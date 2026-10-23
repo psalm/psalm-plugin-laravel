@@ -44,19 +44,12 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 {
     private static bool $remapping = false;
 
-    private static bool $reportMixedIssues = false;
-
     /**
      * @var array<string, ShadowTarget|null> resolved shadows, negatives included: target() is asked
      *      once per issue and again per taint journey hop, over the same handful of paths, and both
      *      the registry and the template-source cache behind it are frozen before Psalm forks
      */
     private static array $targets = [];
-
-    public static function init(bool $reportMixedIssues): void
-    {
-        self::$reportMixedIssues = $reportMixedIssues;
-    }
 
     /**
      * A target resolved before the component seeds exist (an issue Psalm reports while still
@@ -71,7 +64,6 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
     public static function reset(): void
     {
         self::$remapping = false;
-        self::$reportMixedIssues = false;
         self::$targets = [];
     }
 
@@ -103,7 +95,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 
         // The resolver, not just the issue's own target: a taint journey hops between files, and
         // any of those hops can be another template's shadow.
-        $relocated = ShadowIssueRelocator::relocate($issue, $target, self::target(...), self::$reportMixedIssues);
+        $relocated = ShadowIssueRelocator::relocate($issue, $target, self::target(...));
 
         // Null is a decline, not a drop: Psalm keeps handling the original, which for a shadow
         // means it stays invisible — but nothing is ever silently thrown away here.
@@ -271,6 +263,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         }
 
         $shadow = (string) @\file_get_contents($shadowPath);
+        [$undeclared, $declared] = self::provenanceNames($shadow, $shadowPath);
 
         return new ShadowTarget(
             $entry,
@@ -284,44 +277,80 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             // no snapshot at all, and a wrong prefix costs a no-op strip, never a wrong one.
             ShadowRegistry::markerPrefixFor($entry->templatePath) ?? MarkerComment::prefixFor($templateSource),
             PreludeBuilder::declaresTagAttributes($shadow),
-            self::$reportMixedIssues ? [] : self::undeclaredNames($shadow, $shadowPath),
+            $undeclared,
+            $declared,
+            $shadow,
         );
     }
 
     /**
      * #1909: the names only the prelude's `mixed` fallback types. A body docblock in any `@var`
      * spelling, a name the template binds itself, or a component seed types the name later, so it
-     * is subtracted. A body that does not parse turns the gate off instead.
+     * is subtracted. A body that does not parse turns the gate off instead. #1986: the names typed
+     * by a declaration (the prelude's non-`mixed` types, a body `@var`, a component seed), which a
+     * local write leaves declared and an `extract()` does not hide. A Blade-owned name the compiled
+     * body rewrites (`$loop`, `$attributes` after a tag) has the rewrite's type, not the prelude's,
+     * unless a body `@var` declares it. Null when the shadow does not parse, which drops every
+     * `Mixed*`: Psalm's analysis of a broken body describes the break.
      *
-     * @return array<string, true>
+     * @return array{array<string, true>, array<string, true>|null}
      */
-    private static function undeclaredNames(string $shadow, string $shadowPath): array
+    private static function provenanceNames(string $shadow, string $shadowPath): array
     {
-        $fallback = PreludeBuilder::fallbackNames($shadow);
-        $locals = $fallback === [] ? null : (new ContractParser())->localNames($shadow);
-
-        if ($locals === null) {
-            return [];
+        try {
+            $tokens = \token_get_all($shadow, \TOKEN_PARSE);
+        } catch (\ParseError) {
+            return [[], null];
         }
 
-        // Every name in a docblock carrying a `@var` tag: its type can name callable parameters
-        // before the variable, and over-matching only keeps findings.
-        $declared = [];
-        \preg_match_all('#/\*\*.*?\*/#s', (string) \strstr($shadow, "\n?>\n"), $docblocks);
+        $seeds = \array_fill_keys(\array_keys(ComponentViewRegistry::seedFor($shadowPath) ?? []), true);
+        [$typed, $docblocks] = self::docblockNames($shadow, $tokens);
+        $locals = (new ContractParser())->localNames($shadow);
+        $rewritten = $locals === null ? PreludeBuilder::BLADE_OWNED_NAMES : \array_intersect_key(PreludeBuilder::BLADE_OWNED_NAMES, $locals);
 
-        foreach ($docblocks[0] as $docblock) {
-            if (\preg_match('/@(?:psalm-|phpstan-)?var\b/', $docblock) === 1
-                && \preg_match_all('/\$(' . PreludeBuilder::VARIABLE_NAME . ')/', $docblock, $names) > 0
+        $undeclared = $locals === null ? [] : \array_diff_key(
+            \array_fill_keys(PreludeBuilder::fallbackNames($shadow), true),
+            $locals,
+            $docblocks,
+            $seeds,
+        );
+
+        return [$undeclared, \array_diff_key($typed, $rewritten) + $docblocks + $seeds];
+    }
+
+    /**
+     * The prelude's non-`mixed` names, and every name in a body docblock carrying a `@var` tag: its
+     * type can name callable parameters before the variable, and over-matching only keeps findings.
+     * Real doc comments only, so docblock-looking text in markup or a string declares nothing.
+     *
+     * @param list<array{0: int, 1: string, 2: int}|string> $tokens the shadow, parsed
+     *
+     * @return array{array<string, true>, array<string, true>}
+     *
+     * @psalm-pure
+     */
+    private static function docblockNames(string $shadow, array $tokens): array
+    {
+        $preludeEnd = \substr_count((string) \strstr($shadow, "\n?>\n", true), "\n") + 1;
+        $typed = [];
+        $declared = [];
+
+        foreach ($tokens as $token) {
+            if (!\is_array($token) || $token[0] !== \T_DOC_COMMENT) {
+                continue;
+            }
+
+            if ($token[2] <= $preludeEnd) {
+                if (\preg_match('#\A/\*\* @var (?!mixed \$)\S.* \$(' . PreludeBuilder::VARIABLE_NAME . ') \*/\z#', $token[1], $name) === 1) {
+                    $typed[$name[1]] = true;
+                }
+            } elseif (\preg_match('/@(?:psalm-|phpstan-)?var\b/', $token[1]) === 1
+                && \preg_match_all('/\$(' . PreludeBuilder::VARIABLE_NAME . ')/', $token[1], $names) > 0
             ) {
                 $declared += \array_fill_keys($names[1], true);
             }
         }
 
-        return \array_diff_key(
-            \array_fill_keys($fallback, true),
-            $locals,
-            $declared,
-            ComponentViewRegistry::seedFor($shadowPath) ?? [],
-        );
+        return [$typed, $declared];
     }
 }

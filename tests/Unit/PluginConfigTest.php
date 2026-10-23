@@ -708,7 +708,6 @@ final class PluginConfigTest extends TestCase
             'blade=true',
             'blade.validateViewData=true',
             'blade.reportUnusedViewData=true',
-            'blade.reportMixedIssues=true',
             'experimental=true',
             'failOnInternalError=true',
         ])));
@@ -727,7 +726,6 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->bladeEnabled);
         $this->assertTrue($config->bladeValidateViewData);
         $this->assertTrue($config->bladeReportUnusedViewData);
-        $this->assertTrue($config->bladeReportMixedIssues);
         $this->assertTrue($config->experimental);
         $this->assertTrue($config->failOnInternalError);
     }
@@ -786,7 +784,7 @@ final class PluginConfigTest extends TestCase
     #[Test]
     public function blade_sub_settings_never_enable_blade(): void
     {
-        $subSettings = PluginOverrides::parse('blade.validateViewData=true blade.reportUnusedViewData=true blade.reportMixedIssues=true');
+        $subSettings = PluginOverrides::parse('blade.validateViewData=true blade.reportUnusedViewData=true');
 
         $this->assertFalse(PluginConfig::fromXml(null, $subSettings)->bladeEnabled);
         $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'), $subSettings)->bladeEnabled);
@@ -797,7 +795,7 @@ final class PluginConfigTest extends TestCase
     {
         yield 'bad bool' => ['<resolveDynamicWhereClauses value="maybe" />'];
         yield 'bad blade value' => ['<blade value="yes" />'];
-        yield 'bad blade sub-setting' => ['<blade reportMixedIssues="yes" />'];
+        yield 'bad blade sub-setting' => ['<blade validateViewData="yes" />'];
         yield 'bad enum' => ['<modelProperties columnFallback="db" />'];
         yield 'prompt injection without value' => ['<findPromptInjection />'];
     }
@@ -810,7 +808,7 @@ final class PluginConfigTest extends TestCase
 
         PluginConfig::fromXml(
             new \SimpleXMLElement("<pluginClass>{$inner}</pluginClass>"),
-            PluginOverrides::parse('resolveDynamicWhereClauses=true blade=true blade.reportMixedIssues=true modelProperties.columnFallback=none findPromptInjection=true'),
+            PluginOverrides::parse('resolveDynamicWhereClauses=true blade=true blade.validateViewData=true modelProperties.columnFallback=none findPromptInjection=true'),
         );
     }
 }

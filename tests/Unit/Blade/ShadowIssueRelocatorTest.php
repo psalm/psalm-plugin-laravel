@@ -28,8 +28,12 @@ use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedArgument;
+use Psalm\Issue\MixedArrayAssignment;
+use Psalm\Issue\MixedArrayOffset;
 use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\MixedMethodCall;
+use Psalm\Issue\MixedOperand;
+use Psalm\Issue\MixedPropertyFetch;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\NullArgument;
@@ -98,6 +102,9 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     private const OFFSET_SNIPPET = "<?php echo e(\$acct['avatar']); ?>";
 
+    /** Every variable the save/restore cases read, declared so only the statement gate decides. */
+    private const LOOK_ALIKE_NAMES = ['attributes' => true, 'component' => true, 'message' => true, 'value' => true, 'something' => true, 'fallback' => true, 'partner' => true];
+
     /** @param array<int, int> $lineMap */
     private function entry(array $lineMap): ShadowEntry
     {
@@ -110,21 +117,25 @@ final class ShadowIssueRelocatorTest extends TestCase
         return new Raw(\str_repeat("\n", $line - 1), self::SHADOW, 'shadow.php', $line - 1, $line - 1);
     }
 
-    /** @param array<string, true> $undeclaredNames */
+    /**
+     * @param array<string, true> $undeclaredNames
+     * @param array<string, true> $declaredNames
+     */
     private function relocate(
         CodeIssue $issue,
         ShadowEntry $entry,
-        bool $reportMixed = false,
         bool $isComponentView = false,
         string $templateSource = self::TEMPLATE_SOURCE,
         bool $attributesFromTag = false,
         array $undeclaredNames = [],
+        array $declaredNames = [],
+        string $shadowSource = '',
     ): CodeIssue|false|null {
-        $target = new ShadowTarget($entry, $templateSource, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor($templateSource), $attributesFromTag, $undeclaredNames);
+        $target = new ShadowTarget($entry, $templateSource, 'resources/views/profile.blade.php', $isComponentView, MarkerComment::prefixFor($templateSource), $attributesFromTag, $undeclaredNames, $declaredNames, $shadowSource);
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
-        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null, $reportMixed);
+        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null);
     }
 
     #[Test]
@@ -165,11 +176,11 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function it_drops_an_unmapped_mixed_issue(): void
     {
         // Prelude lines map to 0: the prelude types every unresolved template variable as mixed,
-        // so a Mixed* issue there says nothing about the template. Run with the flag ON so this
-        // keeps pinning the unmapped-line path specifically, not the new default-off behavior.
-        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(2));
+        // so a Mixed* issue there says nothing about the template. A callee's origin keeps it past
+        // the provenance gate, so this pins the unmapped-line path specifically.
+        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(2), self::stubOrigin());
 
-        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0]), reportMixed: true));
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
     }
 
     #[Test]
@@ -178,31 +189,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    #[Test]
-    public function a_mapped_mixed_issue_is_rebuilt_when_reportmixed_is_on(): void
-    {
-        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
-
-        $this->assertInstanceOf(MixedAssignment::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    #[Test]
-    public function a_mapped_non_mixed_issue_is_unaffected_by_the_flag(): void
-    {
-        $issue = new UndefinedVariable('Cannot find referenced variable $x', $this->shadowLocation(9));
-
-        $off = $this->relocate($issue, $this->entry([9 => 3]));
-        $on = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
-
-        $this->assertInstanceOf(CodeIssue::class, $off);
-        $this->assertInstanceOf(CodeIssue::class, $on);
-        $this->assertSame(3, $off->code_location->getLineNumber());
-        $this->assertSame(3, $on->code_location->getLineNumber());
     }
 
     #[Test]
@@ -902,7 +888,7 @@ final class ShadowIssueRelocatorTest extends TestCase
     #[DataProvider('compiledSaveRestoreIssues')]
     public function a_mixed_issue_on_a_compiled_save_or_restore_is_dropped(CodeIssue $issue): void
     {
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), declaredNames: self::LOOK_ALIKE_NAMES));
     }
 
     /** @return iterable<string, array{CodeIssue}> */
@@ -919,12 +905,41 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         yield '$message restore' => [self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message')];
 
+        $props = '$$__key = $$__key ?? $__value;';
+        yield '@props assignment' => [new MixedAssignment('Unable to determine the type of this assignment', self::selectionLocation('$$__key', 7, $props), self::stubOrigin())];
+        yield '@props attribute copy' => [new MixedAssignment(
+            'Unable to determine the type of this assignment',
+            self::selectionLocation('$__newAttributes[$__key]', 24, '        $__newAttributes[$__key] = $__value;'),
+            self::stubOrigin(),
+        )];
+        $aware = '$$__consumeVariable = is_string($__key) ? $__env->getConsumableComponentData($__key, $__value) : $__env->getConsumableComponentData($__value);';
+        yield '@aware assignment' => [new MixedAssignment('Unable to determine the type of this assignment', self::selectionLocation('$$__consumeVariable', 19, $aware), self::stubOrigin())];
+        $wireKeys = '\\Livewire\\Features\\SupportCompiledWireKeys\\SupportCompiledWireKeys';
+        $assets = '\\Livewire\\Features\\SupportScriptsAndAssets\\SupportScriptsAndAssets';
+        yield 'Livewire wire:key' => [new MixedArrayAssignment(
+            "Cannot access array value on mixed variable {$wireKeys}::\$currentLoop['key']",
+            self::selectionLocation("{$wireKeys}::\$currentLoop", \strlen("{$wireKeys}::\$currentLoop"), "<?php {$wireKeys}::\$currentLoop['key'] = \$partner['id']; ?>"),
+            self::stubOrigin(),
+        )];
+        yield 'Livewire @assets dedup' => [new MixedArgument(
+            'Argument 2 of in_array cannot be mixed, expecting array<array-key, mixed>',
+            self::selectionLocation("{$assets}::\$alreadyRunAssetKeys", \strlen("{$assets}::\$alreadyRunAssetKeys"), "                    if (in_array(\$__assetKey, {$assets}::\$alreadyRunAssetKeys)) {"),
+            'in_array',
+            self::stubOrigin(),
+        )];
+        yield 'Livewire @livewire key' => [new MixedOperand(
+            'Right operand cannot be mixed',
+            self::selectionLocation("{$wireKeys}::generateKey", \strlen("{$wireKeys}::generateKey"), "\$__key ??= {$wireKeys}::generateKey('lw-1', \$__key);"),
+            self::stubOrigin(),
+        )];
+
         foreach (['session', 'context'] as $kind) {
             yield "@{$kind} push" => [self::mixedAssignment(
                 "if (isset(\$value)) { \$__{$kind}Previous[] = \$value; }",
                 "{ \$__{$kind}Previous[]",
                 \strlen("\$__{$kind}Previous[]"),
             )];
+            yield "@{$kind} read" => [self::mixedAssignment("\$value = {$kind}()->get(\$__{$kind}Args[0]); ?>", '$value', 6, 'value')];
             yield "@{$kind} restore" => [self::mixedAssignment(
                 "if (isset(\$__{$kind}Previous) && !empty(\$__{$kind}Previous)) { \$value = array_pop(\$__{$kind}Previous); }",
                 '{ $value',
@@ -942,7 +957,7 @@ final class ShadowIssueRelocatorTest extends TestCase
     #[DataProvider('authorSaveRestoreLookAlikes')]
     public function a_save_or_restore_look_alike_keeps_reporting(CodeIssue $issue, string $templateSource = self::TEMPLATE_SOURCE): void
     {
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true, templateSource: $templateSource);
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource, declaredNames: self::LOOK_ALIKE_NAMES);
 
         $this->assertInstanceOf($issue::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
@@ -957,9 +972,9 @@ final class ShadowIssueRelocatorTest extends TestCase
         yield 'hash shorter than xxh128' => [self::mixedAssignment('<?php $attributes = $__attributesOriginalabc123; ?>', '<?php $attributes', 11, 'attributes')];
         yield 'original of the other name' => [self::mixedAssignment('<?php $attributes = $__componentOriginal' . self::COMPONENT_HASH . '; ?>', '<?php $attributes', 11, 'attributes')];
         yield 'not the assignment target' => [new MixedArgument(
-            'Argument 1 of array_pop cannot be mixed, expecting array<array-key, mixed>',
-            self::selectionLocation('array_pop($__sessionPrevious', 18, 'if (isset($__sessionPrevious) && !empty($__sessionPrevious)) { $value = array_pop($__sessionPrevious); }'),
-            'array_pop',
+            'Argument 1 of e cannot be mixed',
+            self::selectionLocation('= $value', 6, 'if (isset($value)) { $__sessionPrevious[] = $value; }'),
+            'e',
         )];
         yield 'statement written in the template' => [
             self::mixedAssignment($restore, '<?php $attributes', 11, 'attributes'),
@@ -970,6 +985,32 @@ final class ShadowIssueRelocatorTest extends TestCase
         yield 'statement written between comment look-alikes' => [
             self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message'),
             "<div>\n@php \$open = '{{--'; if (isset(\$__messageOriginal)) { \$message = \$__messageOriginal; } \$close = '--}}'; @endphp\n</div>\n",
+        ];
+        yield 'author props-like assignment' => [new MixedAssignment(
+            'Unable to determine the type of this assignment',
+            self::selectionLocation('$$__name', 8, '<?php $$__name = $$__name ?? $fallback; ?>'),
+            self::stubOrigin(),
+        )];
+        yield 'author echo of a $__ variable' => [new MixedArgument('Argument 1 of echo cannot be mixed', self::selectionLocation('$__mine', 7, '<?php echo $__mine; ?>'), 'echo', self::stubOrigin())];
+        // `{!! $__html !!}` compiles to the statement Livewire's `@livewire` ends with.
+        yield 'author raw echo of $__html' => [new MixedArgument('Argument 1 of echo cannot be mixed', self::selectionLocation('$__html', 7, '<?php echo $__html; ?>'), 'echo', self::stubOrigin())];
+        yield "another class's static loop key" => [new MixedArrayAssignment(
+            "Cannot access array value on mixed variable App\\Loops::\$currentLoop['key']",
+            self::selectionLocation('\\App\\Loops::$currentLoop', 24, "<?php \\App\\Loops::\$currentLoop['key'] = 1; ?>"),
+            self::stubOrigin(),
+        )];
+        yield 'Livewire wire:key written in the template' => [
+            new MixedArrayAssignment(
+                "Cannot access array value on mixed variable Livewire\\Features\\SupportCompiledWireKeys\\SupportCompiledWireKeys::\$currentLoop['key']",
+                self::selectionLocation('\\Livewire\\Features\\SupportCompiledWireKeys\\SupportCompiledWireKeys::$currentLoop', 81, "<?php \\Livewire\\Features\\SupportCompiledWireKeys\\SupportCompiledWireKeys::\$currentLoop['key'] = 1; ?>"),
+                self::stubOrigin(),
+            ),
+            "<div>\n@php \\Livewire\\Features\\SupportCompiledWireKeys\\SupportCompiledWireKeys::\$currentLoop['key'] = 1; @endphp\n</div>\n",
+        ];
+        yield 'author session read' => [self::mixedAssignment("<?php \$value = session()->get('status'); ?>", '$value', 6, 'value')];
+        yield 'session read written in the template' => [
+            self::mixedAssignment('$value = session()->get($__sessionArgs[0]); ?>', '$value', 6, 'value'),
+            "<div>\n@php \$value = session()->get(\$__sessionArgs[0]); @endphp\n</div>\n",
         ];
         yield 'issue class outside the Mixed family' => [new UndefinedVariable('Cannot find referenced variable $attributes', self::selectionLocation('<?php $attributes', 11, $restore))];
     }
@@ -987,19 +1028,20 @@ final class ShadowIssueRelocatorTest extends TestCase
      * A shadow-line-9 location whose snippet is readable without a booted ProjectAnalyzer, selecting
      * the $width bytes that end where $anchor ends. Offset 1000 keeps file and snippet offsets apart.
      */
-    private static function selectionLocation(string $anchor, int $width, string $snippet = self::AWARE_SHADOW_LINE): CodeLocation
+    private static function selectionLocation(string $anchor, int $width, string $snippet = self::AWARE_SHADOW_LINE, string $filePath = self::SHADOW): CodeLocation
     {
         $end = 1000 + (int) \strpos($snippet, $anchor) + \strlen($anchor);
 
-        return new class ($snippet, [$end - $width, $end]) extends CodeLocation {
+        return new class ($snippet, [$end - $width, $end], $filePath) extends CodeLocation {
             /** @param array{int, int} $selection */
             public function __construct(
                 private readonly string $snippetText,
                 private readonly array $selection,
+                string $filePath,
             ) {
                 // Kept issues get their message remapped, which reads the file path and name.
-                $this->file_path = '/tmp/shadow.php';
-                $this->file_name = 'shadow.php';
+                $this->file_path = $filePath;
+                $this->file_name = \basename($filePath);
                 $this->raw_line_number = 9;
             }
 
@@ -1734,29 +1776,27 @@ final class ShadowIssueRelocatorTest extends TestCase
     /**
      * #1909: array access on a possible `ArrayAccess` runs a virtual `offsetGet()` call that Psalm
      * analyzes with `PossiblyInvalidMethodCall`/`MixedMethodCall` suppressed. The re-emit lost that
-     * suppression, whatever the variable's origin and whatever `reportMixedIssues` says.
+     * suppression, whatever the variable's origin. A declared `$acct` keeps the `MixedMethodCall`
+     * past the provenance gate.
      */
     #[Test]
     #[DataProvider('virtualOffsetCallIssues')]
-    public function a_virtual_offset_call_issue_is_dropped(CodeIssue $issue, bool $reportMixed): void
+    public function a_virtual_offset_call_issue_is_dropped(CodeIssue $issue): void
     {
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: $reportMixed));
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), declaredNames: ['acct' => true]));
     }
 
-    /** @return iterable<string, array{CodeIssue, bool}> */
+    /** @return iterable<string, array{CodeIssue}> */
     public static function virtualOffsetCallIssues(): iterable
     {
-        $possibly = new PossiblyInvalidMethodCall(
+        yield 'PossiblyInvalidMethodCall' => [new PossiblyInvalidMethodCall(
             'Cannot call method on possible array{id: mixed, ...<array-key, mixed>} variable $acct',
             self::selectionLocation('$acct', 5, self::OFFSET_SNIPPET),
-        );
-
-        yield 'PossiblyInvalidMethodCall' => [$possibly, false];
-        yield 'PossiblyInvalidMethodCall, Mixed reporting on' => [$possibly, true];
-        yield 'MixedMethodCall, Mixed reporting on' => [new MixedMethodCall(
+        )];
+        yield 'MixedMethodCall' => [new MixedMethodCall(
             'Cannot determine the type of $acct when calling method offsetGet',
             self::selectionLocation('$acct', 5, self::OFFSET_SNIPPET),
-        ), true];
+        )];
     }
 
     /** A real call is positioned on its method name, which `(` follows, never `[`. */
@@ -1784,13 +1824,12 @@ final class ShadowIssueRelocatorTest extends TestCase
             self::selectionLocation('$cls::make()', 12, "<?php echo e(\$cls::make()['k']); ?>"),
         );
 
-        $this->assertInstanceOf(MixedMethodCall::class, $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+        $this->assertInstanceOf(MixedMethodCall::class, $this->relocate($issue, $this->entry([9 => 3]), declaredNames: ['cls' => true]));
     }
 
     /**
      * #1909: the prelude types a variable no contract declares as `mixed`, and Psalm narrows or
-     * coerces that `mixed` into findings outside the Mixed family. With `reportMixedIssues` off
-     * they are dropped when the expression they are about reads only such variables.
+     * coerces that `mixed` into findings outside the Mixed family. They are dropped when the expression they are about reads only such variables.
      */
     #[Test]
     #[DataProvider('undeclaredSubjectIssues')]
@@ -1842,22 +1881,20 @@ final class ShadowIssueRelocatorTest extends TestCase
     /** Declared, local, and look-alike subjects keep reporting. */
     #[Test]
     #[DataProvider('authoredSubjectIssues')]
-    public function a_finding_not_only_about_undeclared_variables_keeps_reporting(CodeIssue $issue, array $undeclaredNames, bool $reportMixed = false): void
+    public function a_finding_not_only_about_undeclared_variables_keeps_reporting(CodeIssue $issue, array $undeclaredNames): void
     {
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: $reportMixed, undeclaredNames: $undeclaredNames);
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), undeclaredNames: $undeclaredNames);
 
         $this->assertInstanceOf($issue::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
-    /** @return iterable<string, array{0: CodeIssue, 1: array<string, true>, 2?: bool}> */
+    /** @return iterable<string, array{CodeIssue, array<string, true>}> */
     public static function authoredSubjectIssues(): iterable
     {
-        yield 'Mixed reporting on' => [self::riskyOnEndpoint(), ['endpoint' => true], true];
         yield 'Risky on a declared variable' => [self::riskyOnEndpoint(), ['other' => true]];
         yield 'magic method on a declared receiver' => [self::magicOnBook(), ['other' => true]];
         yield 'argument on a declared variable' => [self::stripTagsArgument(), []];
-        yield 'argument on a declared variable, Mixed reporting on' => [self::stripTagsArgument(), ['status' => true], true];
         yield 'Risky without mixed in the operand' => [new RiskyTruthyFalsyComparison(
             "Operand of type ''|0 contains type ''|0, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead.",
             self::selectionLocation("\$endpoint['body_params'] ?? false", 33, self::RISKY_SNIPPET),
@@ -1906,6 +1943,188 @@ final class ShadowIssueRelocatorTest extends TestCase
     private static function newCafe(): InvalidStringClass
     {
         return new InvalidStringClass('String cannot be used as a class', self::selectionLocation('new $café()', \strlen('new $café()'), '<?php echo e(new $café()); ?>'));
+    }
+
+    /**
+     * #1986: a `Mixed*` finding is dropped when its `mixed` comes from the prelude's fallback: Psalm's
+     * origin (traced only while the variable-use graph runs) is a fetch of an undeclared name (an
+     * undeclared variable, a template local, a compiled `$__*` variable), or, without an origin, the
+     * expression (a method call: its receiver chain) reads one of them or no variable at all.
+     *
+     * @param array<string, true> $declaredNames
+     */
+    #[Test]
+    #[DataProvider('fallbackMixedIssues')]
+    public function a_mixed_finding_derived_from_the_fallback_is_dropped(CodeIssue $issue, array $declaredNames): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), declaredNames: $declaredNames));
+    }
+
+    /** @return iterable<string, array{CodeIssue, array<string, true>}> */
+    public static function fallbackMixedIssues(): iterable
+    {
+        $call = '<?php echo e($x->foo()); ?>';
+
+        yield 'origin on an undeclared variable' => [self::mixedCall('$x', 'foo', $call, self::selectionLocation('$x', 2, $call)), []];
+        yield 'origin on a template local' => [
+            self::mixedCall('$local', 'bar', '<?php echo e($local->bar()); ?>', self::selectionLocation('$local', 6, '<?php $local = $x[\'k\']; ?>')),
+            [],
+        ];
+        yield 'origin on the compiled loop variable' => [
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation('$w', 2, '<?php echo e($w); ?>'), 'e', self::selectionLocation('$__currentLoopData', 18, '<?php $__currentLoopData = $g->list; ?>')),
+            [],
+        ];
+        yield 'origin on an expression reading an undeclared variable' => [
+            self::mixedCall('$v', 'foo', '<?php echo e($v->foo()); ?>', self::selectionLocation("\$x['k']", 7, "<?php \$v = \$x['k']; ?>")),
+            [],
+        ];
+        yield 'no origin, receiver chain on an undeclared variable' => [self::mixedCall('$x->a', 'b', '<?php echo e($x->a->b()); ?>'), []];
+        yield 'no origin, argument reading an undeclared variable' => [
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation('$x->foo()', 9, $call), 'e'),
+            [],
+        ];
+        yield 'no origin, declared array read at an undeclared offset' => [
+            new MixedArrayOffset('Cannot access value on variable $data using mixed offset', self::selectionLocation('$data[$x]', 9, '<?php echo e($data[$x]); ?>')),
+            ['data' => true],
+        ];
+        yield 'no origin, loop alias' => [self::mixedAssignment('<?php foreach($__currentLoopData as $item): ?>', '$item', 5, 'item'), []];
+        yield 'no origin, nullsafe receiver on an undeclared variable' => [
+            new MixedMethodCall('Cannot determine the type of $__tmp_nullsafe__789 when calling method foo', self::selectionLocation('foo', 3, '<?php echo e($x?->foo()); ?>')),
+            [],
+        ];
+        yield 'no origin, receiver chain through a call on an undeclared variable' => [
+            new MixedMethodCall('Cannot determine the type of the object on the left hand side of this expression', self::selectionLocation('name', 4, '<?php echo e($x->first()->name()); ?>')),
+            [],
+        ];
+        yield 'no origin, comment inside a chain on an undeclared receiver' => [
+            new MixedMethodCall('Cannot determine the type of the object on the left hand side of this expression', self::selectionLocation('last', 4, '<?php echo e($user /* c */ ->first($n)->last()); ?>')),
+            ['n' => true],
+        ];
+        yield 'no origin, dynamic method on an undeclared receiver' => [
+            new MixedMethodCall('Cannot determine the type of $user when calling method', self::selectionLocation('$method', 7, '<?php echo e($user->$method()); ?>')),
+            ['method' => true],
+        ];
+        // `self::` outside a class reports nothing (#1559) and leaves its result `mixed`.
+        yield 'no origin, static property on an unresolved class' => [
+            new MixedPropertyFetch('Cannot fetch property on mixed var $__fake_var_4163', self::selectionLocation('self::getResource()::$parentResource', 36, '<?php echo e(self::getResource()::$parentResource::getUrl()); ?>')),
+            [],
+        ];
+        yield 'compiled props assignment, origin in a callee' => [
+            new MixedAssignment('Unable to determine the type of this assignment', self::selectionLocation('$$__key', 7, '<?php $$__key = $$__key ?? $__value; ?>'), self::stubOrigin()),
+            [],
+        ];
+        yield 'no origin, no variable read' => [
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation("session('k')", 12, "<?php echo e(session('k')); ?>"), 'e'),
+            [],
+        ];
+    }
+
+    /**
+     * #1986 negatives: a `Mixed*` finding from a declared variable or a callee's `mixed` return follows
+     * the user's `errorLevel` and `issueHandlers`, as in a PHP file.
+     *
+     * @param array<string, true> $declaredNames
+     */
+    #[Test]
+    #[DataProvider('declaredMixedIssues')]
+    public function a_mixed_finding_from_a_declared_or_computed_value_keeps_reporting(CodeIssue $issue, array $declaredNames): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), declaredNames: $declaredNames);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** @return iterable<string, array{CodeIssue, array<string, true>}> */
+    public static function declaredMixedIssues(): iterable
+    {
+        $call = "<?php echo e(\$data['x']->foo()); ?>";
+        $data = ['data' => true];
+
+        yield 'origin on a declared variable' => [self::mixedCall("\$data['x']", 'foo', $call, self::selectionLocation('$data', 5, $call)), $data];
+        yield 'origin on a name an undeclared one prefixes' => [self::mixedCall('$xy', 'foo', '<?php echo e($xy->foo()); ?>', self::selectionLocation('$xy', 3, '<?php echo e($xy->foo()); ?>')), ['xy' => true]];
+        yield 'origin in a callee outside the shadow' => [self::mixedCall('$decoded', 'baz', '<?php echo e($decoded->baz()); ?>', self::stubOrigin()), []];
+        yield 'origin in a callee the template defines' => [
+            self::mixedCall('$__tmp', 'foo', '<?php echo e(tv()->foo()); ?>', self::selectionLocation('mixed', 5, '<?php function tv(): mixed { return null; } ?>')),
+            [],
+        ];
+        yield 'no origin, nullsafe receiver on a declared variable' => [
+            new MixedMethodCall('Cannot determine the type of $__tmp_nullsafe__789 when calling method nulls', self::selectionLocation('nulls', 5, "<?php echo e(\$data['x']?->nulls()); ?>")),
+            $data,
+        ];
+        yield 'no origin, comment inside a chain on a declared receiver' => [
+            new MixedMethodCall('Cannot determine the type of $__tmp_nullsafe__1 when calling method last', self::selectionLocation('last', 4, "<?php echo e(\$data['x']?->first() /* c */ ?->last()); ?>")),
+            $data,
+        ];
+        yield 'no origin, receiver chain through a call on a declared variable' => [
+            new MixedMethodCall('Cannot determine the type of the object on the left hand side of this expression', self::selectionLocation('name', 4, '<?php echo e($rows->first()->name()); ?>')),
+            ['rows' => true],
+        ];
+        yield 'no origin, dynamic method on a declared receiver' => [
+            new MixedMethodCall('Cannot determine the type of $user when calling method', self::selectionLocation('$method', 7, '<?php echo e($user->$method()); ?>')),
+            ['user' => true],
+        ];
+        yield 'no origin, a $__ name inside a string literal' => [
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation("\$data['\$__lit']", 15, "<?php echo e(\$data['\$__lit']); ?>"), 'e'),
+            $data,
+        ];
+        yield 'origin in a callee, an author $__ variable' => [
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation('$__mine', 7, '<?php echo e($__mine); ?>'), 'e', self::stubOrigin()),
+            [],
+        ];
+        yield 'no origin, declared receiver' => [self::mixedCall("\$data['x']", 'foo', $call), $data];
+        yield 'no origin, argument reading a declared variable' => [
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation("\$data['x']->foo()", 17, $call), 'e'),
+            $data,
+        ];
+    }
+
+    /** #1986: a receiver chain that starts on an earlier shadow line is read from the shadow source. */
+    #[Test]
+    public function a_receiver_chain_begun_on_an_earlier_line_is_read_from_the_shadow(): void
+    {
+        $source = "<?php\n?>\n<?php echo e(\$data['x']\n    ->first()); ?>\n";
+        $start = (int) \strpos($source, 'first');
+        $issue = new MixedMethodCall("Cannot determine the type of \$data['x'] when calling method first", new Raw($source, self::SHADOW, 'shadow.php', $start, $start + 5));
+        $entry = $this->entry([$issue->code_location->getLineNumber() => 3]);
+
+        $this->assertInstanceOf(MixedMethodCall::class, $this->relocate($issue, $entry, declaredNames: ['data' => true], shadowSource: $source));
+        // The snippet alone starts at `->` and cannot tell, so the answer is the fallback's.
+        $this->assertFalse($this->relocate($issue, $entry, declaredNames: ['data' => true]));
+        $this->assertFalse($this->relocate($issue, $entry, shadowSource: $source));
+    }
+
+    /** #1986: a kept finding's origin names the template line, not the shadow it was found in. */
+    #[Test]
+    public function a_kept_mixed_finding_names_the_template_as_its_origin(): void
+    {
+        $call = "<?php echo e(\$data['x']->foo()); ?>";
+        $relocated = $this->relocate(self::mixedCall("\$data['x']", 'foo', $call, self::selectionLocation('$data', 5, $call)), $this->entry([9 => 3]), declaredNames: ['data' => true]);
+
+        $this->assertInstanceOf(MixedMethodCall::class, $relocated);
+        $this->assertSame(self::TEMPLATE, $relocated->getOriginalLocation()?->file_path);
+        $this->assertSame(3, $relocated->getOriginalLocation()->getLineNumber());
+
+        $stub = self::stubOrigin();
+        $relocated = $this->relocate(self::mixedCall('$decoded', 'baz', '<?php echo e($decoded->baz()); ?>', $stub), $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(MixedMethodCall::class, $relocated);
+        $this->assertSame($stub, $relocated->getOriginalLocation());
+    }
+
+    /** A callee's `@return mixed`, the origin Psalm gives a `mixed` that a stub or vendor method returns. */
+    private static function stubOrigin(): CodeLocation
+    {
+        return self::selectionLocation('mixed', 5, ' * @return mixed', '/vendor/stub.phpstub');
+    }
+
+    private static function mixedCall(string $receiver, string $method, string $snippet, ?CodeLocation $origin = null): MixedMethodCall
+    {
+        return new MixedMethodCall(
+            "Cannot determine the type of {$receiver} when calling method {$method}",
+            self::selectionLocation("{$receiver}->{$method}", \strlen($method), $snippet),
+            $origin,
+        );
     }
 
     private static function riskyOnEndpoint(): RiskyTruthyFalsyComparison

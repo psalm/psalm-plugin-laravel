@@ -84,18 +84,25 @@ final class ShadowIssueRelocator
     ];
 
     /**
-     * The compiled save/restore statements whose assignment `MixedAssignment` reports (#1872):
-     * `statement` is what must be absent from the template, `target` where Psalm positions the
-     * issue. The `$__*Original*` saves are not here: AssignmentAnalyzer skips a target whose var id
-     * starts with `$_`. The `$__sessionPrevious[] =` push has no var id, so it IS reported.
+     * The compiled statements whose `mixed` target or operand Psalm reports a `Mixed*` on (#1872,
+     * #1986): `statement` is what must be absent from the template, `target` where Psalm positions
+     * the issue. The `$__*Original*` saves are not here: AssignmentAnalyzer skips a target whose var
+     * id starts with `$_`. The `$__sessionPrevious[] =` push has no var id, so it IS reported.
      */
     private const SAVE_RESTORE_PATTERNS = [
+        // CompilesComponents::compileProps() and compileAware(): a callee's `mixed` value per prop
+        '/(?<statement>(?<target>\$\$__key) = \$\$__key \?\? \$__value;)/',
+        '/(?<statement>(?<target>\$__newAttributes\[\$__key\]) = \$__value;)/',
+        '/(?<statement>(?<target>\$\$__consumeVariable) = is_string\(\$__key\) \? [^;]*;)/',
+        // Livewire's precompilers: the `wire:key` loop key, `@assets` dedup, `@livewire` key
+        '/(?<statement>(?<target>\\\\Livewire\\\\Features\\\\Support(?<feature>CompiledWireKeys|ScriptsAndAssets)\\\\Support\k<feature>::\$?\w+))/',
         // CompilesComponents::compileEndComponentClass(); the hash is newComponentHash()'s xxh128
         '/(?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};)/',
         // CompilesErrors::compileEnderror()
         '/(?<statement>if \(isset\(\$__messageOriginal\)\) \{ (?<target>\$message) = \$__messageOriginal; \})/',
-        // CompilesSessions/CompilesContexts: the push in compileSession(), the pop in compileEndsession()
+        // CompilesSessions/CompilesContexts: the push and the read in compileSession(), the pop in compileEndsession()
         '/(?<statement>if \(isset\(\$value\)\) \{ (?<target>\$__(?:session|context)Previous)\[\] = \$value; \})/',
+        '/(?<statement>(?<target>\$value) = (?<kind>session|context)\(\)->get\(\$__\k<kind>Args\[0\]\);)/',
         '/(?<statement>if \(isset\(\$__(?<kind>session|context)Previous\) && !empty\(\$__\k<kind>Previous\)\) \{ (?<target>\$value) = array_pop\(\$__\k<kind>Previous\); \})/',
     ];
 
@@ -125,18 +132,15 @@ final class ShadowIssueRelocator
     ];
 
     /**
-     * @param ShadowTarget                    $target      the shadow the issue was found in
-     * @param \Closure(string): ?ShadowTarget $resolve     any OTHER shadow a taint journey passes
-     *                                                     through; a journey crosses files, so one
-     *                                                     target is not enough
-     * @param bool                            $reportMixed `<blade reportMixedIssues="true" />`; false
-     *                                                      drops the whole `MixedIssue` family instead
-     *                                                      of relocating it (#1495)
+     * @param ShadowTarget                    $target  the shadow the issue was found in
+     * @param \Closure(string): ?ShadowTarget $resolve any OTHER shadow a taint journey passes
+     *                                                 through; a journey crosses files, so one
+     *                                                 target is not enough
      *
      * @return CodeIssue|false|null the issue to re-emit on the template, `false` to drop it, `null`
      *                              to decline and leave Psalm's own handling of the original alone
      */
-    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve, bool $reportMixed): CodeIssue|false|null
+    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve): CodeIssue|false|null
     {
         // A compiled directive (Livewire tags in particular) injects untyped closures the template
         // author cannot reach, and they dominate this family inside a shadow. Dropped
@@ -474,16 +478,17 @@ final class ShadowIssueRelocator
         }
 
         // A template variable the prelude cannot resolve is typed `mixed`, so `MixedIssue` findings
-        // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
-        // by default, both on a mapped template line and on the prelude's own unmapped lines below.
-        if ($issue instanceof MixedIssue && !$reportMixed) {
+        // inside a shadow are overwhelmingly this artifact rather than a real template bug. Dropped
+        // when derived from it (#1986); one from a declared variable or a callee's `mixed` reports as
+        // in a PHP file. The prelude's own unmapped lines are dropped below either way.
+        if ($issue instanceof MixedIssue && self::isFallbackMixed($issue, $target)) {
             return false;
         }
 
         // The same `mixed` narrowed (`$x['k'] ?? false`, `$x?->p`) or coerced to a parameter type
         // (ArgumentAnalyzer keeps a `mixed` argument as the param type once the call returns) yields
         // findings outside the family. Dropped with it when they are only about such variables.
-        if (!$reportMixed && $target->undeclaredNames !== [] && self::isOnlyAboutUndeclared($issue, $target->undeclaredNames)) {
+        if ($target->undeclaredNames !== [] && self::isOnlyAboutUndeclared($issue, $target->undeclaredNames)) {
             return false;
         }
 
@@ -501,10 +506,8 @@ final class ShadowIssueRelocator
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
             // `MixedIssue` there is an artifact of the prelude typing every unresolved template
-            // variable as `mixed`, so it is dropped rather than parked on line 1 regardless of
-            // $reportMixed: opting back in is about seeing the family on real template lines, not
-            // about the prelude's own noise. Anything else is worth showing even without an exact
-            // line.
+            // variable as `mixed`, so it is dropped rather than parked on line 1. Anything else is
+            // worth showing even without an exact line.
             if ($issue instanceof MixedIssue) {
                 return false;
             }
@@ -556,6 +559,11 @@ final class ShadowIssueRelocator
         }
 
         $overrides = ['code_location' => $location, 'message' => $message];
+
+        if ($issue instanceof MixedIssue) {
+            $overrides['origin_location'] = self::templateOrigin($issue->getOriginalLocation(), $issue, $target, $resolve);
+        }
+
         $taint = PsalmBridge::taintArguments($issue);
 
         if ($taint !== null) {
@@ -1074,6 +1082,149 @@ final class ShadowIssueRelocator
     }
 
     /**
+     * #1986: whether a `Mixed*` finding's `mixed` comes from the prelude's fallback rather than a
+     * declaration, judged against {@see ShadowTarget::$declaredNames}. Psalm's origin (traced only
+     * while the variable-use graph runs, so not under `findUnusedCode="false"`) is exact: a variable
+     * fetch in this shadow on an undeclared name (an undeclared variable, a template local, compiled
+     * `$__*` bookkeeping) is the fallback; anything else is a callee's `mixed`, outside the shadow or
+     * defined in it, unless its variables say otherwise. A template local's origin stops at its own
+     * assignment, so a local is never proof of a declaration. Without an origin, the finding must
+     * read at least one variable, all of them declared; a method call is positioned on its name, so
+     * its receiver chain is read instead.
+     */
+    private static function isFallbackMixed(MixedIssue&CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $declared = $target->declaredNames;
+
+        if ($declared === null) {
+            return true;
+        }
+
+        $origin = $issue->getOriginalLocation();
+
+        if ($origin instanceof CodeLocation) {
+            if ($origin->file_path !== $issue->code_location->file_path) {
+                return false;
+            }
+
+            $text = self::selectedText($origin);
+
+            if ($text !== null) {
+                $names = \preg_match('/\A\$(' . PreludeBuilder::VARIABLE_NAME . ')\z/', $text, $name) === 1 ? [$name[1]] : self::readNames($text);
+
+                return $names !== [] && \array_diff_key(\array_flip($names), $declared) !== [];
+            }
+        }
+
+        $names = ($issue instanceof MixedMethodCall ? self::receiverNames($issue->code_location, $target) : null)
+            ?? self::readNames((string) self::selectedText($issue->code_location));
+
+        return $names === [] || \array_diff_key(\array_flip($names), $declared) !== [];
+    }
+
+    /**
+     * The variables the receiver chain before a method name reads (`$data['x']?->` of
+     * `$data['x']?->foo()`), walked back token by token over `->`, `?->`, `::`, names, comments and
+     * balanced `[...]`/`(...)`, through the shadow source so a chain begun on an earlier line is
+     * read too. Null when no operator precedes the selection (a static call's covers the whole
+     * call); empty when the chain reads no variable, a variable variable hides one, or the walk
+     * runs off the source.
+     *
+     * @return list<string>|null
+     *
+     * @psalm-pure
+     */
+    private static function receiverNames(CodeLocation $location, ShadowTarget $target): ?array
+    {
+        $selection = ShadowSelection::of($location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return [];
+        }
+
+        try {
+            $prefix = $target->shadowSource !== ''
+                ? \substr($target->shadowSource, 0, $location->getSelectionBounds()[0])
+                : \substr($selection->snippet, 0, $selection->start);
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $tokens = @\token_get_all(\str_starts_with($prefix, '<?php') ? $prefix : '<?php ' . $prefix);
+        $names = [];
+        $depth = 0;
+        $wantOperator = true;
+        $atSelection = true;
+
+        for ($i = \count($tokens) - 1; $i > 0; $i--) {
+            $token = $tokens[$i];
+            $id = \is_array($token) ? $token[0] : $token;
+
+            if (\in_array($id, [\T_WHITESPACE, \T_COMMENT, \T_DOC_COMMENT], true)) {
+                continue;
+            }
+
+            if ($id === '$') {
+                return [];
+            }
+
+            if (\is_array($token) && $token[0] === \T_VARIABLE) {
+                $names[] = \substr($token[1], 1);
+            }
+
+            if ($depth > 0) {
+                $depth += match ($id) {
+                    ')', ']' => 1,
+                    '(', '[' => -1,
+                    default => 0,
+                };
+            } elseif ($wantOperator) {
+                if (!\in_array($id, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true)) {
+                    return $atSelection ? null : $names;
+                }
+
+                $wantOperator = false;
+            } elseif ($id === ')' || $id === ']') {
+                $depth = 1;
+            } elseif (\in_array($id, [\T_VARIABLE, \T_STRING, \T_NAME_QUALIFIED, \T_NAME_FULLY_QUALIFIED], true)) {
+                $wantOperator = true;
+            } else {
+                return $names;
+            }
+
+            $atSelection = false;
+        }
+
+        return [];
+    }
+
+    /**
+     * A kept finding's origin on the template line it came from, so the report never names a shadow.
+     * An origin outside every shadow (a callee's `@return mixed`) is kept as is; a shadow line with
+     * no template position loses the origin.
+     *
+     * @param \Closure[_](string): ?ShadowTarget $resolve
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function templateOrigin(?CodeLocation $origin, CodeIssue $issue, ShadowTarget $target, \Closure $resolve): ?CodeLocation
+    {
+        if (!$origin instanceof CodeLocation) {
+            return null;
+        }
+
+        $originTarget = $origin->file_path === $issue->code_location->file_path ? $target : $resolve($origin->file_path);
+
+        if (!$originTarget instanceof ShadowTarget) {
+            return $origin;
+        }
+
+        $line = $originTarget->templateLineFor($origin->getLineNumber());
+
+        return $line < 1 ? null : $originTarget->locationFor($line);
+    }
+
+    /**
      * Every variable an expression reads; empty when one is a variable variable, whose name is unknown.
      *
      * @return list<string>
@@ -1084,13 +1235,20 @@ final class ShadowIssueRelocator
     {
         $names = [];
 
+        $afterDoubleColon = false;
+
         foreach (\token_get_all('<?php ' . $expression) as $token) {
             if ($token === '$') {
                 return [];
             }
 
-            if (\is_array($token) && $token[0] === \T_VARIABLE) {
+            // `Foo::$bar` names a static property, not a variable.
+            if (\is_array($token) && $token[0] === \T_VARIABLE && !$afterDoubleColon) {
                 $names[] = \substr($token[1], 1);
+            }
+
+            if (!\is_array($token) || $token[0] !== \T_WHITESPACE) {
+                $afterDoubleColon = \is_array($token) && $token[0] === \T_DOUBLE_COLON;
             }
         }
 
