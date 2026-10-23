@@ -165,46 +165,6 @@ final class CompilerEnvironmentTest extends TestCase
         );
     }
 
-    /** The bootstrapper tells vendor inputs from project inputs by file; an internal function has none. */
-    #[Test]
-    public function an_internal_function_reason_carries_no_declaring_file(): void
-    {
-        $compiler = $this->compiler();
-        $compiler->directive('mine', 'strtoupper');
-
-        [, , $reasons] = CompilerEnvironment::describe($compiler);
-
-        $this->assertSame([['input' => "directive 'mine' (internal function or eval()'d code)", 'file' => null]], $reasons);
-    }
-
-    /** Non-callable state has no declaring file, so it is named once as a whole. */
-    #[Test]
-    public function undescribable_compiler_state_is_named_without_a_file(): void
-    {
-        $compiler = $this->compiler();
-        (new \ReflectionProperty(BladeCompiler::class, 'echoFormat'))->setValue($compiler, new \stdClass());
-
-        [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
-
-        $this->assertFalse($trusted);
-        $this->assertSame([['input' => 'compiler state that cannot be read or described', 'file' => null]], $reasons);
-    }
-
-    /** A subclass is untrusted on its own, so it must be named too, or the input count would hide it. */
-    #[Test]
-    public function a_compiler_subclass_is_named_with_its_declaring_file(): void
-    {
-        $compiler = new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@needle');
-
-        [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
-
-        $this->assertFalse($trusted);
-        $this->assertSame(
-            [['input' => 'compiler class ' . ThrowingBladeCompiler::class . ' (a BladeCompiler subclass)', 'file' => (new \ReflectionClass(ThrowingBladeCompiler::class))->getFileName()]],
-            $reasons,
-        );
-    }
-
     /**
      * The mirror case: two invokable-object directives with different constructor state must not
      * describe identically, since a matching hash would let a stale shadow look fresh. Asserted

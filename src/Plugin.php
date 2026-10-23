@@ -1009,11 +1009,11 @@ final class Plugin implements PluginEntryPointInterface
         );
 
         if (!$bootstrapper->boot()) {
-            $disabledReason = $bootstrapper->disabledReason();
+            $disabled = $bootstrapper->disabled();
 
             // Blade is opt-in: a run that silently lost it would pass CI with zero template findings.
-            if ($disabledReason !== null && $pluginConfig->failOnInternalError) {
-                throw new Blade\BladeDisabledException($disabledReason, 0, $bootstrapper->disabledCause());
+            if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException && $pluginConfig->failOnInternalError) {
+                throw $disabled;
             }
 
             return false;

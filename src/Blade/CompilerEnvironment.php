@@ -60,7 +60,7 @@ final class CompilerEnvironment
      * @return array{0: string, 1: bool, 2: list<array{input: string, file: ?string}>} the environment
      *         hash, whether every input that fed it could be resolved deterministically, and the inputs
      *         that could not (e.g. `directive 'ray' (closure bound to Foo)`) with their declaring file,
-     *         null when unknown, for the user-facing warning
+     *         null when unknown, for the --debug list
      */
     public static function describe(BladeCompiler $compiler): array
     {
@@ -70,30 +70,23 @@ final class CompilerEnvironment
             $fileHashes = [];
             /** @var list<array{input: string, file: ?string}> $reasons */
             $reasons = [];
-            // Non-callable state carries no file to name, so it is reported as one input below.
-            $stateTrusted = true;
 
             $descriptor = [
-                'class' => self::describeCompilerClass($compiler, $trustworthy, $reasons),
+                'class' => self::describeCompilerClass($compiler, $trustworthy),
                 'customDirectives' => self::describeCallableMap($compiler->getCustomDirectives(), 'directive', $compiler, $fileHashes, $trustworthy, $reasons),
                 'extensions' => self::describeCallableMap($compiler->getExtensions(), 'extension', $compiler, $fileHashes, $trustworthy, $reasons),
-                'conditions' => self::describeCallableMap(self::readArrayProperty($compiler, 'conditions', $stateTrusted), 'condition', $compiler, $fileHashes, $trustworthy, $reasons),
-                'precompilers' => self::describeCallableMap(self::readArrayProperty($compiler, 'precompilers', $stateTrusted), 'precompiler', $compiler, $fileHashes, $trustworthy, $reasons),
-                'prepareStringsForCompilationUsing' => self::describeCallableMap(self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $stateTrusted), 'string preparation callback', $compiler, $fileHashes, $trustworthy, $reasons),
-                'echoHandlers' => self::describeCallableMap(self::readArrayProperty($compiler, 'echoHandlers', $stateTrusted), 'echo handler', $compiler, $fileHashes, $trustworthy, $reasons),
-                'echoFormat' => self::describeValue(self::readProperty($compiler, 'echoFormat', $stateTrusted), $stateTrusted),
-                'encodingOptions' => self::describeValue(self::readProperty($compiler, 'encodingOptions', $stateTrusted), $stateTrusted),
-                'compilesComponentTags' => self::describeValue(self::readProperty($compiler, 'compilesComponentTags', $stateTrusted), $stateTrusted),
-                'classComponentAliases' => self::describeValue($compiler->getClassComponentAliases(), $stateTrusted),
-                'classComponentNamespaces' => self::describeValue($compiler->getClassComponentNamespaces(), $stateTrusted),
-                'anonymousComponentPaths' => self::describeValue($compiler->getAnonymousComponentPaths(), $stateTrusted),
-                'anonymousComponentNamespaces' => self::describeValue($compiler->getAnonymousComponentNamespaces(), $stateTrusted),
+                'conditions' => self::describeCallableMap(self::readArrayProperty($compiler, 'conditions', $trustworthy), 'condition', $compiler, $fileHashes, $trustworthy, $reasons),
+                'precompilers' => self::describeCallableMap(self::readArrayProperty($compiler, 'precompilers', $trustworthy), 'precompiler', $compiler, $fileHashes, $trustworthy, $reasons),
+                'prepareStringsForCompilationUsing' => self::describeCallableMap(self::readArrayProperty($compiler, 'prepareStringsForCompilationUsing', $trustworthy), 'string preparation callback', $compiler, $fileHashes, $trustworthy, $reasons),
+                'echoHandlers' => self::describeCallableMap(self::readArrayProperty($compiler, 'echoHandlers', $trustworthy), 'echo handler', $compiler, $fileHashes, $trustworthy, $reasons),
+                'echoFormat' => self::describeValue(self::readProperty($compiler, 'echoFormat', $trustworthy), $trustworthy),
+                'encodingOptions' => self::describeValue(self::readProperty($compiler, 'encodingOptions', $trustworthy), $trustworthy),
+                'compilesComponentTags' => self::describeValue(self::readProperty($compiler, 'compilesComponentTags', $trustworthy), $trustworthy),
+                'classComponentAliases' => self::describeValue($compiler->getClassComponentAliases(), $trustworthy),
+                'classComponentNamespaces' => self::describeValue($compiler->getClassComponentNamespaces(), $trustworthy),
+                'anonymousComponentPaths' => self::describeValue($compiler->getAnonymousComponentPaths(), $trustworthy),
+                'anonymousComponentNamespaces' => self::describeValue($compiler->getAnonymousComponentNamespaces(), $trustworthy),
             ];
-
-            if (!$stateTrusted) {
-                $trustworthy = false;
-                $reasons[] = ['input' => 'compiler state that cannot be read or described', 'file' => null];
-            }
 
             return [\hash('xxh128', \json_encode($descriptor, \JSON_THROW_ON_ERROR)), $trustworthy, $reasons];
         } catch (\Throwable) {
@@ -108,13 +101,11 @@ final class CompilerEnvironment
      * name and file hash are still contributed so the descriptor stays deterministic across two
      * runs of the SAME subclass source.
      *
-     * @param list<array{input: string, file: ?string}> $reasons
-     *
      * @return array{class: string, file?: string, hash?: string}
      *
      * @psalm-capabilities read-props|write-this-props|write-refs|io
      */
-    private static function describeCompilerClass(BladeCompiler $compiler, bool &$trustworthy, array &$reasons): array
+    private static function describeCompilerClass(BladeCompiler $compiler, bool &$trustworthy): array
     {
         $class = self::normalizeClassName($compiler::class);
 
@@ -129,8 +120,6 @@ final class CompilerEnvironment
         } catch (\Throwable) {
             $file = false;
         }
-
-        $reasons[] = ['input' => "compiler class {$class} (a BladeCompiler subclass)", 'file' => \is_string($file) ? $file : null];
 
         if (!\is_string($file)) {
             return ['class' => $class];

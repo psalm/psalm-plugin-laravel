@@ -777,7 +777,6 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('blade.compiler', $this->progress->warningText());
-        $this->assertStringContainsString("the 'blade.compiler' service is not bound", (string) $bootstrapper->disabledReason());
         $this->assertSame(0, $registrar->markCalls);
         $this->assertSame([], $registrar->analyzedShadows);
         $this->assertDirectoryDoesNotExist($this->shadowDir);
@@ -903,11 +902,8 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->bootstrapper($app, $registrar)->boot();
 
-        // The one warning is for `ThrowingBladeCompiler` being a compiler SUBCLASS (unconditionally
-        // untrustworthy, #1517 F3, unrelated to this test's own point). The compile failure is an
-        // issue instead, so it is not named in a warning `--no-progress` would discard.
-        $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
-        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
+        // The compile failure is an issue instead, so it is not named in a warning `--no-progress` would discard.
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
         $this->assertSame(
             [[$broken, "{{ \$x }}\n@unparseable\n", 'RuntimeException: unexpected end of file']],
             $registrar->compileFailures,
@@ -1069,7 +1065,7 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
         $this->assertSame(0, $registrar->markCalls);
-        $this->assertNull($bootstrapper->disabledReason(), 'an empty view tree is not a disable: failOnInternalError must not fire');
+        $this->assertNull($bootstrapper->disabled(), 'an empty view tree is not a disable: failOnInternalError must not fire');
     }
 
     #[Test]
@@ -1247,13 +1243,13 @@ final class BladeBootstrapperTest extends TestCase
      * #1517 M3: positive-side coverage for the `$trustedEnvironment && $manifest->isFresh(...)`
      * gate (`BladeBootstrapper::compileAll()`). An internal-function directive handler
      * (`getFileName()` returns `false`) makes `CompilerEnvironment::describe()` report
-     * `trustworthy = false`, which must (a) emit the untrusted-environment warning every run, and
+     * `trustworthy = false`, which must (a) stay out of the warnings (debug only, #1930), and
      * (b) force a recompile even on a SECOND run against an unchanged template and an unchanged
      * (still-untrustworthy) environment — the existing coverage only pins the negative side
      * (`assertSame([], $this->progress->warnings)` elsewhere in this suite).
      */
     #[Test]
-    public function an_untrustworthy_environment_recompiles_every_run_and_warns(): void
+    public function an_untrustworthy_environment_recompiles_every_run_without_a_warning(): void
     {
         $registerUntrustedDirective = static function (Container $app): void {
             /** @var BladeCompiler $compiler */
@@ -1268,9 +1264,10 @@ final class BladeBootstrapperTest extends TestCase
         $first = new RecordingShadowRegistrar();
         $this->bootstrapper($firstApp, $first)->boot();
 
-        $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
-        $this->assertStringContainsString('1 compiler input cannot be fingerprinted', $this->progress->warningText());
-        $this->assertStringContainsString("directive 'shout' (internal function", \implode('', $this->progress->debugMessages));
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $debug = \implode('', $this->progress->debugMessages);
+        $this->assertStringContainsString('1 compiler input cannot be fingerprinted', $debug);
+        $this->assertStringContainsString("directive 'shout' (internal function", $debug);
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1281,47 +1278,11 @@ final class BladeBootstrapperTest extends TestCase
         $second = new RecordingShadowRegistrar();
         $this->bootstrapper($secondApp, $second)->boot();
 
-        $this->assertCount(2, $this->progress->warnings, 'the second run must warn again: the environment is still untrustworthy');
         $this->assertNotSame(
             "<?php // stale\n",
             (string) \file_get_contents($second->analyzedShadows[0]),
             'an untrustworthy environment must force a recompile even though nothing else changed',
         );
-    }
-
-    /**
-     * #1693: the default warning stays a single line; the inputs are listed (uncapped) under --debug.
-     */
-    #[Test]
-    public function the_untrusted_environment_warning_is_short_and_inputs_are_listed_in_debug(): void
-    {
-        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
-
-        $app = $this->app();
-        /** @var BladeCompiler $compiler */
-        $compiler = $app->make('blade.compiler');
-
-        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
-            $compiler->directive($name, 'strtoupper');
-        }
-
-        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
-
-        $this->assertCount(1, $this->progress->warnings);
-        $text = $this->progress->warningText();
-        $this->assertStringNotContainsString("\n", \trim($text));
-        $this->assertStringContainsString('5 compiler inputs cannot be fingerprinted', $text);
-        $this->assertStringContainsString('analysis results are unaffected', $text);
-        $this->assertStringContainsString('--debug', $text);
-        $this->assertStringNotContainsString("directive 'a'", $text);
-
-        $debug = \implode('', $this->progress->debugMessages);
-
-        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
-            $this->assertStringContainsString("  - directive '{$name}'", $debug);
-        }
-
-        $this->assertStringContainsString('To restore caching', $debug);
     }
 
     /** Declares a directive handler in `$dir`; included from an instance method, it is bound to this test case and so untrusted. */
@@ -1338,41 +1299,11 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
-     * #1930: a vendor package's callback is not the user's to fix, so it never warns, and --debug
-     * leaves out the advice. The cache is still skipped: only the diagnostic changes.
+     * #1930: the skipped cache costs about a second and changes no result, so it never warns; --debug
+     * lists every input with its declaring file relative to the project root (the vendor dir's parent).
      */
     #[Test]
-    public function an_untrusted_input_declared_under_vendor_is_listed_in_debug_without_a_warning(): void
-    {
-        $fakeVendor = $this->root . '/fake-vendor';
-        $this->writeTemplate('profile.blade.php', "<p>@vendored</p>\n");
-        $boot = function (RecordingShadowRegistrar $registrar) use ($fakeVendor): void {
-            $app = $this->app();
-            /** @var BladeCompiler $compiler */
-            $compiler = $app->make('blade.compiler');
-            $compiler->directive('vendored', $this->untrustedDirectiveDeclaredIn($fakeVendor . '/acme/directives'));
-            (new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, vendorDirOverride: $fakeVendor))->boot();
-        };
-
-        $first = new RecordingShadowRegistrar();
-        $boot($first);
-
-        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
-        $debug = \implode('', $this->progress->debugMessages);
-        $this->assertStringContainsString('Blade shadow cache skipped for this run', $debug);
-        $this->assertStringContainsString("  - directive 'vendored' (closure bound to", $debug);
-        $this->assertStringContainsString(' in fake-vendor/acme/directives/directive.php' . "\n", $debug, 'paths are relative to the project root');
-        $this->assertStringNotContainsString('static fn', $debug);
-
-        \file_put_contents($first->analyzedShadows[0], "<?php // stale\n");
-        $second = new RecordingShadowRegistrar();
-        $boot($second);
-
-        $this->assertNotSame("<?php // stale\n", (string) \file_get_contents($second->analyzedShadows[0]), 'a vendor-only untrusted environment still recompiles');
-    }
-
-    #[Test]
-    public function an_untrusted_project_input_keeps_the_warning_and_the_advice_names_only_project_inputs(): void
+    public function untrusted_inputs_are_listed_in_debug_with_project_relative_paths(): void
     {
         $fakeVendor = $this->root . '/fake-vendor';
         $this->writeTemplate('profile.blade.php', "<p>@vendored @local</p>\n");
@@ -1384,36 +1315,11 @@ final class BladeBootstrapperTest extends TestCase
         $compiler->directive('local', $this->untrustedDirectiveDeclaredIn($this->root . '/app/Providers'));
         (new BladeBootstrapper($app, new RecordingShadowRegistrar(), $this->progress, $this->shadowDir, vendorDirOverride: $fakeVendor))->boot();
 
-        $this->assertCount(1, $this->progress->warnings);
-        $this->assertStringContainsString('2 compiler inputs cannot be fingerprinted', $this->progress->warningText());
-
-        $debug = \implode('', $this->progress->debugMessages);
-        $advice = \strpos($debug, 'To restore caching');
-        $this->assertNotFalse($advice, $debug);
-        $this->assertStringContainsString("directive 'local' (closure bound to " . self::class . ') in app/Providers/directive.php', \substr($debug, 0, $advice));
-        $this->assertStringNotContainsString("directive 'vendored'", \substr($debug, 0, $advice), 'the advice must not cover vendor inputs');
-        $this->assertStringContainsString("directive 'vendored'", \substr($debug, $advice));
-    }
-
-    #[Test]
-    public function a_vendor_input_reached_under_a_mis_cased_path_still_counts_as_vendor(): void
-    {
-        if (!$this->filesystemIsCaseInsensitive()) {
-            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
-        }
-
-        $vendorDir = $this->root . '/Fake-Vendor';
-        \mkdir($vendorDir, 0o777, true);
-        $this->writeTemplate('profile.blade.php', "<p>@vendored</p>\n");
-
-        $app = $this->app();
-        /** @var BladeCompiler $compiler */
-        $compiler = $app->make('blade.compiler');
-        // Included under the lower-case spelling, so reflection reports that spelling.
-        $compiler->directive('vendored', $this->untrustedDirectiveDeclaredIn($this->root . '/fake-vendor/acme/directives'));
-        (new BladeBootstrapper($app, new RecordingShadowRegistrar(), $this->progress, $this->shadowDir, vendorDirOverride: $vendorDir))->boot();
-
         $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $debug = \implode('', $this->progress->debugMessages);
+        $this->assertStringContainsString('2 compiler inputs cannot be fingerprinted', $debug);
+        $this->assertStringContainsString("  - directive 'vendored' (closure bound to " . self::class . ') in fake-vendor/acme/directives/directive.php' . "\n", $debug);
+        $this->assertStringContainsString("  - directive 'local' (closure bound to " . self::class . ') in app/Providers/directive.php' . "\n", $debug);
     }
 
     /** The caller throws instead (Plugin::initBladeAnalysis()), so warning here would report the disable twice. */
@@ -1427,7 +1333,7 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertFalse($bootstrapper->boot());
         $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
-        $this->assertStringContainsString("the 'blade.compiler' service is not bound", (string) $bootstrapper->disabledReason());
+        $this->assertStringContainsString("the 'blade.compiler' service is not bound", (string) $bootstrapper->disabled()?->getMessage());
     }
 
     /** Unreadable view roots with nothing found elsewhere leave Blade with nothing: a disable, not a silent zero. */
@@ -1446,7 +1352,7 @@ final class BladeBootstrapperTest extends TestCase
             \chmod($nested, 0o777);
         }
 
-        $this->assertStringContainsString('1 view directory could not be read', (string) $bootstrapper->disabledReason());
+        $this->assertStringContainsString('1 view directory could not be read', (string) $bootstrapper->disabled()?->getMessage());
         $this->assertStringContainsString('Blade template analysis is disabled for this run', $this->progress->warningText());
         $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
     }
