@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AnnotateFixture;
 
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
 
 final class Renderer
 {
@@ -57,6 +58,18 @@ final class Renderer
     public function locals(): string
     {
         return view('locals', ['rows' => $this->items()])->render();
+    }
+
+    /** `diff()` is declared `static`, and a count difference infers the unbounded `int<min, max>`. */
+    public function statics(): View
+    {
+        $all = new Collection($this->items());
+
+        return view('statics', [
+            'missing' => $all->diff(['b']),
+            'byKey' => $all->groupBy(static fn(string $item): string => $item)->all(),
+            'stats' => ['total' => \count($this->items()) - \count($all)],
+        ]);
     }
 
     /** @return list<string> */

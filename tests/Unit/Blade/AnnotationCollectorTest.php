@@ -278,6 +278,42 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
+    public function prints_no_static_marker_or_unbounded_int_range_at_any_depth(): void
+    {
+        $int = new Type\Union([new Type\Atomic\TInt()]);
+        $box = new Type\Atomic\TGenericObject('App\\Box', [$int, new Type\Union([new Type\Atomic\TString()])], is_static: true);
+        $passed = new Type\Union([Type\Atomic\TKeyedArray::make([
+            'box' => new Type\Union([$box]),
+            'boxes' => new Type\Union([new Type\Atomic\TArray([$int, new Type\Union([$box])])]),
+            'total' => new Type\Union([new Type\Atomic\TIntRange(null, null)]),
+            'positive' => new Type\Union([new Type\Atomic\TIntRange(1, null)]),
+        ])]);
+
+        // typeFor() also parses the id back, which needs a booted Psalm; the printed form is what matters.
+        $printable = new \ReflectionMethod(AnnotationCollector::class, 'printable');
+        $printed = $printable->invoke(null, $passed);
+        $this->assertInstanceOf(Type\Union::class, $printed);
+
+        $this->assertSame(
+            'array{box: App\\Box<int, string>, boxes: array<int, App\\Box<int, string>>, positive: int<1, max>, total: int}',
+            $printed->getId(false),
+        );
+    }
+
+    #[Test]
+    public function a_static_marked_type_agrees_with_the_same_type_unmarked(): void
+    {
+        $plain = new Type\Atomic\TGenericObject('App\\Box', [new Type\Union([new Type\Atomic\TInt()])]);
+
+        AnnotationCollector::record('home', ['box' => new Type\Union([$plain->setIsStatic(true)])], true);
+        AnnotationCollector::record('home', ['box' => new Type\Union([$plain])], true);
+
+        $observed = (new \ReflectionProperty(AnnotationCollector::class, 'observed'))->getValue();
+        $this->assertIsArray($observed);
+        $this->assertInstanceOf(Type\Union::class, $observed['home']['box'] ?? null, 'the two call sites must agree');
+    }
+
+    #[Test]
     public function writes_class_names_absolute_so_a_template_import_cannot_change_them(): void
     {
         $object = new Type\Union([new Type\Atomic\TNamedObject('App\\Models\\User')]);

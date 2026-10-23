@@ -16,6 +16,7 @@ use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic;
+use Psalm\Type\MutableTypeVisitor;
 use Psalm\Type\TypeNode;
 use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
@@ -200,6 +201,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         foreach ($data as $name => $type) {
+            // Normalized before comparing, so `Foo&static` and `Foo` from two call sites agree.
+            $type = self::printable($type);
             $seen = self::$observed[$viewName][$name] ?? null;
 
             if ($seen === false) {
@@ -296,6 +299,35 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             static fn(array $match): string => $match[0][0] === "'" || $match[0][0] === '"' ? $match[0] : '\\' . $match[0],
             $id,
         );
+    }
+
+    /**
+     * The type as a template can declare it, at any depth. A template has no class scope for a
+     * `static` marker to refer to, and `getId(false)` still prints it on a generic object
+     * (`Collection<int, string>&static`). An unbounded `int<min, max>` is plain `int`.
+     */
+    private static function printable(Union $union): Union
+    {
+        $visitor = new class extends MutableTypeVisitor {
+            /**
+             * @psalm-capabilities read-props|write-this-props|write-refs
+             */
+            #[\Override]
+            protected function enterNode(TypeNode &$type): ?int
+            {
+                if ($type instanceof Atomic\TNamedObject && $type->is_static) {
+                    $type = $type->setIsStatic(false);
+                } elseif ($type instanceof Atomic\TIntRange && $type->min_bound === null && $type->max_bound === null) {
+                    $type = new Atomic\TInt($type->from_docblock);
+                }
+
+                return null;
+            }
+        };
+
+        $visitor->traverse($union);
+
+        return $union;
     }
 
     /**

@@ -49,6 +49,7 @@ final class AnnotateEndToEndTest extends TestCase
         'loop' => "@foreach (\$items as \$item)\n  <li>{{ \$item }} {{ \$loop->index }}</li>\n@endforeach\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
+        'statics' => "<p>{{ \$missing->count() }} {{ count(\$byKey) }} {{ \$stats['total'] }}</p>\n",
     ];
 
     private ?string $controlFile = null;
@@ -103,6 +104,20 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertSame(
             "<?php /**\n * @var string \$title\n * @var string \$extra\n */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
             $this->template('declared'),
+        );
+    }
+
+    #[Test]
+    public function prints_neither_the_static_marker_nor_an_unbounded_int_range(): void
+    {
+        // A template has no class scope for `static` to refer to, and `int<min, max>` is plain `int`.
+        $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var array<string, \\Illuminate\\Support\\Collection<int, string>> \$byKey\n"
+            . " * @var \\Illuminate\\Support\\Collection<int<0, max>, string> \$missing\n"
+            . " * @var array{total: int} \$stats\n */\n?>\n" . self::TEMPLATES['statics'],
+            $this->template('statics'),
         );
     }
 
@@ -207,7 +222,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(6, $result['changed']);
+        $this->assertCount(7, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
