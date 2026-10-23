@@ -159,7 +159,10 @@ final class CompilerEnvironmentTest extends TestCase
         [, $trusted, $reasons] = CompilerEnvironment::describe($compiler);
 
         $this->assertFalse($trusted);
-        $this->assertSame(["directive 'mine' (callable bound to " . MarkerDirective::class . ')'], $reasons);
+        $this->assertSame(
+            [['input' => "directive 'mine' (callable bound to " . MarkerDirective::class . ')', 'file' => (new \ReflectionClass(MarkerDirective::class))->getFileName()]],
+            $reasons,
+        );
     }
 
     /**

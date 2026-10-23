@@ -996,6 +996,8 @@ final class Plugin implements PluginEntryPointInterface
      *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
      *              published nothing, so no Blade handler may register
+     *
+     * @throws Blade\BladeDisabledException when Blade disabled itself and `failOnInternalError` is on
      */
     private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, bool $annotating): bool
     {
@@ -1007,9 +1009,17 @@ final class Plugin implements PluginEntryPointInterface
             $output,
             $pluginConfig->bladeCacheDir,
             $pluginConfig->bladeReportUnusedViewData || $annotating,
+            $pluginConfig->failOnInternalError,
         );
 
         if (!$bootstrapper->boot()) {
+            $disabled = $bootstrapper->disabled();
+
+            // Blade is opt-in: a run that silently lost it would pass CI with zero template findings.
+            if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException && $pluginConfig->failOnInternalError) {
+                throw $disabled;
+            }
+
             return false;
         }
 
