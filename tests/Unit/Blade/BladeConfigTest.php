@@ -54,7 +54,7 @@ final class BladeConfigTest extends TestCase
     public function blade_value_false_switches_the_present_element_off(): void
     {
         $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade value="false" validateViewData="true" /></pluginClass>'),
+            new \SimpleXMLElement('<pluginClass><blade value="false" reportMixedIssues="true" /></pluginClass>'),
         );
 
         $this->assertFalse($config->bladeEnabled);

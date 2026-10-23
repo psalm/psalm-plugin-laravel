@@ -7,8 +7,11 @@ namespace Psalm\LaravelPlugin\Internal;
 use Psalm\Config;
 use Psalm\Issue\PluginIssue;
 use Psalm\LaravelPlugin\Issues\BladeCompileFailure;
+use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
+use Psalm\LaravelPlugin\Issues\MissingViewVariable;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
+use Psalm\LaravelPlugin\Issues\UnusedViewData;
 
 /**
  * Applies the default reporting policy for plugin diagnostics that are still
@@ -24,6 +27,9 @@ final class ExperimentalIssuePolicy
         UnknownModelAttribute::class,
         UndefinedModelRelation::class,
         BladeCompileFailure::class,
+        MissingViewVariable::class,
+        InvalidViewVariableType::class,
+        UnusedViewData::class,
     ];
 
     public static function apply(bool $enforced): void

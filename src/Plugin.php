@@ -39,6 +39,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
         require_once __DIR__ . '/Issues/BladeCompileFailure.php';
+        require_once __DIR__ . '/Issues/MissingViewVariable.php';
+        require_once __DIR__ . '/Issues/InvalidViewVariableType.php';
+        require_once __DIR__ . '/Issues/UnusedViewData.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
         // Third gated laravel/ai call site, alongside the stubs and the handler.
@@ -90,7 +93,7 @@ final class Plugin implements PluginEntryPointInterface
             // (finder fallback) and the always-on view() narrowing both need it.
             $viewFactory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
 
-            if ($pluginConfig->findMissingViews || $pluginConfig->bladeValidateViewData) {
+            if ($pluginConfig->findMissingViews || $pluginConfig->bladeEnabled) {
                 $this->initMissingViewHandler(ApplicationProvider::getApp(), $output, $viewFactory, $pluginConfig->findMissingViews);
             }
 
@@ -115,7 +118,7 @@ final class Plugin implements PluginEntryPointInterface
             // handler below would read an empty registry and, worse, report on templates whose
             // facts were never collected (#1518).
             $bladeActive = ($pluginConfig->bladeEnabled || $annotate instanceof Blade\Annotate\AnnotateRequest)
-                && $this->initBladeAnalysis($pluginConfig, $output, $annotate instanceof Blade\Annotate\AnnotateRequest);
+                && $this->initBladeAnalysis($pluginConfig, $output);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
@@ -812,21 +815,13 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
             require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
             $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
-        }
-
-        // Checks view() call sites against the contracts the compiled templates declare, and reports
-        // data keys the template never reads (#1478). Needs the compile pass to have populated
-        // ContractRegistry, hence the activation half of the gate; the two flags are independent
-        // opt-ins for the checks themselves, sharing one walk of the statement.
-        if ($bladeActive && ($pluginConfig->bladeValidateViewData || $pluginConfig->bladeReportUnusedViewData)) {
+            // Checks view() call sites against the contracts the compiled templates declare, and
+            // reports data keys the template never reads (#1478); needs ContractRegistry populated.
+            // No flag of its own: ExperimentalIssuePolicy sets the severity of its issues (#1985).
             require_once __DIR__ . '/Blade/ComposerKeyResolver.php';
             require_once __DIR__ . '/Blade/ReadSetResolver.php';
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
-            Handlers\Views\ViewContractHandler::init(
-                $pluginConfig->bladeValidateViewData,
-                $pluginConfig->bladeReportUnusedViewData,
-            );
             $registration->registerHooksFromClass(Handlers\Views\ViewContractHandler::class);
         }
 
@@ -917,7 +912,7 @@ final class Plugin implements PluginEntryPointInterface
      * Uses the app's FileViewFinder which reflects config('view.paths') plus
      * any paths added by service providers during bootstrap.
      *
-     * Also runs without findMissingViews ($report false) for Blade's validateViewData, which needs
+     * Also runs without findMissingViews ($report false) for Blade's view-data checks, which need
      * to know which `@includeFirst` candidate exists; a finder it cannot read then just leaves that
      * unknown, so only the MissingView diagnostic warns.
      */
@@ -997,15 +992,12 @@ final class Plugin implements PluginEntryPointInterface
      * and the booted `BladeCompiler`'s own registration surface (see
      * `Blade\CompilerEnvironment::describe()`).
      *
-     * @param bool $annotating the annotate codemod is driving this run, which needs the read sets
-     *                         the UnusedViewData pass collects whether or not that rule is on
-     *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
      *              published nothing, so no Blade handler may register
      *
      * @throws Blade\BladeDisabledException when Blade disabled itself and `failOnInternalError` is on
      */
-    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, bool $annotating): bool
+    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): bool
     {
         $registrar = new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance());
 
@@ -1014,8 +1006,8 @@ final class Plugin implements PluginEntryPointInterface
             $registrar,
             $output,
             $pluginConfig->bladeCacheDir,
-            $pluginConfig->bladeReportUnusedViewData || $annotating,
-            $pluginConfig->failOnInternalError,
+            collectDataIncludes: true,
+            failOnInternalError: $pluginConfig->failOnInternalError,
         );
 
         if (!$bootstrapper->boot()) {

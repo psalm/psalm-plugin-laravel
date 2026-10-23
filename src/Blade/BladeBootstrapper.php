@@ -38,7 +38,7 @@ final class BladeBootstrapper
         private readonly ShadowRegistrar $registrar,
         private readonly Progress $output,
         private readonly string $shadowDir,
-        /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
+        /** UnusedViewData's read sets: two extra AST walks per template. The plugin always collects them. */
         private readonly bool $collectDataIncludes = false,
         /** The caller escalates a disable, so the warning is left to that one report. */
         private readonly bool $failOnInternalError = false,

@@ -34,12 +34,13 @@ final class UnusedViewDataTest extends TestCase
 
     /**
      * The command a case's `$config` resolves to. Cases naming the same config share one run.
+     * `--show-info` keeps the `info` default of this experimental issue in the report.
      *
      * @return list<string>
      */
     private function arguments(string $config): array
     {
-        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
+        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json', '--show-info=true'];
     }
 
     /**
@@ -51,22 +52,6 @@ final class UnusedViewDataTest extends TestCase
     private function unusedDataIssues(string $config): array
     {
         return $this->project($this->fixtureIssues(self::FIXTURE, $this->arguments($config)));
-    }
-
-    /**
-     * The final run of consecutive real runs, each against the shadow cache its predecessor left
-     * behind. The cache surviving between the steps is the subject, so these runs stay out of the
-     * memo and nothing clears the directory between them.
-     *
-     * @param non-empty-list<string> $configs
-     *
-     * @return list<array{file: string, message: string}>
-     */
-    private function unusedDataIssuesWarm(array $configs): array
-    {
-        $argumentSets = \array_map(fn(string $config): array => $this->arguments($config), $configs);
-
-        return $this->project($this->decodeIssues($this->analyzeFixtureSequence(self::FIXTURE, $argumentSets)));
     }
 
     /**
@@ -237,27 +222,33 @@ final class UnusedViewDataTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'Suppressed.php'), \var_export($issues, true));
     }
 
+    /** An experimental issue: `info` under a bare `<blade />`, `error` under `<experimental value="true" />`. */
     #[Test]
-    public function the_check_is_off_unless_the_config_flag_opts_in(): void
+    public function the_check_runs_under_bare_blade_and_only_its_severity_follows_experimental(): void
     {
-        $this->assertSame([], $this->unusedDataIssues('psalm-unused-data-off.xml'));
+        $enforced = $this->unusedDataSeverities('psalm.xml');
+        $advisory = $this->unusedDataSeverities('psalm-blade-only.xml');
+
+        $this->assertNotSame([], $enforced);
+        $this->assertSame(['error'], \array_values(\array_unique($enforced)));
+        $this->assertSame(['info'], \array_values(\array_unique($advisory)));
+        $this->assertSame(\array_keys($enforced), \array_keys($advisory));
     }
 
     /**
-     * A shadow cache warmed while the flag was off stores no read set and no data includes for any
-     * template (neither pass ran). Flipping the flag on against that SAME cache must recompile each
-     * template once, or every entry stays "fresh" with an unknowable read set forever and the rule
-     * silently reports nothing.
+     * @return array<string, string> one entry per UnusedViewData issue, its identity => its severity
      */
-    #[Test]
-    public function a_cache_warmed_with_the_flag_off_is_recompiled_once_the_flag_turns_on(): void
+    private function unusedDataSeverities(string $config): array
     {
-        // Step one warms the cache with the flag off; step two runs against that same cache
-        // directory with the flag on, deliberately without deleting it in between.
-        $this->assertReportsOnly(
-            $this->unusedDataIssuesWarm(['psalm-unused-data-off.xml', 'psalm.xml']),
-            'UnreadKey.php',
-            'orphan',
-        );
+        $severities = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments($config)) as $issue) {
+            if ($issue['type'] === self::UNUSED) {
+                $key = \implode(':', [\basename((string) $issue['file_name']), (string) $issue['line_from'], (string) $issue['message']]);
+                $severities[$key] = (string) $issue['severity'];
+            }
+        }
+
+        return $severities;
     }
 }
