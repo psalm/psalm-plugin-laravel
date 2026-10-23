@@ -56,11 +56,15 @@ final class BladeBaselineTest extends TestCase
     }
 
     /**
+     * The exit code is asserted, not just the report: Psalm prints the report before it writes its
+     * caches and exits, so a crash after the output would still leave a passing `[]`.
+     *
      * @param list<string> $arguments
+     * @param 0|2 $exitCode 0 for a clean run, 2 for one that reports an error
      *
      * @return list<array{type: string, file: string, line: int}>
      */
-    private function analyze(string $copy, array $arguments, bool $blade = true): array
+    private function analyze(string $copy, array $arguments, int $exitCode, bool $blade = true): array
     {
         $process = new Process(
             [\PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', '-c', 'psalm.xml', '--threads=1', '--scan-threads=1', '--no-progress', '--output-format=json', ...$arguments],
@@ -71,8 +75,11 @@ final class BladeBaselineTest extends TestCase
         $process->setTimeout(300);
         $process->run();
 
+        $output = "\n{$process->getOutput()}\n{$process->getErrorOutput()}";
+        $this->assertSame($exitCode, $process->getExitCode(), 'unexpected Psalm exit code.' . $output);
+
         $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
+        $this->assertIsArray($decoded, 'Psalm did not emit a JSON report.' . $output);
 
         $issues = [];
 
@@ -102,7 +109,11 @@ final class BladeBaselineTest extends TestCase
             return $copy;
         }
 
-        $this->analyze($copy, ['--no-cache', '--set-baseline=baseline.xml']);
+        // The run that writes a baseline still reports against the previous one, here none.
+        $this->assertSame(
+            [['type' => 'UndefinedPropertyFetch', 'file' => self::TEMPLATE, 'line' => 2]],
+            $this->analyze($copy, ['--no-cache', '--set-baseline=baseline.xml'], 2),
+        );
 
         $baseline = (string) \file_get_contents($copy . '/baseline.xml');
         $this->assertStringContainsString('<file src="' . self::TEMPLATE . '">', $baseline);
@@ -133,19 +144,21 @@ final class BladeBaselineTest extends TestCase
         $copy = $this->baselinedCopy();
         $arguments = ['--use-baseline=baseline.xml'];
 
-        $this->assertSame([], $this->analyze($copy, [...$arguments, '--no-cache']), 'cold shadow cache, no Psalm cache');
+        $this->assertSame([], $this->analyze($copy, [...$arguments, '--no-cache'], 0), 'cold shadow cache, no Psalm cache');
         $this->assertFileExists($copy . '/.cache/blade-shadows/manifest.php');
-        $this->assertSame([], $this->analyze($copy, $arguments), 'warm shadow cache, cold Psalm cache');
-        $this->assertSame([], $this->analyze($copy, $arguments), 'warm shadow cache, warm Psalm cache');
+        $this->assertSame([], $this->analyze($copy, $arguments, 0), 'warm shadow cache, cold Psalm cache');
+        $this->assertSame([], $this->analyze($copy, $arguments, 0), 'warm shadow cache, warm Psalm cache');
     }
 
+    /** Psalm trims both the stored entry and the selection it matches, so outer whitespace is free. */
     #[Test]
-    public function moving_or_reindenting_the_flagged_line_keeps_the_entry(): void
+    public function moving_reindenting_or_trailing_space_on_the_flagged_line_keeps_the_entry(): void
     {
         $copy = $this->baselinedCopy();
         $this->editTemplate($copy, "<div>\n    <p", "<section>\n<div>\n        <p");
+        $this->editTemplate($copy, "</p>\n", "</p>   \n");
 
-        $this->assertSame([], $this->analyze($copy, ['--no-cache', '--use-baseline=baseline.xml']));
+        $this->assertSame([], $this->analyze($copy, ['--no-cache', '--use-baseline=baseline.xml'], 0));
     }
 
     #[Test]
@@ -159,7 +172,7 @@ final class BladeBaselineTest extends TestCase
                 ['type' => 'UndefinedPropertyFetch', 'file' => self::TEMPLATE, 'line' => 2],
                 ['type' => 'UnusedBaselineEntry', 'file' => self::TEMPLATE, 'line' => 0],
             ],
-            $this->analyze($copy, ['--no-cache', '--use-baseline=baseline.xml']),
+            $this->analyze($copy, ['--no-cache', '--use-baseline=baseline.xml'], 2),
         );
     }
 
@@ -170,7 +183,7 @@ final class BladeBaselineTest extends TestCase
 
         $this->assertSame(
             [['type' => 'UnusedBaselineEntry', 'file' => self::TEMPLATE, 'line' => 0]],
-            $this->analyze($copy, ['--no-cache', '--use-baseline=baseline.xml'], blade: false),
+            $this->analyze($copy, ['--no-cache', '--use-baseline=baseline.xml'], 2, blade: false),
         );
     }
 }
