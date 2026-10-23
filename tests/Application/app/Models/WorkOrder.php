@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -64,6 +65,42 @@ final class WorkOrder extends Model
     public function parts(): BelongsToMany
     {
         return $this->belongsToMany(Part::class)->withPivot('quantity', 'unit_price');
+    }
+
+    /**
+     * A declared pivot shape wins over the one built from the body (#1944).
+     *
+     * @psalm-return BelongsToMany<Part, $this, Pivot&object{quantity: int}, 'pivot'>
+     */
+    public function pricedParts(): BelongsToMany
+    {
+        return $this->belongsToMany(Part::class)->withPivot('quantity');
+    }
+
+    /** Returns differing only in the pivot table still resolve the relation (#1944). */
+    public function branchTableParts(): BelongsToMany
+    {
+        if ($this->exists) {
+            return $this->belongsToMany(Part::class, 'part_work_order');
+        }
+
+        return $this->belongsToMany(Part::class, 'archived_part_work_order');
+    }
+
+    /** Returns differing only in `withPivot()` columns keep the relation but no pivot shape (#1944). */
+    public function branchColumnParts(): BelongsToMany
+    {
+        if ($this->exists) {
+            return $this->belongsToMany(Part::class)->withPivot('quantity');
+        }
+
+        return $this->belongsToMany(Part::class)->withPivot('unit_price');
+    }
+
+    /** Delegated `withPivot()` (#1944): the outer columns follow parts()'s own. */
+    public function discountedParts(): BelongsToMany
+    {
+        return $this->parts()->withPivot('discount');
     }
 
     public function damageReports(): MorphMany

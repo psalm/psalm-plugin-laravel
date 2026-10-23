@@ -564,6 +564,24 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - Unrelated value types are still rejected (`LengthAwarePaginator<int, Tag>` is not a `LengthAwarePaginator<int, User>`).
 - Do not widen `Support\Collection` by copying this: a collection is routinely written through, which is why its variance is a separate decision.
 
+### `BelongsToMany` / `MorphToMany` are covariant in `TPivotModel` (#1944)
+
+**Decision:** All four `TPivotModel` declarations (`stubs/common/` `BelongsToMany` and `MorphToMany`, plus the `stubs/13/` and `stubs/13.5.0/` `BelongsToMany` re-declarations) are `@template-covariant`. A version dir re-declares the class header, so the flag must be on every copy or Psalm keeps the last-loaded (invariant) one.
+
+**Why:** a pivot refined with its `withPivot()` columns (`Pivot&object{role: string}`) must still satisfy every existing `BelongsToMany<..., Pivot, 'pivot'>` return and parameter. TPivotModel has no input position: callbacks receive it (covariant) and `$using` is a `class-string<TPivotModel>`.
+
+**Rejected:** refining the slot while keeping it invariant. Every existing plain `Pivot` declaration on a `withPivot()` body then fails with `InvalidReturnStatement` / `InvalidArgument`.
+
+### `withPivot()` columns refine TPivotModel in a handler (#1944)
+
+**Decision:** `BelongsToManyWithPivotHandler` answers `withPivot()` with the receiver whose TPivotModel gains `object{<column>: <type>}`; each type comes from the pivot table's migration, else `mixed`. A column named like the parent model's `CREATED_AT` / `UPDATED_AT`, or the default `created_at` / `updated_at` (`fromAttributes()` fills the pivot before it has a parent, so the defaults are date-normalized too; parent names read from the constants; `mixed` for all columns when the model overrides `getCreatedAtColumn()` / `getUpdatedAtColumn()`) stays `mixed`: once `created_at` is selected, `Pivot::fromAttributes()` makes the pivot cast the parent's timestamp columns as dates, and the date class (Carbon or an app-configured one) is not known statically. A selected column that already has a type in the receiver's shape keeps it: Laravel only appends columns.
+
+**Boundary:** a dynamic or class-string `$table` argument declines the refinement (the pivot class may change through `using()`), so a declared pivot shape on such a relation still reports `InvalidReturnType`.
+
+**Rejected:**
+- A stub-only refinement. The columns are call arguments and their types live in a migration; no docblock form maps a literal argument list to object-shape keys.
+- Leaving the inferred `Pivot` and relying on Psalm accepting a declared shape. Psalm 7.0.0-rc8 still compares two object shapes inside an intersection by name only (`ObjectComparator::isIntersectionShallowlyContainedBy`), so any `Pivot&object{...}` passes any declared one, but plain `Pivot` never does. The handler still types columns honestly so nothing breaks once Psalm compares the properties.
+
 ## Producer Return Narrowing
 
 ### Provenance may narrow, conformance never widens
