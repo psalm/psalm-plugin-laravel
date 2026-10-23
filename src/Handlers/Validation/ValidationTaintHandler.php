@@ -13,6 +13,7 @@ use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Plugin\EventHandler\Event\AfterFileAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
+use Psalm\Type\TaintKind;
 
 /**
  * Applies taint to validated request data — the *mechanism* side. The
@@ -103,7 +104,16 @@ final class ValidationTaintHandler implements
     #[\Override]
     public static function removeTaints(AddRemoveTaintsEvent $event): int
     {
-        return ValidatedFieldReadResolver::resolve($event)?->removedTaints ?? 0;
+        $removed = ValidatedFieldReadResolver::resolve($event)?->removedTaints ?? 0;
+
+        // Rule masks are built-in kinds only. A rule clearing every one of them
+        // (numeric, in, enum, ...) also clears the custom taints psalm.xml
+        // aliases into `input`; a partial escape (email, ip) keeps them.
+        if (($removed & TaintKind::ALL_INPUT) === TaintKind::ALL_INPUT) {
+            return $removed | $event->getCodebase()->getInputTaints();
+        }
+
+        return $removed;
     }
 
     /**
