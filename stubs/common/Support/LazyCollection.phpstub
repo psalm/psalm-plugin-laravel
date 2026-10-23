@@ -127,12 +127,7 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * parameter (it forwards func_get_args() to Collection::random) — matched
      * here against Laravel source.
      *
-     * Unused method template: workaround for vimeo/psalm#11837, a conditional return in a stub
-     * that re-declares a reflected method otherwise collapses to its first branch.
-     *
      * `$preserveKeys = true` keeps the source keys; any other number result is re-indexed.
-     *
-     * @template TUnused
      *
      * @param  int|null  $number
      * @param  bool  $preserveKeys

@@ -8,13 +8,6 @@ namespace Illuminate\Support\Traits;
  * closures and first-class callables, and an untyped closure param inferred from `$this` stays a
  * literal `static`. `$this` and `static` in the return infer identically here (probed on rc1 for
  * Stringable, Response, paginators, Router and userland hosts), so the signature mirrors Laravel.
- *
- * The unused `@template` is a workaround for vimeo/psalm#11837: a conditional return in a stub
- * that re-declares a reflected method collapses to a single branch (here: always
- * `HigherOrderTapProxy`). A method-level template routes around that code path. Drop it once
- * the fix (vimeo/psalm#11840) lands.
- *
- * @see https://github.com/vimeo/psalm/issues/11837
  */
 trait Tappable
 {
@@ -22,7 +15,6 @@ trait Tappable
      * Call the given Closure with this instance then return the instance, or, with no
      * callback, a proxy that runs each method called on it against this instance.
      *
-     * @template TUnused
      * @param  callable|null  $callback
      * @return ($callback is null ? \Illuminate\Support\HigherOrderTapProxy<$this> : $this)
      */
