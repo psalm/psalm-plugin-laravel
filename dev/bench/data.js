@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792759435971,
+  "lastUpdate": 1792762340568,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15220,6 +15220,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41bc120754cb4d6c1cc24da5c81ca931e24063d8",
+          "message": "Require Laravel 12.27+ and match `Collection` `sum()` and `pad()` types to the runtime (#1922)\n\n* fix(collections): split groupBy()/keyBy() enum keys at Laravel 12.27 #1896\n\nThe 12.20 floor maps only a BackedEnum group key and casts every keyBy() object with (string), so\na pure UnitEnum (groupBy) or any enum (keyBy) throws there. The enum-accepting contract moves to\nstubs/12.27.0/, where enum_value() resolves enums first.\n\n* fix(collections): match sum() callback arity and empty-collection result to runtime #1896\n\nsum() passes the callback only the item on every 12.x release and the key too from 13.x\n(stubs/13/). Its accumulator starts at int 0, so an empty float collection yields int and a\nnumeric-string callback result is a valid addend.\n\n* fix(collections): keep string keys in pad() result key type #1896\n\narray_pad() keeps string keys and renumbers int keys, and LazyCollection::pad() re-yields items\nunder their own keys, so the key type is TKey|int, not Laravel's documented int.\n\n* style(stubs): copy full Laravel class headers into version-dir Collection/Enumerable stubs\n\nPin untyped-closure parameter inference for Enumerable::sum() and the\ngroupBy() callback below 12.27, and state the keyBy() enum cutoff (12.26.4).\n\n* fix(collections): accept enum keyBy() keys from Laravel 12.26.4 #1896\n\n* build: require Laravel 12.27 or newer on the 12.x line #1896\n\nLaravel 12.26.4 and 12.27.0 added enum group keys to Collection::keyBy() and\ngroupBy(). With the floor at 12.27 the collection stubs no longer need a\nversion split for them.\n\n* refactor(collections): drop the enum key version split now that 12.27 is the floor #1896\n\ncommon/Support/Collection.phpstub keeps the UnitEnum group key contracts that\nhold on every supported release; the 12.26.4/12.27.0 stub dirs and their\nbelow-floor tests go away.",
+          "timestamp": "2026-10-23T15:29:27+02:00",
+          "tree_id": "8e33aeb3c40886b38cae72267cef41c75cf530d2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/41bc120754cb4d6c1cc24da5c81ca931e24063d8"
+        },
+        "date": 1792762338843,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.88,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1310,
             "unit": "MB"
           }
         ]
