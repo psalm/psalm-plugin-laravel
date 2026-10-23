@@ -94,7 +94,7 @@ final class AnnotateEndToEndTest extends TestCase
         $this->annotate();
 
         $this->assertSame(
-            "<?php /** @var string \$title\n * @var string \$extra\n */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
+            "<?php /**\n * @var string \$title\n * @var string \$extra\n */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
             $this->template('declared'),
         );
     }

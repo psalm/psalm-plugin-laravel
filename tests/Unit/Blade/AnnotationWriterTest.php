@@ -281,9 +281,9 @@ final class AnnotationWriterTest extends TestCase
     #[Test]
     public function the_dry_run_diff_for_an_opened_out_docblock_line_matches_the_actual_byte_change(): void
     {
-        // A one-line header docblock is opened out: the declaration lands before its `*/`, which
-        // moves to a line of its own. That modifies an existing line, so a hand-rolled "pure
-        // insertion" hunk header would lie about it.
+        // A one-line header docblock is opened out: its text and the declaration each get a line,
+        // and the `*/` moves to a line of its own. That modifies an existing line, so a hand-rolled
+        // "pure insertion" hunk header would lie about it.
         $path = $this->template("<?php /** Header. */ ?>\n<p>{{ \$title }}</p>\n");
         $before = (string) \file_get_contents($path);
 
