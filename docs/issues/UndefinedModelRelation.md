@@ -78,7 +78,7 @@ User::with('posts:id,user_id,title');  // OK: no closure, columns are parsed
 
 ### `:columns` in existence queries
 
-Relationship existence queries look the relation name up verbatim, so a `:columns` suffix never resolves and Laravel throws `BadMethodCallException` (`Call to undefined method ...::posts:id()`). This covers `has()` / `whereHas()` / `doesntHave()` / `whereDoesntHave()` (and their `or*` forms) and the `where*Relation()` families. There are no related columns to select in an existence query, so `:columns` has no meaning there. `withWhereHas()` is the exception: it strips `:columns` itself and is not reported.
+Relationship existence queries look the relation name up verbatim, so a `:columns` suffix never resolves and Laravel throws `BadMethodCallException` (`Call to undefined method ...::posts:id()`). This covers `has()` / `whereHas()` / `doesntHave()` / `whereDoesntHave()` (and their `or*` forms) and the `where*Relation()` families. There are no related columns to select in an existence query, so `:columns` has no meaning there. `withWhereHas()` is the exception and is not reported: without a callback it strips `:columns` itself on every supported Laravel version. With a closure, Laravel parses the suffix only from 13.37.0; on older versions the eager load looks it up verbatim. The rule does not report that case yet ([#1982](https://github.com/psalm/psalm-plugin-laravel/issues/1982)).
 
 ```php
 User::has('posts:id');                                // UndefinedModelRelation
@@ -86,7 +86,7 @@ User::whereHas('posts:id', fn ($query) => $query);    // UndefinedModelRelation
 User::whereRelation('posts:id', 'published', true);   // UndefinedModelRelation
 
 User::has('posts');                                   // OK
-User::withWhereHas('posts:id');                       // OK: withWhereHas() strips the columns
+User::withWhereHas('posts:id,user_id');               // OK: withWhereHas() strips the columns
 ```
 
 ## Known limitations
