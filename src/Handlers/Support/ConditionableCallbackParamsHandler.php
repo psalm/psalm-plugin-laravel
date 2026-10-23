@@ -275,6 +275,8 @@ final class ConditionableCallbackParamsHandler implements
      * The receiver as the callback will see it: exactly one object atomic of the dispatched class
      * (null dropped for `?->`), else null. `$this` in a trait is `Host&static`; a final host has
      * no subclass, and Psalm reads the expected param as the plain host, so `&static` is dropped.
+     *
+     * @psalm-capabilities read-props
      */
     private static function receiver(
         StatementsAnalyzer $source,
@@ -503,6 +505,8 @@ final class ConditionableCallbackParamsHandler implements
     /**
      * Whether `self`/`static`/`parent` appears anywhere in the type, generics included. Closure
      * storage keeps these unexpanded, and Psalm never matches them against the host type.
+     *
+     * @psalm-pure
      */
     private static function containsLateBound(Union $type): bool
     {

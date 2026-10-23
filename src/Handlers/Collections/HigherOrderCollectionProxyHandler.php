@@ -507,7 +507,7 @@ final class HigherOrderCollectionProxyHandler implements
     /**
      * Whether every atomic of a key type is an exact int/string key class (no template, no nested type).
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function isPlainKey(Union $key): bool
     {

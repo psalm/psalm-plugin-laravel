@@ -192,7 +192,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
     /**
      * sum() upstream returns `$result ?: 0` so null is impossible. Pure int or pure float only.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function narrowSum(Union $columnType): ?Union
     {
@@ -211,7 +211,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
     /**
      * avg() is null on empty table; numeric values land as float|int.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function narrowAvg(Union $columnType): ?Union
     {
@@ -241,7 +241,7 @@ final class BuilderAggregateHandler implements MethodReturnTypeProviderInterface
      * Mixed numerics, strings, numeric-string, TNumeric, objects → null (defer to stub).
      * Also classifies the raw column for {@see ModelAggregatePropertyHandler::columnAwareType()}.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     public static function numericShape(Union $type): ?string
     {

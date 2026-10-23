@@ -102,7 +102,9 @@ final class ViewCallChain
         return new self($chain->viewName, $chain->data, $complete, $merged[0]);
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function isInRenderMethod(StatementsSource $source): bool
     {
         $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;

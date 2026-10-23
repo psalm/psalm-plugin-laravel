@@ -500,7 +500,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
      *
      * @return class-string|null
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function extractClassFromUnion(Union $union): ?string
     {

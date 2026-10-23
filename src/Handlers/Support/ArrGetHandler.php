@@ -115,7 +115,7 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface
      * no literal keys, and a multi-atomic union would force flattening shapes that
      * disagree on which keys exist.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function asSealedKeyedArray(mixed $type): ?TKeyedArray
     {
