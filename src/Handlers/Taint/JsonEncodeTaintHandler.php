@@ -15,18 +15,17 @@ use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
-// @todo-by https://github.com/vimeo/psalm/issues/12322 remove this handler when Psalm models json_encode() HEX flags
 /**
- * Treats `json_encode()` with literal HEX flags as escaping (Blade `@json` compiles to
- * `json_encode($x, 15, 512)`). Core does this for `htmlspecialchars()` flags in `HtmlFunctionTainter`,
- * but has no `json_encode()` branch. Delete this handler once it has one (vimeo/psalm#12322).
+ * Treats `json_encode()` with literal `JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP` flags as a has_quotes
+ * escape (Blade `@json` compiles to `json_encode($x, 15, 512)`). Core's `JsonEncodeTainter` removes only
+ * html (with `JSON_HEX_TAG | JSON_HEX_AMP`) and keeps has_quotes by design, see vimeo/psalm#12453.
  *
- * - `JSON_HEX_TAG` removes html. `JSON_HEX_APOS` plus `JSON_HEX_QUOT` removes has_quotes; without
- *   HEX_APOS a `'` stays raw, without HEX_QUOT a `"` becomes `\"` (a backslash escapes nothing in HTML).
- * - Known gap: the encoder's own `"` delimiters still close a double-quoted attribute
- *   (`data-x="@json($v)"`). Accepted because such markup is visibly broken for every string, array or
- *   object value, so it rarely survives manual testing (ints, bools and null encode bare and render fine).
- *   Single-quoted attributes and `<script>` are safe with these flags.
+ * - Without HEX_APOS a `'` stays raw, without HEX_QUOT a `"` becomes `\"` (a backslash escapes nothing in
+ *   HTML), without HEX_AMP an attribute decodes a payload `&quot;` back to `"`.
+ * - Known gap (the reason core keeps has_quotes): the encoder's own `"` delimiters still close a
+ *   double-quoted attribute (`data-x="@json($v)"`). Accepted because such markup is visibly broken for
+ *   every string, array or object value, so it rarely survives manual testing (ints, bools and null
+ *   encode bare and render fine). Single-quoted attributes and `<script>` are safe with these flags.
  * - Flags are the literal node type, AND-ed across a literal union. Anything else declines.
  * - Only the written name `json_encode` is matched, so `use function json_encode as enc; enc($v, 15)`
  *   keeps its findings (accepted false positive).
@@ -75,18 +74,15 @@ final class JsonEncodeTaintHandler implements RemoveTaintsInterface
         }
 
         $flags = $flagsArg instanceof Arg ? self::provenFlagBits($source, $flagsArg) : 0;
-        $quoteFlags = \JSON_HEX_APOS | \JSON_HEX_QUOT;
-        $removed = (($flags & \JSON_HEX_TAG) !== 0 ? TaintKind::INPUT_HTML : 0)
-            | (($flags & $quoteFlags) === $quoteFlags ? TaintKind::INPUT_HAS_QUOTES : 0);
-
-        if ($removed === 0) {
+        $quoteFlags = \JSON_HEX_APOS | \JSON_HEX_QUOT | \JSON_HEX_AMP;
+        if (($flags & $quoteFlags) !== $quoteFlags) {
             return 0;
         }
 
         // Same test as TaintFlowGraph::isCallSpecialized(). The core stub is always loaded, so storage exists.
         $storage = $codebase->functions->getStorage($source, 'json_encode');
 
-        return $storage->specialize_call || $storage->builtin ? $removed : 0;
+        return $storage->specialize_call || $storage->builtin ? TaintKind::INPUT_HAS_QUOTES : 0;
     }
 
     /** Mirrors FunctionCallAnalyzer: an unqualified, unaliased name falls back to the global function. */

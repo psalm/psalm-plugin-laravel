@@ -4,8 +4,11 @@
 <?php declare(strict_types=1);
 
 /**
- * The handler must not strip taint on the enclosing function's other return paths:
+ * The handler must not strip has_quotes on the enclosing function's other return paths:
  * Psalm accumulates removed taints of every return expression into the function storage.
+ * TaintedHtml is lost here by core's own json_encode() html removal, which has no such guard.
+ *
+ * @todo-by https://github.com/vimeo/psalm/issues/12470 expect TaintedHtml again (removal no longer leaks into later returns)
  */
 function first(string $a, bool $b): string|false {
     if ($b) {
@@ -20,5 +23,4 @@ function render(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
