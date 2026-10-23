@@ -1039,4 +1039,27 @@ final class ContractParserTest extends TestCase
         $this->assertSame([['InvalidDocblock'], 2], ContractParser::suppressionContext($source, 5));
         $this->assertSame([[], 9], ContractParser::suppressionContext($source, 9));
     }
+
+    /** #1909: every name the body binds itself; null when it does not parse, never an empty set. */
+    #[Test]
+    public function local_names_are_the_names_the_body_binds(): void
+    {
+        $locals = $this->parser->localNames('<?php $ep = $endpoint; foreach ($items as $k => [$it]) {} $fn = fn($arg) => $arg; ?>');
+
+        $this->assertNotNull($locals);
+        \ksort($locals);
+        $this->assertSame(['arg' => true, 'ep' => true, 'fn' => true, 'it' => true, 'k' => true], $locals);
+        // `$$name` is what `@props` compiles to, so it binds nothing listable but keeps the set known;
+        // `extract()` binds names the walk cannot list, so the set is unknown.
+        $this->assertSame([], $this->parser->localNames('<?php echo $$name; ?>'));
+        $this->assertNull($this->parser->localNames('<?php extract(["book" => 1]); ?>'));
+
+        // A compound assignment and an internal function's by-reference output bind; a by-value
+        // argument does not, whatever the callee.
+        $locals = $this->parser->localNames('<?php $cls .= "X"; $settings["cls"] .= "X"; preg_match("/x/", $subject, $matches); \\sort($list); in_array($needle, $hay); ?>');
+        $this->assertNotNull($locals);
+        \ksort($locals);
+        $this->assertSame(['cls' => true, 'list' => true, 'matches' => true, 'settings' => true], $locals);
+        $this->assertNull($this->parser->localNames('<?php $x = ; ?>'));
+    }
 }

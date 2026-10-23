@@ -14,15 +14,18 @@ use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidScope;
+use Psalm\Issue\InvalidStringClass;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedIssue;
+use Psalm\Issue\MixedMethodCall;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidCast;
 use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyNullPropertyFetch;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
@@ -30,12 +33,16 @@ use Psalm\Issue\PossiblyUndefinedMethod;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
+use Psalm\Issue\RiskyTruthyFalsyComparison;
 use Psalm\Issue\TooManyArguments;
 use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
+use Psalm\Issue\UndefinedMagicMethod;
+use Psalm\Issue\UndefinedMethod;
 use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UnevaluatedCode;
+use Psalm\Issue\UnhandledMatchCondition;
 use Psalm\Issue\UnusedVariable;
 
 /**
@@ -90,6 +97,31 @@ final class ShadowIssueRelocator
         // CompilesSessions/CompilesContexts: the push in compileSession(), the pop in compileEndsession()
         '/(?<statement>if \(isset\(\$value\)\) \{ (?<target>\$__(?:session|context)Previous)\[\] = \$value; \})/',
         '/(?<statement>if \(isset\(\$__(?<kind>session|context)Previous\) && !empty\(\$__\k<kind>Previous\)\) \{ (?<target>\$value) = array_pop\(\$__\k<kind>Previous\); \})/',
+    ];
+
+    /**
+     * #1909: findings outside the Mixed family that Psalm also derives from a `mixed` subject, by
+     * exact (final) issue class => where that subject sits. `operand`: every variable the selection
+     * reads; `receiver`: the bare `$name->` before a selected method name; `class`: the `$name` a
+     * `new $name`/`$name::` selection opens with. An allowlist because Psalm's hierarchy does not
+     * separate a type finding from an arity or taint finding on the same selection.
+     */
+    private const UNDECLARED_SUBJECTS = [
+        RiskyTruthyFalsyComparison::class => 'operand',
+        PossiblyInvalidArgument::class => 'operand',
+        PossiblyInvalidCast::class => 'operand',
+        UnhandledMatchCondition::class => 'operand',
+        InvalidStringClass::class => 'class',
+        PossiblyInvalidMethodCall::class => 'receiver',
+        UndefinedMagicMethod::class => 'receiver',
+        UndefinedMethod::class => 'receiver',
+        PossiblyUndefinedMethod::class => 'receiver',
+    ];
+
+    /** Messages that name the offending type: only a `mixed` one is the fallback's. */
+    private const UNDECLARED_MESSAGES = [
+        RiskyTruthyFalsyComparison::class => '/ contains type mixed, /',
+        UnhandledMatchCondition::class => '/(?:\||values )mixed\z/',
     ];
 
     /**
@@ -236,6 +268,20 @@ final class ShadowIssueRelocator
         if (
             ($issue instanceof PossiblyInvalidMethodCall || $issue instanceof PossiblyUndefinedMethod)
             && self::selectedText($issue->code_location) === '$__currentLoopData'
+        ) {
+            return false;
+        }
+
+        // Array access on a possible `ArrayAccess` runs a virtual `offsetGet()`/`offsetExists()` call
+        // with these two suppressed (ArrayFetchAnalyzer.php), lost the same way (#1909). It takes the
+        // array expression's position, which `[` follows; a real instance call's method name is
+        // followed by `(`. A static or `new` call's `MixedMethodCall` covers the whole call, so only
+        // the instance path's wording counts. Not Mixed-gated: plain PHP suppresses it for a
+        // declared `array|ArrayAccess` too.
+        if (
+            ($issue instanceof PossiblyInvalidMethodCall
+                || ($issue instanceof MixedMethodCall && \str_starts_with($issue->message, 'Cannot determine the type of ')))
+            && self::selectionFollowedBy($issue->code_location, '[')
         ) {
             return false;
         }
@@ -431,6 +477,13 @@ final class ShadowIssueRelocator
         // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
         // by default, both on a mapped template line and on the prelude's own unmapped lines below.
         if ($issue instanceof MixedIssue && !$reportMixed) {
+            return false;
+        }
+
+        // The same `mixed` narrowed (`$x['k'] ?? false`, `$x?->p`) or coerced to a parameter type
+        // (ArgumentAnalyzer keeps a `mixed` argument as the param type once the call returns) yields
+        // findings outside the family. Dropped with it when they are only about such variables.
+        if (!$reportMixed && $target->undeclaredNames !== [] && self::isOnlyAboutUndeclared($issue, $target->undeclaredNames)) {
             return false;
         }
 
@@ -964,6 +1017,84 @@ final class ShadowIssueRelocator
         //
         // {@see self::echoArgumentSlice()} depends on the preceding text being there.
         return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
+    }
+
+    /** @psalm-pure */
+    private static function selectionFollowedBy(CodeLocation $location, string $next): bool
+    {
+        $selection = ShadowSelection::of($location);
+
+        return $selection instanceof ShadowSelection
+            && \str_starts_with(\ltrim(\substr($selection->snippet, $selection->end)), $next);
+    }
+
+    /**
+     * Whether the subject {@see UNDECLARED_SUBJECTS} locates for the issue reads variables, all of
+     * them in $undeclared. Residual: a call whose arguments read only such variables counts as
+     * derived from them even when its return type alone is the problem.
+     *
+     * @param array<string, true> $undeclared
+     *
+     * @psalm-mutation-free
+     */
+    private static function isOnlyAboutUndeclared(CodeIssue $issue, array $undeclared): bool
+    {
+        // Widened: Psalm rejects a `class-string` offset into a literal-keyed constant.
+        /** @psalm-var array<string, 'operand'|'receiver'|'class'> $subjects */
+        $subjects = self::UNDECLARED_SUBJECTS;
+        /** @psalm-var array<string, non-empty-string> $messages */
+        $messages = self::UNDECLARED_MESSAGES;
+        $subject = $subjects[$issue::class] ?? null;
+        $message = $messages[$issue::class] ?? null;
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if ($subject === null || !$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        if ($message !== null && \preg_match($message, $issue->message) !== 1) {
+            return false;
+        }
+
+        $selected = \substr($selection->snippet, $selection->start, $selection->end - $selection->start);
+        $names = [];
+
+        if ($subject === 'operand') {
+            $names = self::readNames($selected);
+        } elseif ($subject === 'receiver') {
+            // Not after `->`, `::`, `$` or `\`: `$a->$b->m()` and `A::$b->m()` have a fetch receiver.
+            if (\preg_match('/(?<![\w$>:\\\\])\$(' . PreludeBuilder::VARIABLE_NAME . ')\s*\??->\s*\z/', \substr($selection->snippet, 0, $selection->start), $receiver) === 1) {
+                $names = [$receiver[1]];
+            }
+        } elseif (\preg_match('/\A(?:new\h+)?\$(' . PreludeBuilder::VARIABLE_NAME . ')/', $selected, $class) === 1) {
+            $names = [$class[1]];
+        }
+
+        return $names !== [] && \array_diff_key(\array_flip($names), $undeclared) === [];
+    }
+
+    /**
+     * Every variable an expression reads; empty when one is a variable variable, whose name is unknown.
+     *
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
+    private static function readNames(string $expression): array
+    {
+        $names = [];
+
+        foreach (\token_get_all('<?php ' . $expression) as $token) {
+            if ($token === '$') {
+                return [];
+            }
+
+            if (\is_array($token) && $token[0] === \T_VARIABLE) {
+                $names[] = \substr($token[1], 1);
+            }
+        }
+
+        return $names;
     }
 
     /**

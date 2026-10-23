@@ -49,6 +49,12 @@ final class PreludeBuilder
         'attributes' => true, 'slot' => true, 'component' => true,
     ];
 
+    /** A whole PHP variable name, without `$`: `\w` alone stops at the first non-ASCII byte. */
+    public const VARIABLE_NAME = '[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*';
+
+    /** The line typing a name nothing declares; {@see fallbackNames()} reads it back. */
+    private const FALLBACK_LINE = '/** @var mixed $%s */';
+
     private const COMPONENT_TYPE = '\Illuminate\View\Component';
 
     private const COMPONENT_ATTRIBUTES_TYPE = '\Illuminate\View\ComponentAttributeBag';
@@ -93,7 +99,7 @@ final class PreludeBuilder
 
         foreach ($undeclared as $name) {
             if (!isset($tagTypes[$name])) {
-                $lines[] = "/** @var mixed \${$name} */";
+                $lines[] = \sprintf(self::FALLBACK_LINE, $name);
             }
         }
 
@@ -245,6 +251,24 @@ final class PreludeBuilder
 
         return $end !== false
             && \str_contains(\substr($shadow, 0, $end), "\n/** @var " . self::COMPONENT_ATTRIBUTES_TYPE . '|null $attributes */');
+    }
+
+    /**
+     * The names a shadow's prelude leaves to the `mixed` fallback, as written by {@see build()}. A
+     * body docblock or assignment can still type one later; the caller subtracts those.
+     *
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
+    public static function fallbackNames(string $shadow): array
+    {
+        $end = \strpos($shadow, "\n?>\n");
+        $line = \str_replace('%s', '(' . self::VARIABLE_NAME . ')', \preg_quote(self::FALLBACK_LINE, '#'));
+
+        return $end !== false && \preg_match_all("#^{$line}\$#m", \substr($shadow, 0, $end), $matches) > 0
+            ? $matches[1]
+            : [];
     }
 
     /**

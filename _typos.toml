@@ -16,6 +16,9 @@ extend-exclude = [
 # Intentional misspellings used as test/doc fixtures. Each pattern is
 # scoped narrowly enough that an accidental real typo would still be caught.
 extend-ignore-re = [
+    # ShadowIssueRelocatorTest (#1909): the ASCII prefix of `$café`, proving a name is not
+    # matched by its prefix.
+    "'caf' => true",
     # README + MissingProperty fixtures: simulated typo'd Eloquent attribute
     "siteSettinsg",
     # UnknownModelAttribute (#699) fixtures: the canonical deliberately typo'd
