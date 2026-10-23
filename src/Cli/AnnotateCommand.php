@@ -19,13 +19,11 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * `view()` call sites that render it.
  *
  * Runs Psalm as a child process rather than doing its own parse: the call sites' types only exist
- * inside an analysis, and inferring them a second way would mean guessing. Two flags are forced on
- * that child and cannot be overridden, because the pass is unsound without them:
- *
- *  - `--threads=1`, since plugin statics collected in a forked analysis worker never reach the
- *    parent process, where the write runs;
- *  - the control file in the environment, which is the entire gate on writing to the source tree.
- *    An ordinary `vendor/bin/psalm` run has none and can never annotate anything.
+ * inside an analysis, and inferring them a second way would mean guessing. The control file in the
+ * child's environment is the entire gate on writing to the source tree: an ordinary
+ * `vendor/bin/psalm` run has none and can never annotate anything. Under it the plugin pins the
+ * analysis to one process (plugin statics collected in a forked worker never reach the parent,
+ * where the write runs); scanning keeps the caller's `--threads`.
  *
  * The child's issue report (hundreds of findings on a real project) would bury this command's own
  * summary, so its stdout is captured to a file and shown only when the pass never ran; progress
@@ -82,6 +80,8 @@ final class AnnotateCommand extends Command
         $this->ignoreValidationErrors();
 
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'Print the changes as a unified diff instead of writing them.');
+        // Not `--diff`/`--no-diff`: both are Psalm's own diff-mode flags, and unknown tokens are forwarded to Psalm.
+        $this->addOption('no-diffs', null, InputOption::VALUE_NONE, 'List the changed templates instead of printing the unified diff.');
         $this->addArgument(
             'psalm-args',
             InputArgument::IS_ARRAY | InputArgument::OPTIONAL,
@@ -143,7 +143,7 @@ final class AnnotateCommand extends Command
 
             $exitCode = $this->runPsalm($psalmBin, $cwd, $controlFile, $psalmOutput);
 
-            return $this->report($io, $controlFile, $exitCode, $psalmOutput);
+            return $this->report($io, $controlFile, $exitCode, $psalmOutput, !$input->hasParameterOption('--no-diffs', true));
         } finally {
             @\unlink($controlFile);
             @\unlink($psalmOutput);
@@ -185,7 +185,7 @@ final class AnnotateCommand extends Command
         return $tokens;
     }
 
-    private function report(SymfonyStyle $io, string $controlFile, int $exitCode, ?string $psalmOutput = null): int
+    private function report(SymfonyStyle $io, string $controlFile, int $exitCode, ?string $psalmOutput = null, bool $showDiffs = true): int
     {
         $raw = @\file_get_contents($controlFile);
 
@@ -230,8 +230,8 @@ final class AnnotateCommand extends Command
         $dryRun = ($result['dryRun'] ?? false) === true;
 
         if ($changed !== []) {
-            if ($dryRun) {
-                $io->writeln(\rtrim($result['diff'] ?? ''));
+            if ($showDiffs) {
+                $io->writeln($this->colorizedDiff($result['diff'] ?? ''));
                 $io->newLine();
             } else {
                 foreach ($changed as $path => $names) {
@@ -280,6 +280,31 @@ final class AnnotateCommand extends Command
             : \sprintf('%d template(s) annotated.', \count($changed)));
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * The unified diff with git's colours: removed lines red, added green, hunk headers cyan.
+     * Every line is escaped first, so template markup like `<x-card>` is never read as a console
+     * style tag; undecorated output (a pipe, a file) gets the plain diff back, applicable as is.
+     * Split on "\n" alone, so a CRLF template's "\r" stays in its lines.
+     */
+    private function colorizedDiff(string $diff): string
+    {
+        $lines = [];
+
+        foreach (\explode("\n", \rtrim($diff, "\n")) as $line) {
+            $escaped = OutputFormatter::escape($line);
+
+            $lines[] = match (true) {
+                \str_starts_with($line, '--- '), \str_starts_with($line, '+++ ') => "<options=bold>{$escaped}</>",
+                \str_starts_with($line, '@@') => "<fg=cyan>{$escaped}</>",
+                \str_starts_with($line, '+') => "<fg=green>{$escaped}</>",
+                \str_starts_with($line, '-') => "<fg=red>{$escaped}</>",
+                default => $escaped,
+            };
+        }
+
+        return \implode("\n", $lines);
     }
 
     /**
@@ -347,9 +372,8 @@ final class AnnotateCommand extends Command
      * {@see AnalyzeCommand::scanArguments()}: Symfony binds `--flags` as options, never into a
      * declared argument.
      *
-     * `--dry-run` is this command's own and is dropped. Any `--threads` the caller passed is
-     * dropped too, and replaced with the single thread the pass requires — appending a second one
-     * instead would leave PHP's getopt handing Psalm an array for a scalar option.
+     * Only `--dry-run` and `--no-diffs`, this command's own, are dropped. `--threads` passes through
+     * and sizes the scan; the plugin pins the analysis itself to one process.
      *
      * Public (not private) so it is unit-testable: CommandTester cannot set argv.
      *
@@ -359,31 +383,9 @@ final class AnnotateCommand extends Command
      */
     public function forwardedArguments(?array $argv = null): array
     {
-        $forwarded = [];
-        $skipValue = false;
-
-        foreach ($this->rawTokens($argv) as $token) {
-            if ($skipValue) {
-                $skipValue = false;
-
-                continue;
-            }
-
-            if ($token === '--threads') {
-                $skipValue = true; // the space-separated value form
-
-                continue;
-            }
-
-            if ($token === '--dry-run' || \str_starts_with($token, '--threads=')) {
-                continue;
-            }
-
-            $forwarded[] = $token;
-        }
-
-        // BEFORE the forwarded tokens, not after: PHP's getopt() stops at the first positional
-        // argument, so a --threads=1 trailing one is never parsed and the child forks.
-        return ['--threads=1', ...$forwarded];
+        return \array_values(\array_filter(
+            $this->rawTokens($argv),
+            static fn(string $token): bool => $token !== '--dry-run' && $token !== '--no-diffs',
+        ));
     }
 }

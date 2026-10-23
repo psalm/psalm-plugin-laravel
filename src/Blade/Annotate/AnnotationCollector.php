@@ -25,8 +25,8 @@ use Psalm\Type\Union;
  * Records, per view name, the type every resolved `view()` call site passes for each data key —
  * the only sound type source {@see AnnotationWriter} has.
  *
- * Registered only in annotate mode, and only under `--threads=1`: Psalm's forked analysis workers
- * never hand their statics back to the parent, where the write runs.
+ * Registered only in annotate mode, which pins the analysis to one process: Psalm's forked analysis
+ * workers never hand their statics back to the parent, where the write runs.
  *
  * The confidence rule is deliberately narrow, because a wrong annotation becomes a false positive
  * at every call site that renders the template. A type is answered only when every producer of that

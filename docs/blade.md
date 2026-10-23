@@ -252,7 +252,7 @@ A `match` follows Psalm's behavior on plain PHP (#1801). Inside an arm (its cond
 
 Nothing in the pipeline needs a single process, and that is checked rather than assumed: a test compares a forked run against a single-process run of the same fixture, cold and warm cache, and requires identical issue lists. Shadows are compiled, and the registries the issue remap reads are filled, while Psalm initialises its plugins, which happens before either the scanner or the analyzer forks; every worker therefore inherits a complete copy, and nothing writes to the shadow cache once analysis starts. A template issue found in a worker is re-emitted there against the `.blade.php` path and travels home in the worker pool's result payload like any other issue. A taint finding is emitted later still, in the parent process, after the workers' flow graphs have been merged, so its journey is rewritten where the registries live.
 
-`psalm-laravel blade:annotate` is the one exception, and forces `--threads=1` on the Psalm run it drives (see [Annotating templates](#annotating-templates)). That restriction is about the producer types the command collects, not about analysis.
+`psalm-laravel blade:annotate` is the one exception, and keeps the analysis of the Psalm run it drives in one process (see [Annotating templates](#annotating-templates)); your `--threads` still sizes its scan. That restriction is about the producer types the command collects, not about the scan.
 ## Degradation
 
 By default Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, a view directory cannot be read and no template was found elsewhere, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings (Psalm also picks it by itself when an AI agent runs it outside CI), so in that mode this warning is written to STDERR directly. With [`failOnInternalError`](config.md#failoninternalerror) enabled, the disable fails the run instead, so a disable cannot pass CI silently. Finding no templates at all is not a disable.
@@ -308,11 +308,14 @@ The check declines for a call site instead of guessing, and the gate that matter
 `psalm-laravel blade:annotate` writes the `@var` declarations a template is missing, as native PHP docblock lines, taking each type from the `view()` call sites that render it:
 
 ```bash
-vendor/bin/psalm-laravel blade:annotate            # write them
-vendor/bin/psalm-laravel blade:annotate --dry-run  # print a unified diff instead
+vendor/bin/psalm-laravel blade:annotate            # write them, and print what changed as a coloured unified diff
+vendor/bin/psalm-laravel blade:annotate --dry-run  # print the coloured unified diff only, write nothing
+vendor/bin/psalm-laravel blade:annotate --no-diffs # list the changed templates instead of printing the diff
 ```
 
-It runs Psalm as a child process, because the producer types only exist during an analysis; flags you pass (`-c psalm.xml`) are forwarded to it, and `--threads=1` is forced, since plugin state collected in a forked worker never reaches the process that does the writing. It refuses to run against a subset of the project (`-f`, or a bare path), because agreement between call sites is a claim about all of them: a call site in a file the run skipped cannot disagree. A run that somehow ends up forked anyway refuses to write and says so, rather than leaving every variable untyped. Blade analysis is switched on for the run whether or not your config enables it; if it cannot boot, the command reports that the pass was never reached.
+`--no-diffs` combines with `--dry-run` (the list, still writing nothing). It is not called `--diff`: that is Psalm's own diff-mode flag, and flags the command does not own are forwarded to Psalm.
+
+It runs Psalm as a child process, because the producer types only exist during an analysis; flags you pass (`-c psalm.xml`) are forwarded to it, `--threads` included: scanning uses your thread count, while analysis stays in one process, since plugin state collected in a forked worker never reaches the process that does the writing. It refuses to run against a subset of the project (`-f`, or a bare path), because agreement between call sites is a claim about all of them: a call site in a file the run skipped cannot disagree. A run that somehow ends up forked anyway refuses to write and says so, rather than leaving every variable untyped. Blade analysis is switched on for the run whether or not your config enables it; if it cannot boot, the command reports that the pass was never reached.
 
 Psalm's own issue report is not printed: on a real project it runs to hundreds of findings that would bury the result. What you see is the annotated list (or the diff) plus the names left unknown. Progress on stderr stays live, and if the pass never runs, the captured Psalm output is printed so you can see why.
 

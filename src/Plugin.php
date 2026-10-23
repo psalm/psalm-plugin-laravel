@@ -847,13 +847,17 @@ final class Plugin implements PluginEntryPointInterface
         // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
         // not a config flag, is what keeps an ordinary psalm run from touching the source tree.
         // The two hooks are one pass in two halves: the collector fills a static that only survives
-        // to the writer's AfterAnalysis because the command forces `--threads=1`.
+        // to the writer's AfterAnalysis because annotate mode pins the analysis to this process.
         if ($bladeActive && $annotate instanceof Blade\Annotate\AnnotateRequest) {
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Blade/Annotate/AnnotationCollector.php';
             require_once __DIR__ . '/Blade/Annotate/AnnotationWriter.php';
             Blade\Annotate\AnnotationCollector::init();
             Blade\Annotate\AnnotationWriter::init($annotate);
+            // A forked analysis worker never hands the collector's statics back, so analysis must run
+            // in this process. Psalm reads `$threads` only when analysis starts, after this init,
+            // while the scan already took its count from `--threads`: the caller's value sizes the scan.
+            ProjectAnalyzer::getInstance()->threads = 1;
             $registration->registerHooksFromClass(Blade\Annotate\AnnotationCollector::class);
             $registration->registerHooksFromClass(Blade\Annotate\AnnotationWriter::class);
         }

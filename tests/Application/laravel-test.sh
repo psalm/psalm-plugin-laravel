@@ -276,7 +276,7 @@ else
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --no-progress --no-suggestions --output-format=compact
 
     # `psalm-laravel blade:annotate` (#1524), end to end from a real project root: it is the only
-    # caller of the forced --threads=1 / control-file child process, and the only step that proves
+    # caller of the control-file child process, and the only step that proves
     # the shipped binary reaches it. Deliberately AFTER the baselined run and against its own
     # Blade-enabled config, so neither the fixture below nor the compiled shadows touch the baseline.
     info "Running: ./vendor/bin/psalm-laravel blade:annotate"

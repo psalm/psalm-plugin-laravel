@@ -19,10 +19,14 @@ use Symfony\Component\Process\Process;
  * `view()` call sites pass. A real `vendor/bin/psalm` run is the only way to pin it: the producer
  * types exist only during an analysis, which is the whole reason the codemod is driven by one.
  *
- * The command half (argument forwarding, the forced thread count) is covered by
+ * The command half (argument forwarding, output handling) is covered by
  * {@see \Tests\Psalm\LaravelPlugin\Unit\Cli\AnnotateCommandTest}; what it ultimately does is set
  * the environment variable this test sets by hand, against a fixture that is not a project root
  * and so has no `vendor/bin/psalm` of its own.
+ *
+ * The child runs with `--threads=2` to keep the plugin's analysis pin honest: the fixture has enough
+ * files that Psalm forks the analysis when threads > 1, so without the pin the writer publishes its
+ * 'forked workers' error and every annotation assertion fails.
  */
 #[CoversClass(AnnotationCollector::class)]
 #[CoversClass(AnnotationWriter::class)]
@@ -291,7 +295,7 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=2', '--no-progress', '--output-format=json'],
             self::FIXTURE,
             $controlFile === null ? null : [AnnotateRequest::ENV_VAR => $controlFile],
         );
