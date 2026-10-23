@@ -40,7 +40,7 @@ Supported name syntaxes:
 * Dot-notation: `with('posts.comments.author')`, where each segment is resolved against the previous segment's related model.
 * Array (list): `with(['posts', 'comments'])`.
 * Array (keyed closure): `with(['posts' => fn ($query) => $query])`, where the key is the relation name.
-* Select columns: `with('posts:id,title')`, where the `:columns` part is stripped before checking. The exception is a relation paired with a constraint closure, see [`:columns` with a closure](#columns-with-a-closure).
+* Select columns: `with('posts:id,title')`, where the `:columns` part is stripped before checking. The exception is a relation paired with a constraint closure, see [`:columns` with a closure](#columns-with-a-closure). Relationship existence queries do not parse `:columns` at all, see [`:columns` in existence queries](#columns-in-existence-queries).
 
 ## Example
 
@@ -74,6 +74,19 @@ User::query()->with('posts:id,user_id,title', fn ($query) => $query->latest()); 
 // Eager loading matches the posts to their users by `user_id`, so the foreign key must be selected.
 User::with(['posts' => fn ($query) => $query->select('id', 'user_id', 'title')->latest()]);  // OK: select inside the closure
 User::with('posts:id,user_id,title');  // OK: no closure, columns are parsed
+```
+
+### `:columns` in existence queries
+
+Relationship existence queries look the relation name up verbatim, so a `:columns` suffix never resolves and Laravel throws `BadMethodCallException` (`Call to undefined method ...::posts:id()`). This covers `has()` / `whereHas()` / `doesntHave()` / `whereDoesntHave()` (and their `or*` forms) and the `where*Relation()` families. There are no related columns to select in an existence query, so `:columns` has no meaning there. `withWhereHas()` is the exception: it strips `:columns` itself and is not reported.
+
+```php
+User::has('posts:id');                                // UndefinedModelRelation
+User::whereHas('posts:id', fn ($query) => $query);    // UndefinedModelRelation
+User::whereRelation('posts:id', 'published', true);   // UndefinedModelRelation
+
+User::has('posts');                                   // OK
+User::withWhereHas('posts:id');                       // OK: withWhereHas() strips the columns
 ```
 
 ## Known limitations
