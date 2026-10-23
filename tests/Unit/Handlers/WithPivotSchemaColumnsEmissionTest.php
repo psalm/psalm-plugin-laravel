@@ -203,9 +203,12 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         $this->assertSame([], \array_diff($this->modelDates($immutable), $traces));
 
         // A callable builds the dates: nothing is proven. `immutable_*` casts name their class regardless.
-        $traces = $this->runPsalm(['WITH_PIVOT_DATE' => 'callable']);
-        $this->assertContains($this->stampedRelation('mixed'), $traces);
-        $this->assertSame([], \array_diff($this->modelDates('mixed'), $traces));
+        // So does a class that is no Carbon: `Date::createFromFormat()` and friends may return anything.
+        foreach (['callable', 'plain'] as $mode) {
+            $traces = $this->runPsalm(['WITH_PIVOT_DATE' => $mode]);
+            $this->assertContains($this->stampedRelation('mixed'), $traces, $mode);
+            $this->assertSame([], \array_diff($this->modelDates('mixed'), $traces), $mode);
+        }
     }
 
     /**

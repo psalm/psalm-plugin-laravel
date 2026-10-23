@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Database\Eloquent\Castable;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes;
@@ -237,7 +238,7 @@ final class CastResolver
     /**
      * The date class `Date::use()` left in the booted app, read from DateFactory's statics: `mixed` when a
      * callable or a factory builds the dates (the class is unknowable), `Illuminate\Support\Carbon` when
-     * unconfigured. A configured class must be in Psalm's storage: a TNamedObject without it breaks analysis.
+     * unconfigured. A configured class must be a Carbon in Psalm's storage: a TNamedObject without storage breaks analysis.
      *
      * `immutable_*` casts are not routed here: HasAttributes builds them with CarbonImmutable whatever
      * `Date::use()` says.
@@ -260,7 +261,9 @@ final class CastResolver
             return self::makeNullable(new Union([new TNamedObject(\Illuminate\Support\Carbon::class)]), $nullable);
         }
 
-        $storage = ClassLineage::storage($codebase, $class);
+        // Only a Carbon is provably what the factory hands back: CarbonInterface's `static` returns bind every
+        // override, while another class's `createFromFormat()` and friends may return anything.
+        $storage = ClassLineage::isA($codebase, $class, CarbonInterface::class) ? ClassLineage::storage($codebase, $class) : null;
         if (!$storage instanceof ClassLikeStorage) {
             return Type::getMixed();
         }
