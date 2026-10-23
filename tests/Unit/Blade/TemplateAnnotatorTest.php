@@ -412,6 +412,17 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
+    public function opens_out_a_docblock_in_a_cr_only_file_with_cr_endings(): void
+    {
+        $source = "<?php\r/** @var int \$a */\r?>\r{{ \$a }}{{ \$b }}\r";
+
+        $this->assertSame(
+            "<?php\r/**\r * @var int \$a\r * @var int \$b\r */\r?>\r{{ \$a }}{{ \$b }}\r",
+            TemplateAnnotator::annotate($source, ['b' => 'int']),
+        );
+    }
+
+    #[Test]
     public function a_cr_only_file_is_annotated_once(): void
     {
         $source = "<?php\r/**\r * Header.\r * @var string \$title\r */\r?>\r<p>{{ \$title }}</p>\r";

@@ -195,14 +195,22 @@ final class TemplateAnnotator
     }
 
     /**
-     * A template mixing both endings keeps the one it uses more; a template with neither gets "\n".
+     * The ending the template uses most, bare CR included; a tie or a template with none gets "\n".
      *
      * @psalm-pure
      */
     private static function dominantLineEnding(string $source): string
     {
         $crlf = \substr_count($source, "\r\n");
+        $byEnding = [
+            "\n" => \substr_count($source, "\n") - $crlf,
+            "\r\n" => $crlf,
+            "\r" => \substr_count($source, "\r") - $crlf,
+        ];
 
-        return $crlf > \substr_count($source, "\n") - $crlf ? "\r\n" : "\n";
+        // arsort() is stable, so a tie keeps "\n" first.
+        \arsort($byEnding);
+
+        return \array_key_first($byEnding);
     }
 }
