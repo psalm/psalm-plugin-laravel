@@ -704,10 +704,14 @@ final class ModelMetadataRegistryBuilder
 
     /**
      * @template T
+     *
      * @param array<string, \Throwable> $failures
-     * @param \Closure(): T $compute
+     * @param \Closure[_](): T $compute
      * @param T $fallback
+     *
      * @return T
+     *
+     * @psalm-capabilities read-props|write-this-props|write-refs
      */
     private static function computeSection(
         int $section,

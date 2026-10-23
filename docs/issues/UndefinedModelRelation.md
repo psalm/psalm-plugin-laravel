@@ -40,7 +40,7 @@ Supported name syntaxes:
 * Dot-notation: `with('posts.comments.author')`, where each segment is resolved against the previous segment's related model.
 * Array (list): `with(['posts', 'comments'])`.
 * Array (keyed closure): `with(['posts' => fn ($query) => $query])`, where the key is the relation name.
-* Select columns: `with('posts:id,title')`, where the `:columns` part is stripped before checking.
+* Select columns: `with('posts:id,title')`, where the `:columns` part is stripped before checking. The exception is a relation paired with a constraint closure, see [`:columns` with a closure](#columns-with-a-closure).
 
 ## Example
 
@@ -62,6 +62,19 @@ $user->load('comments');  // UndefinedModelRelation: Relation 'comments' is not 
 ## How to fix
 
 Correct the relation name, or define the missing relationship method on the model.
+
+### `:columns` with a closure
+
+Laravel parses the `:columns` select syntax for list entries (`with('posts:id')`, `with(['posts:id'])`) and for nested-array keys, but not for a relation name paired with a constraint closure. There the name is looked up verbatim and `RelationNotFoundException` is thrown. The rule reports this for `with()` / `load()` / `loadMissing()` array keys whose value is a closure, and for the two-argument `Builder::with($relation, $closure)` form:
+
+```php
+User::with(['posts:id,user_id,title' => fn ($query) => $query->latest()]);  // UndefinedModelRelation
+User::query()->with('posts:id,user_id,title', fn ($query) => $query->latest());  // UndefinedModelRelation
+
+// Eager loading matches the posts to their users by `user_id`, so the foreign key must be selected.
+User::with(['posts' => fn ($query) => $query->select('id', 'user_id', 'title')->latest()]);  // OK: select inside the closure
+User::with('posts:id,user_id,title');  // OK: no closure, columns are parsed
+```
 
 ## Known limitations
 

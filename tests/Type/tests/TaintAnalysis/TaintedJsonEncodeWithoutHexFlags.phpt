@@ -51,8 +51,8 @@ function firstClassCallable(\Illuminate\Http\Request $request): void {
     echo $encode((string) $request->input('v'), 15);
 }
 
-/** Quote flags never clear html: APOS|QUOT keeps only TaintedHtml, QUOT alone keeps both. */
-function quoteFlagsWithoutHexTag(\Illuminate\Http\Request $request): void {
+/** Without JSON_HEX_AMP an attribute decodes a payload `&quot;` back to `"`, so APOS|QUOT keeps both. */
+function quoteFlagsWithoutHexAmp(\Illuminate\Http\Request $request): void {
     $v = (string) $request->input('v');
 
     echo json_encode($v, JSON_HEX_APOS | JSON_HEX_QUOT);
@@ -77,5 +77,6 @@ TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
