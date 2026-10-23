@@ -215,8 +215,52 @@ final class AnnotateEndToEndTest extends TestCase
         }
     }
 
+    /**
+     * The view-data checks follow the project's own Blade setting. The codemod switches Blade on for a
+     * project that has it off, but that run must not start reporting view data: it lacks the view
+     * finder an `@includeFirst` candidate is resolved through. `noteOmitted()` passes an unread key.
+     */
+    #[Test]
+    public function a_run_with_blade_on_only_for_the_codemod_reports_no_view_data(): void
+    {
+        $this->assertSame(['UnusedViewData'], $this->viewDataIssues('psalm.xml'));
+        $this->assertSame([], $this->viewDataIssues('psalm-blade-off.xml'));
+    }
+
+    /** @return list<string> the view-data issue types a dry annotate run under `$config` reports */
+    private function viewDataIssues(string $config): array
+    {
+        $output = $this->annotateOutput(dryRun: true, config: $config);
+        $decoded = \json_decode($output, true);
+        $this->assertIsArray($decoded, $output);
+
+        $types = [];
+
+        foreach ($decoded as $issue) {
+            $this->assertIsArray($issue);
+
+            if (\in_array($issue['type'], ['MissingViewVariable', 'InvalidViewVariableType', 'UnusedViewData'], true)) {
+                $types[] = (string) $issue['type'];
+            }
+        }
+
+        return $types;
+    }
+
     /** @return array<string, mixed> the control file's result */
     private function annotate(bool $dryRun = false): array
+    {
+        $this->annotateOutput($dryRun);
+
+        $this->assertIsString($this->controlFile);
+        $decoded = \json_decode((string) \file_get_contents($this->controlFile), true);
+        $this->assertIsArray($decoded, 'the annotate pass never reported back');
+
+        return $decoded;
+    }
+
+    /** @return string the JSON report of the annotate run */
+    private function annotateOutput(bool $dryRun = false, string $config = 'psalm.xml'): string
     {
         $controlFile = \tempnam(\sys_get_temp_dir(), 'psalm-laravel-annotate-e2e');
         $this->assertIsString($controlFile);
@@ -227,12 +271,7 @@ final class AnnotateEndToEndTest extends TestCase
             'dryRun' => $dryRun,
         ]));
 
-        $this->runPsalm($controlFile);
-
-        $decoded = \json_decode((string) \file_get_contents($controlFile), true);
-        $this->assertIsArray($decoded, 'the annotate pass never reported back');
-
-        return $decoded;
+        return $this->runPsalm($controlFile, $config);
     }
 
     /**
@@ -253,19 +292,22 @@ final class AnnotateEndToEndTest extends TestCase
         return null;
     }
 
-    private function runPsalm(?string $controlFile): void
+    /** @return string the JSON report, info issues included */
+    private function runPsalm(?string $controlFile, string $config = 'psalm.xml'): string
     {
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json', '--show-info=true'],
             self::FIXTURE,
             $controlFile === null ? null : [AnnotateRequest::ENV_VAR => $controlFile],
         );
         $process->setTimeout(300);
         // Not mustRun(): the fixture reports issues of its own at errorLevel 1.
         $process->run();
+
+        return $process->getOutput();
     }
 
     private function template(string $name): string

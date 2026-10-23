@@ -819,9 +819,14 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
             require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
             $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
-            // Checks view() call sites against the contracts the compiled templates declare, and
-            // reports data keys the template never reads (#1478); needs ContractRegistry populated.
-            // No flag of its own: ExperimentalIssuePolicy sets the severity of its issues (#1985).
+        }
+
+        // Checks view() call sites against the contracts the compiled templates declare, and reports
+        // data keys the template never reads (#1478); needs ContractRegistry populated. No flag of
+        // its own: ExperimentalIssuePolicy sets the severity of its issues (#1985). Not for a run
+        // where only the annotate codemod switched Blade on: that run skips initMissingViewHandler(),
+        // which `@includeFirst` candidates resolve through.
+        if ($bladeActive && $pluginConfig->bladeEnabled) {
             require_once __DIR__ . '/Blade/ComposerKeyResolver.php';
             require_once __DIR__ . '/Blade/ReadSetResolver.php';
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
