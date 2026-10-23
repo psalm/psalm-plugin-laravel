@@ -1,9 +1,3 @@
---SKIPIF--
-<?php
-require getcwd() . '/vendor/autoload.php';
-// Property fetch through `X&object{...}` on a mixin model is vimeo/psalm#12111, fixed in 7.0.0-rc3.
-\Tests\Psalm\LaravelPlugin\Type\PsalmVersion::skipOnRange('7.0.0-rc1', '7.0.0-rc3');
-?>
 --FILE--
 <?php declare(strict_types=1);
 
@@ -47,7 +41,7 @@ function declared_shape(Team $team): string
 
 function with_pivot_columns(WorkOrder $order): void
 {
-    // The harness has no migrations, so PR A types the withPivot() columns `mixed`.
+    // The harness has no migrations, so the withPivot() columns read `mixed`.
     $pivot = $order->parts()->firstOrFail()->pivot;
     /** @psalm-trace $pivot */
     $_quantity = $pivot->quantity;

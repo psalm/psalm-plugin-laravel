@@ -549,13 +549,13 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 ### `withPivot()` columns refine TPivotModel in a handler (#1944)
 
-**Decision:** `BelongsToManyWithPivotHandler` answers `withPivot()` with the receiver whose TPivotModel gains `object{<column>: <type>}`; each type comes from the pivot table's migration, else `mixed`. `created_at` / `updated_at` stay `mixed`: selecting them makes the pivot cast them to Carbon.
+**Decision:** `BelongsToManyWithPivotHandler` answers `withPivot()` with the receiver whose TPivotModel gains `object{<column>: <type>}`; each type comes from the pivot table's migration, else `mixed`. A column named like the parent model's `CREATED_AT` / `UPDATED_AT` (read from the constants; `mixed` for all columns when the model overrides `getCreatedAtColumn()` / `getUpdatedAtColumn()`) stays `mixed`: once `created_at` is selected, `Pivot::fromAttributes()` makes the pivot cast the parent's timestamp columns as dates, and the date class (Carbon or an app-configured one) is not known statically. A selected column that already has a type in the receiver's shape keeps it: Laravel only appends columns.
 
 **Boundary:** a dynamic or class-string `$table` argument declines the refinement (the pivot class may change through `using()`), so a declared pivot shape on such a relation still reports `InvalidReturnType`.
 
 **Rejected:**
 - A stub-only refinement. The columns are call arguments and their types live in a migration; no docblock form maps a literal argument list to object-shape keys.
-- Leaving the inferred `Pivot` and relying on Psalm accepting a declared shape. Psalm 7 rc2 compares two object shapes inside an intersection by name only (`ObjectComparator::isIntersectionShallowlyContainedBy`), so any `Pivot&object{...}` passes any declared one, but plain `Pivot` never does. The handler still types columns honestly so nothing breaks once Psalm compares the properties.
+- Leaving the inferred `Pivot` and relying on Psalm accepting a declared shape. Psalm 7.0.0-rc8 still compares two object shapes inside an intersection by name only (`ObjectComparator::isIntersectionShallowlyContainedBy`), so any `Pivot&object{...}` passes any declared one, but plain `Pivot` never does. The handler still types columns honestly so nothing breaks once Psalm compares the properties.
 
 ## Producer Return Narrowing
 
