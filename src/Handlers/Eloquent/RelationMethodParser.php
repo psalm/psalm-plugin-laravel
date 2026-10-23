@@ -349,8 +349,10 @@ final class RelationMethodParser
                 // The outermost resolved using() wins; a chain with none resolved has a pivot class that is unknown.
                 $unresolvedUsing = $parsed['pivotModel'] === null;
             } elseif (isset(PivotColumnResolver::FACTORY_TABLE_POSITION[$name])) {
+                // Another receiver's factory takes that model's timestamp names and default table, not this one's.
+                $onThis = $expr->var instanceof PhpParser\Node\Expr\Variable && $expr->var->name === 'this';
                 // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it.
-                $parsed['pivotTable'] = PivotColumnResolver::table($codebase, $expr, $name, $parsed['relatedModel'], $receiverClass);
+                $parsed['pivotTable'] = $onThis ? PivotColumnResolver::table($codebase, $expr, $name, $parsed['relatedModel'], $receiverClass) : false;
                 break;
             }
 

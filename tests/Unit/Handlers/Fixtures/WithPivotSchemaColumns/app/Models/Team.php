@@ -46,7 +46,7 @@ class Team extends Model
     /** The custom pivot's `@property` and cast win; the rest is the relation's table, dates included. */
     public function assignments(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'staff_assignments')->using(Assignment::class)->withPivot('hours', 'label', 'level', 'note')->withTimestamps();
+        return $this->belongsToMany(User::class, 'staff_assignments')->using(Assignment::class)->withPivot('hours', 'label', 'level', 'note', 'grade')->withTimestamps();
     }
 
     /** No `@property`, no casts: the timestamp columns are dates, not their raw schema type. */
@@ -61,6 +61,12 @@ class Team extends Model
         /** @psalm-trace $relation */
 
         return $relation;
+    }
+
+    /** Laravel reads the timestamp names off the factory's receiver (a Sheet), not off this model. */
+    public function foreignStamps(): BelongsToMany
+    {
+        return (new Sheet())->belongsToMany(User::class, 'sheet_entries')->withTimestamps();
     }
 
     public function oddRota(): BelongsToMany

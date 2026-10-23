@@ -34,6 +34,16 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $she
     $_assignments = $team->assignments();
     /** @psalm-trace $_assignments */
 
+    // The attribute read: the pivot class's own property types win over the shape.
+    $_hours = $team->assignments()->firstOrFail()->pivot->hours;
+    /** @psalm-trace $_hours */
+
+    $_grade = $team->assignments()->firstOrFail()->pivot->grade;
+    /** @psalm-trace $_grade */
+
+    $_foreign = $team->foreignStamps();
+    /** @psalm-trace $_foreign */
+
     $_rota = $team->rota();
     /** @psalm-trace $_rota */
 

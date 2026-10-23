@@ -48,6 +48,7 @@ return new class extends Migration {
             $table->string('label');
             $table->string('level');
             $table->string('note')->nullable();
+            $table->integer('grade')->nullable();
             $table->timestamps();
         });
 

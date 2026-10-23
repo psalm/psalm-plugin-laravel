@@ -24,6 +24,7 @@ use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
@@ -186,8 +187,8 @@ final class PivotColumnResolver
         $dates = $visible && $stock && $switch !== null && \in_array($switch, $columns, true);
         $types = [];
         foreach ($columns as $column) {
-            $declared = $using === null ? null : self::declaredType($codebase, $using, $column);
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
+            $declared = $using === null ? null : self::declaredType($codebase, $using, $column, $schemaColumn?->nullable ?? true);
             $isDate = $parent !== null && \in_array($column, $parent, true);
             if ($declared instanceof Union) {
                 $types[$column] = $declared;
@@ -301,24 +302,25 @@ final class PivotColumnResolver
     }
 
     /**
-     * The type a custom pivot class gives a column itself: its `@property`, else an explicit cast. `mixed` when
-     * its casts are not fully known (a class this run never registered), null when it says nothing.
+     * The type a custom pivot class gives a column itself, null when it says nothing. What its own property
+     * types answer (`@property`, a cast or a column of its default table) is reused verbatim: Psalm reads such
+     * a property before an object shape, so a different type in the shape would never be read. A cast on a
+     * column its default table lacks is bound to no nullability; the relation table's decides, and an unknown
+     * column may be null. `mixed` when its casts are not fully known (a class this run never registered).
+     *
+     * @param bool $nullable whether the column may be null in the relation's table
      */
-    private static function declaredType(Codebase $codebase, string $pivotClass, string $column): ?Union
+    private static function declaredType(Codebase $codebase, string $pivotClass, string $column, bool $nullable): ?Union
     {
         // `using(Pivot::class)` is the framework's own pivot: it says nothing about its columns.
         if (self::isFrameworkPivot($pivotClass)) {
             return null;
         }
 
-        try {
-            $declared = $codebase->classlike_storage_provider->get($pivotClass)->pseudo_property_get_types['$' . $column] ?? null;
-        } catch (\InvalidArgumentException) {
-            return Type::getMixed();
-        }
-
-        if ($declared instanceof Union) {
-            return $declared;
+        /** @var class-string<Model> $pivotClass */
+        $own = ModelPropertyHandler::resolveColumnType($codebase, $pivotClass, $column);
+        if ($own instanceof Union) {
+            return $own;
         }
 
         $metadata = ModelMetadataRegistry::for($pivotClass);
@@ -326,7 +328,9 @@ final class PivotColumnResolver
             return Type::getMixed();
         }
 
-        return ($metadata->casts()[$column] ?? null)?->psalmType;
+        $cast = ($metadata->casts()[$column] ?? null)?->psalmType;
+
+        return $cast instanceof Union && $nullable ? Type::combineUnionTypes($cast, Type::getNull()) : $cast;
     }
 
     /** Whether the pivot class converts dates as stock Laravel does, so `getDates()` decides which columns are dates. */

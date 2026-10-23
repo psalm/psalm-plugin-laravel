@@ -139,9 +139,14 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         // table (`assignment_defaults`: hours is a string there) is never read; dates win over the raw schema.
         $this->assertContains(
             '$_assignments: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
-            . "Assignment&object{hours:int, label:non-empty-string, level:int, note:null|string, created_at:{$date}, updated_at:{$date}}, 'pivot'>",
+            . "Assignment&object{hours:string, label:non-empty-string, level:int, note:null|string, grade:int|null, created_at:{$date}, updated_at:{$date}}, 'pivot'>",
             $traces,
         );
+        // Reads: a column the pivot class's own default table declares is read through the class, so the
+        // shape carries that type (`hours` is a string there, whatever the relation's table says).
+        $this->assertContains('$_hours: string', $traces);
+        // A cast on a column that default table lacks takes its nullability from the relation's table.
+        $this->assertContains('$_grade: int|null', $traces);
         // No `@property`, no casts: a timestamped table must still give dates, not `null|string`.
         $this->assertContains(
             '$_rota: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
@@ -164,6 +169,12 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         $this->assertContains(
             '$_odd_rota: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
             . "OddRota&object{hours:mixed, created_at:mixed, updated_at:mixed}, 'pivot'>",
+            $traces,
+        );
+        // A factory called on another model reads that model's timestamp names: nothing is proven for this one.
+        $this->assertContains(
+            '$_foreign: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
+            . "Pivot, 'pivot'>",
             $traces,
         );
         // A non-literal using() leaves the pivot class unknown: no shape.
