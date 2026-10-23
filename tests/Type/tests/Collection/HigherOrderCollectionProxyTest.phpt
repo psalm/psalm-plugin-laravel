@@ -400,7 +400,7 @@ final class HigherOrderCollectionProxyTest
 
     /**
      * A non-generic subclass takes its proxy from the vendor trait annotation (Laravel 13.31+: 3 params,
-     * 12.20-13.30: 2 params, never resolved to the subclass's item type). Chaining a collection method after
+     * 12.27-13.30: 2 params, never resolved to the subclass's item type). Chaining a collection method after
      * the proxy call must still resolve to an Enumerable instead of `mixed` on every supported version.
      */
     public function subclassReceiverFallsBackToEnumerable(CustomerCollection $users): void

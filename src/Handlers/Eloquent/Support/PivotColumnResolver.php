@@ -44,7 +44,7 @@ final class PivotColumnResolver
     /** Declarers of the Laravel defaults a model may inherit. */
     private const STOCK_DECLARERS = [HasRelationships::class, HasTimestamps::class, Model::class];
 
-    /** Relation methods that return `$this` and cannot change the pivot class or table (Laravel 12.20 and 13). */
+    /** Relation methods that return `$this` and cannot change the pivot class or table (Laravel 12.27 and 13). */
     private const PIVOT_PRESERVING = [
         'withpivot', 'withtimestamps', 'as', 'withpivotvalue', 'orderbypivot',
         'wherepivot', 'wherepivotbetween', 'wherepivotnotbetween', 'wherepivotin', 'wherepivotnotin', 'wherepivotnull', 'wherepivotnotnull',
@@ -286,7 +286,7 @@ final class PivotColumnResolver
     /**
      * The columns a `withTimestamps($createdAt, $updatedAt)` call selects: a literal name is itself, an absent
      * or `null` one is the parent's column (`createdAt()` falls back to `created_at` for a disabled constant).
-     * `false` disables the column in Laravel 13 and names none in 12.20, a dynamic name is unknown: neither adds one.
+     * `false` disables the column in Laravel 13 and names none in 12.27, a dynamic name is unknown: neither adds one.
      *
      * @return list<string>
      */
