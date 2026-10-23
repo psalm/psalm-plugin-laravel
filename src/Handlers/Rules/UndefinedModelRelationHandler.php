@@ -325,7 +325,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * True only when every atomic is a Closure (Psalm's `TClosure` extends `TNamedObject` and is
      * named `Closure`); unions such as `Closure|array` or `?Closure` are not proven.
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function isProvenClosure(?Union $type): bool
     {
