@@ -83,6 +83,11 @@ Two suppression paths work exactly as they do for ordinary PHP files:
   </issueHandlers>
   ```
 
+Template findings work with `errorLevel`, `<issueHandlers>`, `@psalm-suppress` and a baseline (`--set-baseline`, `--use-baseline`) like findings in PHP files. Two baseline differences:
+
+* **An entry stores the whole template line, not the flagged expression.** Moving or re-indenting the line keeps the entry. Any other edit on that line, even a CSS class, reports the finding again, plus `UnusedBaselineEntry` for the old entry.
+* **A baseline holds one Blade mode.** A run with Blade off (`--no-blade`) against a baseline written with Blade on reports each template entry as `UnusedBaselineEntry`.
+
 ## Tuning template findings
 
 Re-emitted template issues pass through Psalm's normal suppression with the `.blade.php` path, so the standard per-path `<issueHandlers>` config applies to a template line exactly as it does to a PHP file. Downgrade a whole issue type over `resources/views` the same way as for any other directory:
