@@ -48,6 +48,8 @@ final class AnnotateEndToEndTest extends TestCase
         'conflict' => "<p>{{ \$flag }}</p>\n",
         'loop' => "@foreach (\$items as \$item)\n  <li>{{ \$item }} {{ \$loop->index }}</li>\n@endforeach\n",
         'collections' => "{{ \$missing->count() }} {{ count(\$byRole) }} {{ \$kind }}\n",
+        'panel' => "{{ \$family->count() }} {{ \$handler instanceof \\Closure }}\n",
+        'panel-kind' => "{{ \$kind }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
     ];
@@ -180,6 +182,21 @@ final class AnnotateEndToEndTest extends TestCase
             $this->template('collections'),
         );
         $this->assertNull($this->unknownFor($result, 'collections'), 'a template with nothing unknown has no entry');
+    }
+
+    #[Test]
+    public function leaves_undeclared_a_late_static_marker_it_cannot_drop_and_a_template_behind_get_class(): void
+    {
+        // `Collection<int, Panel>` contradicts a `Collection<int, Panel&static>` caller in the
+        // invariant TValue slot, and `Closure(Panel): void` promises to accept more than the caller's
+        // `Closure(Panel&static): void`. `get_class()` of a `Collection<int, T>` would write `T` as a
+        // class. None of them has a declaration, so each is listed instead.
+        $result = $this->annotate();
+
+        $this->assertSame(self::TEMPLATES['panel-kind'], $this->template('panel-kind'));
+        $this->assertSame(['kind'], $this->unknownFor($result, 'panel-kind'));
+        $this->assertSame(self::TEMPLATES['panel'], $this->template('panel'));
+        $this->assertEqualsCanonicalizing(['family', 'handler'], $this->unknownFor($result, 'panel'));
     }
 
     #[Test]
