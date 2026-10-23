@@ -52,6 +52,8 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $she
     $_delegated_filtered = $team->delegatedFilteredStamps();
     /** @psalm-trace $_delegated_filtered */
 
+    $team->swappedTable();
+
     $_branched = $team->branchedStamps(true);
     /** @psalm-trace $_branched */
 }

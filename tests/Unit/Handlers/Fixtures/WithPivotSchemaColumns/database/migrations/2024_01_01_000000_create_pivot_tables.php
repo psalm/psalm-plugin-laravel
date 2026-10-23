@@ -40,6 +40,13 @@ return new class extends Migration {
             $table->timestamps();
         });
 
+        Schema::create('memberships_other', function (Blueprint $table): void {
+            $table->foreignId('team_id');
+            $table->foreignId('user_id');
+            $table->integer('role');
+            $table->string('rank');
+        });
+
         // Sheet renames its created column to made_at.
         Schema::create('sheet_entries', function (Blueprint $table): void {
             $table->foreignId('sheet_id');

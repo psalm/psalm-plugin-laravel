@@ -148,11 +148,28 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
             '$_filtered: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS . $mixed,
             $traces,
         );
+        // The callback's relation joins another table, so this chain's table types nothing.
+        $this->assertContains(
+            '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team&static, ' . self::RELATIONS
+            . "Pivot&object{role:mixed, role_at:mixed, rank:mixed}, 'pivot'>",
+            $traces,
+        );
         $this->assertContains(
             '$_delegated_filtered: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
             . "Pivot&object{role:string, created_at:mixed, updated_at:mixed}, 'pivot'>",
             $traces,
         );
+    }
+
+    #[Test]
+    public function it_trusts_only_the_named_pivot_preserving_methods(): void
+    {
+        $this->assertTrue(PivotColumnResolver::keepsPivot('wherepivotnotbetween'));
+        $this->assertTrue(PivotColumnResolver::keepsPivot('orwherepivotnull'));
+        // A macro with a familiar prefix may return anything.
+        $this->assertFalse(PivotColumnResolver::keepsPivot('wherepivotrecent'));
+        $this->assertFalse(PivotColumnResolver::keepsPivot('orwherepivotrecent'));
+        $this->assertFalse(PivotColumnResolver::keepsPivot('using'));
     }
 
     #[Test]

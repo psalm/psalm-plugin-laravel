@@ -54,6 +54,18 @@ class Team extends Model
         return $this->belongsToMany(User::class, 'memberships_stamped')->where('role', 'admin')->withTimestamps();
     }
 
+    /** The callback's relation joins another table: the columns must not read from this chain's `memberships_stamped`. */
+    public function swappedTable(): BelongsToMany
+    {
+        $relation = $this->belongsToMany(User::class, 'memberships_stamped')
+            ->when(true, fn() => $this->belongsToMany(User::class, 'memberships_other'))
+            ->withPivot('role')
+            ->withTimestamps('role_at', 'rank');
+        /** @psalm-trace $relation */
+
+        return $relation;
+    }
+
     public function stampedBody(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'memberships_stamped')->withPivot('role')->withTimestamps();

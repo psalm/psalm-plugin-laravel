@@ -44,6 +44,13 @@ final class PivotColumnResolver
     /** Declarers of the Laravel defaults a model may inherit. */
     private const STOCK_DECLARERS = [HasRelationships::class, HasTimestamps::class, Model::class];
 
+    /** Relation methods that return `$this` and cannot change the pivot class or table (Laravel 12.20 and 13). */
+    private const PIVOT_PRESERVING = [
+        'withpivot', 'withtimestamps', 'as', 'withpivotvalue', 'orderbypivot',
+        'wherepivot', 'wherepivotbetween', 'wherepivotnotbetween', 'wherepivotin', 'wherepivotnotin', 'wherepivotnull', 'wherepivotnotnull',
+        'orwherepivot', 'orwherepivotbetween', 'orwherepivotnotbetween', 'orwherepivotin', 'orwherepivotnotin', 'orwherepivotnull', 'orwherepivotnotnull',
+    ];
+
     /**
      * Reads the receiver chain from $outer down to its many-to-many factory call: the columns its calls select
      * (innermost first) and the pivot table. `table` is false when the factory is not called on `$this`: it takes
@@ -61,9 +68,10 @@ final class PivotColumnResolver
             if (isset(self::FACTORY_TABLE_POSITION[$name])) {
                 $onThis = $call->var instanceof Expr\Variable && $call->var->name === 'this';
 
+                // An unproven link may have swapped in another factory's relation: its table is not the pivot's.
                 return [
                     'columns' => $columns,
-                    'table' => $onThis ? self::table($codebase, $call, $name, $relatedClass, $parentClass) : false,
+                    'table' => !$onThis ? false : ($visible ? self::table($codebase, $call, $name, $relatedClass, $parentClass) : null),
                     'visible' => $visible && $onThis,
                 ];
             }
@@ -84,9 +92,7 @@ final class PivotColumnResolver
      */
     public static function keepsPivot(string $name): bool
     {
-        return \in_array($name, ['withpivot', 'withtimestamps', 'as', 'withpivotvalue', 'orderbypivot'], true)
-            || \str_starts_with($name, 'wherepivot')
-            || \str_starts_with($name, 'orwherepivot');
+        return \in_array($name, self::PIVOT_PRESERVING, true);
     }
 
     /**
