@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792774305371,
+  "lastUpdate": 1792784659875,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15320,6 +15320,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.02,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fe0b79353e2892e4dfbf98710c37c816334238b6",
+          "message": "Report `BladeCompileFailure` as an error with the compiler's cause (#2003)\n\n* fix(blade): report BladeCompileFailure as an error with the compiler cause\n\n- Graduate BladeCompileFailure out of ExperimentalIssuePolicy: it now\n  reports as an error by default.\n- Message is `Template not analysed: <cause>`, the exception message on\n  one line, without the exception class.\n- Compile under a scoped error handler: Psalm's global handler turned a\n  PHP error raised inside the Blade compiler (a prose `@component` passes\n  null to str_contains()) into a message carrying the vendor path and the\n  full Psalm command line. The scoped handler names the directive instead,\n  and asks for arguments when a directive was used without them.\n\nRefs #1987\n\n* fix(blade): give the missing-arguments advice only to built-in directives that need one\n\n- Skip custom directives: callCustomDirective() passes '' for a bare\n  directive, so a null there comes from the callback itself.\n- Skip compile methods without a required first parameter (`@parent`).\n- Cover typed compile methods (`@js`) that reject the null with a\n  TypeError on entry, instead of reporting the TypeError's vendor path.\n- Keep the two spellings apart in the issue page.\n\nRefs #1987\n\n* fix(blade): keep Psalm's exception class and narrow the arguments advice to Laravel's methods\n\n- Throw RuntimeException with the error severity as code, as Psalm's own\n  handler does, so a directive or precompiler catching it compiles the\n  same; only the message changes.\n- Give the missing-arguments advice only when the compile method is\n  declared by Laravel's BladeCompiler: a subclass override may fail on a\n  null of its own.\n- Recognize a typed compile method rejecting a bare directive's null\n  from frame names alone, so the advice survives\n  zend.exception_ignore_args.\n\nRefs #1987",
+          "timestamp": "2026-10-23T21:41:12+02:00",
+          "tree_id": "f8481900236364881c57385a51e4c0cc83e4d5bd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/fe0b79353e2892e4dfbf98710c37c816334238b6"
+        },
+        "date": 1792784658392,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.14,
+            "range": "± 0.36",
             "unit": "s"
           },
           {
