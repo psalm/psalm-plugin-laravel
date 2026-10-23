@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792542787711,
+  "lastUpdate": 1792753146208,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -14975,6 +14975,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1289,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6efcc5fd81ba3c6617615eaebaa52540cd8c2bd1",
+          "message": "Defer `json_encode()` html escape to Psalm and require `JSON_HEX_AMP` (#1973)\n\n* fix(taint): defer json_encode() html escape to Psalm and require JSON_HEX_AMP\n\nPsalm 7.0.0-rc7 removes the html taint from json_encode() with\nJSON_HEX_TAG | JSON_HEX_AMP (vimeo/psalm#12453), so the plugin's html\nbranch is dropped and the floor moves to ^7.0.0-rc8. The has_quotes\nremoval stays (core keeps it by design) and now also requires\nJSON_HEX_AMP: without it an attribute decodes a payload &quot; back to \".\n\n* test(taint): drop json_encode() shadow cases that are not valid PHP\n\nA local function named like a 'use function' import is a fatal\nredeclaration, and an alias to an unknown function cannot run.\n\n* test(taint): pin core json_encode() html loss in guard tests\n\nCore's json_encode() html removal has neither the return-path nor the\nspecialization guard, so TaintedHtml disappears in the sibling-return\nand unspecialized-stub cases. The tests keep asserting the plugin's own\nhas_quotes guards. The Blade @json fixture now passes JSON_HEX_AMP to\nkeep clearing html.\n\n* test(taint): link the upstream sibling-return report",
+          "timestamp": "2026-10-23T12:56:11+02:00",
+          "tree_id": "355d542e639a8f77addc7008c89bd12445b084aa",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6efcc5fd81ba3c6617615eaebaa52540cd8c2bd1"
+        },
+        "date": 1792753144363,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.65,
+            "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1309,
             "unit": "MB"
           }
         ]
