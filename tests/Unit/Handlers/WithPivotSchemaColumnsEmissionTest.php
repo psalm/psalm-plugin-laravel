@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\PivotColumnResolver;
 use Symfony\Component\Process\Process;
 
@@ -18,6 +19,7 @@ use Symfony\Component\Process\Process;
  * columns. This points a real Psalm subprocess at a fixture project with pivot-table migrations.
  */
 #[CoversClass(PivotColumnResolver::class)]
+#[CoversClass(CastResolver::class)]
 #[Group('subprocess')]
 final class WithPivotSchemaColumnsEmissionTest extends TestCase
 {
@@ -189,14 +191,40 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
     #[Test]
     public function it_types_the_dates_as_the_configured_date_class(): void
     {
-        $default = 'Illuminate\\Support\\Carbon|null';
-        $this->assertContains($this->stampedRelation($default), $this->runPsalm());
+        $default = 'Illuminate\\Support\\Carbon';
+        $traces = $this->runPsalm();
+        $this->assertContains($this->stampedRelation("{$default}|null"), $traces);
+        $this->assertSame([], \array_diff($this->modelDates($default), $traces));
 
-        // Date::use(CarbonImmutable::class): the dates are that class.
-        $this->assertContains($this->stampedRelation('Carbon\\CarbonImmutable|null'), $this->runPsalm(['WITH_PIVOT_DATE' => 'immutable']));
+        // Date::use(CarbonImmutable::class): the dates are that class, pivot timestamps and model casts alike.
+        $immutable = 'Carbon\\CarbonImmutable';
+        $traces = $this->runPsalm(['WITH_PIVOT_DATE' => 'immutable']);
+        $this->assertContains($this->stampedRelation("{$immutable}|null"), $traces);
+        $this->assertSame([], \array_diff($this->modelDates($immutable), $traces));
 
-        // A callable builds the dates: nothing is proven.
-        $this->assertContains($this->stampedRelation('mixed'), $this->runPsalm(['WITH_PIVOT_DATE' => 'callable']));
+        // A callable builds the dates: nothing is proven. `immutable_*` casts name their class regardless.
+        $traces = $this->runPsalm(['WITH_PIVOT_DATE' => 'callable']);
+        $this->assertContains($this->stampedRelation('mixed'), $traces);
+        $this->assertSame([], \array_diff($this->modelDates('mixed'), $traces));
+    }
+
+    /**
+     * The Post model's date properties when the app's date class is $date: `published_at` is a non-null column,
+     * `reviewed_on` a nullable one with a cast format, `deleted_at` is added by SoftDeletes. `archived_at` is
+     * `immutable_datetime`, which Laravel builds with CarbonImmutable whatever `Date::use()` says.
+     *
+     * @return list<string> the expected `@psalm-trace` messages
+     */
+    private function modelDates(string $date): array
+    {
+        $nullable = $date === 'mixed' ? 'mixed' : "{$date}|null";
+
+        return [
+            "\$_published_at: {$date}",
+            "\$_reviewed_on: {$nullable}",
+            "\$_deleted_at: {$nullable}",
+            '$_archived_at: Carbon\\CarbonImmutable|null',
+        ];
     }
 
     private function stampedRelation(string $date): string
