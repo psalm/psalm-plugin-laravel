@@ -84,12 +84,18 @@ final class ShadowIssueRelocator
     ];
 
     /**
-     * The compiled save/restore statements whose assignment `MixedAssignment` reports (#1872):
-     * `statement` is what must be absent from the template, `target` where Psalm positions the
-     * issue. The `$__*Original*` saves are not here: AssignmentAnalyzer skips a target whose var id
-     * starts with `$_`. The `$__sessionPrevious[] =` push has no var id, so it IS reported.
+     * The compiled statements whose `mixed` target or operand Psalm reports a `Mixed*` on (#1872,
+     * #1986): `statement` is what must be absent from the template, `target` where Psalm positions
+     * the issue. The `$__*Original*` saves are not here: AssignmentAnalyzer skips a target whose var
+     * id starts with `$_`. The `$__sessionPrevious[] =` push has no var id, so it IS reported.
      */
     private const SAVE_RESTORE_PATTERNS = [
+        // CompilesComponents::compileProps() and compileAware(): a callee's `mixed` value per prop
+        '/(?<statement>(?<target>\$\$__key) = \$\$__key \?\? \$__value;)/',
+        '/(?<statement>(?<target>\$__newAttributes\[\$__key\]) = \$__value;)/',
+        '/(?<statement>(?<target>\$\$__consumeVariable) = is_string\(\$__key\) \? [^;]*;)/',
+        // Livewire's RenderComponent::generate()
+        '/(?<statement>echo (?<target>\$__html);)/',
         // CompilesComponents::compileEndComponentClass(); the hash is newComponentHash()'s xxh128
         '/(?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};)/',
         // CompilesErrors::compileEnderror()
@@ -1079,19 +1085,17 @@ final class ShadowIssueRelocator
      * #1986: whether a `Mixed*` finding's `mixed` comes from the prelude's fallback rather than a
      * declaration. Psalm's origin (traced only while the variable-use graph runs, so not under
      * `findUnusedCode="false"`) is exact: a variable fetch in this shadow on a name in
-     * {@see ShadowTarget::$untypedNames} or a compiled `$__*` name is the fallback, anything outside
-     * the shadow is a callee's `mixed`. A template local's origin stops at its own assignment, so a
-     * local is never proof of a declaration. Without an origin, the finding must read variables, all
-     * of them declared.
+     * {@see ShadowTarget::$untypedNames} (compiled `$__*` bookkeeping is a local too) is the
+     * fallback, anything outside the shadow is a callee's `mixed`. A template local's origin stops
+     * at its own assignment, so a local is never proof of a declaration. Without an origin, the
+     * finding must read at least one variable, all of them declared; a method call is positioned on
+     * its name, so its receiver chain is read instead.
      */
     private static function isFallbackMixed(MixedIssue&CodeIssue $issue, ShadowTarget $target): bool
     {
         $untyped = $target->untypedNames;
-        $selected = (string) self::selectedText($issue->code_location);
 
-        // `$__*` names are the compiler's (`$$__key` of `@props`/`@aware`, Livewire's `$__html`),
-        // whatever their origin.
-        if ($untyped === null || \preg_match('/\$__\w/', $selected) === 1) {
+        if ($untyped === null) {
             return true;
         }
 
@@ -1105,24 +1109,85 @@ final class ShadowIssueRelocator
             $text = self::selectedText($origin);
 
             if ($text !== null && \preg_match('/\A\$(' . PreludeBuilder::VARIABLE_NAME . ')\z/', $text, $name) === 1) {
-                return isset($untyped[$name[1]]) || \str_starts_with($name[1], '__');
+                return isset($untyped[$name[1]]);
             }
         }
 
-        $names = self::readNames($selected);
+        $names = self::readNames((string) self::selectedText($issue->code_location));
 
-        // A method call is positioned on its name; the message carries the receiver's var id.
-        if ($names === [] && \preg_match('/\ACannot determine the type of (\$.+?) when calling method /', $issue->message, $receiver) === 1) {
-            $names = self::readNames($receiver[1]);
+        if ($names === [] && $issue instanceof MixedMethodCall) {
+            $names = self::receiverNames($issue->code_location);
         }
 
         foreach ($names as $name) {
-            if (isset($untyped[$name]) || \str_starts_with($name, '__')) {
+            if (isset($untyped[$name])) {
                 return true;
             }
         }
 
         return $names === [];
+    }
+
+    /**
+     * The variables the receiver chain before a method name reads (`$data['x']?->` of
+     * `$data['x']?->foo()`), walked back token by token over `->`, `?->`, `::`, names and balanced
+     * `[...]`/`(...)`; empty when it reads none or a variable variable hides one.
+     *
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
+    private static function receiverNames(CodeLocation $location): array
+    {
+        $selection = ShadowSelection::of($location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return [];
+        }
+
+        $tokens = @\token_get_all('<?php ' . \substr($selection->snippet, 0, $selection->start));
+        $names = [];
+        $depth = 0;
+        $wantOperator = true;
+
+        for ($i = \count($tokens) - 1; $i > 0; $i--) {
+            $token = $tokens[$i];
+            $id = \is_array($token) ? $token[0] : $token;
+
+            if ($id === \T_WHITESPACE) {
+                continue;
+            }
+
+            if ($id === '$') {
+                return [];
+            }
+
+            if ($id === \T_VARIABLE) {
+                $names[] = \substr($token[1], 1);
+            }
+
+            if ($depth > 0) {
+                $depth += match ($id) {
+                    ')', ']' => 1,
+                    '(', '[' => -1,
+                    default => 0,
+                };
+            } elseif ($wantOperator) {
+                if (!\in_array($id, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true)) {
+                    break;
+                }
+
+                $wantOperator = false;
+            } elseif ($id === ')' || $id === ']') {
+                $depth = 1;
+            } elseif (\in_array($id, [\T_VARIABLE, \T_STRING, \T_NAME_QUALIFIED, \T_NAME_FULLY_QUALIFIED], true)) {
+                $wantOperator = true;
+            } else {
+                break;
+            }
+        }
+
+        return $names;
     }
 
     /**

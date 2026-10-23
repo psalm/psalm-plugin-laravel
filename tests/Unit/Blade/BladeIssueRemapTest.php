@@ -296,6 +296,8 @@ final class BladeIssueRemapTest extends TestCase
             'resources/views/mixed-leak-declared.blade.php:20 MixedArgument',
             'resources/views/mixed-leak-declared.blade.php:7 MixedArgument',
             'resources/views/mixed-provenance.blade.php:10 MixedAssignment',
+            'resources/views/mixed-provenance.blade.php:11 MixedArgument',
+            'resources/views/mixed-provenance.blade.php:11 MixedMethodCall',
             'resources/views/mixed-provenance.blade.php:5 MixedArgument',
             'resources/views/mixed-provenance.blade.php:5 MixedMethodCall',
             // An invalid fetch or call on a literal-defaulted prop.
@@ -2052,8 +2054,8 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1986: `Mixed*` findings follow their provenance. Undeclared variables, a loop alias over one,
-     * and a template local assigned from one report nothing; a declared `array` and a callee's
+     * #1986: `Mixed*` findings follow their provenance. Undeclared variables (a nullsafe call on one
+     * included), a loop alias over one, and a template local assigned from one report nothing; a declared `array` and a callee's
      * `mixed` return report as in a PHP file. Without the variable-use graph (`findUnusedCode="false"`,
      * as `psalm-laravel init` writes) Psalm traces no origin, so a local's finding is dropped too.
      * At `errorLevel` 2 Psalm itself demotes the family to info.
@@ -2063,8 +2065,8 @@ final class BladeIssueRemapTest extends TestCase
     {
         $template = 'resources/views/mixed-provenance.blade.php';
         $cases = [
-            'psalm.xml' => ['MixedMethodCall' => [5], 'MixedArgument' => [5], 'MixedAssignment' => [10]],
-            'psalm-unused-code-off.xml' => ['MixedMethodCall' => [5], 'MixedArgument' => [5]],
+            'psalm.xml' => ['MixedMethodCall' => [5, 11], 'MixedArgument' => [5, 11], 'MixedAssignment' => [10]],
+            'psalm-unused-code-off.xml' => ['MixedMethodCall' => [5, 11], 'MixedArgument' => [5, 11]],
             'psalm-level2.xml' => [],
         ];
 

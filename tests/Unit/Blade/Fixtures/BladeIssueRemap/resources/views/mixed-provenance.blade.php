@@ -8,3 +8,5 @@
 {{ $local->bar() }}
 @foreach($g->list as $w) {{ $w }} @endforeach
 @php $decoded = json_decode('1'); @endphp
+{{ $data['x']?->nulls() }}
+{{ $h?->nulls() }}

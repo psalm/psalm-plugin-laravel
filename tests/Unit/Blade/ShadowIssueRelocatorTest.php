@@ -898,6 +898,17 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         yield '$message restore' => [self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message')];
 
+        $props = '$$__key = $$__key ?? $__value;';
+        yield '@props assignment' => [new MixedAssignment('Unable to determine the type of this assignment', self::selectionLocation('$$__key', 7, $props), self::stubOrigin())];
+        yield '@props attribute copy' => [new MixedAssignment(
+            'Unable to determine the type of this assignment',
+            self::selectionLocation('$__newAttributes[$__key]', 24, '        $__newAttributes[$__key] = $__value;'),
+            self::stubOrigin(),
+        )];
+        $aware = '$$__consumeVariable = is_string($__key) ? $__env->getConsumableComponentData($__key, $__value) : $__env->getConsumableComponentData($__value);';
+        yield '@aware assignment' => [new MixedAssignment('Unable to determine the type of this assignment', self::selectionLocation('$$__consumeVariable', 19, $aware), self::stubOrigin())];
+        yield 'Livewire echo' => [new MixedArgument('Argument 1 of echo cannot be mixed', self::selectionLocation('$__html', 7, 'echo $__html;'), 'echo', self::stubOrigin())];
+
         foreach (['session', 'context'] as $kind) {
             yield "@{$kind} push" => [self::mixedAssignment(
                 "if (isset(\$value)) { \$__{$kind}Previous[] = \$value; }",
@@ -950,6 +961,16 @@ final class ShadowIssueRelocatorTest extends TestCase
         yield 'statement written between comment look-alikes' => [
             self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message'),
             "<div>\n@php \$open = '{{--'; if (isset(\$__messageOriginal)) { \$message = \$__messageOriginal; } \$close = '--}}'; @endphp\n</div>\n",
+        ];
+        yield 'author props-like assignment' => [new MixedAssignment(
+            'Unable to determine the type of this assignment',
+            self::selectionLocation('$$__name', 8, '<?php $$__name = $$__name ?? $fallback; ?>'),
+            self::stubOrigin(),
+        )];
+        yield 'author echo of a $__ variable' => [new MixedArgument('Argument 1 of echo cannot be mixed', self::selectionLocation('$__mine', 7, '<?php echo $__mine; ?>'), 'echo', self::stubOrigin())];
+        yield 'Livewire echo written in the template' => [
+            new MixedArgument('Argument 1 of echo cannot be mixed', self::selectionLocation('$__html', 7, 'echo $__html;'), 'echo', self::stubOrigin()),
+            "<div>\n@php echo \$__html; @endphp\n</div>\n",
         ];
         yield 'author session read' => [self::mixedAssignment("<?php \$value = session()->get('status'); ?>", '$value', 6, 'value')];
         yield 'session read written in the template' => [
@@ -1915,9 +1936,10 @@ final class ShadowIssueRelocatorTest extends TestCase
             self::mixedCall('$local', 'bar', '<?php echo e($local->bar()); ?>', self::selectionLocation('$local', 6, '<?php $local = $x[\'k\']; ?>')),
             ['local' => true],
         ];
+        // The compiled body binds `$__currentLoopData`, so it is one of the template's locals.
         yield 'origin on the compiled loop variable' => [
             new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation('$w', 2, '<?php echo e($w); ?>'), 'e', self::selectionLocation('$__currentLoopData', 18, '<?php $__currentLoopData = $g->list; ?>')),
-            [],
+            ['__currentLoopData' => true, 'w' => true],
         ];
         yield 'no origin, receiver chain on an undeclared variable' => [self::mixedCall('$x->a', 'b', '<?php echo e($x->a->b()); ?>'), ['x' => true]];
         yield 'no origin, argument reading an undeclared variable' => [
@@ -1929,6 +1951,14 @@ final class ShadowIssueRelocatorTest extends TestCase
             ['x' => true],
         ];
         yield 'no origin, loop alias' => [self::mixedAssignment('<?php foreach($__currentLoopData as $item): ?>', '$item', 5, 'item'), ['item' => true]];
+        yield 'no origin, nullsafe receiver on an undeclared variable' => [
+            new MixedMethodCall('Cannot determine the type of $__tmp_nullsafe__789 when calling method foo', self::selectionLocation('foo', 3, '<?php echo e($x?->foo()); ?>')),
+            ['x' => true],
+        ];
+        yield 'no origin, receiver chain through a call on an undeclared variable' => [
+            new MixedMethodCall('Cannot determine the type of the object on the left hand side of this expression', self::selectionLocation('name', 4, '<?php echo e($x->first()->name()); ?>')),
+            ['x' => true],
+        ];
         yield 'compiled props assignment, origin in a callee' => [
             new MixedAssignment('Unable to determine the type of this assignment', self::selectionLocation('$$__key', 7, '<?php $$__key = $$__key ?? $__value; ?>'), self::stubOrigin()),
             [],
@@ -1966,6 +1996,22 @@ final class ShadowIssueRelocatorTest extends TestCase
         yield 'origin in a callee outside the shadow' => [
             self::mixedCall('$decoded', 'baz', '<?php echo e($decoded->baz()); ?>', self::stubOrigin()),
             ['decoded' => true],
+        ];
+        yield 'no origin, nullsafe receiver on a declared variable' => [
+            new MixedMethodCall('Cannot determine the type of $__tmp_nullsafe__789 when calling method nulls', self::selectionLocation('nulls', 5, "<?php echo e(\$data['x']?->nulls()); ?>")),
+            ['x' => true],
+        ];
+        yield 'no origin, receiver chain through a call on a declared variable' => [
+            new MixedMethodCall('Cannot determine the type of the object on the left hand side of this expression', self::selectionLocation('name', 4, '<?php echo e($rows->first()->name()); ?>')),
+            ['x' => true],
+        ];
+        yield 'no origin, a $__ name inside a string literal' => [
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation("\$data['\$__lit']", 15, "<?php echo e(\$data['\$__lit']); ?>"), 'e'),
+            [],
+        ];
+        yield 'origin in a callee, an author $__ variable' => [
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation('$__mine', 7, '<?php echo e($__mine); ?>'), 'e', self::stubOrigin()),
+            [],
         ];
         yield 'origin in a callee, a name with an inner double underscore' => [
             new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation('$a__b', 5, '<?php echo e($a__b); ?>'), 'e', self::stubOrigin()),
