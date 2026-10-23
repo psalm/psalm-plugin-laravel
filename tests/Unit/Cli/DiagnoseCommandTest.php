@@ -181,6 +181,104 @@ final class DiagnoseCommandTest extends TestCase
     }
 
 
+    #[Test]
+    public function renders_the_blade_status_line(): void
+    {
+        $base = $this->okReport();
+        $report = new Report(
+            pluginVersion: $base->pluginVersion,
+            psalmVersion: $base->psalmVersion,
+            laravelVersion: $base->laravelVersion,
+            phpRuntimeVersion: $base->phpRuntimeVersion,
+            phpAnalysisVersion: $base->phpAnalysisVersion,
+            phpAnalysisSource: $base->phpAnalysisSource,
+            bootMode: $base->bootMode,
+            bootPath: $base->bootPath,
+            bootstrapErrors: [],
+            hardFailures: [],
+            loadedProviders: [],
+            blade: 'disabled: the view finder could not be resolved',
+        );
+
+        $tester = $this->testerFor($this->fixtureProvider($report));
+        $tester->execute([]);
+
+        $this->assertMatchesRegularExpression('/^Blade: disabled: the view finder could not be resolved$/m', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function blade_is_off_without_a_psalm_config_or_without_the_blade_element(): void
+    {
+        $root = $this->bladeProject(null);
+
+        $this->assertSame('off', (new Diagnostics())->bladeStatus($root));
+
+        $this->writePsalmXml($root, '<pluginClass class="Psalm\LaravelPlugin\Plugin" />');
+        $this->assertSame('off', (new Diagnostics())->bladeStatus($root));
+
+        $this->writePsalmXml($root, '<pluginClass class="Psalm\LaravelPlugin\Plugin"><blade value="false" /></pluginClass>');
+        $this->assertSame('off', (new Diagnostics())->bladeStatus($root));
+    }
+
+    #[Test]
+    public function blade_is_on_with_its_template_count_and_cache_directory(): void
+    {
+        $root = $this->bladeProject('{root}/blade-cache');
+
+        $this->assertMatchesRegularExpression(
+            '/^on \(\d+ templates?, cache ' . \preg_quote($root . '/blade-cache', '/') . '\)$/',
+            (new Diagnostics())->bladeStatus($root),
+        );
+    }
+
+    #[Test]
+    public function blade_reports_the_reason_it_disabled_itself(): void
+    {
+        // A cache directory nested under a regular file can never be created.
+        $root = $this->bladeProject('{root}/not-a-dir/blade');
+        \file_put_contents($root . '/not-a-dir', '');
+
+        $this->assertSame(
+            "disabled: the shadow cache directory '{$root}/not-a-dir/blade' could not be created",
+            (new Diagnostics())->bladeStatus($root),
+        );
+    }
+
+    /** @var list<string> */
+    private array $tempDirs = [];
+
+    #[\Override]
+    protected function tearDown(): void
+    {
+        foreach ($this->tempDirs as $dir) {
+            (new \Illuminate\Filesystem\Filesystem())->deleteDirectory($dir);
+        }
+    }
+
+    /** A temp project root; with a cache directory given, its psalm.xml enables Blade there. */
+    private function bladeProject(?string $cacheDir): string
+    {
+        $root = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-diagnose-' . \uniqid('', true);
+        \mkdir($root);
+        $this->tempDirs[] = $root;
+
+        if ($cacheDir !== null) {
+            $cacheDir = \str_replace('{root}', $root, $cacheDir);
+            $this->writePsalmXml($root, "<pluginClass class=\"Psalm\\LaravelPlugin\\Plugin\"><blade cacheDir=\"{$cacheDir}\" /></pluginClass>");
+        }
+
+        return $root;
+    }
+
+    private function writePsalmXml(string $root, string $plugins): void
+    {
+        \file_put_contents(
+            $root . '/psalm.xml',
+            '<?xml version="1.0"?><psalm xmlns="https://getpsalm.org/schema/config"><plugins>' . $plugins . '</plugins></psalm>',
+        );
+    }
+
+
     private function testerFor(Diagnostics $diagnostics, ?TipsProvider $tipsProvider = null): CommandTester
     {
         $command = new DiagnoseCommand($diagnostics, $tipsProvider);

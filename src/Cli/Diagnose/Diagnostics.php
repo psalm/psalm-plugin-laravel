@@ -6,7 +6,14 @@ namespace Psalm\LaravelPlugin\Cli\Diagnose;
 
 use Composer\InstalledVersions;
 use Illuminate\Foundation\Application as LaravelApplication;
+use Psalm\Config;
+use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
+use Psalm\LaravelPlugin\Blade\ShadowRegistrar;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
+use Psalm\LaravelPlugin\Plugin;
+use Psalm\Progress\VoidProgress;
 
 /**
  * Collects runtime introspection data about the plugin's resolved state.
@@ -63,7 +70,129 @@ class Diagnostics
             bootstrapErrors: $bootstrapErrors,
             hardFailures: $hardFailures,
             loadedProviders: $this->collectLoadedProviders(),
+            blade: $this->bladeStatus($projectRoot),
         );
+    }
+
+    /**
+     * Runs the same Blade boot a Psalm run does, against a registrar that only counts, so the
+     * reported reason is the one that run would print. It compiles into the configured cache
+     * directory like that run, which only warms the cache the next run reads.
+     *
+     * @return string `off`, `on (N templates, cache <dir>)`, or `disabled: <reason>`
+     */
+    public function bladeStatus(?string $projectRoot): string
+    {
+        $psalmXml = $projectRoot === null ? null : $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        $pluginXml = $psalmXml === null ? null : $this->readPluginXml($psalmXml);
+
+        if ($pluginXml === false) {
+            return 'off';
+        }
+
+        try {
+            $overrides = PluginOverrides::parse((string) \getenv(PluginOverrides::ENV_VAR));
+            $config = PluginConfig::fromXml($pluginXml, $overrides);
+
+            if (!$config->bladeEnabled) {
+                return 'off';
+            }
+
+            // The default cache directory derives from Psalm's own, which needs a loaded Psalm config.
+            if ($psalmXml !== null && $projectRoot !== null && !isset($pluginXml?->blade['cacheDir'])) {
+                $this->loadPsalmConfig($psalmXml, $projectRoot);
+                $config = PluginConfig::fromXml($pluginXml, $overrides);
+            }
+
+            $registrar = new class implements ShadowRegistrar {
+                public int $shadows = 0;
+
+                /** @psalm-pure */
+                #[\Override]
+                public function markTemplatesReportable(array $templatePaths): bool
+                {
+                    return true;
+                }
+
+                /** @psalm-capabilities read-props|write-this-props|write-refs */
+                #[\Override]
+                public function registerShadowsForAnalysis(array $shadowPaths): void
+                {
+                    $this->shadows = \count($shadowPaths);
+                }
+
+                /** @psalm-capabilities read-props */
+                #[\Override]
+                public function queueClassLikesForScanning(array $classNames): void {}
+
+                /** @psalm-capabilities read-props */
+                #[\Override]
+                public function queueResolvableClassLikesForScanning(array $candidates): void {}
+
+                /** @psalm-capabilities read-props */
+                #[\Override]
+                public function queueFilesForScanning(array $paths): void {}
+
+                /** @psalm-capabilities read-props */
+                #[\Override]
+                public function reportCompileFailure(string $templatePath, string $source, string $message): void {}
+            };
+
+            // failOnInternalError keeps the disable warning off STDERR: this report states it instead.
+            $bootstrapper = new BladeBootstrapper(ApplicationProvider::getApp(), $registrar, new VoidProgress(), $config->bladeCacheDir, failOnInternalError: true);
+            $bootstrapper->boot();
+        } catch (\Throwable $throwable) {
+            return 'disabled: ' . $throwable->getMessage();
+        }
+
+        $cause = $bootstrapper->disabledCause();
+
+        if ($cause !== null) {
+            return 'disabled: ' . $cause;
+        }
+
+        return \sprintf('on (%d template%s, cache %s)', $registrar->shadows, $registrar->shadows === 1 ? '' : 's', $config->bladeCacheDir);
+    }
+
+    /**
+     * Loading reads the constant Psalm's CLI defines, and `exit(1)`s on any argv token that is not an
+     * existing path (see {@see resolveAnalysisPhpVersion()}), so argv is hidden for the duration.
+     */
+    private function loadPsalmConfig(string $psalmXml, string $projectRoot): void
+    {
+        global $argv;
+
+        if (!\defined('PSALM_VERSION')) {
+            \define('PSALM_VERSION', $this->safePrettyVersion('vimeo/psalm') ?? 'unknown');
+        }
+
+        $saved = $argv;
+        $argv = [];
+
+        try {
+            Config::loadFromXMLFile($psalmXml, $projectRoot);
+        } finally {
+            $argv = $saved;
+        }
+    }
+
+    /**
+     * This plugin's `<pluginClass>` children, as Psalm hands them to the plugin.
+     *
+     * @return \SimpleXMLElement|null|false null when the plugin is registered without settings,
+     *                                      false when it is not registered at all
+     */
+    private function readPluginXml(string $psalmXml): \SimpleXMLElement|false|null
+    {
+        $xml = $this->loadPsalmXml($psalmXml);
+
+        foreach ($xml?->plugins->pluginClass ?? [] as $plugin) {
+            if (\strcasecmp(\ltrim((string) $plugin['class'], '\\'), Plugin::class) === 0) {
+                return $plugin->count() > 0 ? $plugin->children() : null;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -120,7 +249,19 @@ class Diagnostics
      */
     private function readPsalmXmlPhpVersion(string $projectRoot): ?string
     {
-        $path = $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
+        $xml = $this->loadPsalmXml($projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml');
+
+        $attr = $xml['phpVersion'] ?? null;
+        if (!$attr instanceof \SimpleXMLElement) {
+            return null;
+        }
+
+        $value = (string) $attr;
+        return $value === '' ? null : $value;
+    }
+
+    private function loadPsalmXml(string $path): ?\SimpleXMLElement
+    {
         if (!\is_file($path)) {
             return null;
         }
@@ -137,17 +278,7 @@ class Diagnostics
         \libxml_clear_errors();
         \libxml_use_internal_errors($previous);
 
-        if (!$xml instanceof \SimpleXMLElement) {
-            return null;
-        }
-
-        $attr = $xml['phpVersion'] ?? null;
-        if (!$attr instanceof \SimpleXMLElement) {
-            return null;
-        }
-
-        $value = (string) $attr;
-        return $value === '' ? null : $value;
+        return $xml instanceof \SimpleXMLElement ? $xml : null;
     }
 
     private function safePrettyVersion(string $package): ?string
