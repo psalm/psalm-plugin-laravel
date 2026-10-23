@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Collections;
 
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
 use PhpParser\Node\Arg;
@@ -16,11 +17,14 @@ use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\Instanceof_;
+use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Name\FullyQualified;
+use PhpParser\Node\NullableType;
 use PhpParser\Node\Stmt\Return_;
+use PhpParser\Node\UnionType;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Type\Comparator\TypeComparisonResult;
@@ -54,7 +58,7 @@ use Psalm\Type\Atomic\TString;
 use Psalm\Type\Union;
 
 /**
- * Narrows Collection::filter(), Collection::where(), and Collection::whereNotNull() return types.
+ * Narrows Collection::filter(), Collection::where(), Collection::reject() and Collection::whereNotNull() return types.
  *
  * filter() without a callback (or with an explicit null):
  *   Calls array_filter(), removing all falsy values. Removes `null` and `false` from
@@ -93,6 +97,20 @@ use Psalm\Type\Union;
  * whereNotNull() without a key argument:
  *   Removes only `null` from TValue (does not narrow other falsy types).
  *
+ * filter(Closure), where(Closure) and reject(Closure) with a class-typed first parameter:
+ *   Laravel calls the callback for every element and keeps the original item; PHP never
+ *   coerces an object into a class type, so any non-instance throws TypeError. TValue is
+ *   therefore narrowed to the parameter's class (`fn (Dog $d)` on `Collection<int, Animal>`
+ *   returns `Collection<int, Dog>`), also from `mixed`. Only class/interface/enum names and
+ *   null (`?Dog`) qualify; scalar params decline (Laravel runs callbacks in coercive mode, so
+ *   "5" passes `int` and stays a string), and so does a param unrelated to TValue (Psalm's
+ *   InvalidArgument stays). For filter/where the predicate matcher above then runs on the
+ *   narrowed TValue; reject() gets only the param narrowing. Closure and arrow-fn literals
+ *   only. Return type only: ArgumentTypeCoercion is still reported. Param narrowing also needs
+ *   an exact-base receiver (Collection, LazyCollection or Eloquent\Collection, no intersection
+ *   or template) and declines `self`/`static`/`parent` param types (closures can be rebound).
+ *   reject()/where() on an Eloquent\Collection receiver never reach this handler.
+ *
  * Not covered (intentionally, 80/20):
  * - Numeric falsy types (0, 0.0) are not narrowed — Psalm has no `non-zero-int` atomic
  *   type, so the complexity of constructing `int<min, -1>|int<1, max>` isn't worth it.
@@ -100,7 +118,7 @@ use Psalm\Type\Union;
  *   concrete types, not the Enumerable interface.
  * - whereNotNull($key) with a string key — we don't narrow TValue when filtering by a
  *   nested field key, since the item type itself is unchanged.
- * - reject() with a callback — symmetric truthy-removal is rarely the predicate's intent.
+ * - reject() predicate-body inversion (`reject(fn ($x) => $x === null)`).
  * - where(column, operator, value) — column/operator/value form leaves TValue unchanged.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/441
@@ -133,6 +151,10 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             return self::narrowByCallback($event);
         }
 
+        if ($method === 'reject') {
+            return self::narrowByCallback($event, matchPredicate: false);
+        }
+
         if ($method === 'wherenotnull') {
             return self::handleWhereNotNull($event);
         }
@@ -160,23 +182,24 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Narrow filter(callable) / where(callable) when the sole argument is a closure whose
-     * body matches a recognized predicate shape. Returns null for anything else so
-     * Psalm's default static return stands.
+     * Narrow filter(callable) / where(callable) / reject(callable) when the sole argument is a
+     * closure literal: first from a class-typed first parameter, then (filter/where only) from
+     * a recognized predicate body run on the param-narrowed TValue. Returns null for anything
+     * else so Psalm's default static return stands.
      *
      * Not annotated `@psalm-mutation-free` because the type-check branches reach into
      * Psalm's codebase (`getCodebase()`, `Type::intersectUnionTypes`) and PhpParser
      * attributes (`Name::getAttribute`), which Psalm treats as impure.
      */
-    private static function narrowByCallback(MethodReturnTypeProviderEvent $event): ?Union
+    private static function narrowByCallback(MethodReturnTypeProviderEvent $event, bool $matchPredicate = true): ?Union
     {
         $args = $event->getCallArgs();
         if (\count($args) !== 1) {
             return null;
         }
 
-        $body = self::extractSingleParamClosureBody($args[0]->value);
-        if ($body === null) {
+        $closure = $args[0]->value;
+        if (!$closure instanceof Closure && !$closure instanceof ArrowFunction) {
             return null;
         }
 
@@ -185,9 +208,63 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        [$paramName, $bodyExpr] = $body;
-        $tValue = $templateTypeParameters[1];
         $source = $event->getSource();
+        $paramNarrowed = self::isExactBaseReceiver($event, $source)
+            ? self::narrowByParamType($closure, $templateTypeParameters[1], $source)
+            : null;
+        $narrowed = $matchPredicate
+            ? self::narrowByPredicate($closure, $paramNarrowed ?? $templateTypeParameters[1], $source)
+            : null;
+        $narrowed ??= $paramNarrowed;
+
+        if (!$narrowed instanceof Union) {
+            return null;
+        }
+
+        return self::buildNarrowedReturn($event, $templateTypeParameters[0], $narrowed);
+    }
+
+    /**
+     * Param narrowing rewrites TValue positionally, which is only right for the three classes
+     * whose `(TKey, TValue)` templates map one-to-one. A subclass with a different template
+     * layout (`Bag<V, M> extends Collection<int, V>`), a template-bounded receiver
+     * (`C of Collection`) or an intersection would receive a type it does not declare.
+     */
+    private static function isExactBaseReceiver(MethodReturnTypeProviderEvent $event, StatementsSource $source): bool
+    {
+        $stmt = $event->getStmt();
+        $exact = [\strtolower(Collection::class), \strtolower(LazyCollection::class), \strtolower(EloquentCollection::class)];
+        if (!$stmt instanceof MethodCall
+            || !\in_array(\strtolower($event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName()), $exact, true)
+        ) {
+            return false;
+        }
+
+        $receiver = $source->getNodeTypeProvider()->getType($stmt->var);
+        if (!$receiver instanceof Union) {
+            return false;
+        }
+
+        foreach ($receiver->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject
+                || $atomic->extra_types !== []
+                || !\in_array(\strtolower($atomic->value), $exact, true)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function narrowByPredicate(Closure|ArrowFunction $closure, Union $tValue, StatementsSource $source): ?Union
+    {
+        $body = self::extractSingleParamClosureBody($closure);
+        if ($body === null) {
+            return null;
+        }
+
+        [$paramName, $bodyExpr] = $body;
         $codebase = $source->getCodebase();
 
         $call = $bodyExpr instanceof BooleanNot ? $bodyExpr->expr : $bodyExpr;
@@ -195,7 +272,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        if (!self::paramReceivesItemUnchanged($args[0]->value, $tValue, $source)) {
+        if (!self::paramReceivesItemUnchanged($closure, $tValue, $source)) {
             return null;
         }
 
@@ -203,20 +280,98 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 
         if (self::isVarRef($bodyExpr, $paramName)) {
             // Identity closure body — same value passes the predicate iff truthy.
-            $narrowed = self::removeFalsyTypes($tValue);
-        } elseif (self::isNotNullCheck($bodyExpr, $paramName)) {
-            $narrowed = self::removeNullType($tValue);
-        } elseif ($classCheck !== null) {
-            $narrowed = self::narrowByClassCheck($tValue, $classCheck[0], $classCheck[1], $codebase);
-        } else {
-            $narrowed = self::narrowByTypeCheck($bodyExpr, $paramName, $tValue, $codebase);
+            return self::removeFalsyTypes($tValue);
         }
 
-        if (!$narrowed instanceof Union) {
+        if (self::isNotNullCheck($bodyExpr, $paramName)) {
+            return self::removeNullType($tValue);
+        }
+
+        if ($classCheck !== null) {
+            return self::narrowByClassCheck($tValue, $classCheck[0], $classCheck[1], $codebase);
+        }
+
+        return self::narrowByTypeCheck($bodyExpr, $paramName, $tValue, $codebase);
+    }
+
+    /**
+     * Laravel calls the callback for every element, and PHP never coerces an object into a class
+     * type: a non-instance (or null for a non-nullable param) throws TypeError. So every element
+     * of the result is an instance of the first parameter's native class type.
+     *
+     * Declines unless every param atomic is a plain class/interface/enum name or null (scalars
+     * are coerced in Laravel's non-strict mode: "5" passes `int` and stays a string in the
+     * result), and unless TValue is mixed or already accepts the param's classes, so an unrelated
+     * param keeps Psalm's InvalidArgument and today's result. Each TValue atomic is intersected
+     * with the param: kept when the param accepts it, replaced by the param's subclasses of it
+     * otherwise.
+     */
+    private static function narrowByParamType(Closure|ArrowFunction $closure, Union $tValue, StatementsSource $source): ?Union
+    {
+        $param = $closure->params[0] ?? null;
+        $signature = self::closureType($closure, $source)?->params[0]->signature_type ?? null;
+        if ($param === null || $param->variadic || $param->byRef || !$signature instanceof Union) {
             return null;
         }
 
-        return self::buildNarrowedReturn($event, $templateTypeParameters[0], $narrowed);
+        // Closures can be rebound, and Psalm resolves `self` to the lexical class (`parent` stays
+        // unexpanded), so the declared signature does not tell what the callback receives.
+        $nativeTypes = $param->type instanceof UnionType ? $param->type->types : [$param->type instanceof NullableType ? $param->type->type : $param->type];
+        foreach ($nativeTypes as $native) {
+            if ($native instanceof Name && $native->isSpecialClassName()) {
+                return null;
+            }
+        }
+
+        $classes = [];
+        foreach ($signature->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if ($atomic::class !== TNamedObject::class || $atomic->extra_types !== []) {
+                return null;
+            }
+
+            $classes[] = $atomic;
+        }
+
+        if ($classes === [] || $tValue->getTemplateTypes() !== []) {
+            return null;
+        }
+
+        $codebase = $source->getCodebase();
+        if (!$tValue->isMixed() && !self::isContained($codebase, new Union($classes), $tValue)) {
+            return null;
+        }
+
+        $narrowed = [];
+        foreach ($tValue->getAtomicTypes() as $atomic) {
+            if (self::isContained($codebase, new Union([$atomic]), $signature)) {
+                $narrowed[] = $atomic;
+                continue;
+            }
+
+            foreach ($signature->getAtomicTypes() as $paramAtomic) {
+                if (self::isContained($codebase, new Union([$paramAtomic]), new Union([$atomic]))) {
+                    $narrowed[] = $paramAtomic;
+                }
+            }
+        }
+
+        $result = $narrowed === [] ? null : new Union($narrowed);
+
+        return $result?->getId() === $tValue->getId() ? null : $result;
+    }
+
+    /** Containment without coercion: a supertype-to-subtype coercion counts as NOT contained. */
+    private static function isContained(Codebase $codebase, Union $input, Union $container): bool
+    {
+        $comparison = new TypeComparisonResult();
+
+        return UnionTypeComparator::isContainedBy($codebase, $input, $container, union_comparison_result: $comparison)
+            && $comparison->type_coerced !== true
+            && $comparison->type_coerced_from_mixed !== true;
     }
 
     /**
@@ -240,6 +395,18 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         return $resolved === $name || !$functions->functionExists($source, \strtolower($resolved));
     }
 
+    /** The closure literal's inferred type, which carries the native param signatures. */
+    private static function closureType(Expr $closure, StatementsSource $source): ?TClosure
+    {
+        foreach ($source->getNodeTypeProvider()->getType($closure)?->getAtomicTypes() ?? [] as $atomic) {
+            if ($atomic instanceof TClosure) {
+                return $atomic;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Laravel invokes the callback in coercive typing mode, so a scalar-typed param may receive
      * a converted item (`Stringable` → string, int → string). Narrowing is only sound when every
@@ -247,28 +414,25 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      */
     private static function paramReceivesItemUnchanged(Expr $closure, Union $tValue, StatementsSource $source): bool
     {
-        foreach ($source->getNodeTypeProvider()->getType($closure)?->getAtomicTypes() ?? [] as $atomic) {
-            if (!$atomic instanceof TClosure) {
-                continue;
-            }
-
-            $signature = $atomic->params[0]->signature_type ?? null;
-            if (!$signature instanceof Union) {
-                return true;
-            }
-
-            $comparison = new TypeComparisonResult();
-
-            return UnionTypeComparator::isContainedBy(
-                $source->getCodebase(),
-                $tValue,
-                $signature,
-                union_comparison_result: $comparison,
-                allow_float_int_equality: false,
-            ) && $comparison->to_string_cast !== true;
+        $atomic = self::closureType($closure, $source);
+        if (!$atomic instanceof TClosure) {
+            return false;
         }
 
-        return false;
+        $signature = $atomic->params[0]->signature_type ?? null;
+        if (!$signature instanceof Union) {
+            return true;
+        }
+
+        $comparison = new TypeComparisonResult();
+
+        return UnionTypeComparator::isContainedBy(
+            $source->getCodebase(),
+            $tValue,
+            $signature,
+            union_comparison_result: $comparison,
+            allow_float_int_equality: false,
+        ) && $comparison->to_string_cast !== true;
     }
 
     /** @psalm-mutation-free */
@@ -295,7 +459,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Build the narrowed return type with the same Collection subclass and is_static.
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function buildNarrowedReturn(
         MethodReturnTypeProviderEvent $event,
@@ -641,7 +806,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      * since whereNotNull() only guarantees items are !== null.
      *
      * Returns null if nothing changed or narrowing would leave the union empty.
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function removeNullType(Union $type): ?Union
     {
@@ -672,7 +838,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      * - Narrows `string` → `non-falsy-string`, `array` → `non-empty-array`
      *
      * Returns null if nothing changed or narrowing would leave the union empty.
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function removeFalsyTypes(Union $type): ?Union
     {

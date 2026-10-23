@@ -35,13 +35,30 @@ class Route
      */
     public function getAction($key = null) {}
 
-    // `domain()` is intentionally NOT stubbed. Laravel 13.18.0 (#60586) added the
-    // conditional `@return ($domain is null ? string|null : $this)` natively, and a stub
-    // conditional collapses against the reflected one on Psalm beta19 (the two conditional
-    // `@return`s merge down to the flat union). The reflected `$this` setter branch is also
-    // unresolvable by Psalm beta19, so the refined chainable return is no longer achievable
-    // either way; the native (degraded) type stands until the upstream Psalm merge bug is
-    // fixed. See vimeo/psalm — conditional-return stub/source merge collapse.
+    /**
+     * Get or set the domain for the route.
+     *
+     * Laravel declares the flat `$this|string|null` on every 12.x and on 13.x before 13.18.0,
+     * which breaks `->domain('x')->name('y')` chains (the next call lands on `string|null`).
+     * The conditional keeps the getter `string|null` and the setter chainable.
+     *
+     * The template is explicit, not the implicit `($domain is null ? ...)` form Laravel 13.18.0+
+     * declares natively: with both the stub and the reflected source declaring that implicit
+     * conditional, Psalm 7 collapses the call to the getter branch.
+     *
+     * Known limitation: a possibly-empty unpack (`domain(...$args)`) misses the getter branch, a
+     * subclass override with a native-only return still resolves through this conditional, and a
+     * first-class callable (`domain(...)`) leaves `TDomain` unresolved (InvalidArgument on call);
+     * Laravel 13.18+'s native type behaves the same. Pinned by RouteDomainKnownLimitation.phpt.
+     *
+     * @template TDomain of \BackedEnum|string|null
+     *
+     * @param  TDomain  $domain
+     * @return (TDomain is null ? string|null : $this)
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function domain($domain = null) {}
 
     /**
      * Get a given parameter from the route.
