@@ -1361,7 +1361,7 @@ final class BladeBootstrapperTest extends TestCase
         $debug = \implode('', $this->progress->debugMessages);
         $this->assertStringContainsString('Blade shadow cache skipped for this run', $debug);
         $this->assertStringContainsString("  - directive 'vendored' (closure bound to", $debug);
-        $this->assertStringContainsString('acme/directives/directive.php', $debug);
+        $this->assertStringContainsString(' in fake-vendor/acme/directives/directive.php' . "\n", $debug, 'paths are relative to the project root');
         $this->assertStringNotContainsString('static fn', $debug);
 
         \file_put_contents($first->analyzedShadows[0], "<?php // stale\n");
@@ -1390,7 +1390,7 @@ final class BladeBootstrapperTest extends TestCase
         $debug = \implode('', $this->progress->debugMessages);
         $advice = \strpos($debug, 'To restore caching');
         $this->assertNotFalse($advice, $debug);
-        $this->assertStringContainsString("directive 'local'", \substr($debug, 0, $advice));
+        $this->assertStringContainsString("directive 'local' (closure bound to " . self::class . ') in app/Providers/directive.php', \substr($debug, 0, $advice));
         $this->assertStringNotContainsString("directive 'vendored'", \substr($debug, 0, $advice), 'the advice must not cover vendor inputs');
         $this->assertStringContainsString("directive 'vendored'", \substr($debug, $advice));
     }

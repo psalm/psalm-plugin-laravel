@@ -897,7 +897,7 @@ final class BladeBootstrapper
         $vendorInputs = [];
 
         foreach ($inputs as ['input' => $input, 'file' => $file]) {
-            $line = "  - {$input}" . ($file === null ? '' : " in {$file}") . "\n";
+            $line = "  - {$input}" . ($file === null ? '' : ' in ' . $this->displayPath($file, $vendorDir)) . "\n";
 
             // An unknown file counts as project code: the user may still be able to fix it.
             // Canonicalized like the hint roots (#1552): a mis-cased invocation path survives realpath().
@@ -937,6 +937,23 @@ final class BladeBootstrapper
             . "or register a static method (`[Foo::class, 'bar']`). A compiler subclass or compiler state is never fingerprinted.\n"
             . ($vendorInputs === [] ? '' : "Also declared in vendor packages:\n" . \implode('', $vendorInputs)),
         );
+    }
+
+    /**
+     * Relative to the project root (the vendor directory's parent), so the list reads `vendor/livewire/...`
+     * and `app/...` like Psalm's own issue paths. A file outside the project keeps its absolute path.
+     */
+    private function displayPath(string $file, ?string $vendorDir): string
+    {
+        if ($vendorDir === null) {
+            return $file;
+        }
+
+        $resolved = \realpath($file);
+        $canonical = PathCaseCanonicalizer::canonicalize($resolved === false ? $file : $resolved);
+        $root = \rtrim(\dirname($vendorDir), \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
+
+        return \str_starts_with($canonical, $root) ? \substr($canonical, \strlen($root)) : $file;
     }
 
     private function degrade(string $cause, ?\Throwable $previous = null): void
