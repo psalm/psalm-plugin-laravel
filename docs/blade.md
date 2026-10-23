@@ -85,8 +85,8 @@ Two suppression paths work exactly as they do for ordinary PHP files:
 
 Template findings work with `errorLevel`, `<issueHandlers>`, `@psalm-suppress` and a baseline (`--set-baseline`, `--use-baseline`) like findings in PHP files. Two baseline differences:
 
-* **An entry stores the whole template line, not the flagged expression.** Moving or re-indenting the line keeps the entry. Any other edit on that line, even a CSS class, reports the finding again, plus `UnusedBaselineEntry` for the old entry.
-* **A baseline holds one Blade mode.** A run with Blade off (`--no-blade`) against a baseline written with Blade on reports each template entry as `UnusedBaselineEntry`.
+* **An entry matches the trimmed text of the whole template line, not the flagged expression.** Moving the line or changing its leading or trailing whitespace keeps the entry. Any other change to that text, even a CSS class, reports the finding again.
+* **A baseline holds one Blade mode.** A run with Blade off (`--no-blade`) against a baseline written with Blade on reports the template's baseline entries as `UnusedBaselineEntry` (one per file and issue type, while `findUnusedBaselineEntry` is on, its default).
 
 ## Tuning template findings
 
