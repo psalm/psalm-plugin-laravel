@@ -1019,7 +1019,7 @@ final class ShadowIssueRelocator
         return TemplateSnippetMatcher::callExpressionAt($selection->snippet, $selection->start);
     }
 
-    /** @psalm-mutation-free */
+    /** @psalm-pure */
     private static function selectionFollowedBy(CodeLocation $location, string $next): bool
     {
         $selection = ShadowSelection::of($location);
