@@ -22,7 +22,7 @@ final readonly class Report
      * @param list<string> $bootstrapErrors
      * @param list<string> $hardFailures
      * @param list<string> $loadedProviders Service provider class names the booted kernel registered, sorted. Empty when boot failed.
-     * @param string $blade `off`, `on (N templates, cache <dir>)`, or `disabled: <reason>`
+     * @param string $blade `off`, `on (cache <dir>)`, or `unknown: <reason>`
      */
     public function __construct(
         public ?string $pluginVersion,

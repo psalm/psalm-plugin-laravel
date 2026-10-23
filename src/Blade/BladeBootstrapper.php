@@ -89,18 +89,10 @@ final class BladeBootstrapper
 
     private ?BladeDisabledException $disabled = null;
 
-    private ?string $disabledCause = null;
-
     /** Why boot() disabled Blade analysis, chaining the crash behind it; null when it activated or merely found nothing to analyze. */
     public function disabled(): ?BladeDisabledException
     {
         return $this->disabled;
-    }
-
-    /** The bare cause behind {@see disabled()}, for a report that frames it itself. */
-    public function disabledCause(): ?string
-    {
-        return $this->disabledCause;
     }
 
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
@@ -933,7 +925,6 @@ final class BladeBootstrapper
 
     private function degrade(string $cause, ?\Throwable $previous = null): void
     {
-        $this->disabledCause = $cause;
         $this->disabled = new BladeDisabledException('Blade template analysis is disabled for this run, because ' . $cause . '.', 0, $previous);
 
         if ($this->failOnInternalError) {

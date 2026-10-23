@@ -257,7 +257,7 @@ Nothing in the pipeline needs a single process, and that is checked rather than 
 
 By default Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, a view directory cannot be read and no template was found elsewhere, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings (Psalm also picks it by itself when an AI agent runs it outside CI), so in that mode this warning is written to STDERR directly. With [`failOnInternalError`](config.md#failoninternalerror) enabled, the disable fails the run instead, so a disable cannot pass CI silently. Finding no templates at all is not a disable.
 
-`vendor/bin/psalm-laravel diagnose` boots Blade the same way and prints one line: `Blade: off`, `Blade: on (N templates, cache <dir>)`, or `Blade: disabled: <reason>`.
+`vendor/bin/psalm-laravel diagnose` prints whether your Psalm config enables Blade and where its shadows go: `Blade: off` or `Blade: on (cache <dir>)`. It reads the config only, without compiling any template, so a disable shows up in the run's warning above, not there.
 
 Degradation is all-or-nothing: the template facts the compile pass collects (contracts, data-include sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [`validateViewData`](config.md#validateviewdata) and [`reportUnusedViewData`](config.md#reportunusedviewdata) checks stay silent for that run.
 
