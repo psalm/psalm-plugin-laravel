@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792791052687,
+  "lastUpdate": 1792791635941,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15425,6 +15425,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.52,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "09bc682d446397a50635d1952b183819b17ebe9c",
+          "message": "Hide Psalm's issue report from `blade:annotate` output (#2014)\n\n* feat(blade): hide Psalm's issue report from blade:annotate output\n\n* docs(blade): drop internals note on the captured Psalm output",
+          "timestamp": "2026-10-23T23:36:58+02:00",
+          "tree_id": "ca48cb527631927de35e3e2917f134c27d79dd72",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/09bc682d446397a50635d1952b183819b17ebe9c"
+        },
+        "date": 1792791634130,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.91,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
