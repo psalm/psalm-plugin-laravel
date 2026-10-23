@@ -308,9 +308,12 @@ The check declines for a call site instead of guessing, and the gate that matter
 `psalm-laravel blade:annotate` writes the `@var` declarations a template is missing, as native PHP docblock lines, taking each type from the `view()` call sites that render it:
 
 ```bash
-vendor/bin/psalm-laravel blade:annotate            # write them
-vendor/bin/psalm-laravel blade:annotate --dry-run  # print a unified diff instead
+vendor/bin/psalm-laravel blade:annotate            # write them, and print what changed as a coloured unified diff
+vendor/bin/psalm-laravel blade:annotate --dry-run  # print the coloured unified diff only, write nothing
+vendor/bin/psalm-laravel blade:annotate --no-diffs # list the changed templates instead of printing the diff
 ```
+
+`--no-diffs` combines with `--dry-run` (the list, still writing nothing). It is not called `--diff`: that is Psalm's own diff-mode flag, and flags the command does not own are forwarded to Psalm.
 
 It runs Psalm as a child process, because the producer types only exist during an analysis; flags you pass (`-c psalm.xml`) are forwarded to it, and `--threads=1` is forced, since plugin state collected in a forked worker never reaches the process that does the writing. It refuses to run against a subset of the project (`-f`, or a bare path), because agreement between call sites is a claim about all of them: a call site in a file the run skipped cannot disagree. A run that somehow ends up forked anyway refuses to write and says so, rather than leaving every variable untyped. Blade analysis is switched on for the run whether or not your config enables it; if it cannot boot, the command reports that the pass was never reached.
 
