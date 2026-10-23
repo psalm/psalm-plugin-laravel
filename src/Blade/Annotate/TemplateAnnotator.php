@@ -16,14 +16,16 @@ use Psalm\LaravelPlugin\Blade\SourceLines;
  *
  * 1. the first doc comment of a `<?php` block the file opens with — appended before its `*\/`, so
  *    the template keeps one docblock (a second one before the same statement is dropped by the PHP
- *    parser, which attaches only the last);
+ *    parser, which attaches only the last). Text sharing a line with `/**` moves to its own line,
+ *    so the block reads as one tag per line;
  * 2. a new `<?php /** ... *\/ ?>` block directly after that leading block, so a
  *    `declare(strict_types=1)` stays the first statement;
  * 3. the same new block at the very top of the file, after any BOM.
  *
- * Byte-conservative on purpose: the template is user source, so the only edit is one insertion at
- * one offset. Nothing is re-serialized, and every byte outside the inserted run comes out
- * identical — including a BOM, the file's own line endings, and any existing declaration.
+ * Byte-conservative on purpose: the template is user source, so the only edit is one splice, at the
+ * header docblock or at the new block's offset. Nothing is re-serialized, and every byte outside
+ * that splice comes out identical — including a BOM, the file's own line endings, and any existing
+ * declaration, whose text is moved, never rewritten.
  *
  * Idempotency is derived from state, not from a marker: a name the source already declares is
  * dropped, so re-running over an annotated template inserts nothing.
@@ -70,9 +72,10 @@ final class TemplateAnnotator
         }
 
         $header = self::leadingPhpBlock($source, $bom);
+        $replaced = 0;
 
         if ($header !== null && $header['doc'] !== null) {
-            [$offset, $insertion] = self::intoDocblock($header['doc'], $declarations, $eol);
+            [$offset, $replaced, $insertion, $firstAt] = self::intoDocblock($source, $header['doc'], $declarations, $eol);
         } else {
             $docblock = '/**' . $eol . ' * ' . \implode($eol . ' * ', $declarations) . $eol . ' */' . $eol;
 
@@ -88,13 +91,15 @@ final class TemplateAnnotator
                 $offset = $header['openEnd'];
                 $insertion = $docblock;
             }
+
+            $firstAt = (int) \strpos($insertion, '@var');
         }
 
         $prefix = \substr($source, 0, $offset);
 
         return [
-            $prefix . $insertion . \substr($source, $offset),
-            1 + SourceLines::breaksIn($prefix . \substr($insertion, 0, (int) \strpos($insertion, '@var'))),
+            $prefix . $insertion . \substr($source, $offset + $replaced),
+            1 + SourceLines::breaksIn($prefix . \substr($insertion, 0, $firstAt)),
             $declarations,
         ];
     }
@@ -151,35 +156,47 @@ final class TemplateAnnotator
     }
 
     /**
-     * The lines go before the doc comment's closing delimiter, indented like it. A comment that closes
-     * after text on its own line (a one-line docblock) is opened out instead: the new lines go in
-     * front of the delimiter, which moves to a line of its own.
+     * The header docblock, rewritten as a whole but byte-for-byte except for two moves: text on the
+     * `/**` line goes to a line of its own, and the new lines go before the closing delimiter, which
+     * ends on a line of its own. Lines the comment already breaks keep their own indentation; lines
+     * this opens out are indented like the comment itself when it starts its line.
      *
      * @param array{0: int, 1: string} $doc offset and text of the doc comment
      * @param list<string> $declarations
      *
-     * @return array{0: int, 1: string} the insertion offset and text
+     * @return array{0: int, 1: int, 2: string, 3: int} the offset, the length replaced there, the
+     *         replacement, and the offset of the first declaration inside the replacement
      *
      * @psalm-pure
      */
-    private static function intoDocblock(array $doc, array $declarations, string $eol): array
+    private static function intoDocblock(string $source, array $doc, array $declarations, string $eol): array
     {
         [$offset, $text] = $doc;
-        $head = \substr($text, 0, -2);
-        $bare = \rtrim($head);
+        $preceding = \substr($source, 0, $offset);
+        $breakAt = \max((int) \strrpos("\n" . $preceding, "\n"), (int) \strrpos("\r" . $preceding, "\r"));
+        $before = \substr($preceding, $breakAt);
+        $indent = \strspn($before, " \t") === \strlen($before) ? $before : '';
 
-        if (\preg_match('/[\r\n]([ \t]*)\z/', $head, $closing, \PREG_OFFSET_CAPTURE) === 1) {
-            [$indent, $lineStart] = $closing[1];
+        // `$head` runs from after `/**` up to the `*/`.
+        $head = \substr($text, 3, -2);
 
-            return [$offset + $lineStart, $indent . '* ' . \implode($eol . $indent . '* ', $declarations) . $eol];
+        if (\preg_match('/\A[ \t]*(?=[^\s])/', $head, $opener) === 1) {
+            $head = $eol . $indent . ' * ' . \substr($head, \strlen($opener[0]));
         }
 
-        // Cut before the whitespace that preceded the delimiter, which then follows the new lines as
-        // the delimiter's own indent.
-        return [
-            $offset + \strlen($bare),
-            $eol . ' * ' . \implode($eol . ' * ', $declarations) . $eol . ($bare === $head ? ' ' : ''),
-        ];
+        if (\preg_match('/[\r\n]([ \t]*)\z/', $head, $closing, \PREG_OFFSET_CAPTURE) === 1) {
+            [$closingIndent, $closerAt] = $closing[1];
+            $first = $closerAt + \strlen($closingIndent . '* ');
+            $head = \substr($head, 0, $closerAt)
+                . $closingIndent . '* ' . \implode($eol . $closingIndent . '* ', $declarations) . $eol
+                . $closingIndent;
+        } else {
+            $kept = \rtrim($head);
+            $first = \strlen($kept . $eol . $indent . ' * ');
+            $head = $kept . $eol . $indent . ' * ' . \implode($eol . $indent . ' * ', $declarations) . $eol . $indent . ' ';
+        }
+
+        return [$offset, \strlen($text), '/**' . $head . '*/', \strlen('/**') + $first];
     }
 
     /**

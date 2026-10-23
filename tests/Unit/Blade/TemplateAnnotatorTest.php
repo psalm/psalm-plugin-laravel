@@ -59,15 +59,53 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
-    public function opens_out_a_one_line_header_docblock_keeping_its_own_bytes(): void
+    public function opens_out_a_one_line_header_docblock_into_one_tag_per_line(): void
     {
         $source = "<?php /** Header. */ ?>\n<p>{{ \$title }}</p>\n";
 
         $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame("<?php /** Header.\n * @var string \$title\n */ ?>\n<p>{{ \$title }}</p>\n", $result[0]);
-        $this->assertSame(2, $result[1]);
+        $this->assertSame("<?php /**\n * Header.\n * @var string \$title\n */ ?>\n<p>{{ \$title }}</p>\n", $result[0]);
+        $this->assertSame(3, $result[1]);
+    }
+
+    #[Test]
+    public function opens_out_a_one_line_declaration_on_its_own_line_aligned_with_the_new_ones(): void
+    {
+        $source = "<?php declare(strict_types=1);\n/** @var \\App\\Course \$course */\n?>\n{{ \$course }}{{ \$report }}\n";
+
+        $result = TemplateAnnotator::annotate($source, ['report' => '\\App\\Report']);
+
+        $this->assertNotNull($result);
+        $this->assertSame(
+            "<?php declare(strict_types=1);\n/**\n * @var \\App\\Course \$course\n * @var \\App\\Report \$report\n */\n?>\n{{ \$course }}{{ \$report }}\n",
+            $result[0],
+        );
+        $this->assertSame(4, $result[1]);
+    }
+
+    #[Test]
+    public function opens_out_a_one_line_docblock_at_its_own_indentation_and_line_endings(): void
+    {
+        $source = "<?php\r\n    /** @var int \$a */\r\n?>\r\n{{ \$a }}{{ \$b }}\r\n";
+
+        $result = TemplateAnnotator::annotate($source, ['b' => 'int']);
+
+        $this->assertNotNull($result);
+        $this->assertSame("<?php\r\n    /**\r\n     * @var int \$a\r\n     * @var int \$b\r\n     */\r\n?>\r\n{{ \$a }}{{ \$b }}\r\n", $result[0]);
+    }
+
+    #[Test]
+    public function moves_text_off_the_opening_line_of_a_multi_line_docblock(): void
+    {
+        $source = "<?php\n/** @var int \$a\n */\n?>\n{{ \$a }}{{ \$b }}\n";
+
+        $result = TemplateAnnotator::annotate($source, ['b' => 'int']);
+
+        $this->assertNotNull($result);
+        $this->assertSame("<?php\n/**\n * @var int \$a\n * @var int \$b\n */\n?>\n{{ \$a }}{{ \$b }}\n", $result[0]);
+        $this->assertSame(4, $result[1]);
     }
 
     #[Test]
