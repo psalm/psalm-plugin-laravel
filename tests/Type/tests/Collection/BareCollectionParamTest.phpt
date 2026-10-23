@@ -11,7 +11,10 @@
  * callee body still sees the bounds.
  */
 
+namespace Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam;
+
 use App\Models\Customer;
+use Closure;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
@@ -58,8 +61,8 @@ final class Box
 }
 
 // class_alias() names resolve for the existence check but have no storage of their own.
-class_alias(Collection::class, 'AliasCollection');
-class_alias(Dog::class, 'AliasDog');
+class_alias(Collection::class, 'Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\AliasCollection');
+class_alias(Dog::class, 'Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\AliasDog');
 
 function takeAliasedCollection(AliasCollection $c): int
 {
@@ -179,5 +182,5 @@ function rejects(Consumer $consumer, Collection $dogs, Box $box): void
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of Consumer::takeExplicit expects Illuminate\Support\Collection<string, Dog>, but Illuminate\Support\Collection<int, Dog> provided
-InvalidArgument on line %d: Argument 1 of Consumer::takeBox expects Box<array-key>, but Box<int> provided
+InvalidArgument on line %d: Argument 1 of Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Consumer::takeExplicit expects Illuminate\Support\Collection<string, Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Dog>, but Illuminate\Support\Collection<int, Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Dog> provided
+InvalidArgument on line %d: Argument 1 of Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Consumer::takeBox expects Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Box<array-key>, but Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Box<int> provided
