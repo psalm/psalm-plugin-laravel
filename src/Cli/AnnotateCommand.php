@@ -82,6 +82,8 @@ final class AnnotateCommand extends Command
         $this->ignoreValidationErrors();
 
         $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'Print the changes as a unified diff instead of writing them.');
+        // Not `--diff`/`--no-diff`: both are Psalm's own diff-mode flags, and unknown tokens are forwarded to Psalm.
+        $this->addOption('no-diffs', null, InputOption::VALUE_NONE, 'List the changed templates instead of printing the unified diff.');
         $this->addArgument(
             'psalm-args',
             InputArgument::IS_ARRAY | InputArgument::OPTIONAL,
@@ -143,7 +145,7 @@ final class AnnotateCommand extends Command
 
             $exitCode = $this->runPsalm($psalmBin, $cwd, $controlFile, $psalmOutput);
 
-            return $this->report($io, $controlFile, $exitCode, $psalmOutput);
+            return $this->report($io, $controlFile, $exitCode, $psalmOutput, !$input->hasParameterOption('--no-diffs', true));
         } finally {
             @\unlink($controlFile);
             @\unlink($psalmOutput);
@@ -185,7 +187,7 @@ final class AnnotateCommand extends Command
         return $tokens;
     }
 
-    private function report(SymfonyStyle $io, string $controlFile, int $exitCode, ?string $psalmOutput = null): int
+    private function report(SymfonyStyle $io, string $controlFile, int $exitCode, ?string $psalmOutput = null, bool $showDiffs = true): int
     {
         $raw = @\file_get_contents($controlFile);
 
@@ -230,8 +232,8 @@ final class AnnotateCommand extends Command
         $dryRun = ($result['dryRun'] ?? false) === true;
 
         if ($changed !== []) {
-            if ($dryRun) {
-                $io->writeln(\rtrim($result['diff'] ?? ''));
+            if ($showDiffs) {
+                $io->writeln($this->colorizedDiff($result['diff'] ?? ''));
                 $io->newLine();
             } else {
                 foreach ($changed as $path => $names) {
@@ -280,6 +282,31 @@ final class AnnotateCommand extends Command
             : \sprintf('%d template(s) annotated.', \count($changed)));
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * The unified diff with git's colours: removed lines red, added green, hunk headers cyan.
+     * Every line is escaped first, so template markup like `<x-card>` is never read as a console
+     * style tag; undecorated output (a pipe, a file) gets the plain diff back, applicable as is.
+     * Split on "\n" alone, so a CRLF template's "\r" stays in its lines.
+     */
+    private function colorizedDiff(string $diff): string
+    {
+        $lines = [];
+
+        foreach (\explode("\n", \rtrim($diff, "\n")) as $line) {
+            $escaped = OutputFormatter::escape($line);
+
+            $lines[] = match (true) {
+                \str_starts_with($line, '--- '), \str_starts_with($line, '+++ ') => "<options=bold>{$escaped}</>",
+                \str_starts_with($line, '@@') => "<fg=cyan>{$escaped}</>",
+                \str_starts_with($line, '+') => "<fg=green>{$escaped}</>",
+                \str_starts_with($line, '-') => "<fg=red>{$escaped}</>",
+                default => $escaped,
+            };
+        }
+
+        return \implode("\n", $lines);
     }
 
     /**
@@ -347,7 +374,7 @@ final class AnnotateCommand extends Command
      * {@see AnalyzeCommand::scanArguments()}: Symfony binds `--flags` as options, never into a
      * declared argument.
      *
-     * `--dry-run` is this command's own and is dropped. Any `--threads` the caller passed is
+     * `--dry-run` and `--no-diffs` are this command's own and are dropped. Any `--threads` the caller passed is
      * dropped too, and replaced with the single thread the pass requires — appending a second one
      * instead would leave PHP's getopt handing Psalm an array for a scalar option.
      *
@@ -375,7 +402,7 @@ final class AnnotateCommand extends Command
                 continue;
             }
 
-            if ($token === '--dry-run' || \str_starts_with($token, '--threads=')) {
+            if ($token === '--dry-run' || $token === '--no-diffs' || \str_starts_with($token, '--threads=')) {
                 continue;
             }
 
