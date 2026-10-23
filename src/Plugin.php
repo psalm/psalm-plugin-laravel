@@ -123,7 +123,7 @@ final class Plugin implements PluginEntryPointInterface
             // handler below would read an empty registry and, worse, report on templates whose
             // facts were never collected (#1518).
             $bladeActive = ($pluginConfig->bladeEnabled || $annotate instanceof Blade\Annotate\AnnotateRequest)
-                && $this->initBladeAnalysis($pluginConfig, $output, $annotate instanceof Blade\Annotate\AnnotateRequest);
+                && $this->initBladeAnalysis($pluginConfig, $output, $annotate);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
@@ -1013,15 +1013,16 @@ final class Plugin implements PluginEntryPointInterface
      * and the booted `BladeCompiler`'s own registration surface (see
      * `Blade\CompilerEnvironment::describe()`).
      *
-     * @param bool $annotating the annotate codemod is driving this run, which needs the read sets
-     *                         the UnusedViewData pass collects whether or not that rule is on
+     * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod driving this run, which needs
+     *                                                the read sets the UnusedViewData pass collects whether
+     *                                                or not that rule is on, and is told why Blade disabled itself
      *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
      *              published nothing, so no Blade handler may register
      *
      * @throws Blade\BladeDisabledException when Blade disabled itself and `failOnInternalError` is on
      */
-    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, bool $annotating): bool
+    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, ?Blade\Annotate\AnnotateRequest $annotate): bool
     {
         $registrar = new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance());
 
@@ -1030,12 +1031,16 @@ final class Plugin implements PluginEntryPointInterface
             $registrar,
             $output,
             $pluginConfig->bladeCacheDir,
-            $pluginConfig->bladeReportUnusedViewData || $annotating,
+            $pluginConfig->bladeReportUnusedViewData || $annotate instanceof Blade\Annotate\AnnotateRequest,
             $pluginConfig->failOnInternalError,
         );
 
         if (!$bootstrapper->boot()) {
             $disabled = $bootstrapper->disabled();
+
+            if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException) {
+                $annotate?->publishError($disabled->getMessage());
+            }
 
             // Blade is opt-in: a run that silently lost it would pass CI with zero template findings.
             if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException && $pluginConfig->failOnInternalError) {
