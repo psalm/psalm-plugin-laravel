@@ -403,6 +403,10 @@ cache. The hook fires for every issue in the run, so bail on the issue class fir
 and only then do anything expensive. Every uncertain path returns `null` and keeps
 the finding.
 
+#### Dropping a false positive Psalm raises per receiver atomic
+
+`Collections\EmptyCollectionLookupIssueHandler` (`BeforeAddIssueInterface`, registered from `registerHooksFromClass()` before `Blade\BladeIssueRemapHandler`) drops the `expects never` argument issue a lookup (`get`/`has`/`contains`/...) raises on an empty `Collection<never, never>` (#1814). It bails on the issue class, the method id and the message before it touches storage, then resolves the declaring method from storage (Laravel's collections only) and compares the quoted expected type with its parameter whose class templates are replaced by `never`; every miss returns `null` and keeps the issue. Stateless, so no `reset()`. Rationale and the rejected stub widenings: [Architecture Decisions](decisions.md), "Lookups on an empty collection".
+
 See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Syntax](types.md), [Docblock Annotations](annotations.md) and [Purity and Capabilities](purity.md) for Psalm references, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 
 ## External resources
