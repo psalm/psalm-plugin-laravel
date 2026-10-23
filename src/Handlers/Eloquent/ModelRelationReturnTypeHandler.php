@@ -59,7 +59,7 @@ use Psalm\Type\Union;
  * pivot default (`Pivot` / `MorphPivot`) and slot 4 with `'pivot'` — emitting only 2
  * triggers `MissingTemplateParam` on consumers because Psalm rejects a partial form
  * even when the stub declares a default via `@template T of … = Default` (see #883).
- * Captured `->withPivot()` columns refine that default to `Pivot&object{...}` (#1944).
+ * Captured `->withPivot()` / `->withTimestamps()` columns refine that default to `Pivot&object{...}` (#1944).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
  * @internal
@@ -298,7 +298,7 @@ final class ModelRelationReturnTypeHandler
      * returns null because its target is runtime-selected. Returns null when no statically
      * known target exists.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool} $parsed
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
      * @psalm-pure
      */
     private static function resolveRelatedModelType(array $parsed): ?Union
@@ -330,7 +330,7 @@ final class ModelRelationReturnTypeHandler
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
      *
      * @param class-string $relationClass
-     * @param array{pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, ...} $pivot
+     * @param array{pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, ...} $pivot
      */
     private static function buildRelationType(
         Codebase $codebase,
@@ -384,7 +384,7 @@ final class ModelRelationReturnTypeHandler
             if ($pivot['pivotModel'] === null && $pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
                 $pivotType = PivotColumnResolver::refine(
                     $pivotType,
-                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass),
+                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass, $pivot['pivotVisible']),
                 ) ?? $pivotType;
             }
 

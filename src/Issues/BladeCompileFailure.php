@@ -8,7 +8,7 @@ use Psalm\Issue\PluginIssue;
 
 /**
  * Reported on line 1 of a Blade template the Blade compiler threw on, so the template is not
- * analyzed. The message names the compiler's exception class and message.
+ * analyzed. The message carries the compiler's cause on one line, without the exception class.
  */
 final class BladeCompileFailure extends PluginIssue
 {

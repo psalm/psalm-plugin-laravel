@@ -20,7 +20,6 @@ final class ExperimentalIssuePolicyTest extends TestCase
     private const EXPERIMENTAL_ISSUES = [
         'UnknownModelAttribute',
         'UndefinedModelRelation',
-        'BladeCompileFailure',
         'MissingViewVariable',
         'InvalidViewVariableType',
         'UnusedViewData',

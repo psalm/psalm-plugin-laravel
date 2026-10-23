@@ -116,7 +116,7 @@ class MailMessage extends SimpleMessage implements Renderable
      * subject is RFC 2047-encoded by UnstructuredHeader when Symfony serializes the message, so neither can inject a header (#1958).
      * An address can: a quoted local part or domain literal carrying CRLF reaches the header verbatim
      * unless Laravel's Message::ensureAddressIsSafe() (12.60+/13.10+) or symfony/mime 7.4.12/8.0.12+
-     * (CVE-2026-45067) rejects it. Neither guard exists on all of the supported range (^12.27 || ^13.3).
+     * (CVE-2026-45067) rejects it; supported 12.x releases below 12.60 have neither guard.
      */
     /**
      * Set the from address for the mail message.

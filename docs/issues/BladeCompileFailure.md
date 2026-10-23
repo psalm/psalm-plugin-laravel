@@ -6,23 +6,32 @@ nav_order: 13
 
 # BladeCompileFailure
 
-Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on, so the template is not analyzed. The message names the exception class and message. Needs [Blade template analysis](../blade.md) enabled. See [Reporting level](#reporting-level).
+Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on. The template is skipped, and the message reads `Template not analysed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
 
 ## Why it matters
 
-A template that does not compile is skipped, and every finding it would have produced disappears with it. A template that used to report issues and now fails to compile looks like an improvement. Reported as an issue, the skip survives `--no-progress` and shows up in every `--output-format`. At the default `info` level Psalm only prints it with `--show-info=true`; once it is an `error` (see [Reporting level](#reporting-level)) it also fails the run and is recorded by `--set-baseline`.
+A template that does not compile is skipped, and every finding it would have produced disappears with it. A template that used to report issues and now fails to compile would otherwise look like an improvement. The issue is an `error`: it fails the run, survives `--no-progress`, shows up in every `--output-format`, and is recorded by `--set-baseline`.
 
 ## Example
 
+```blade
+{{-- resources/views/help.blade.php --}}
+<p>Wrap the card in a @component block.</p>
+```
+
 ```text
-INFO: BladeCompileFailure - resources/views/dashboard.blade.php:1:1 - Blade template could not be compiled and is not analyzed: LogicException: the feature directive needs a request
+ERROR: BladeCompileFailure - resources/views/help.blade.php:1:1 - Template not analysed: @component needs arguments; write @@component to print it as text
 ```
 
 ## Common causes
 
+* Prose that Blade reads as a directive (`@component`, `@section`) without arguments. Escape it as `@@component`.
+* A malformed directive, such as `@foreach` without `as`.
 * A directive, condition, or precompiler callback that throws when called outside a request.
 * A component tag (`<x-...>`) whose class or view cannot be resolved by the booted application (see [Known limits](../blade.md#known-limits)).
-* The plugin's own declaration parser crashed on the template (an exception class such as `TypeError`). This is a plugin bug: report it with the template.
+* The plugin's own declaration parser crashed on the template. This is a plugin bug: report it with the template.
+
+The line is always 1: the compiler reports no template line.
 
 ## How to fix
 
@@ -39,19 +48,6 @@ Fix the template, or make the failing directive or component resolvable in the b
 ```
 
 A `{{-- @psalm-suppress --}}` comment in the template cannot silence it: that comment only takes effect in the compiled template, and this template never compiled.
-
-## Reporting level
-
-Without an explicit issue handler, it is reported as `info` by default: hidden unless Psalm runs with `--show-info=true`, never failing the run, and left out of a baseline. Promote that default to an error in `psalm.xml`:
-
-```xml
-<pluginClass class="Psalm\LaravelPlugin\Plugin">
-    <blade />
-    <experimental value="true" />
-</pluginClass>
-```
-
-Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy, regardless of `<experimental>`.
 
 ## Limitations
 

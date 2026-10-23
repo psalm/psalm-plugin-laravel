@@ -10,7 +10,13 @@
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <blade cacheDir=".cache/blade-shadows" />
-            <experimental value="true" />
         </pluginClass>
     </plugins>
+    <issueHandlers>
+        <PluginIssue name="BladeCompileFailure">
+            <errorLevel type="suppress">
+                <file name="resources/views/broken.blade.php" />
+            </errorLevel>
+        </PluginIssue>
+    </issueHandlers>
 </psalm>

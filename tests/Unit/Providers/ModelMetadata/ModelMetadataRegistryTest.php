@@ -1259,9 +1259,6 @@ final class ModelMetadataRegistryTest extends TestCase
     #[Test]
     public function attribute_tagged_trait_initializer_merged_class_cast_appears_in_casts(): void
     {
-        // The #[Initialize] attribute and the bootTraits branch reading it arrive in Laravel 12.22; below
-        // that the framework ignores the tag, so the replay stays convention-only and `via_attr` is absent
-        // (the plugin is correct there — the CI 12.20 floor exercises exactly this).
         if (!\class_exists(\Illuminate\Database\Eloquent\Attributes\Initialize::class)) {
             self::markTestSkipped('The #[Initialize] attribute discovery branch requires Laravel >= 12.22.');
         }

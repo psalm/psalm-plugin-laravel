@@ -26,9 +26,8 @@ use Symfony\Component\Process\Process;
  * merges at construction — invisible to a constructor-less warm-up until the initializer replay), and an
  * unbacked-but-hidden append (dropped before the throwing loop). Asserting exactly one finding proves the
  * rule both fires on the real bug and stays silent on all four — and would fail loudly if a future change
- * silently no-op'd it. (The `#[Initialize]`-tagged attribute-discovery path is version-gated to Laravel
- * 12.22+, so a skip-guarded unit test locks it — not this version-agnostic fork, which the 12.20 floor
- * job also runs, where that append would be genuinely unbacked.)
+ * silently no-op'd it. The `#[Initialize]`-tagged attribute-discovery path has its own unit test;
+ * this subprocess fixture isolates emission from attribute discovery.
  *
  * Like {@see SuppressScopeUnusedCodeTest}, this forks a real `vendor/bin/psalm` (it boots Laravel via
  * the plugin, ~6s) because the emission cannot be observed in-process. It lives in tests/Unit for

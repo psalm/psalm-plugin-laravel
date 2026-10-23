@@ -6,7 +6,6 @@ namespace Psalm\LaravelPlugin\Internal;
 
 use Psalm\Config;
 use Psalm\Issue\PluginIssue;
-use Psalm\LaravelPlugin\Issues\BladeCompileFailure;
 use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
 use Psalm\LaravelPlugin\Issues\MissingViewVariable;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
@@ -26,7 +25,6 @@ final class ExperimentalIssuePolicy
     private const ISSUES = [
         UnknownModelAttribute::class,
         UndefinedModelRelation::class,
-        BladeCompileFailure::class,
         MissingViewVariable::class,
         InvalidViewVariableType::class,
         UnusedViewData::class,

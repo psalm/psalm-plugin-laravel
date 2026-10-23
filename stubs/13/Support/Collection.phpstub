@@ -9,7 +9,7 @@ use Illuminate\Support\Traits\Macroable;
 use Illuminate\Support\Traits\TransformsToResourceCollection;
 
 /**
- * Laravel 13 (from 13.2.0, below the 13.3 floor) calls the `sum()` callback with `($item, $key)`; every
+ * Laravel 13 (from 13.2.0) calls the `sum()` callback with `($item, $key)`; every
  * 12.x release passes the item only. Only `sum()` is declared: the rest merges from `common`.
  * `TValue` stays invariant like the `common` stub (Laravel declares it covariant).
  *

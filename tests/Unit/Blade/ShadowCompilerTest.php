@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Illuminate\View\Compilers\BladeCompiler;
 use PhpParser\Error as PhpParserError;
 use PhpParser\ParserFactory;
@@ -44,6 +45,18 @@ final class ShadowCompilerTest extends TestCase
         $this->assertArrayHasKey(\array_key_first($matching) + 1, $result->lineMap, 'shadow line has no line-map entry');
 
         return $result->lineMap[\array_key_first($matching) + 1];
+    }
+
+    /** Psalm runs with E_ALL; PHPUnit's runtime reports less, which would let PHP errors pass. */
+    private function compileReportingAll(ShadowCompiler $compiler, string $source): ShadowResult|BladeCompileError
+    {
+        $previous = \error_reporting(\E_ALL);
+
+        try {
+            return $compiler->compile('view.blade.php', $source);
+        } finally {
+            \error_reporting($previous);
+        }
     }
 
     /** @return iterable<string, array{string}> */
@@ -339,7 +352,7 @@ final class ShadowCompilerTest extends TestCase
 
         $this->assertInstanceOf(BladeCompileError::class, $result);
         $this->assertSame('view.blade.php', $result->templatePath);
-        $this->assertStringContainsString('BindingResolutionException', $result->message);
+        $this->assertSame('Target [Illuminate\\Contracts\\View\\Factory] is not instantiable.', $result->message);
     }
 
     #[Test]
@@ -351,7 +364,182 @@ final class ShadowCompilerTest extends TestCase
         $result = $this->compiler->compile('view.blade.php', "<x-alert\n    type=\"error\"\n/>\n");
 
         $this->assertInstanceOf(BladeCompileError::class, $result);
-        $this->assertStringContainsString('BindingResolutionException', $result->message);
+        $this->assertSame('Target [Illuminate\\Contracts\\View\\Factory] is not instantiable.', $result->message);
+    }
+
+    #[Test]
+    public function a_compile_error_is_one_line_of_the_exception_message_without_its_class(): void
+    {
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('explode', static function (): never {
+            throw new \LogicException("the explode directive\n    needs a request\n");
+        });
+
+        $result = (new ShadowCompiler($blade))->compile('view.blade.php', "@explode\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertSame('the explode directive needs a request', $result->message);
+    }
+
+    #[Test]
+    public function a_php_error_in_an_argumentless_directive_asks_for_arguments(): void
+    {
+        $result = $this->compileReportingAll($this->compiler, "<p>\n  Wrap it in a @component block.\n</p>\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertSame('@component needs arguments; write @@component to print it as text', $result->message);
+    }
+
+    #[Test]
+    public function an_argumentless_directive_whose_compile_method_is_typed_asks_for_arguments(): void
+    {
+        // compileJs(string) throws a TypeError before any PHP error is raised. Production php.ini
+        // drops exception arguments from traces, which must not cost the advice.
+        foreach (['0', '1'] as $ignoreArgs) {
+            $previous = \ini_set('zend.exception_ignore_args', $ignoreArgs);
+
+            try {
+                $result = $this->compiler->compile('view.blade.php', "Use @js here\n");
+            } finally {
+                \ini_set('zend.exception_ignore_args', (string) $previous);
+            }
+
+            $this->assertInstanceOf(BladeCompileError::class, $result);
+            $this->assertSame('@js needs arguments; write @@js to print it as text', $result->message, "exception_ignore_args={$ignoreArgs}");
+        }
+    }
+
+    #[Test]
+    public function a_custom_directive_never_gets_the_arguments_advice(): void
+    {
+        // callCustomDirective() passes '' for a bare directive, so the null is the closure's own. Str is
+        // not strict, so the null raises the deprecation rather than a TypeError.
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('analytics', static fn(): string => Str::lower(null));
+        // Overrides a built-in directive whose compile method does require an argument.
+        $blade->directive('section', static fn(): string => Str::lower(null));
+
+        foreach (['analytics', 'section'] as $directive) {
+            $result = $this->compileReportingAll(new ShadowCompiler($blade), "Track it with @{$directive} today\n");
+
+            $this->assertInstanceOf(BladeCompileError::class, $result);
+            $this->assertSame(
+                "@{$directive}: mb_strtolower(): Passing null to parameter #1 (\$string) of type string is deprecated",
+                $result->message,
+            );
+        }
+    }
+
+    #[Test]
+    public function a_directive_that_takes_no_arguments_never_gets_the_arguments_advice(): void
+    {
+        // compileParent() has no parameter: its null is the section stack, empty before any @section.
+        $result = $this->compileReportingAll($this->compiler, "Ask your @parent first\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertStringStartsWith('@parent: ', $result->message);
+        $this->assertStringNotContainsString('needs arguments', $result->message);
+    }
+
+    #[Test]
+    public function a_subclass_compile_method_never_gets_the_arguments_advice(): void
+    {
+        $compiler = new ShadowCompiler(new class (new Filesystem(), \sys_get_temp_dir()) extends BladeCompiler {
+            public ?string $missing = null;
+
+            protected function compileProbe(?string $expression): string
+            {
+                return Str::lower($this->missing) . $expression;
+            }
+
+            protected function compileStrictProbe(?string $expression): string
+            {
+                // This file is strict: the null is a TypeError inside the method, not on its entry.
+                return \trim($this->missing) . $expression;
+            }
+        });
+
+        $deprecation = $this->compileReportingAll($compiler, "@probe\n");
+        $typeError = $this->compileReportingAll($compiler, "@strictProbe\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $deprecation);
+        $this->assertSame('@probe: mb_strtolower(): Passing null to parameter #1 ($string) of type string is deprecated', $deprecation->message);
+        $this->assertInstanceOf(BladeCompileError::class, $typeError);
+        $this->assertSame('trim(): Argument #1 ($string) must be of type string, null given', $typeError->message);
+    }
+
+    #[Test]
+    public function a_built_in_directive_given_arguments_never_gets_the_arguments_advice(): void
+    {
+        // Laravel's own compileInclude() runs, but the null comes from the overridden helper it calls.
+        $compiler = new ShadowCompiler(new class (new Filesystem(), \sys_get_temp_dir()) extends BladeCompiler {
+            public ?string $missing = null;
+
+            #[\Override]
+            public function stripParentheses($expression): string
+            {
+                return Str::lower($this->missing);
+            }
+        });
+
+        $result = $this->compileReportingAll($compiler, "@include('header')\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertSame('@include: mb_strtolower(): Passing null to parameter #1 ($string) of type string is deprecated', $result->message);
+    }
+
+    #[Test]
+    public function a_directive_catching_the_runtime_exception_psalm_throws_still_compiles(): void
+    {
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('guarded', static function (): string {
+            try {
+                \trigger_error('optional feature unavailable', \E_USER_WARNING);
+            } catch (\RuntimeException $runtimeException) {
+                return "<?php /* {$runtimeException->getCode()} */ ?>";
+            }
+
+            return '';
+        });
+
+        $result = $this->compileReportingAll(new ShadowCompiler($blade), "@guarded\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('/* ' . \E_USER_WARNING . ' */', $result->contents);
+    }
+
+    #[Test]
+    public function a_php_error_in_a_directive_with_arguments_names_the_directive(): void
+    {
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('warn', static function (string $expression): string {
+            \trigger_error("cannot compile {$expression}", \E_USER_WARNING);
+
+            return '';
+        });
+
+        $result = $this->compileReportingAll(new ShadowCompiler($blade), "@warn(\$user)\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertSame('@warn: cannot compile $user', $result->message);
+    }
+
+    #[Test]
+    public function the_previous_error_handler_is_restored_after_a_failed_compile(): void
+    {
+        $sentinel = static fn(): bool => false;
+        \set_error_handler($sentinel);
+
+        try {
+            $result = $this->compiler->compile('view.blade.php', "<x-alert/>\n");
+            $current = \set_error_handler(static fn(): bool => false);
+            \restore_error_handler();
+        } finally {
+            \restore_error_handler();
+        }
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertSame($sentinel, $current);
     }
 
     #[Test]
