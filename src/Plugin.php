@@ -231,8 +231,6 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Producers\ProducerReturnTypeHandler::reset();
         Handlers\Rules\UnregisteredRouteNameHandler::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
-        Handlers\Support\CallbackCallSite::reset();
-        Handlers\Support\CollectionCallbackParamsHandler::reset();
         Handlers\Support\ConditionableCallbackParamsHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
         Handlers\Filesystem\StorageHandler::reset();
@@ -534,13 +532,8 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ConditionableWhenHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableWhenHandler::class);
 
-        // Shared by both call-site params handlers; not a hook class, so nothing else loads it.
-        require_once __DIR__ . '/Handlers/Support/CallbackCallSite.php';
         require_once __DIR__ . '/Handlers/Support/ConditionableCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableCallbackParamsHandler::class);
-
-        require_once __DIR__ . '/Handlers/Support/CollectionCallbackParamsHandler.php';
-        $registration->registerHooksFromClass(Handlers\Support\CollectionCallbackParamsHandler::class);
 
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
