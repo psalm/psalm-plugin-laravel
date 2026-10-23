@@ -49,6 +49,9 @@ final class AnnotateEndToEndTest extends TestCase
 
     private ?string $controlFile = null;
 
+    /** Psalm's JSON report from the last run. */
+    private string $psalmOutput = '';
+
     protected function setUp(): void
     {
         $this->clean();
@@ -215,6 +218,18 @@ final class AnnotateEndToEndTest extends TestCase
         }
     }
 
+    #[Test]
+    public function skips_taint_analysis_in_annotate_mode(): void
+    {
+        // The codemod reads call-site types only; the taint graph Psalm 7 builds by default is
+        // pure cost there. The ordinary run is the positive control: the fixture has a taint flow.
+        $this->runPsalm(null);
+        $this->assertStringContainsString('"type":"TaintedHtml"', $this->psalmOutput);
+
+        $this->annotate(dryRun: true);
+        $this->assertStringNotContainsString('"type":"Tainted', $this->psalmOutput);
+    }
+
     /** @return array<string, mixed> the control file's result */
     private function annotate(bool $dryRun = false): array
     {
@@ -266,6 +281,8 @@ final class AnnotateEndToEndTest extends TestCase
         $process->setTimeout(300);
         // Not mustRun(): the fixture reports issues of its own at errorLevel 1.
         $process->run();
+
+        $this->psalmOutput = $process->getOutput();
     }
 
     private function template(string $name): string

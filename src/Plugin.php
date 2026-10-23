@@ -106,6 +106,14 @@ final class Plugin implements PluginEntryPointInterface
             // write to the source tree. Absent for every ordinary psalm run (#1524).
             $annotate = Blade\Annotate\AnnotateRequest::fromEnvironment();
 
+            if ($annotate instanceof Blade\Annotate\AnnotateRequest) {
+                // The codemod reads call-site types only. Psalm 7 builds the taint graph by default,
+                // and here nothing reports it, so dropping it saves analysis time and memory. The
+                // graph exists already (taint is set up before plugins load); taint handlers bail
+                // without it.
+                ProjectAnalyzer::getInstance()->getCodebase()->taint_flow_graph = null;
+            }
+
             // A request force-enables Blade even for a project that has it off: the user ran the
             // codemod, and refusing because of a config flag they never set for it would only be
             // confusing. That is safe precisely because the request is gated on a marked control
