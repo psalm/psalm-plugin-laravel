@@ -45,6 +45,9 @@ final class ShadowManifest
 
     private ?string $fingerprintSuffix = null;
 
+    /** @var array<string, string> template path => app facts its shadow depends on, see {@see self::salt()} */
+    private array $salts = [];
+
     /**
      * @psalm-mutation-free
      */
@@ -315,6 +318,17 @@ final class ShadowManifest
     }
 
     /**
+     * Folds app state the shadow's bytes depend on (the names it leaves undeclared, #1827) into the
+     * template's fingerprint. Empty by default: the fingerprint is then what it was without salts.
+     *
+     * @psalm-external-mutation-free
+     */
+    public function salt(string $templatePath, string $salt): void
+    {
+        $this->salts[$templatePath] = $salt;
+    }
+
+    /**
      * @param int-mask-of<self::SLOT_*> $requiredSlots slots whose collection pass must have run for
      *        the entry to count as fresh; an entry written with that pass disabled forces a recompile
      *        so the collector actually runs for it.
@@ -324,7 +338,7 @@ final class ShadowManifest
         $shadowPath = $this->shadowPath($templatePath, $source);
         $entry = $this->entries[$shadowPath] ?? null;
 
-        if ($entry === null || $entry[3] !== $this->fingerprint($source) || !\is_file($shadowPath)) {
+        if ($entry === null || $entry[3] !== $this->fingerprint($templatePath, $source) || !\is_file($shadowPath)) {
             return false;
         }
 
@@ -412,7 +426,7 @@ final class ShadowManifest
             $templatePath,
             $shadow->lineMap,
             $shadow->extendsLine,
-            $this->fingerprint($source),
+            $this->fingerprint($templatePath, $source),
             $shadow->suppressions,
             [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables, $contract->rawDeclaredVariables],
             $dataIncludes,
@@ -481,7 +495,7 @@ final class ShadowManifest
 
     private function shadowPath(string $templatePath, string $source): string
     {
-        return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '-' . $this->fingerprint($source) . '.php';
+        return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '-' . $this->fingerprint($templatePath, $source) . '.php';
     }
 
     /** The OS-level reason for the most recently suppressed warning, if any, as ": <message>". */
@@ -500,13 +514,15 @@ final class ShadowManifest
         return $this->shadowDir . \DIRECTORY_SEPARATOR . self::MANIFEST_FILE;
     }
 
-    private function fingerprint(string $source): string
+    private function fingerprint(string $templatePath, string $source): string
     {
         // Everything but the source is fixed for the process, and the plugin build id costs a
         // Composer lookup, so the suffix is built once rather than per template.
         $this->fingerprintSuffix ??= '|' . self::MARKER_PASS_VERSION . '|' . Application::VERSION . '|'
             . PluginBuildId::current() . '|' . $this->environment;
 
-        return \hash('xxh128', $source . $this->fingerprintSuffix);
+        $salt = $this->salts[$templatePath] ?? '';
+
+        return \hash('xxh128', $source . $this->fingerprintSuffix . ($salt === '' ? '' : '|' . $salt));
     }
 }

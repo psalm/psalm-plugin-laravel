@@ -37,6 +37,104 @@ final class ContractParserTest extends TestCase
         return $this->parser->parseDataContract($source, $this->compiler->compileString($source));
     }
 
+    /** @param array<string, true> $provided */
+    private function undeclared(string $source, array $provided = ['app' => true]): array
+    {
+        return $this->parser->undeclaredReads($source, $this->compiler->compileString($source), $provided);
+    }
+
+    /** `$message` reaches every mail view and a shared name every view: a `@var` for either is an IDE hint, not a contract. */
+    #[Test]
+    public function a_declaration_for_a_name_every_view_receives_does_not_activate_undeclared_reads(): void
+    {
+        $this->assertSame([], $this->undeclared("<?php /** @var \\Illuminate\\Mail\\Message \$message */ ?>\n{{ \$subject }}\n"));
+        $this->assertSame([], $this->undeclared("<?php /** @var string \$siteName */ ?>\n{{ \$subject }}\n", ['siteName' => true]));
+    }
+
+    #[Test]
+    public function a_real_declaration_activates_undeclared_reads_next_to_one_that_does_not_count(): void
+    {
+        $source = "<?php /** @var \\Illuminate\\Mail\\Message \$message */ ?>\n<?php /** @var string \$title */ ?>\n{{ \$title }} {{ \$subject }}\n";
+
+        $this->assertSame(['subject'], $this->undeclared($source));
+    }
+
+    /** @return iterable<string, array{string, list<string>}> */
+    public static function scopedBindings(): iterable
+    {
+        yield 'an arrow parameter named like a declaration leaves it a contract' => [
+            "<?php /** @var string \$title */ ?>\n{{ \$title }}\n@php \$format = static fn (string \$title): string => strtoupper(\$title); @endphp\n{{ \$subtitle }}\n",
+            ['subtitle'],
+        ];
+        yield 'a declaration the template normalises in place stays a contract' => [
+            "<?php /** @var string \$title */ ?>\n@php \$title = \$title ?? 'Untitled'; @endphp\n{{ \$subtitle }}\n",
+            ['subtitle'],
+        ];
+        yield 'a name only an arrow parameter binds is undeclared outside the arrow' => [
+            "<?php /** @var list<int> \$ids */ ?>\n{{ implode(',', array_map(fn (int \$n) => \$n, \$ids)) }} {{ \$n }}\n",
+            ['n'],
+        ];
+        yield 'a by-reference out-argument binds the name its @var types' => [
+            "<?php parse_str('a=1', \$parts); /** @var array<string, string> \$parts */ ?>\n{{ \$parts['a'] }} {{ \$title }}\n",
+            [],
+        ];
+        yield 'a loop alias hint alone is no contract' => [
+            "@foreach (\$items as \$item)\n<?php /** @var \\App\\Item \$item */ ?>\n{{ \$item }}\n@endforeach\n{{ \$other }}\n",
+            [],
+        ];
+    }
+
+    /** @param list<string> $expected */
+    #[Test]
+    #[DataProvider('scopedBindings')]
+    public function only_a_binding_in_the_templates_own_scope_turns_a_declaration_into_a_local(string $source, array $expected): void
+    {
+        $this->assertSame($expected, $this->undeclared($source));
+    }
+
+    /** @return iterable<string, array{string, list<string>}> */
+    public static function livewireMarkers(): iterable
+    {
+        yield 'a functional Volt component' => [
+            "<?php use function Livewire\\Volt\\{state}; state(['count' => 0]); /** @var string \$title */ ?>\n{{ \$title }} {{ \$count }}\n",
+            [],
+        ];
+        yield 'an address that spells a directive is text' => [
+            "<?php /** @var string \$title */ ?>\n<a href=\"mailto:help@this.example\">{{ \$subtitle }}</a>\n",
+            ['subtitle'],
+        ];
+        yield 'an escaped directive is text' => [
+            "<?php /** @var string \$title */ ?>\n<code>@@entangle('x')</code> {{ \$subtitle }}\n",
+            ['subtitle'],
+        ];
+    }
+
+    /** @param list<string> $expected */
+    #[Test]
+    #[DataProvider('livewireMarkers')]
+    public function only_live_livewire_markup_keeps_the_net(string $source, array $expected): void
+    {
+        $this->assertSame($expected, $this->undeclared($source));
+    }
+
+    #[Test]
+    public function render_targets_are_the_literal_views_of_component_and_each_directives(): void
+    {
+        $source = <<<'BLADE'
+            @component('partials/badge') @endcomponent
+            @componentFirst(['custom.alert', 'alert']) @endcomponent
+            @component(App\View\Components\Card::class) @endcomponent
+            @@component('escaped.text')
+            {{-- @component('commented.out') --}}
+            @each('partials.row', $rows, 'row', 'partials.empty')
+            BLADE;
+
+        $this->assertSame(
+            [['partials.badge', 'custom.alert', 'alert'], ['partials.row']],
+            $this->parser->renderTargets($source),
+        );
+    }
+
     #[Test]
     public function extracts_a_var_comment_declaration(): void
     {

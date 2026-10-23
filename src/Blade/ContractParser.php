@@ -63,6 +63,19 @@ final class ContractParser
      */
     private const DIRECTIVE_PATTERN = '/\B@(?<name>@?\w+(?:::\w+)?)(?:[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
 
+    /**
+     * Livewire markup or code: the component's public properties reach its view with no call site
+     * naming them. `@this`/`@entangle` take Blade's `\B@` boundary, so `help@this.example` is text,
+     * and `@@entangle` is the escaped spelling; `Livewire\Volt\` is a functional Volt component's import.
+     */
+    private const LIVEWIRE_MARKERS = '/\bwire:[\w.-]+|\B(?<!@)@(?:this|entangle)\b|\$wire\b|\$this\b|\bnew\s+class\b|\bLivewire\\\\Volt\\\\/';
+
+    /** The by-name render directives that hand their target data no call site of it lists; `\B@` as {@see self::DIRECTIVE_PATTERN}. */
+    private const RENDER_TARGET_PATTERN = '/\B@(?<name>@?(?:componentFirst|component|each))[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . '/i';
+
+    /** Laravel injects `$message` into every mail view, and `@error` binds it. */
+    private const ALWAYS_PROVIDED = ['message' => true];
+
     private ?Parser $parser = null;
 
     public function parse(string $source, string $compiled): TemplateContract
@@ -93,6 +106,95 @@ final class ContractParser
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
         return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
+    }
+
+    /**
+     * The names a contract template reads that nothing in it declares, binds or captures, and the
+     * booted app does not provide: the ones the prelude leaves undeclared so Psalm reports them
+     * (#1827). Empty when the template declares no view variable (a name the app provides to every
+     * view, or `$message`, is none), is a component or Livewire view, or its read set is not
+     * provably whole.
+     *
+     * @param array<string, true> $provided names the booted application supplies to every view
+     *
+     * @return list<string>
+     */
+    public function undeclaredReads(string $source, string $compiled, array $provided): array
+    {
+        if (PreludeBuilder::isComponentView($source)
+            || \preg_match(self::LIVEWIRE_MARKERS, MarkerPrePass::blankInertText($source)) === 1
+        ) {
+            return [];
+        }
+
+        [, , $unknown, $opaque, $captured, $reads, $locals, $free, $outArguments] = $this->walkReads($compiled);
+
+        if ($unknown || $opaque) {
+            return [];
+        }
+
+        $known = $provided + self::ALWAYS_PROVIDED;
+        // Only the template's own scope can turn a declaration into a local: an arrow parameter of
+        // the same name does not, and neither does `$title = $title ?? ''`, which reads it first.
+        $declaresLocal = \array_diff_key($locals, $free) + $outArguments;
+
+        if (\array_diff_key($this->rawContractVars($source, $this->filterNames($declaresLocal, [])), $known) === []) {
+            return [];
+        }
+
+        // Every raw `@var` counts, not only view data: a name-first or non-doc one still states the name.
+        $declared = \array_fill_keys(self::rawDeclaredNames($source), true);
+
+        return $this->filterNames($reads, $locals + $outArguments + $captured + $declared + $known);
+    }
+
+    /**
+     * The views this template renders through a directive that hands them data their own `@var`s
+     * cannot anticipate: `@component('alert')` / `@componentFirst([...])`, whose `@slot`s become
+     * the target's variables, and `@each('row', ...)`, which adds `$key`
+     * (`Factory::renderEach()`). Literal view names only; a class target is a class component.
+     *
+     * @return array{0: list<string>, 1: list<string>} `@component` targets, `@each` targets
+     */
+    public function renderTargets(string $source): array
+    {
+        $targets = [[], []];
+
+        if (\preg_match_all(self::RENDER_TARGET_PATTERN, MarkerPrePass::blankInertText($source), $matches, \PREG_SET_ORDER) < 1) {
+            return $targets;
+        }
+
+        foreach ($matches as $match) {
+            if (\str_starts_with($match['name'], '@')) {
+                continue;
+            }
+
+            try {
+                $statement = ($this->parser()->parse('<?php f' . $match['args'] . ';') ?? [])[0] ?? null;
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if (!$statement instanceof Node\Stmt\Expression || !$statement->expr instanceof Node\Expr\FuncCall) {
+                continue;
+            }
+
+            $first = $statement->expr->args[0] ?? null;
+            $value = $first instanceof Node\Arg ? $first->value : null;
+            $kind = \strtolower($match['name']) === 'each' ? 1 : 0;
+
+            foreach ($value instanceof Node\Expr\Array_ ? $value->items : [$value] as $literal) {
+                if ($literal instanceof Node\ArrayItem) {
+                    $literal = $literal->value;
+                }
+
+                if ($literal instanceof Node\Scalar\String_ && !\str_contains($literal->value, '\\')) {
+                    $targets[$kind][] = \str_replace('/', '.', $literal->value);
+                }
+            }
+        }
+
+        return $targets;
     }
 
     /**
@@ -724,8 +826,12 @@ final class ContractParser
     /**
      * One walk of the compiled body, feeding both read-set consumers.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
-     *         the body binds for itself, and whether it hides which names it reads
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool, 4: array<string, true>, 5: array<string, true>, 6: array<string, true>, 7: array<string, true>, 8: array<string, true>}
+     *         names read, the names the body binds for itself, whether it hides which names it reads,
+     *         whether it hands its scope to code no walk sees (`include`, `eval`), the names a
+     *         closure `use` clause captures, and, scope-aware: the names the template's own scope
+     *         (arrow functions included) reads, binds, reads before binding, and binds as a
+     *         by-reference argument of a function the booted app defines
      */
     private function walkReads(string $compiled): array
     {
@@ -736,10 +842,13 @@ final class ContractParser
         } catch (\Throwable) {
             // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
             // would turn every key a call site passes into a false positive.
-            return [[], [], true];
+            return [[], [], true, true, [], [], [], [], []];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
+            /** @var array<string, list<string>|null> function name => its by-reference parameter names, null for unknown */
+            private array $byReference = [];
+
             /** @var array<string, true> */
             public array $names = [];
 
@@ -748,15 +857,57 @@ final class ContractParser
 
             public bool $unknown = false;
 
+            public bool $opaque = false;
+
+            /** @var array<string, true> */
+            public array $captured = [];
+
+            /** @var array<string, true> names read where the template's own variables are visible */
+            public array $outer = [];
+
+            /** @var array<string, true> names the template's own scope binds, outside any function */
+            public array $ownLocals = [];
+
+            /** @var array<string, true> names the template's own scope reads before binding them */
+            public array $free = [];
+
+            /** @var array<string, true> names a top-level by-reference argument binds */
+            public array $outArguments = [];
+
+            /** @var array<string, true> names the template's own scope has bound so far, in document order */
+            private array $bound = [];
+
+            /**
+             * Enclosing functions, innermost last: an arrow function's own bindings (it sees the
+             * template's variables), or null for a closure, function or method (it sees none).
+             *
+             * @var array<int, array<string, true>|null>
+             */
+            private array $scopes = [];
+
             #[\Override]
             public function enterNode(Node $node): null
             {
+                if ($node instanceof Node\FunctionLike) {
+                    $this->scopes[] = $node instanceof Node\Expr\ArrowFunction ? [] : null;
+                }
+
+                if ($node instanceof Node\Expr\Include_ || $node instanceof Node\Expr\Eval_) {
+                    $this->opaque = true;
+                }
+
+                if ($node instanceof Node\ClosureUse && \is_string($node->var->name)) {
+                    $this->captured[$node->var->name] = true;
+                }
+
                 if ($node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef) {
                     if ($node->var instanceof Node\Expr\Variable) {
                         $node->var->setAttribute('contractSkip', true);
                     }
 
-                    $this->bindLocals($node->var);
+                    // Bound in document order only once the right-hand side has been read: in
+                    // `$title = $title ?? ''` the template still reads the `$title` it was passed.
+                    $this->bindLocals($node->var, false);
                 }
 
                 if ($node instanceof Node\Stmt\Foreach_) {
@@ -787,7 +938,7 @@ final class ContractParser
                         // one shape that reads (or injects) a name no static walk can enumerate.
                         $this->unknown = true;
                     } elseif ($node->getAttribute('contractSkip') !== true) {
-                        $this->names[$node->name] = true;
+                        $this->read($node->name);
                     }
                 }
 
@@ -798,13 +949,74 @@ final class ContractParser
                 return null;
             }
 
+            /** @psalm-capabilities read-props|write-this-props|write-refs */
+            #[\Override]
+            public function leaveNode(Node $node): null
+            {
+                if ($node instanceof Node\FunctionLike) {
+                    \array_pop($this->scopes);
+                }
+
+                if ($this->scopes === [] && ($node instanceof Node\Expr\Assign || $node instanceof Node\Expr\AssignRef)) {
+                    foreach ($this->targetNames($node->var) as $name) {
+                        $this->bound[$name] = true;
+                    }
+                }
+
+                return null;
+            }
+
+            /** @psalm-external-mutation-free */
+            private function read(string $name): void
+            {
+                $this->names[$name] = true;
+
+                foreach ($this->scopes as $scope) {
+                    if ($scope === null || isset($scope[$name])) {
+                        return;
+                    }
+                }
+
+                $this->outer[$name] = true;
+
+                if (!isset($this->bound[$name])) {
+                    $this->free[$name] = true;
+                }
+            }
+
             /**
              * Every name one binding construct introduces, list destructuring included: `as [$id,
              * $name]` binds both, and a call site is expected to pass neither.
              *
+             * @param bool $now false when the binding takes effect after its node's children are read
+             *
              * @psalm-external-mutation-free
              */
-            private function bindLocals(?Node\Expr $target): void
+            private function bindLocals(?Node\Expr $target, bool $now = true): void
+            {
+                $innermost = \array_key_last($this->scopes);
+
+                foreach ($this->targetNames($target) as $name) {
+                    $this->locals[$name] = true;
+
+                    if ($innermost === null) {
+                        $this->ownLocals[$name] = true;
+
+                        if ($now) {
+                            $this->bound[$name] = true;
+                        }
+                    } elseif ($this->scopes[$innermost] !== null) {
+                        $this->scopes[$innermost][$name] = true;
+                    }
+                }
+            }
+
+            /**
+             * @return list<string>
+             *
+             * @psalm-mutation-free
+             */
+            private function targetNames(?Node\Expr $target): array
             {
                 // `$row['k'] = …`, `$row[] = …` and `$a['x']['y'] = …` create `$row` / `$a` when it is
                 // unset, so the template binds it for itself, whatever it holds afterwards.
@@ -813,22 +1025,24 @@ final class ContractParser
                 }
 
                 if ($target instanceof Node\Expr\Variable && \is_string($target->name)) {
-                    $this->locals[$target->name] = true;
-
-                    return;
+                    return [$target->name];
                 }
 
                 if (!$target instanceof Node\Expr\Array_ && !$target instanceof Node\Expr\List_) {
-                    return;
+                    return [];
                 }
+
+                $names = [];
 
                 foreach ($target->items as $item) {
                     // A skipped slot (`[, $b]`) is null; the key of a keyed destructure is read, not
                     // bound, so only the value side recurses.
                     if ($item instanceof Node\ArrayItem) {
-                        $this->bindLocals($item->value);
+                        $names = [...$names, ...$this->targetNames($item->value)];
                     }
                 }
+
+                return $names;
             }
 
             /**
@@ -847,6 +1061,8 @@ final class ContractParser
                 // `get_defined_vars()` is deliberately not in this list: Blade compiles it into every
                 // `@include`, so reading it as unknown would turn the rule off almost everywhere.
                 if ($name !== 'compact') {
+                    $this->bindOutArguments($name, $args);
+
                     return;
                 }
 
@@ -854,7 +1070,7 @@ final class ContractParser
                     if ($arg instanceof Node\Arg && $arg->value instanceof Node\Scalar\String_) {
                         // An all-digit name is never a variable, and PHP would cast most to an int key.
                         if (\preg_match('/^-?\d+$/D', $arg->value->value) !== 1) {
-                            $this->names[$arg->value->value] = true;
+                            $this->read($arg->value->value);
                         }
 
                         continue;
@@ -863,12 +1079,79 @@ final class ContractParser
                     $this->unknown = true;
                 }
             }
+
+            /**
+             * `parse_str($query, $parts)` and `preg_match($re, $s, $matches)` bind `$parts` and
+             * `$matches`, so a `@var` on one types a local, not view data. Only in the template's own
+             * scope, and never into {@see self::$locals}: the other consumers of this walk read such an
+             * argument as a read, as before.
+             *
+             * @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
+             *
+             * @psalm-capabilities read-props|write-this-props|write-refs
+             */
+            private function bindOutArguments(string $function, array $args): void
+            {
+                if ($this->scopes !== []) {
+                    return;
+                }
+
+                if (!\array_key_exists($function, $this->byReference)) {
+                    $this->byReference[$function] = $this->byReferenceParameters($function);
+                }
+
+                $parameters = $this->byReference[$function];
+
+                if ($parameters === null) {
+                    return;
+                }
+
+                foreach (\array_values($args) as $position => $arg) {
+                    if (!$arg instanceof Node\Arg || $arg->unpack
+                        || !$arg->value instanceof Node\Expr\Variable || !\is_string($arg->value->name)
+                    ) {
+                        continue;
+                    }
+
+                    $byReference = $arg->name instanceof Node\Identifier
+                        ? \in_array($arg->name->toString(), $parameters, true)
+                        : ($parameters[$position] ?? '') !== '';
+
+                    if ($byReference) {
+                        $this->outArguments[$arg->value->name] = true;
+                        $this->bound[$arg->value->name] = true;
+                    }
+                }
+            }
+
+            /**
+             * Positional names of the by-reference parameters, a non-reference position as '', or
+             * null when the function is not defined (`function_exists()` never autoloads).
+             *
+             * @return list<string>|null
+             *
+             * @psalm-pure
+             */
+            private function byReferenceParameters(string $function): ?array
+            {
+                if (!\function_exists($function)) {
+                    return null;
+                }
+
+                return \array_map(
+                    static fn(\ReflectionParameter $parameter): string => $parameter->isPassedByReference() ? $parameter->getName() : '',
+                    (new \ReflectionFunction($function))->getParameters(),
+                );
+            }
         };
 
         $traverser = new NodeTraverser();
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->locals, $visitor->unknown];
+        return [
+            $visitor->names, $visitor->locals, $visitor->unknown, $visitor->opaque, $visitor->captured,
+            $visitor->outer, $visitor->ownLocals, $visitor->free, $visitor->outArguments,
+        ];
     }
 }

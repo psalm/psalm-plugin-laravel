@@ -60,8 +60,10 @@ final class PreludeBuilder
     /**
      * @param array<string, string> $propTypes variable name (without $) => the type a `@props` literal
      *                                         default gives the body: no docblock in the body states it
+     * @param list<string>          $omit      names left out of the `mixed` net, so Psalm reports their
+     *                                         reads as undefined (#1827)
      */
-    public function build(string $compiled, string $source, array $propTypes = []): string
+    public function build(string $compiled, string $source, array $propTypes = [], array $omit = []): string
     {
         $componentTypes = \array_filter(
             self::componentTypesFor($source),
@@ -84,7 +86,7 @@ final class PreludeBuilder
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
-        $undeclared = $this->undeclaredVariables($compiled, $declared);
+        $undeclared = $this->undeclaredVariables($compiled, $declared + \array_fill_keys($omit, ''));
         $tagTypes = $this->tagBookkeepingTypes($compiled, $source, $undeclared);
 
         foreach ($tagTypes as $name => $type) {

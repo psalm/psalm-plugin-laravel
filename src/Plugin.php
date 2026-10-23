@@ -1003,6 +1003,7 @@ final class Plugin implements PluginEntryPointInterface
             $output,
             $pluginConfig->bladeCacheDir,
             $pluginConfig->bladeReportUnusedViewData || $annotating,
+            $pluginConfig->bladeReportUndeclaredVariables,
         );
 
         if (!$bootstrapper->boot()) {

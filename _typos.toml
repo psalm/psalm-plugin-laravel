@@ -37,6 +37,9 @@ extend-ignore-re = [
     # tests/Type/psalm-with-optin-custom-issues.xml — fixture filename
     # ("opt-in" mashed into one word); renaming would churn many test refs.
     "optin",
+    # reportUndeclaredVariables (#1827) fixture and docs: `$titel` is the deliberately typo'd
+    # view variable (title) the rule reports.
+    "\\$titel\\b",
 ]
 
 [default.extend-identifiers]
