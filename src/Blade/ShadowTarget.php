@@ -35,6 +35,10 @@ final class ShadowTarget
      * @param bool   $attributesFromTag {@see PreludeBuilder::declaresTagAttributes()} on the shadow
      * @param array<string, true> $undeclaredNames names the shadow types only through the prelude's
      *                                             `mixed` fallback; empty turns the #1909 gate off
+     * @param array<string, true>|null $untypedNames $undeclaredNames plus every name the template
+     *                                               binds without a `@var`, whose `mixed` cannot be
+     *                                               traced further (#1986); null when the body
+     *                                               cannot be read, which drops every `Mixed*`
      */
     public function __construct(
         public readonly ShadowEntry $entry,
@@ -44,6 +48,7 @@ final class ShadowTarget
         private readonly string $markerPrefix,
         public readonly bool $attributesFromTag = false,
         public readonly array $undeclaredNames = [],
+        public readonly ?array $untypedNames = null,
     ) {}
 
     public function markerPrefix(): string

@@ -94,8 +94,9 @@ final class ShadowIssueRelocator
         '/(?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};)/',
         // CompilesErrors::compileEnderror()
         '/(?<statement>if \(isset\(\$__messageOriginal\)\) \{ (?<target>\$message) = \$__messageOriginal; \})/',
-        // CompilesSessions/CompilesContexts: the push in compileSession(), the pop in compileEndsession()
+        // CompilesSessions/CompilesContexts: the push and the read in compileSession(), the pop in compileEndsession()
         '/(?<statement>if \(isset\(\$value\)\) \{ (?<target>\$__(?:session|context)Previous)\[\] = \$value; \})/',
+        '/(?<statement>(?<target>\$value) = (?<kind>session|context)\(\)->get\(\$__\k<kind>Args\[0\]\);)/',
         '/(?<statement>if \(isset\(\$__(?<kind>session|context)Previous\) && !empty\(\$__\k<kind>Previous\)\) \{ (?<target>\$value) = array_pop\(\$__\k<kind>Previous\); \})/',
     ];
 
@@ -474,9 +475,10 @@ final class ShadowIssueRelocator
         }
 
         // A template variable the prelude cannot resolve is typed `mixed`, so `MixedIssue` findings
-        // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
-        // by default, both on a mapped template line and on the prelude's own unmapped lines below.
-        if ($issue instanceof MixedIssue && !$reportMixed) {
+        // inside a shadow are overwhelmingly this artifact rather than a real template bug. Dropped
+        // when derived from it (#1986); one from a declared variable or a callee's `mixed` reports as
+        // in a PHP file. The prelude's own unmapped lines are dropped below either way.
+        if ($issue instanceof MixedIssue && !$reportMixed && self::isFallbackMixed($issue, $target)) {
             return false;
         }
 
@@ -556,6 +558,11 @@ final class ShadowIssueRelocator
         }
 
         $overrides = ['code_location' => $location, 'message' => $message];
+
+        if ($issue instanceof MixedIssue) {
+            $overrides['origin_location'] = self::templateOrigin($issue->getOriginalLocation(), $issue, $target, $resolve);
+        }
+
         $taint = PsalmBridge::taintArguments($issue);
 
         if ($taint !== null) {
@@ -1071,6 +1078,82 @@ final class ShadowIssueRelocator
         }
 
         return $names !== [] && \array_diff_key(\array_flip($names), $undeclared) === [];
+    }
+
+    /**
+     * #1986: whether a `Mixed*` finding's `mixed` comes from the prelude's fallback rather than a
+     * declaration. Psalm's origin (traced only while the variable-use graph runs, so not under
+     * `findUnusedCode="false"`) is exact: a variable fetch in this shadow on a name in
+     * {@see ShadowTarget::$untypedNames} or a compiled `$__*` name is the fallback, anything outside
+     * the shadow is a callee's `mixed`. A template local's origin stops at its own assignment, so a
+     * local is never proof of a declaration. Without an origin, the finding must read variables, all
+     * of them declared.
+     */
+    private static function isFallbackMixed(MixedIssue&CodeIssue $issue, ShadowTarget $target): bool
+    {
+        $untyped = $target->untypedNames;
+        $selected = (string) self::selectedText($issue->code_location);
+
+        // `$__*` names are the compiler's (`$$__key` of `@props`/`@aware`, Livewire's `$__html`),
+        // whatever their origin.
+        if ($untyped === null || \preg_match('/\$__\w/', $selected) === 1) {
+            return true;
+        }
+
+        $origin = $issue->getOriginalLocation();
+
+        if ($origin instanceof CodeLocation) {
+            if ($origin->file_path !== $issue->code_location->file_path) {
+                return false;
+            }
+
+            $text = self::selectedText($origin);
+
+            if ($text !== null && \preg_match('/\A\$(' . PreludeBuilder::VARIABLE_NAME . ')\z/', $text, $name) === 1) {
+                return isset($untyped[$name[1]]) || \str_starts_with($name[1], '__');
+            }
+        }
+
+        $names = self::readNames($selected);
+
+        // A method call is positioned on its name; the message carries the receiver's var id.
+        if ($names === [] && \preg_match('/\ACannot determine the type of (\$.+?) when calling method /', $issue->message, $receiver) === 1) {
+            $names = self::readNames($receiver[1]);
+        }
+
+        foreach ($names as $name) {
+            if (isset($untyped[$name]) || \str_starts_with($name, '__')) {
+                return true;
+            }
+        }
+
+        return $names === [];
+    }
+
+    /**
+     * A kept finding's origin on the template line it came from, so the report never names a shadow.
+     * An origin outside every shadow (a callee's `@return mixed`) is kept as is; a shadow line with
+     * no template position loses the origin.
+     *
+     * @param \Closure[_](string): ?ShadowTarget $resolve
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function templateOrigin(?CodeLocation $origin, CodeIssue $issue, ShadowTarget $target, \Closure $resolve): ?CodeLocation
+    {
+        if (!$origin instanceof CodeLocation) {
+            return null;
+        }
+
+        $originTarget = $origin->file_path === $issue->code_location->file_path ? $target : $resolve($origin->file_path);
+
+        if (!$originTarget instanceof ShadowTarget) {
+            return $origin;
+        }
+
+        $line = $originTarget->templateLineFor($origin->getLineNumber());
+
+        return $line < 1 ? null : $originTarget->locationFor($line);
     }
 
     /**

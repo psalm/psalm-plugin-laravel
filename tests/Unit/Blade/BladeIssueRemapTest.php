@@ -258,26 +258,54 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #1986: across every fixture template, `Mixed*` reaches a template only from a declared value
+     * or a callee's `mixed` return, the cascade a PHP file reports too. Undeclared variables and
+     * compiled bookkeeping (`@props`/`@aware`, the `@session`/`@context` read) report none.
+     */
     #[Test]
-    public function the_mixed_issue_family_is_suppressed_by_default(): void
+    public function mixed_findings_reach_templates_only_from_declared_or_computed_values(): void
     {
         $issues = $this->analyze('psalm.xml');
-
-        $this->assertSame(
-            [],
-            $this->linesFor($issues, 'MixedArgument', 'resources/views/untyped.blade.php'),
-            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
-        );
+        $reported = [];
 
         foreach ($issues as $issue) {
-            if (\str_starts_with($issue['type'], 'Mixed')) {
-                $this->assertStringNotContainsString(
-                    '.blade.php',
-                    $issue['file_path'],
-                    \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
-                );
+            $template = \strstr($issue['file_path'], 'resources/views/');
+
+            if (\str_starts_with($issue['type'], 'Mixed') && $template !== false) {
+                $reported[] = "{$template}:{$issue['line_from']} {$issue['type']}";
             }
         }
+
+        \sort($reported);
+
+        $this->assertSame([
+            // A magic method's return on a class-seeded receiver.
+            'resources/views/components/mixed-leak-card.blade.php:2 MixedArgument',
+            'resources/views/components/mixed-leak-scan-card.blade.php:6 MixedArgument',
+            // The template's own nullable `$attributes`.
+            'resources/views/components/nested-attributes-authornull.blade.php:4 MixedArgument',
+            // A session or context value.
+            'resources/views/context-previous.blade.php:2 MixedArgument',
+            // An undefined method's return on a declared receiver.
+            'resources/views/contract-typed-body.blade.php:2 MixedArgument',
+            'resources/views/contract-unqualified.blade.php:2 MixedArgument',
+            'resources/views/contract-vendor-class.blade.php:2 MixedArgument',
+            'resources/views/mixed-leak-declared.blade.php:20 MixedArgument',
+            'resources/views/mixed-leak-declared.blade.php:7 MixedArgument',
+            'resources/views/mixed-provenance.blade.php:10 MixedAssignment',
+            'resources/views/mixed-provenance.blade.php:5 MixedArgument',
+            'resources/views/mixed-provenance.blade.php:5 MixedMethodCall',
+            // An invalid fetch or call on a literal-defaulted prop.
+            'resources/views/props/misuse.blade.php:2 MixedArgument',
+            'resources/views/props/misuse.blade.php:3 MixedArgument',
+            'resources/views/props/misuse.blade.php:4 MixedArgument',
+            'resources/views/session-previous.blade.php:2 MixedArgument',
+            'resources/views/session-value-save-authored.blade.php:3 MixedArgument',
+            'resources/views/session-value-save.blade.php:2 MixedArgument',
+            'resources/views/session-value-save.blade.php:5 MixedArgument',
+            'resources/views/session-value-save.blade.php:8 MixedArgument',
+        ], $reported, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
     }
 
     #[Test]
@@ -905,8 +933,8 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1872: the compiled save/restore bookkeeping of a plain `<x-...>` tag (line 1), nested tags
      * (line 2), a multi-line tag (line 5), `@error` (line 8) and `@session`/`@context` (lines 9 to
-     * 14) reports no `MixedAssignment`. Left: the `$value = session()->get()`/`context()->get()`
-     * read on lines 9 and 12, which is not a save or restore.
+     * 14) reports no `MixedAssignment`, nor does the directive's own `$value = session()->get()`/
+     * `context()->get()` read on lines 9 and 12 (#1986).
      */
     #[Test]
     public function compiled_save_restore_bookkeeping_reports_no_mixed_assignment(): void
@@ -917,16 +945,11 @@ final class BladeIssueRemapTest extends TestCase
 
         // Guard against a vacuous pass: every construct must have compiled its restore.
         $shadow = $this->shadowSourceFor('resources/views/' . $template, 'psalm-blade-report-mixed.xml');
-        foreach (['$attributes = $__attributesOriginal', '$message = $__messageOriginal;', '$__sessionPrevious[] = $value;', '$value = array_pop($__contextPrevious);'] as $statement) {
+        foreach (['$attributes = $__attributesOriginal', '$message = $__messageOriginal;', '$__sessionPrevious[] = $value;', '$value = array_pop($__contextPrevious);', '$value = session()->get($__sessionArgs[0]);', '$value = context()->get($__contextArgs[0]);'] as $statement) {
             $this->assertStringContainsString($statement, $shadow);
         }
 
-        $this->assertSame([9, 12], $this->linesFor($issues, 'MixedAssignment', $template), $json);
-        $this->assertSame(
-            ['Unable to determine the type that $value is being assigned to', 'Unable to determine the type that $value is being assigned to'],
-            $this->messagesFor($issues, 'MixedAssignment', $template),
-            $json,
-        );
+        $this->assertSame([], $this->linesFor($issues, 'MixedAssignment', $template), $json);
     }
 
     /**
@@ -1672,7 +1695,8 @@ final class BladeIssueRemapTest extends TestCase
             }
         }
 
-        $this->assertSame(['2 InvalidPropertyFetch', '3 InvalidMethodCall', '4 InvalidPropertyFetch', '5 DocblockTypeContradiction'], $reported);
+        // Each echo of the failed fetch or call also reports `MixedArgument`, as in a PHP file (#1986).
+        $this->assertSame(['2 InvalidPropertyFetch', '2 MixedArgument', '3 InvalidMethodCall', '3 MixedArgument', '4 InvalidPropertyFetch', '4 MixedArgument', '5 DocblockTypeContradiction'], $reported);
     }
 
     /** Blade echoes a bool as `'1'` / `''`, so a `bool` default is no `e()` argument error. */
@@ -2044,6 +2068,39 @@ final class BladeIssueRemapTest extends TestCase
                 $this->linesFor($issues, 'PossiblyInvalidMethodCall', 'undeclared-isset-offset.blade.php'),
                 $config . ': ' . \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
             );
+        }
+    }
+
+    /**
+     * #1986: `Mixed*` findings follow their provenance. Undeclared variables, a loop alias over one,
+     * and a template local assigned from one report nothing; a declared `array` and a callee's
+     * `mixed` return report as in a PHP file. Without the variable-use graph (`findUnusedCode="false"`,
+     * as `psalm-laravel init` writes) Psalm traces no origin, so a local's finding is dropped too.
+     * At `errorLevel` 2 Psalm itself demotes the family to info.
+     */
+    #[Test]
+    public function mixed_findings_follow_their_provenance(): void
+    {
+        $template = 'resources/views/mixed-provenance.blade.php';
+        $cases = [
+            'psalm.xml' => ['MixedMethodCall' => [5], 'MixedArgument' => [5], 'MixedAssignment' => [10]],
+            'psalm-unused-code-off.xml' => ['MixedMethodCall' => [5], 'MixedArgument' => [5]],
+            'psalm-level2.xml' => [],
+        ];
+
+        foreach ($cases as $config => $expected) {
+            $issues = $this->analyze($config);
+            $reported = [];
+
+            foreach ($issues as $issue) {
+                if (\str_starts_with($issue['type'], 'Mixed') && \str_ends_with($issue['file_path'], $template)) {
+                    $reported[$issue['type']][] = $issue['line_from'];
+                }
+            }
+
+            \ksort($reported);
+            \ksort($expected);
+            $this->assertSame($expected, $reported, $config . ': ' . \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
         }
     }
 }

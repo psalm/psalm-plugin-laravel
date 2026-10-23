@@ -271,6 +271,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         }
 
         $shadow = (string) @\file_get_contents($shadowPath);
+        [$undeclared, $untyped] = self::provenanceNames($shadow, $shadowPath);
 
         return new ShadowTarget(
             $entry,
@@ -284,24 +285,26 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             // no snapshot at all, and a wrong prefix costs a no-op strip, never a wrong one.
             ShadowRegistry::markerPrefixFor($entry->templatePath) ?? MarkerComment::prefixFor($templateSource),
             PreludeBuilder::declaresTagAttributes($shadow),
-            self::$reportMixedIssues ? [] : self::undeclaredNames($shadow, $shadowPath),
+            self::$reportMixedIssues ? [] : $undeclared,
+            $untyped,
         );
     }
 
     /**
      * #1909: the names only the prelude's `mixed` fallback types. A body docblock in any `@var`
      * spelling, a name the template binds itself, or a component seed types the name later, so it
-     * is subtracted. A body that does not parse turns the gate off instead.
+     * is subtracted. #1986: those plus the names the template binds without a `@var`, whose `mixed`
+     * the relocator cannot trace past their assignment. A body that does not parse turns both off:
+     * no undeclared names, and null for the second.
      *
-     * @return array<string, true>
+     * @return array{array<string, true>, array<string, true>|null}
      */
-    private static function undeclaredNames(string $shadow, string $shadowPath): array
+    private static function provenanceNames(string $shadow, string $shadowPath): array
     {
-        $fallback = PreludeBuilder::fallbackNames($shadow);
-        $locals = $fallback === [] ? null : (new ContractParser())->localNames($shadow);
+        $locals = (new ContractParser())->localNames($shadow);
 
         if ($locals === null) {
-            return [];
+            return [[], null];
         }
 
         // Every name in a docblock carrying a `@var` tag: its type can name callable parameters
@@ -317,11 +320,13 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             }
         }
 
-        return \array_diff_key(
-            \array_fill_keys($fallback, true),
+        $undeclared = \array_diff_key(
+            \array_fill_keys(PreludeBuilder::fallbackNames($shadow), true),
             $locals,
             $declared,
             ComponentViewRegistry::seedFor($shadowPath) ?? [],
         );
+
+        return [$undeclared, $undeclared + \array_diff_key($locals, $declared)];
     }
 }
