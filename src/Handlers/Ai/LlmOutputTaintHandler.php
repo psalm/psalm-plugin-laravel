@@ -11,7 +11,6 @@ use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\TaintKind;
 
 /**
  * Sources reads of the Laravel AI response properties that hold model output as
@@ -99,7 +98,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         $codebase = $event->getCodebase();
 
         // Performance gate: skip the per-expression type lookup unless --taint-analysis is on.
-        if (!$codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
+        if ($codebase->taint_flow_graph === null) {
             return null;
         }
 
@@ -168,7 +167,6 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
             $exprType,
             $taintId,
             new CodeLocation($source, $expr),
-            TaintKind::ALL_INPUT,
         );
 
         $nodeTypeProvider->setType($expr, $taintedType);

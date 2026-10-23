@@ -507,7 +507,7 @@ final class RelationMethodParser
      * `object`, a template whose bound leaves room, or a plain class it is / extends (`null` aside).
      * Scalars and intersections never admit it.
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function declarationAdmits(?Union $declared, string $relationClass): bool
     {
@@ -559,7 +559,7 @@ final class RelationMethodParser
     /**
      * The class named by the declared return type when it is a single class (`null` aside).
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function singleDeclaredClass(?Union $declared): ?string
     {
@@ -659,7 +659,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function declaresRelation(Union $declared): bool
     {

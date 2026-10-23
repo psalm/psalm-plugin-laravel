@@ -30,9 +30,9 @@ use Psalm\Type\Union;
  *
  * The handler maps literal arguments `0` and `1` to a plural sentinel because
  * Laravel's runtime returns a `Collection` for any non-null `count`, including
- * 0 and 1. The conditional's broader `null|0|1` set exists so an unbound
- * `TCount` (user subclass extending `Factory<X>` with one template arg) still
- * evaluates to single when `count()`/`times()` was never called.
+ * 0 and 1. A user subclass extending `Factory<X>` with one template arg leaves
+ * `TCount` at its `int|null` bound, which since Psalm 7.0.0-rc6 resolves the
+ * conditional to both branches (see FactoryUnboundCountKnownLimitation.phpt).
  *
  * For the conditional to fire, the receiver type needs both template params
  * populated. User-defined factory subclasses (`class UserFactory extends

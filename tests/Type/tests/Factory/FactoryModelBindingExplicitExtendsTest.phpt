@@ -43,7 +43,7 @@ namespace App\Sandbox\Explicit {
     use Database\Factories\BeaconFactory;
 
     $_one = (new BeaconFactory())->create();
-    /** @psalm-check-type-exact $_one = \App\Models\Pylon */;
+    /** @psalm-check-type-exact $_one = \App\Models\Pylon|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Pylon> */;
 }
 ?>
 --EXPECTF--

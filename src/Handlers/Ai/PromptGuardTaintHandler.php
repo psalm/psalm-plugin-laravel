@@ -290,7 +290,7 @@ final class PromptGuardTaintHandler implements BeforeAddIssueInterface
      *
      * @return list<string>
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function middlewareCandidates(Union $type): array
     {
