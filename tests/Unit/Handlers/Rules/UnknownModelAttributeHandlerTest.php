@@ -213,7 +213,7 @@ final class UnknownModelAttributeHandlerTest extends TestCase
     }
 
     /**
-     * Laravel 12.20 has no BelongsToMany::createQuietly()/createManyQuietly() (13.x adds them); vendor
+     * Laravel 12.x has no BelongsToMany::createQuietly()/createManyQuietly() (13.x adds them); vendor
      * here is 13.x, so the 12.x shape is pinned as data: scanned names with no declaring class.
      *
      * @return iterable<string, array{?string, array<lowercase-string, string>, list<lowercase-string>, bool}>
