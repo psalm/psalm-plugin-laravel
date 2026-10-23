@@ -17,39 +17,41 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * The list mirrors EnumeratesValues::$proxies at the 12.20 floor — do not edit without checking that array.
  * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
+ * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
+ * `@property-read` keeps `static` unparameterized (`LazyCollection&static`), losing TKey/TValue.
  *
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $average
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $avg
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $contains
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $doesntContain
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $each
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $every
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $filter
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $first
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $flatMap
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $groupBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasMany
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasSole
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $keyBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $last
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $map
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $max
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $min
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $partition
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $percentage
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $reject
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipUntil
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipWhile
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $some
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortByDesc
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sum
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeUntil
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeWhile
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $unique
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $unless
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $until
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $when
+ * @property-read HigherOrderCollectionProxy<'average', TValue, LazyCollection<TKey, TValue>> $average
+ * @property-read HigherOrderCollectionProxy<'avg', TValue, LazyCollection<TKey, TValue>> $avg
+ * @property-read HigherOrderCollectionProxy<'contains', TValue, LazyCollection<TKey, TValue>> $contains
+ * @property-read HigherOrderCollectionProxy<'doesntContain', TValue, LazyCollection<TKey, TValue>> $doesntContain
+ * @property-read HigherOrderCollectionProxy<'each', TValue, LazyCollection<TKey, TValue>> $each
+ * @property-read HigherOrderCollectionProxy<'every', TValue, LazyCollection<TKey, TValue>> $every
+ * @property-read HigherOrderCollectionProxy<'filter', TValue, LazyCollection<TKey, TValue>> $filter
+ * @property-read HigherOrderCollectionProxy<'first', TValue, LazyCollection<TKey, TValue>> $first
+ * @property-read HigherOrderCollectionProxy<'flatMap', TValue, LazyCollection<TKey, TValue>> $flatMap
+ * @property-read HigherOrderCollectionProxy<'groupBy', TValue, LazyCollection<TKey, TValue>> $groupBy
+ * @property-read HigherOrderCollectionProxy<'hasMany', TValue, LazyCollection<TKey, TValue>> $hasMany
+ * @property-read HigherOrderCollectionProxy<'hasSole', TValue, LazyCollection<TKey, TValue>> $hasSole
+ * @property-read HigherOrderCollectionProxy<'keyBy', TValue, LazyCollection<TKey, TValue>> $keyBy
+ * @property-read HigherOrderCollectionProxy<'last', TValue, LazyCollection<TKey, TValue>> $last
+ * @property-read HigherOrderCollectionProxy<'map', TValue, LazyCollection<TKey, TValue>> $map
+ * @property-read HigherOrderCollectionProxy<'max', TValue, LazyCollection<TKey, TValue>> $max
+ * @property-read HigherOrderCollectionProxy<'min', TValue, LazyCollection<TKey, TValue>> $min
+ * @property-read HigherOrderCollectionProxy<'partition', TValue, LazyCollection<TKey, TValue>> $partition
+ * @property-read HigherOrderCollectionProxy<'percentage', TValue, LazyCollection<TKey, TValue>> $percentage
+ * @property-read HigherOrderCollectionProxy<'reject', TValue, LazyCollection<TKey, TValue>> $reject
+ * @property-read HigherOrderCollectionProxy<'skipUntil', TValue, LazyCollection<TKey, TValue>> $skipUntil
+ * @property-read HigherOrderCollectionProxy<'skipWhile', TValue, LazyCollection<TKey, TValue>> $skipWhile
+ * @property-read HigherOrderCollectionProxy<'some', TValue, LazyCollection<TKey, TValue>> $some
+ * @property-read HigherOrderCollectionProxy<'sortBy', TValue, LazyCollection<TKey, TValue>> $sortBy
+ * @property-read HigherOrderCollectionProxy<'sortByDesc', TValue, LazyCollection<TKey, TValue>> $sortByDesc
+ * @property-read HigherOrderCollectionProxy<'sum', TValue, LazyCollection<TKey, TValue>> $sum
+ * @property-read HigherOrderCollectionProxy<'takeUntil', TValue, LazyCollection<TKey, TValue>> $takeUntil
+ * @property-read HigherOrderCollectionProxy<'takeWhile', TValue, LazyCollection<TKey, TValue>> $takeWhile
+ * @property-read HigherOrderCollectionProxy<'unique', TValue, LazyCollection<TKey, TValue>> $unique
+ * @property-read HigherOrderCollectionProxy<'unless', TValue, LazyCollection<TKey, TValue>> $unless
+ * @property-read HigherOrderCollectionProxy<'until', TValue, LazyCollection<TKey, TValue>> $until
+ * @property-read HigherOrderCollectionProxy<'when', TValue, LazyCollection<TKey, TValue>> $when
  */
 class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
 {
@@ -125,12 +127,7 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * parameter (it forwards func_get_args() to Collection::random) — matched
      * here against Laravel source.
      *
-     * Unused method template: workaround for vimeo/psalm#11837, a conditional return in a stub
-     * that re-declares a reflected method otherwise collapses to its first branch.
-     *
      * `$preserveKeys = true` keeps the source keys; any other number result is re-indexed.
-     *
-     * @template TUnused
      *
      * @param  int|null  $number
      * @param  bool  $preserveKeys
@@ -163,6 +160,21 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @psalm-variadic
      */
     public function hasAny($key) {}
+
+    /**
+     * Zip the collection together with one or more arrays.
+     *
+     * Accepts variadic iterables via func_get_args(). Iterates until every input is exhausted,
+     * so an exhausted iterator contributes null.
+     *
+     * @template TZipValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
+     * @return static<int, static<int, TValue|TZipValue|null>>
+     *
+     * @psalm-variadic
+     */
+    public function zip($items) {}
 
     /**
      * Select specific values from the items within the collection.

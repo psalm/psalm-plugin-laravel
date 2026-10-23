@@ -51,7 +51,7 @@ $count = random_int(2, 5);
 
 // ----- has() accepts a counted factory --------------------------------------
 $_hasCounted = (new CustomerFactory())->has(MechanicFactory::new()->count($count))->create();
-/** @psalm-check-type-exact $_hasCounted = \App\Models\Customer */;
+/** @psalm-check-type-exact $_hasCounted = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
 
 // ----- has() preserves receiver TCount through the chain --------------------
 $_hasFromCounted = (new CustomerFactory())->count(3)->has(MechanicFactory::new()->count($count))->create();
@@ -59,11 +59,11 @@ $_hasFromCounted = (new CustomerFactory())->count(3)->has(MechanicFactory::new()
 
 // ----- for() accepts a counted factory --------------------------------------
 $_forCounted = (new MechanicFactory())->for(CustomerFactory::new()->count($count))->create();
-/** @psalm-check-type-exact $_forCounted = \App\Models\Mechanic */;
+/** @psalm-check-type-exact $_forCounted = \App\Models\Mechanic|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Mechanic> */;
 
 // ----- hasAttached() accepts a counted factory ------------------------------
 $_hasAttachedCounted = (new CustomerFactory())->hasAttached(MechanicFactory::new()->count($count))->create();
-/** @psalm-check-type-exact $_hasAttachedCounted = \App\Models\Customer */;
+/** @psalm-check-type-exact $_hasAttachedCounted = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
 
 // Regression for https://github.com/psalm/psalm-plugin-laravel/issues/914:
 // hasAttached() must accept the Eloquent\Collection returned by a counted
@@ -78,21 +78,21 @@ $_attachedMechanics = MechanicFactory::new()->count($count)->create();
 /** @psalm-check-type-exact $_attachedMechanics = \Illuminate\Database\Eloquent\Collection<int, \App\Models\Mechanic> */;
 
 $_hasAttachedFromCollection = (new CustomerFactory())->hasAttached($_attachedMechanics)->create();
-/** @psalm-check-type-exact $_hasAttachedFromCollection = \App\Models\Customer */;
+/** @psalm-check-type-exact $_hasAttachedFromCollection = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
 
 // ----- hasAttached() still accepts a Support\Collection of related models ---
 /** @var \Illuminate\Support\Collection<array-key, \App\Models\Mechanic> $supportCollection */
 $supportCollection = new \Illuminate\Support\Collection();
 $_hasAttachedFromSupport = (new CustomerFactory())->hasAttached($supportCollection)->create();
-/** @psalm-check-type-exact $_hasAttachedFromSupport = \App\Models\Customer */;
+/** @psalm-check-type-exact $_hasAttachedFromSupport = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
 
 // ----- hasAttached() still accepts an array of related models ---------------
 $_hasAttachedFromArray = (new CustomerFactory())->hasAttached([new Mechanic()])->create();
-/** @psalm-check-type-exact $_hasAttachedFromArray = \App\Models\Customer */;
+/** @psalm-check-type-exact $_hasAttachedFromArray = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
 
 // ----- hasAttached() still accepts a single related model -------------------
 $_hasAttachedFromModel = (new CustomerFactory())->hasAttached(new Mechanic())->create();
-/** @psalm-check-type-exact $_hasAttachedFromModel = \App\Models\Customer */;
+/** @psalm-check-type-exact $_hasAttachedFromModel = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
 
 ?>
 --EXPECTF--

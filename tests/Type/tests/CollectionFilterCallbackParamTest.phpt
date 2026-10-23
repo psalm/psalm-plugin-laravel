@@ -12,7 +12,7 @@ use Illuminate\Support\LazyCollection;
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1912
  */
-final class CollectionFilterCallbackParamTest
+final class CollectionFilterCallbackParamTest extends CfcpAnimal
 {
     /** @param Collection<int, CfcpAnimal> $animals */
     public function narrowsSupertypeToParamClass(Collection $animals): void
@@ -151,7 +151,7 @@ final class CollectionFilterCallbackParamTest
     /** @param Collection<int, CfcpAnimal|CfcpItem> $items */
     public function paramNarrowingFeedsPredicate(Collection $items): void
     {
-        // The predicate matcher alone declines (CfcpItem would be coerced); it only runs on the param-narrowed TValue.
+        // The predicate matcher alone declines (CfcpItem is not a CfcpAnimal, so the callback would throw TypeError); it only runs on the param-narrowed TValue.
         $_result = $items->filter(fn (CfcpAnimal $_a): bool => $_a instanceof CfcpDog);
         /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static */
     }
@@ -258,6 +258,79 @@ final class CollectionFilterCallbackParamTest
         /** @psalm-check-type-exact $_result = Collection<int, CfcpAnimal>&static */
     }
 
+    /** @param CfcpWithMetadata<CfcpDog, CfcpAnimal> $c */
+    public function subclassWithExtraTemplateKeepsType(CfcpWithMetadata $c): void
+    {
+        $_result = $c->filter(fn (CfcpDog $_d): bool => true);
+        /** @psalm-check-type-exact $_result = CfcpWithMetadata<CfcpDog, CfcpAnimal> */
+    }
+
+    /** @param CfcpBag<int, CfcpAnimal> $bag */
+    public function layoutPreservingSubclassKeepsType(CfcpBag $bag): void
+    {
+        $_result = $bag->filter(fn (CfcpDog $_d): bool => true);
+        /** @psalm-check-type-exact $_result = CfcpBag<int, CfcpAnimal> */
+    }
+
+    /**
+     * @template C of Collection<int, CfcpAnimal>
+     * @param C $c
+     * @return C
+     */
+    public function templateReceiverKeepsType(Collection $c): Collection
+    {
+        $_result = $c->filter(fn (CfcpDog $_d): bool => true);
+        // Returning the result pins that it stays assignable to C (no InvalidReturnStatement).
+        return $_result;
+    }
+
+    /** @param Collection<int, CfcpAnimal>&CfcpNamed $c */
+    public function intersectionReceiverKeepsType(Collection $c): void
+    {
+        $_result = $c->filter(fn (CfcpDog $_d): bool => true);
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpAnimal>&CfcpNamed&static */
+    }
+
+    /** @param Collection<int, CfcpAnimal>|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $c */
+    public function unionReceiverStillNarrowsBaseBranch(Collection $c): void
+    {
+        $_result = $c->filter(fn (CfcpDog $_d): bool => true);
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>&static */
+    }
+
+    /** @param Collection<int, mixed> $items */
+    public function parentParamDeclines(Collection $items): void
+    {
+        $_result = $items->reject(fn (parent $_x): bool => false);
+        /** @psalm-check-type-exact $_result = Collection<int, mixed>&static */
+    }
+
+    /** @param Collection<int, mixed> $items */
+    public function selfParamDeclines(Collection $items): void
+    {
+        $_result = $items->reject(fn (self $_x): bool => false);
+        /** @psalm-check-type-exact $_result = Collection<int, mixed>&static */
+    }
+
+    /**
+     * reject()/where() are declared on EnumeratesValues and do not reach the handler for an
+     * Eloquent\Collection receiver (filter() does), so these keep the declared type.
+     *
+     * @param \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $models
+     */
+    public function eloquentCollectionRejectIsNotHandled(\Illuminate\Database\Eloquent\Collection $models): void
+    {
+        $_result = $models->reject(fn (CfcpModel $_m): bool => false);
+        /** @psalm-check-type-exact $_result = \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>&static */
+    }
+
+    /** @param \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $models */
+    public function eloquentCollectionWhereIsNotHandled(\Illuminate\Database\Eloquent\Collection $models): void
+    {
+        $_result = $models->where(fn (CfcpModel $_m): bool => true);
+        /** @psalm-check-type-exact $_result = \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>&static */
+    }
+
     private static function isDog(CfcpDog $_d): bool
     {
         return true;
@@ -279,6 +352,20 @@ enum CfcpSuit
 {
     case Hearts;
 }
+
+/**
+ * @template V
+ * @template M
+ * @extends Collection<int, V>
+ */
+final class CfcpWithMetadata extends Collection {}
+
+/**
+ * @template TKey of array-key
+ * @template TValue
+ * @extends Collection<TKey, TValue>
+ */
+final class CfcpBag extends Collection {}
 
 abstract class CfcpModel extends \Illuminate\Database\Eloquent\Model {}
 ?>
@@ -325,3 +412,16 @@ ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
 ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal, int):bool|null, but parent type Closure[pure](CfcpDog...):true provided
 ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
 ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal, int):bool|null, but parent type Closure[impure](CfcpDog):bool provided
+ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
+ArgumentTypeCoercion on line %d: Argument 1 of CfcpBag::filter expects callable[impure](CfcpAnimal, int):bool|null, but parent type Closure[pure](CfcpDog):true provided
+ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
+ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal, int):bool|null, but parent type Closure[pure](CfcpDog):true provided
+ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
+ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal, int):bool|null, but parent type Closure[pure](CfcpDog):true provided
+ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
+ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal, int):bool|null, but parent type Closure[pure](CfcpDog):true provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Collection::filter expects callable[impure](Illuminate\Database\Eloquent\Model, int):bool|null, but Closure[pure](CfcpDog):true provided
+MixedArgumentTypeCoercion on line %d: Type mixed should be a subtype of parent
+MixedArgumentTypeCoercion on line %d: Type mixed should be a subtype of CollectionFilterCallbackParamTest
+ArgumentTypeCoercion on line %d: Type Illuminate\Database\Eloquent\Model should be a subtype of CfcpModel
+ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Collection::reject expects Illuminate\Database\Eloquent\Model|bool|callable[impure](Illuminate\Database\Eloquent\Model, int):bool, but parent type Closure[pure](CfcpModel):false provided

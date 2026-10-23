@@ -95,7 +95,7 @@ final class ModelBuilderMixinHandler implements MethodReturnTypeProviderInterfac
      * resolved through that mixin, returning static would bind the chain back to the
      * empty interface and hide concrete Builder methods such as whereNull().
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function callerIsEloquentBuilderContract(?Union $callerType): bool
     {

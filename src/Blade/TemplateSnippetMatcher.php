@@ -76,11 +76,12 @@ final class TemplateSnippetMatcher
      * from the final marker strip), then the full mirror in Blade's own order (comments removed
      * first, `@@` unescaped during the token pass, markers stripped last) for everything else.
      *
-     * Used ONLY by the arity gate: {@see self::occursIn()} itself backs the echo-argument gate too,
-     * in the OPPOSITE polarity (a non-match keeps the issue there), and mirroring there would newly
-     * match `{{ old('@@foo') }}` and drop a genuine finding instead of keeping one.
+     * Used only by gates where a match keeps the issue (the arity gate, the compiled `$attributes`
+     * check): {@see self::occursIn()} itself backs the echo-argument gate too, in the OPPOSITE
+     * polarity (a non-match keeps the issue there), and mirroring there would newly match
+     * `{{ old('@@foo') }}` and drop a genuine finding instead of keeping one.
      *
-     * Only turns non-matches into matches, so it can only shrink what the arity gate drops, never
+     * Only turns non-matches into matches, so it can only shrink what those gates drop, never
      * grow it. Not exhaustive: a registered precompiler or `prepareStringsForCompilationUsing()`
      * callback can rewrite template text arbitrarily and is not mirrored here, so a call whose text
      * one of THOSE rewrote can still be misjudged as generated.

@@ -12,7 +12,6 @@ use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
 /**
@@ -93,7 +92,7 @@ final class ValidatedFieldReadResolver
         $validatedInput = $formRequest === null ? self::extractFormRequestFromValidatedInput($event) : null;
 
         $source = self::methodSourcesInput($event, $expr, $method, $formRequest, $validatedInput)
-            ? TaintKind::ALL_INPUT
+            ? $event->getCodebase()->getInputTaints()
             : 0;
         $escape = self::methodEscape($event, $expr, $method, $formRequest, $validatedInput);
 
@@ -258,7 +257,7 @@ final class ValidatedFieldReadResolver
             $rule = FormRequestPropertyHandler::resolveRuleForProperty($atomic->value, $propertyName);
 
             if ($rule instanceof ResolvedRule) {
-                return new ValidatedFieldRead(TaintKind::ALL_INPUT, $rule->removedTaints);
+                return new ValidatedFieldRead($event->getCodebase()->getInputTaints(), $rule->removedTaints);
             }
         }
 
@@ -332,6 +331,8 @@ final class ValidatedFieldReadResolver
      * when `safe()` returns `ValidatedInput<static>`.
      *
      * @return class-string|null
+     *
+     * @psalm-capabilities read-props
      */
     private static function extractFormRequestFromValidatedInput(AddRemoveTaintsEvent $event): ?string
     {
@@ -397,7 +398,10 @@ final class ValidatedFieldReadResolver
      * extends the given base class.
      *
      * @param class-string $baseClass
+     *
      * @return class-string|null
+     *
+     * @psalm-capabilities read-props
      */
     private static function resolveCallerClass(AddRemoveTaintsEvent $event, string $baseClass): ?string
     {
