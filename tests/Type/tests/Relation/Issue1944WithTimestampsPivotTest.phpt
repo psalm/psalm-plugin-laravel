@@ -73,11 +73,8 @@ class Team extends Model
 
 class Renamed extends Model
 {
-    /** @psalm-suppress MissingClassConstType typed constants need PHP 8.3 */
-    public const CREATED_AT = 'made_at';
-
-    /** @psalm-suppress MissingClassConstType */
-    public const UPDATED_AT = 'changed_at';
+    public const string CREATED_AT = 'made_at';
+    public const string UPDATED_AT = 'changed_at';
 
     public function gate(): void
     {
@@ -100,8 +97,7 @@ class Renamed extends Model
 
 class NoCreatedAt extends Model
 {
-    /** @psalm-suppress MissingClassConstType */
-    public const CREATED_AT = null;
+    public const null CREATED_AT = null;
 
     public function disabled(): void
     {
