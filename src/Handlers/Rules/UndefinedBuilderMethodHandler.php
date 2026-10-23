@@ -132,7 +132,7 @@ final class UndefinedBuilderMethodHandler implements AfterExpressionAnalysisInte
      * (`Builder<Post>`) are excluded — the former already report undefined calls via the
      * builder class, the latter may carry scopes this handler does not enumerate.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function isBaseModelBuilder(Union $receiverType): bool
     {

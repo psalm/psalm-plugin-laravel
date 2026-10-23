@@ -1,0 +1,50 @@
+name: todo-by
+
+# Fails once a `@todo-by <issue URL>` workaround's upstream issue closes, so the workaround gets removed.
+# https://github.com/alies-dev/todo-by
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "4.x"
+      - "3.x"
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: todo-by-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  todo-by:
+    name: Check todo-by tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check todo-by tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TODOBY_VERSION: v0.5.0
+          TODOBY_SHA256: 2b417338c03d15ee44e69d91dbb3e8c35dbaef915539291f31561760d85c4fc3
+        run: |
+          ASSET="todo-by-cli-x86_64-unknown-linux-musl.tar.xz"
+          curl --proto '=https' --tlsv1.2 -sSfL \
+            "https://github.com/alies-dev/todo-by/releases/download/${TODOBY_VERSION}/${ASSET}" -o /tmp/todo-by.tar.xz
+          echo "${TODOBY_SHA256}  /tmp/todo-by.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/todo-by.tar.xz -C /tmp
+          /tmp/todo-by-cli-x86_64-unknown-linux-musl/todo-by --online

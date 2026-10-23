@@ -28,7 +28,7 @@ final class Issue1884Reversed extends Collection
 function remapped_template_subclass_defers(Issue1884Reversed $c): void
 {
     $_keyed = $c->keyBy(fn ($r) => $r->unknown_prop ?? 'unknown');
-    /** @psalm-check-type-exact $_keyed = Issue1884Reversed<array-key|mixed, Customer> */
+    /** @psalm-check-type-exact $_keyed = Issue1884Reversed<array-key, Customer> */
 }
 
 /**

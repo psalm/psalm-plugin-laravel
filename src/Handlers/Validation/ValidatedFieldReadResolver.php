@@ -332,6 +332,8 @@ final class ValidatedFieldReadResolver
      * when `safe()` returns `ValidatedInput<static>`.
      *
      * @return class-string|null
+     *
+     * @psalm-capabilities read-props
      */
     private static function extractFormRequestFromValidatedInput(AddRemoveTaintsEvent $event): ?string
     {
@@ -397,7 +399,10 @@ final class ValidatedFieldReadResolver
      * extends the given base class.
      *
      * @param class-string $baseClass
+     *
      * @return class-string|null
+     *
+     * @psalm-capabilities read-props
      */
     private static function resolveCallerClass(AddRemoveTaintsEvent $event, string $baseClass): ?string
     {
