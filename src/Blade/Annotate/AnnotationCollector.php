@@ -11,9 +11,11 @@ use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
+use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
+use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\MutableTypeVisitor;
@@ -22,8 +24,8 @@ use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
- * Records, per view name, the type every resolved `view()` call site passes for each data key —
- * the only sound type source {@see AnnotationWriter} has.
+ * Records, per view name, the type every resolved `view()` call site and compiled include passes
+ * for each data key — the only sound type source {@see AnnotationWriter} has.
  *
  * Registered only in annotate mode, which pins the analysis to one process: Psalm's forked analysis
  * workers never hand their statics back to the parent, where the write runs.
@@ -104,9 +106,15 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         self::markAnalyzed();
 
-        // The same two statement shapes, and the same outermost-first walk, that
-        // {@see \Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler} checks call sites with.
+        // The same statement shapes, and the same outermost-first walk, that
+        // {@see ViewContractHandler} checks call sites with.
         $stmt = $event->getStmt();
+
+        if ($stmt instanceof Stmt\Echo_) {
+            self::recordEcho($stmt, $event->getStatementsSource());
+
+            return null;
+        }
 
         $expr = match (true) {
             $stmt instanceof Stmt\Expression, $stmt instanceof Stmt\Return_ => $stmt->expr,
@@ -136,6 +144,29 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
+     * A compiled include is a producer of the view it renders like any `view()` call: left unseen, a
+     * controller's type gets declared that the include then passes something else for. One that
+     * passes the including scope (`@include`, `@extends`) leaves the data set open.
+     */
+    private static function recordEcho(Stmt\Echo_ $stmt, StatementsSource $source): void
+    {
+        $include = ViewContractHandler::compiledInclude($stmt);
+        $chain = $include instanceof Expr\MethodCall ? ViewCallChain::fromInclude($include, $source) : null;
+
+        if ($chain instanceof ViewCallChain) {
+            self::record($chain->viewName, $chain->supplied(), $chain->complete);
+
+            return;
+        }
+
+        foreach ($stmt->exprs as $expr) {
+            foreach (self::viewNamesIn($expr) as $viewName) {
+                self::markUnreadable($viewName);
+            }
+        }
+    }
+
+    /**
      * Literal view names of every rendering call nested in an expression the chain declined. Over-
      * marking is the safe direction: the worst it costs is a name left undeclared where a type was provable.
      *
@@ -150,11 +181,35 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 continue;
             }
 
-            // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
-            $nameArg = ArgUtil::byNameOrPosition(\array_values($call->getArgs()), 0, 'view');
+            $args = \array_values($call->getArgs());
+            $method = $call instanceof Expr\FuncCall ? 'view' : self::methodName($call);
 
-            if ($nameArg instanceof Node\Arg && !$nameArg->unpack && $nameArg->value instanceof String_ && $nameArg->value->value !== '') {
-                $names[] = $nameArg->value->value;
+            // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
+            $nameArg = match ($method) {
+                'renderwhen', 'renderunless' => ArgUtil::byNameOrPosition($args, 1, 'view'),
+                'first' => ArgUtil::byNameOrPosition($args, 0, 'views'),
+                default => ArgUtil::byNameOrPosition($args, 0, 'view'),
+            };
+
+            if (!$nameArg instanceof Node\Arg || $nameArg->unpack) {
+                continue;
+            }
+
+            $candidates = [$nameArg->value];
+
+            // `first()` renders whichever candidate exists, so every literal one may be the view.
+            if ($nameArg->value instanceof Expr\Array_) {
+                $candidates = [];
+
+                foreach ($nameArg->value->items as $item) {
+                    $candidates[] = $item?->value;
+                }
+            }
+
+            foreach ($candidates as $candidate) {
+                if ($candidate instanceof String_ && $candidate->value !== '') {
+                    $names[] = $candidate->value;
+                }
             }
         }
 
@@ -174,8 +229,26 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return false;
         }
 
-        return $node->name instanceof Node\Identifier
-            && \in_array($node->name->toLowerString(), ['make', 'view', 'markdown'], true);
+        $method = self::methodName($node);
+
+        if (\in_array($method, ['make', 'view', 'markdown'], true)) {
+            return true;
+        }
+
+        // The other Factory methods compiled includes call (`@includeFirst`, `@includeWhen`, `@each`),
+        // too common as names to match on any receiver.
+        return $node instanceof Expr\MethodCall
+            && $node->var instanceof Expr\Variable
+            && $node->var->name === '__env'
+            && \in_array($method, ['first', 'renderwhen', 'renderunless', 'rendereach'], true);
+    }
+
+    private static function methodName(Node $call): ?string
+    {
+        return ($call instanceof Expr\MethodCall || $call instanceof Expr\NullsafeMethodCall || $call instanceof Expr\StaticCall)
+            && $call->name instanceof Node\Identifier
+                ? $call->name->toLowerString()
+                : null;
     }
 
     /** A producer of this view whose contribution could not be read at all. */

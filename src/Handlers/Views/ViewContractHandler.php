@@ -141,7 +141,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
      * `echo $__env->renderWhen(...);` / `renderUnless(...)` (`@includeWhen`, `@includeUnless`).
      * {@see ViewCallChain::fromInclude()} reads its arguments.
      */
-    private static function compiledInclude(Stmt\Echo_ $stmt): ?Expr\MethodCall
+    public static function compiledInclude(Stmt\Echo_ $stmt): ?Expr\MethodCall
     {
         $echoed = \count($stmt->exprs) === 1 ? $stmt->exprs[0] : null;
 

@@ -305,7 +305,7 @@ The check declines for a call site instead of guessing, and the gate that matter
 
 ## Annotating templates
 
-`psalm-laravel blade:annotate` writes the `@var` declarations a template is missing, as native PHP docblock lines, taking each type from the `view()` call sites that render it:
+`psalm-laravel blade:annotate` writes the `@var` declarations a template is missing, as native PHP docblock lines, taking each type from the `view()` call sites and include directives that render it:
 
 ```bash
 vendor/bin/psalm-laravel blade:annotate            # write them, and print what changed as a coloured unified diff
@@ -324,6 +324,8 @@ The command is the only way in. An ordinary `vendor/bin/psalm` run never writes 
 The run skips taint analysis even when your config enables it: the command reports annotations, never Psalm's findings, so building the taint graph would only cost time and memory.
 
 What it declares, per variable the template reads: the type itself when at least one call site was resolved, every resolved call site agreed on it, and none of them left the view's data set open (a spread, a dynamic key, a `$mergeData`) or was a rendering shape the plugin could not read at all (`$view = view(...)`). Literal precision is dropped, so two call sites passing `'draft'` and `'published'` declare `string` rather than fighting over which literal wins. So is a `static` marker (`Collection<int, string>&static` declares `Collection<int, string>`), which means nothing without a class scope, and `int<min, max>` is written `int`.
+
+An include directive is a call site too, typed with what the variable holds at the directive (after any reassignment in the including template). `@includeIsolated('view', [...])` counts like a `view()` call. Every directive that also hands over the including template's scope (`@include`, `@includeIf`, `@includeWhen`, `@includeFirst`, `@extends`), or passes data the plugin cannot read (`@each`, a data variable), leaves the view's data set open.
 
 Every other variable is left undeclared and listed per template under "Undeclared, type unknown", so the command doubles as a list of the names left to declare by hand. That covers call sites that disagree, a type that is `mixed`, and a type that would not mean the same thing once written (one that carries a generic's template parameter, or whose printed form would close the docblock early because it contains `*/`). A `mixed` declaration would add no type, yet make the variable required at every call site under [`validateViewData`](config.md#validateviewdata). A template with nothing but such names gets no docblock at all.
 

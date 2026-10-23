@@ -232,6 +232,50 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
     }
 
+    #[Test]
+    public function records_an_isolated_include_site_as_a_producer_of_the_included_view(): void
+    {
+        $this->analyzeStatements("echo \$__env->make('inner', ['title' => 'text'])->render();", [['title' => Type::getString()]]);
+
+        $this->assertSame('string', AnnotationCollector::typeFor('inner', 'title'));
+    }
+
+    #[Test]
+    public function declines_when_an_include_site_disagrees_with_a_view_call_site(): void
+    {
+        $this->analyzeStatements(
+            "view('inner', ['title' => 'text']);\necho \$__env->make('inner', ['title' => \$n])->render();",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('inner', 'title'));
+    }
+
+    #[Test]
+    public function marks_a_view_unreadable_when_an_include_passes_the_including_scope_or_unreadable_data(): void
+    {
+        $scope = "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])";
+
+        foreach (
+            [
+                "echo \$__env->make('inner', {$scope})->render();",
+                "echo \$__env->make('inner', ['title' => 1], {$scope})->render();",
+                "echo \$__env->make('inner', \$data)->render();",
+                "echo \$__env->renderWhen(\$on, 'inner', {$scope});",
+                "echo \$__env->first(['missing', 'inner'], {$scope})->render();",
+                "echo \$__env->renderEach('inner', \$items, 'item');",
+            ] as $include
+        ) {
+            AnnotationCollector::reset();
+            $this->analyzeStatements(
+                "view('inner', ['title' => 'text']);\n{$include}",
+                [['title' => Type::getString()], [], [], []],
+            );
+
+            $this->assertNull(AnnotationCollector::typeFor('inner', 'title'), $include);
+        }
+    }
+
     /**
      * Runs the statement hook over parsed PHP, with the shape each array literal infers to supplied
      * in source order: no analysis runs here, so nothing else would type the data arguments.
@@ -248,7 +292,14 @@ final class AnnotationCollectorTest extends TestCase
         $nodeData = new NodeDataProvider();
 
         foreach ((new NodeFinder())->findInstanceOf($statements, Expr\Array_::class) as $index => $literal) {
-            $nodeData->setType($literal, new Type\Union([Type\Atomic\TKeyedArray::make($shapes[$index])]));
+            $nodeData->setType($literal, new Type\Union([Type\Atomic\TKeyedArray::make($shapes[$index] ?? ['x' => Type::getString()])]));
+        }
+
+        // What every compiled template's prelude types `$__env` as.
+        foreach ((new NodeFinder())->findInstanceOf($statements, Expr\Variable::class) as $variable) {
+            if ($variable->name === '__env') {
+                $nodeData->setType($variable, new Type\Union([new Type\Atomic\TNamedObject(\Illuminate\View\Factory::class)]));
+            }
         }
 
         $source = $this->createStub(StatementsSource::class);
