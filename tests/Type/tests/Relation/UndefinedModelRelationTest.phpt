@@ -60,6 +60,14 @@ Customer::with(['vehicles:id.workOrders' => fn (Relation $query) => $query]);
 Customer::query()->with('vehicles:id', fn (Relation $query) => $query);
 Customer::query()->with(callback: fn (Relation $query) => $query, relations: 'vehicles:id');
 
+// Relationship existence queries never parse ':columns' (the name is looked up verbatim), so the
+// suffix is reported with a hint to remove it.
+Customer::has('vehicles:id');
+Customer::query()->whereHas('vehicles:id', fn (Relation $q) => $q);
+Customer::has('vehicles.workOrders:id');
+Customer::query()->whereRelation('vehicles:id', 'make', 'x');
+Customer::query()->whereHas(relation: 'vehicles:id');
+
 function undefined_relations_on_model_instance(Customer $c): void
 {
     $c->load(['vehicles:id' => fn (Relation $query) => $query]);
@@ -97,6 +105,11 @@ UndefinedModelRelation on line %d: Relation 'workOrders:id' is not defined on Ap
 UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
 UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
 UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' in a relationship existence query; remove the suffix.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' in a relationship existence query; remove the suffix.
+UndefinedModelRelation on line %d: Relation 'workOrders:id' is not defined on App\Models\Vehicle: Laravel does not parse ':columns' in a relationship existence query; remove the suffix.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' in a relationship existence query; remove the suffix.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' in a relationship existence query; remove the suffix.
 UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
 UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
 UndefinedModelRelation on line %d: Relation 'typoLoad' is not defined on App\Models\Customer.
