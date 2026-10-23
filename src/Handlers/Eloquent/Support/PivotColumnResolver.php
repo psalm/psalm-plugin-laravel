@@ -188,11 +188,13 @@ final class PivotColumnResolver
         // A plain pivot's forceFill() runs before it has a parent, so it date-normalizes the DEFAULT names into
         // strings that the parent's own names never read back as dates; a using() pivot is filled raw.
         $normalized = $using === null;
+        // Only the names: in_array() against the nullable pair would widen $column to `null|string`.
+        $dateColumns = \array_values(\array_filter($parent ?? [], static fn(?string $name): bool => $name !== null));
         $types = [];
         foreach ($columns as $column) {
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
             $declared = $using === null ? null : self::declaredType($codebase, $using, $column, $schemaColumn?->nullable ?? true);
-            $isDate = $parent !== null && \in_array($column, $parent, true);
+            $isDate = \in_array($column, $dateColumns, true);
             if ($declared instanceof Union) {
                 $types[$column] = $declared;
             } elseif ($parent === null || !$stock || $isDate && !$dates || $normalized && !$isDate && \in_array($column, ['created_at', 'updated_at'], true)) {
@@ -336,7 +338,11 @@ final class PivotColumnResolver
         return $cast instanceof Union && $nullable ? Type::combineUnionTypes($cast, Type::getNull()) : $cast;
     }
 
-    /** Whether the pivot class converts dates as stock Laravel does, so `getDates()` decides which columns are dates. */
+    /**
+     * Whether the pivot class converts dates as stock Laravel does, so `getDates()` decides which columns are dates.
+     *
+     * @psalm-capabilities read-props
+     */
     private static function hasStockDates(Codebase $codebase, string $pivotClass): bool
     {
         foreach (['getDates', 'usesTimestamps', 'hasTimestampAttributes', 'getCreatedAtColumn', 'getUpdatedAtColumn'] as $method) {

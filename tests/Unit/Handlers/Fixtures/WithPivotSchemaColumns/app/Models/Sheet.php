@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 /** Renames the created column: a plain pivot gates its date casts on its OWN `created_at`, a using() pivot on `made_at`. */
 class Sheet extends Model
 {
-    public const string CREATED_AT = 'made_at';
+    public const CREATED_AT = 'made_at';
 
     public function plainStamps(): BelongsToMany
     {
