@@ -123,7 +123,7 @@ function test_belongsTo_no_psalm_return_resolves(): Mechanic
 
 // morphTo with a docblock-declared candidate set narrows getRelated() to that union.
 // DamageReport::reportable() is annotated `@phpstan-return MorphTo<Vehicle|WorkOrder, $this>`;
-// the handler reads that via RelationMethodParser::extractDocblockRelatedModelType.
+// Psalm resolves that declared generic after the model return provider defers.
 function test_morphTo_with_docblock_narrows_to_union(): Vehicle|WorkOrder
 {
     return (new DamageReport())->reportable()->getRelated();

@@ -151,7 +151,8 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
      * Lowercased class names of the receiver's object atomics, as a set.
      *
      * @return array<string, true>
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function classNames(Union $receiver): array
     {
@@ -170,6 +171,8 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
      *
      * Returns null when any atomic is a callable without a known return type (or the arg
      * is not callable at all) — the caller then defers to the stub rather than guess.
+     *
+     * @psalm-pure
      */
     private static function callableReturn(StatementsAnalyzer $source, \PhpParser\Node\Expr $expr): ?Union
     {

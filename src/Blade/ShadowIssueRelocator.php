@@ -831,7 +831,7 @@ final class ShadowIssueRelocator
      *
      * @return array{string, string}|null `[enclosing call, argument]`
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function echoArgumentSlice(CodeLocation $location, string $callee): ?array
     {
@@ -1100,7 +1100,7 @@ final class ShadowIssueRelocator
     /**
      * The source text an issue's location selects in the shadow, or null when unreadable.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function selectedText(CodeLocation $location): ?string
     {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Internal;
 
+use Psalm\LaravelPlugin\Blade\BladeDisabledException;
+
 /**
  * Classifies a {@see \Throwable} raised during plugin initialisation by walking
  * its stack trace and emitting a hint that points at the most likely fix site:
@@ -22,9 +24,22 @@ namespace Psalm\LaravelPlugin\Internal;
  */
 final class InternalErrorClassifier
 {
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     public static function hint(\Throwable $throwable): ?string
     {
+        // Thrown from the plugin's own file, so the frame walk would call every Blade disable a
+        // plugin bug, though most causes are project settings.
+        if ($throwable instanceof BladeDisabledException) {
+            $previous = $throwable->getPrevious();
+
+            return $previous instanceof \Throwable
+                ? self::hint($previous)
+                : 'Blade template analysis could not start. The message above names the cause, usually a project '
+                    . 'setting (the blade.compiler service, the Blade cacheDir, the view directories), not a plugin bug.';
+        }
+
         foreach (self::frameFiles($throwable) as $file) {
             $hint = self::hintForFile($file);
             if ($hint !== null) {
@@ -112,7 +127,7 @@ final class InternalErrorClassifier
      *
      * @return list<string>
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function frameFiles(\Throwable $throwable): array
     {

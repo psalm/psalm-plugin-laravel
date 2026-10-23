@@ -63,7 +63,7 @@ For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-opt
 
 When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on both Eloquent relation chains and direct Model static / instance calls (`User::whereEmail('a@b')`, `$user->whereEmail('a@b')`), preserving the relation or `Builder<TModel>` generic type instead of returning `mixed` or raising `UndefinedMagicMethod`.
 
-Column names are validated against the model's `@property` annotations. Columns with no matching declaration are not claimed by the plugin: relation chains fall through to `mixed`, and direct Model calls fall through to `UndefinedMagicMethod`. Custom Eloquent builder methods that happen to start with `where` (e.g. `whereByMake(string)`) are also left to Psalm's normal resolution so their declared return types win. Partial `@property` annotation is therefore safe.
+Column names are validated against the model's `@property` annotations and, when [`columnFallback`](#columnfallback-values) is `migrations`, against the columns parsed from your migrations. A segment is matched as `Str::snake($segment)` against the exact column name, as Laravel builds the query, so `whereUserId()` matches `user_id` but `whereLine1()` does not match `line_1`. `@property` wins over the migration schema, which also types the single argument of `where{Column}($value)` (casts and nullability included; object and array columns stay untyped). With `columnFallback="none"`, or when the model's schema could not be resolved, only `@property` annotations count. Columns found in neither source are not claimed by the plugin: relation chains fall through to `mixed`, and direct Model calls fall through to `UndefinedMagicMethod`. Custom Eloquent builder methods that happen to start with `where` (e.g. `whereByMake(string)`) are also left to Psalm's normal resolution so their declared return types win. Partial `@property` annotation is therefore safe.
 
 Disable if dynamic where resolution conflicts with your codebase.
 
@@ -307,7 +307,7 @@ Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` fa
 
 Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call.
 
-Inside templates, the literal data array of `@include`, `@includeIf` and `@extends` is type-checked, and `@includeIsolated` is checked in full. See [Included templates](blade.md#included-templates).
+Inside templates, the literal data array of `@include`, `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@extends` and `@extendsFirst` is type-checked, and `@includeIsolated` is checked in full. See [Included templates](blade.md#included-templates).
 
 
 ### `reportUnusedViewData`
@@ -351,9 +351,9 @@ For some but not all of the family back, first set `reportMixedIssues="true"`, t
 
 ### Degradation
 
-Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. Templates that fail to compile are skipped and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md) issues. Other skipped templates are summarized in a single warning; run with `--debug` for the individual causes.
+By default Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if a view directory cannot be read and no template was found elsewhere, if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. With [`failOnInternalError`](#failoninternalerror) enabled, that disable fails the run instead. Templates that fail to compile are skipped and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md) issues. Other skipped templates are summarized in a single warning; run with `--debug` for the individual causes.
 
-Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
+Psalm's `--no-progress` installs a progress implementation that discards warnings, and Psalm also picks it by itself when an AI agent runs it outside CI, so the disable warning is written to STDERR directly in that mode. Other Blade warnings stay invisible under that flag.
 
 ## Per-run overrides
 
@@ -441,6 +441,8 @@ When the plugin encounters an internal error (e.g. failing to boot the Laravel a
 Set this to `true` to throw the exception instead.
 
 This also covers partial boots. When the app's `bootstrap()` throws partway (for example, a `config/*.php` file that calls `parse_url(env('UNSET'))`), the plugin normally keeps running in a degraded mode (service providers never booted, so model, facade and container inference is reduced) and prints a warning about it. With `failOnInternalError` enabled, that swallowed bootstrap failure fails the run instead of degrading silently.
+
+The same holds for [Blade analysis](blade.md): when it is enabled but turns itself off for the run (for example, the booted app never bound `blade.compiler`), the run fails instead of reporting zero template findings. A view tree with no templates is not a failure.
 
 **Recommended for CI.** Without this, a misconfigured environment causes the plugin to silently disable itself — your pipeline passes but without any plugin analysis.
 With `failOnInternalError`, the Psalm run fails immediately, so you know the plugin isn't working.

@@ -57,9 +57,10 @@ use Illuminate\View\Compilers\BladeCompiler;
 final class CompilerEnvironment
 {
     /**
-     * @return array{0: string, 1: bool, 2: list<string>} the environment hash, whether every input
-     *         that fed it could be resolved deterministically, and the callable inputs that could not
-     *         (e.g. `directive 'ray' (closure bound to Foo)`), for the user-facing warning
+     * @return array{0: string, 1: bool, 2: list<array{input: string, file: ?string}>} the environment
+     *         hash, whether every input that fed it could be resolved deterministically, and the inputs
+     *         that could not (e.g. `directive 'ray' (closure bound to Foo)`) with their declaring file,
+     *         null when unknown, for the --debug list
      */
     public static function describe(BladeCompiler $compiler): array
     {
@@ -67,7 +68,7 @@ final class CompilerEnvironment
             $trustworthy = true;
             /** @var array<string, string> $fileHashes path => sha1_file(), cached within this call */
             $fileHashes = [];
-            /** @var list<string> $reasons */
+            /** @var list<array{input: string, file: ?string}> $reasons */
             $reasons = [];
 
             $descriptor = [
@@ -102,7 +103,7 @@ final class CompilerEnvironment
      *
      * @return array{class: string, file?: string, hash?: string}
      *
-     * @psalm-external-mutation-free
+     * @psalm-capabilities read-props|write-this-props|write-refs|io
      */
     private static function describeCompilerClass(BladeCompiler $compiler, bool &$trustworthy): array
     {
@@ -154,7 +155,7 @@ final class CompilerEnvironment
     /**
      * @param array<array-key, mixed> $map
      * @param array<string, string>   $fileHashes
-     * @param list<string>            $reasons    appended with one entry per entry of `$map` that cannot be trusted
+     * @param list<array{input: string, file: ?string}> $reasons appended with one entry per entry of `$map` that cannot be trusted
      *
      * @return list<array{0: array-key, 1: array}> a LIST of `[key, description]` pairs rather than
      *         a re-keyed array: PHP would otherwise coalesce an int key and its string form
@@ -167,11 +168,12 @@ final class CompilerEnvironment
         // Keys, not values: a foreach over untyped compiler data binds a mixed local per element.
         foreach (\array_keys($map) as $key) {
             $distrust = null;
-            $entries[] = [$key, self::describeCallable($map[$key], $compiler, $fileHashes, $distrust)];
+            $file = null;
+            $entries[] = [$key, self::describeCallable($map[$key], $compiler, $fileHashes, $distrust, $file)];
 
             if ($distrust !== null) {
                 $trustworthy = false;
-                $reasons[] = "{$kind} '{$key}' ({$distrust})";
+                $reasons[] = ['input' => "{$kind} '{$key}' ({$distrust})", 'file' => $file];
             }
         }
 
@@ -198,10 +200,11 @@ final class CompilerEnvironment
      *
      * @param array<string, string> $fileHashes
      * @param ?string               $distrust   set to why the callable cannot be trusted, when it cannot
+     * @param ?string               $file       set to the declaring file, once reflection yields a real one
      *
      * @return array{type: string, file?: string, hash?: string, name?: string, startLine?: int|false, endLine?: int|false, scope?: ?string, static?: array}
      */
-    private static function describeCallable(mixed $callable, BladeCompiler $compiler, array &$fileHashes, ?string &$distrust): array
+    private static function describeCallable(mixed $callable, BladeCompiler $compiler, array &$fileHashes, ?string &$distrust, ?string &$file): array
     {
         if (!\is_callable($callable)) {
             $distrust = 'not callable';
@@ -218,6 +221,14 @@ final class CompilerEnvironment
             return ['type' => 'unresolvable'];
         }
 
+        $reflectedFile = $reflection->getFileName();
+
+        // Internal functions return `false`; an `eval()`'d closure returns a string ending in
+        // "eval()'d code" rather than a real path — neither can be hashed as a file.
+        if ($reflectedFile !== false && !\str_contains($reflectedFile, "eval()'d code")) {
+            $file = $reflectedFile;
+        }
+
         $boundThis = $reflection->getClosureThis();
 
         if ($boundThis !== null && $boundThis !== $compiler && !$boundThis instanceof ServiceProvider) {
@@ -226,11 +237,7 @@ final class CompilerEnvironment
             return ['type' => 'unresolvable'];
         }
 
-        $file = $reflection->getFileName();
-
-        // Internal functions return `false`; an `eval()`'d closure returns a string ending in
-        // "eval()'d code" rather than a real path — neither can be hashed as a file.
-        if ($file === false || \str_contains($file, "eval()'d code")) {
+        if ($file === null) {
             $distrust = "internal function or eval()'d code";
 
             return ['type' => 'unresolvable'];

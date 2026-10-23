@@ -102,7 +102,9 @@ final class ViewCallChain
         return new self($chain->viewName, $chain->data, $complete, $merged[0]);
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function isInRenderMethod(StatementsSource $source): bool
     {
         $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;
@@ -178,7 +180,7 @@ final class ViewCallChain
         // so anything supplied there that we cannot read leaves the key set open.
         $complete = !ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg;
 
-        return self::build($args, $source, $pending, true, $complete);
+        return self::build(self::viewArg($args), ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, true, $complete);
     }
 
     /**
@@ -209,30 +211,121 @@ final class ViewCallChain
         // an intro/outro line to the notification body and never touches the template's data.
         $carriesData = $role !== ViewNameSignatures::ROLE_MAIL_MESSAGE;
 
-        return self::build($args, $source, $pending, $carriesData, $complete);
+        return self::build(self::viewArg($args), ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete);
+    }
+
+    /**
+     * The `$__env` Factory call a compiled include reduces to, or null for any other call:
+     * `make($view, $data, $mergeData)` (`@include`, `@includeIf`, `@extends`, `@includeIsolated`),
+     * `renderWhen`/`renderUnless($condition, $view, $data, $mergeData)`, and
+     * `first($views, $data, $mergeData)` (`@includeFirst`, `@extendsFirst`).
+     *
+     * Only a literal data array is read: without one, Blade puts the including scope in the `$data`
+     * slot. The exception is `@includeIsolated('view')`, whose lone-name `make('view')` passes no
+     * data at all.
+     *
+     * `first()` is checked against the first candidate that exists, which is the one
+     * `Factory::first()` renders. Existence is read from disk at analysis time, so its key set is
+     * never treated as closed: only the passed keys are type-checked.
+     */
+    public static function fromInclude(Expr\MethodCall $call, StatementsSource $source): ?self
+    {
+        $args = self::args($call);
+
+        if ($args === null
+            || !$call->name instanceof Identifier
+            || self::roleOfReceiver($call->var, $source) !== ViewNameSignatures::ROLE_VIEW_FACTORY
+        ) {
+            return null;
+        }
+
+        $methodName = $call->name->toLowerString();
+
+        [$name, $at] = match ($methodName) {
+            'make' => [self::viewArg($args), 0],
+            'renderwhen', 'renderunless' => [ArgUtil::byNameOrPosition($args, 1, 'view')?->value, 1],
+            'first' => [self::firstExistingCandidate(ArgUtil::byNameOrPosition($args, 0, 'views')), 0],
+            default => [null, 0],
+        };
+
+        $dataArg = ArgUtil::byNameOrPosition($args, $at + 1, 'data');
+        $literalData = $dataArg instanceof Arg && $dataArg->value instanceof Expr\Array_;
+        $isolatedWithoutData = !$dataArg instanceof Arg && $methodName === 'make' && \count($args) === 1;
+
+        if (!$literalData && !$isolatedWithoutData) {
+            return null;
+        }
+
+        $complete = $methodName !== 'first' && !ArgUtil::byNameOrPosition($args, $at + 2, 'mergedata') instanceof Arg;
+
+        return self::build($name, $dataArg, $source, [], true, $complete);
+    }
+
+    /**
+     * @param list<Arg> $args
+     */
+    private static function viewArg(array $args): ?Expr
+    {
+        return ArgUtil::byNameOrPosition($args, 0, 'view')?->value;
+    }
+
+    /**
+     * The first candidate of a literal list that exists on disk, walking past the ones provably
+     * absent, as `Arr::first()` does. The whole list must be plain string literals first: a key
+     * anywhere can overwrite an earlier element, and `FileViewFinder::find()` trims a name, so
+     * `' inc.card '` may render `inc.card` while this lookup misses it. A candidate of unknowable
+     * existence (namespaced) before the first one found declines too.
+     */
+    private static function firstExistingCandidate(?Arg $views): ?String_
+    {
+        if (!$views instanceof Arg || !$views->value instanceof Expr\Array_) {
+            return null;
+        }
+
+        $candidates = [];
+
+        foreach ($views->value->items as $item) {
+            if ($item === null
+                || $item->key instanceof Expr
+                || !$item->value instanceof String_
+                || $item->value->value !== \trim($item->value->value)
+            ) {
+                return null;
+            }
+
+            $candidates[] = $item->value;
+        }
+
+        foreach ($candidates as $candidate) {
+            $exists = MissingViewHandler::viewExists($candidate->value);
+
+            if ($exists !== false) {
+                return $exists === true ? $candidate : null;
+            }
+        }
+
+        return null;
     }
 
     /**
      * Every binder this class recognizes takes `($view, $data)` in that order. `Router::view()` is
      * the exception that puts the name at position 1, which is why it is not in the table above.
      *
-     * @param list<Arg>                                        $args
      * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      */
     private static function build(
-        array $args,
+        ?Expr $name,
+        ?Arg $dataArg,
         StatementsSource $source,
         array $pending,
         bool $carriesData,
         bool $complete,
     ): ?self {
-        $nameArg = ArgUtil::byNameOrPosition($args, 0, 'view');
-
-        if (!$nameArg instanceof Arg || !$nameArg->value instanceof String_) {
+        if (!$name instanceof String_) {
             return null;
         }
 
-        $viewName = $nameArg->value->value;
+        $viewName = $name->value;
 
         // A namespaced name resolves through package-registered roots the compile pass does not
         // own, so its contract is never in the registry and guessing would be wrong.
@@ -248,8 +341,6 @@ final class ViewCallChain
         if ($carriesData && !self::mergePending($pending, $source, $data, $complete)) {
             return null;
         }
-
-        $dataArg = ArgUtil::byNameOrPosition($args, 1, 'data');
 
         if ($dataArg instanceof Arg) {
             self::mergeArrayArg($dataArg, $source, $data, $complete);

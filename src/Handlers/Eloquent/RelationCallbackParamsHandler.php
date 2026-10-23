@@ -42,7 +42,6 @@ use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
-use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -353,10 +352,8 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * The model a receiver binds an ancestor's template to (`Builder::TModel`, `Relation::TRelatedModel`): the ancestor's
-     * own argument, a concrete model the subclass extends it with, or the receiver's type param at the position of the
-     * template it forwards, matched by the defining class (a name match alone would read another slot). Anything else
-     * names no model.
+     * The model a receiver binds an ancestor's template to (`Builder::TModel`, `Relation::TRelatedModel`), see
+     * {@see ClassLineage::projectedTemplate()}. Anything that is not exactly one model names no model.
      *
      * @param class-string $ancestor
      * @return class-string<Model>|null
@@ -364,37 +361,10 @@ final class RelationCallbackParamsHandler implements
      */
     private static function projectedModel(Codebase $codebase, TNamedObject $atomic, string $ancestor, string $template): ?string
     {
-        $typeParams = $atomic instanceof TGenericObject ? $atomic->type_params : [];
-        if (\strtolower($atomic->value) === \strtolower($ancestor)) {
-            return ModelPropertyResolver::extractExactlyOneModelFromUnion($typeParams[0] ?? null, $codebase);
-        }
-
-        try {
-            $storage = $codebase->classlike_storage_provider->get($atomic->value);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return null;
-        }
-
-        // `template_extended_params` states each ancestor's template in its DIRECT child's terms, so a forwarded
-        // template (`TRelatedModel:HasOneOrMany`) is followed up the chain until the receiver's own template.
-        $value = $storage->template_extended_params[$ancestor][$template] ?? null;
-        for ($hops = 0; $hops < 8 && $value instanceof Union; ++$hops) {
-            $concrete = ModelPropertyResolver::extractExactlyOneModelFromUnion($value, $codebase);
-            $forwarded = $value->isSingle() ? $value->getSingleAtomic() : null;
-            if ($concrete !== null || !$forwarded instanceof TTemplateParam) {
-                return $concrete;
-            }
-
-            if (\strcasecmp($forwarded->defining_class, $storage->name) === 0) {
-                $position = \array_search($forwarded->param_name, \array_keys($storage->template_types ?? []), true);
-
-                return $position === false ? null : ModelPropertyResolver::extractExactlyOneModelFromUnion($typeParams[$position] ?? null, $codebase);
-            }
-
-            $value = $storage->template_extended_params[$forwarded->defining_class][$forwarded->param_name] ?? null;
-        }
-
-        return null;
+        return ModelPropertyResolver::extractExactlyOneModelFromUnion(
+            ClassLineage::projectedTemplate($codebase, $atomic, $ancestor, $template),
+            $codebase,
+        );
     }
 
     /**

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Rules;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
@@ -195,6 +198,54 @@ final class UnknownModelAttributeHandlerTest extends TestCase
     public function unknown_keys_returns_only_the_unrecognized_raw_keys(array $allowed, array $rawKeys, array $expected): void
     {
         $this->assertSame($expected, UnknownModelAttributeHandler::unknownKeys($allowed, $rawKeys));
+    }
+
+    /**
+     * @param array<lowercase-string, string> $declaring
+     * @param list<lowercase-string>          $scanned
+     */
+    #[Test]
+    #[DataProvider('overrideVerdicts')]
+    public function userland_override_scan_ignores_absent_siblings(?string $called, array $declaring, array $scanned, bool $expected): void
+    {
+        $trusted = [BelongsToMany::class, Builder::class, Model::class];
+        $this->assertSame($expected, UnknownModelAttributeHandler::hasUserlandOverride($called, $declaring, $scanned, $trusted));
+    }
+
+    /**
+     * Laravel 12.20 has no BelongsToMany::createQuietly()/createManyQuietly() (13.x adds them); vendor
+     * here is 13.x, so the 12.x shape is pinned as data: scanned names with no declaring class.
+     *
+     * @return iterable<string, array{?string, array<lowercase-string, string>, list<lowercase-string>, bool}>
+     */
+    public static function overrideVerdicts(): iterable
+    {
+        $scanned = ['create', 'createquietly', 'createmany', 'createmanyquietly'];
+        $fw = BelongsToMany::class;
+
+        yield '12.x floor: quiet siblings absent, stock create' => [
+            'create', ['create' => $fw, 'createmany' => $fw], $scanned, false,
+        ];
+        yield '13.x: every sibling framework-declared' => [
+            'create', ['create' => $fw, 'createquietly' => $fw, 'createmany' => $fw, 'createmanyquietly' => $fw], $scanned, false,
+        ];
+        yield 'called method absent' => ['create', ['createmany' => $fw], $scanned, true];
+        yield 'called method userland' => ['create', ['create' => 'App\\Rel'], $scanned, true];
+        yield 'sibling overridden in userland' => [
+            'create', ['create' => $fw, 'createmany' => 'App\\Rel'], $scanned, true,
+        ];
+        yield 'Illuminate-namespaced userland declarer' => [
+            'create', ['create' => $fw, 'newmodelinstance' => 'Illuminate\\Review\\ImportBuilder'], ['create', 'newmodelinstance'], true,
+        ];
+        yield 'no called method (model scan): trusted declarers only' => [
+            null, ['fill' => Model::class, 'isfillable' => 'App\\Concerns\\UsesCustomFields'], ['fill', 'isfillable', 'newinstance'], true,
+        ];
+        yield 'no called method (model scan): stock model' => [
+            null, ['fill' => Model::class, 'isfillable' => Model::class], ['fill', 'isfillable', 'newinstance'], false,
+        ];
+        yield 'absent hook name is ignored' => [
+            'create', ['create' => $fw], ['create', 'newmodelinstance'], false,
+        ];
     }
 
     /**

@@ -1,0 +1,24 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * Schema\Builder::getColumn() exists from Laravel 13.34. It returns a full `getColumns()` row or `[]` for
+ * an absent column, but documents only the full shape, which makes `getColumn(...) === []` a
+ * DocblockTypeContradiction. Psalm merges `array{...}|array{}` into ONE shape with every key optional,
+ * so a union would report PossiblyUndefinedArrayOffset on a guarded `$column['name']`; the facade tag's
+ * bare `array` avoids both.
+ *
+ * Facade-only on purpose: the Builder instance (`$schema->getColumn()`, `Schema::connection()->getColumn()`)
+ * keeps Laravel's docblock. FacadeStubPrecedenceHandler drops the shadowed pseudo-method. The class
+ * header is copied verbatim (hard rule 2); the common stub's other methods and `@mixin` survive.
+ */
+class Schema extends Facade
+{
+    /**
+     * @param  string  $table
+     * @param  string  $column
+     * @return array
+     */
+    public static function getColumn($table, $column) {}
+}
