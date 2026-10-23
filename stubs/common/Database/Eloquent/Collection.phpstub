@@ -13,7 +13,7 @@ use Illuminate\Support\Collection as BaseCollection;
  * Psalm does not inherit @property-read from a parent class when template parameters
  * are remapped via @extends, so these annotations must be repeated here with TModel.
  *
- * The list mirrors EnumeratesValues::$proxies at the 12.20 floor — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the 12.27 floor — do not edit without checking that array.
  * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
  * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
