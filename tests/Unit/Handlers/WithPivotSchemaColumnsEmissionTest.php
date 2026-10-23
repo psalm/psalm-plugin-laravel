@@ -74,17 +74,18 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         $traces = $this->runPsalm();
 
         // Laravel casts the parent's created/updated column names as dates once `created_at` is selected:
-        // Ledger's `modified_at` is one, so it must not read as its raw schema type. A literal `updated_at`
-        // that the parent does not use is a plain column.
+        // Ledger's `modified_at` is one, so it must not read as its raw schema type. So is the default
+        // `updated_at`, even though the parent renamed it: forceFill() runs before the pivot knows its parent,
+        // so it date-normalizes the default names. Its integer column must not read as `int`.
         $this->assertContains(
             '$_entries: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Ledger, ' . self::RELATIONS
-            . "Pivot&object{created_at:mixed, modified_at:mixed, updated_at:null|string, amount:int}, 'pivot'>",
+            . "Pivot&object{created_at:mixed, modified_at:mixed, updated_at:mixed, amount:int}, 'pivot'>",
             $traces,
         );
         // At the call site inside the relation body.
         $this->assertContains(
             '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Ledger&static, ' . self::RELATIONS
-            . "Pivot&object{created_at:mixed, modified_at:mixed, updated_at:null|string, amount:int}, 'pivot'>",
+            . "Pivot&object{created_at:mixed, modified_at:mixed, updated_at:mixed, amount:int}, 'pivot'>",
             $traces,
         );
     }

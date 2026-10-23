@@ -29,7 +29,7 @@ return new class extends Migration {
             $table->foreignId('user_id');
             $table->timestamp('created_at')->nullable();
             $table->timestamp('modified_at')->nullable();
-            $table->timestamp('updated_at')->nullable();
+            $table->integer('updated_at');
             $table->integer('amount');
         });
 

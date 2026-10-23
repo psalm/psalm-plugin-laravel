@@ -149,9 +149,9 @@ final class PivotColumnResolver
 
     /**
      * Each column's type from the migration schema of $table, `mixed` when unknown. A column that may be
-     * one of the relation parent's timestamp columns is `mixed` too: Laravel's pivot casts those as dates
-     * once `created_at` is selected, and which date class that is depends on the app, so neither the raw
-     * schema type nor Carbon is right.
+     * one of the relation parent's timestamp columns, or a default `created_at` / `updated_at`, is `mixed`
+     * too: Laravel's pivot casts those as dates once `created_at` is selected, and which date class that is
+     * depends on the app, so neither the raw schema type nor Carbon is right.
      *
      * @param list<string> $columns
      * @param ?string $parentClass the model the relation is called on
@@ -160,7 +160,9 @@ final class PivotColumnResolver
     public static function columnTypes(Codebase $codebase, ?string $table, array $columns, ?string $parentClass): array
     {
         $schemaTable = $table === null ? null : SchemaStateProvider::getSchema()?->tables[$table] ?? null;
-        $timestamps = $parentClass === null ? null : self::timestampColumns($codebase, $parentClass);
+        $parentTimestamps = $parentClass === null ? null : self::timestampColumns($codebase, $parentClass);
+        // forceFill() runs before the pivot has its parent, so the default names are date-cast too.
+        $timestamps = $parentTimestamps === null ? null : [...$parentTimestamps, 'created_at', 'updated_at'];
         $types = [];
         foreach ($columns as $column) {
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
