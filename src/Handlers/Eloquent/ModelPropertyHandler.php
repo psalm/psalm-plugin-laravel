@@ -248,7 +248,7 @@ final class ModelPropertyHandler
      * passthrough type) and this schema read path agree on the column's intrinsic type — and so the
      * builder reads the mapping from the Schema namespace rather than reaching back into this handler.
      */
-    private static function mapColumnType(ColumnInfo $column): Union
+    public static function mapColumnType(ColumnInfo $column): Union
     {
         $type = ColumnTypeMapper::mapBaseType($column);
 

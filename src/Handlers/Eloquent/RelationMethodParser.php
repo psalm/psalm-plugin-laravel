@@ -325,8 +325,8 @@ final class RelationMethodParser
     }
 
     /**
-     * Add the `->withPivot(...)` columns of a direct BelongsToMany / MorphToMany factory chain and
-     * the pivot table; the factory runs on the receiver, so its class names the default table.
+     * Add the `->withPivot(...)` / `->withTimestamps(...)` columns of a direct BelongsToMany / MorphToMany
+     * factory chain and the pivot table; the factory runs on the receiver, so its class names the default table.
      *
      * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool} $parsed
      * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
@@ -337,29 +337,12 @@ final class RelationMethodParser
             return $parsed;
         }
 
-        $unresolvedUsing = false;
-        while ($expr instanceof PhpParser\Node\Expr\MethodCall && $expr->name instanceof PhpParser\Node\Identifier) {
-            $name = \strtolower($expr->name->name);
-            if ($name === 'withpivot') {
-                // Outermost first: prepend so the innermost call's columns lead.
-                $parsed['pivotColumns'] = [...PivotColumnResolver::columnsFromArgs($expr->args), ...$parsed['pivotColumns']];
-            } elseif ($name === 'withtimestamps') {
-                $parsed['pivotColumns'] = [...PivotColumnResolver::timestampColumns($codebase, $expr, $receiverClass), ...$parsed['pivotColumns']];
-            } elseif ($name === 'using') {
-                // The outermost resolved using() wins; a chain with none resolved has a pivot class that is unknown.
-                $unresolvedUsing = $parsed['pivotModel'] === null;
-            } elseif (isset(PivotColumnResolver::FACTORY_TABLE_POSITION[$name])) {
-                // Another receiver's factory takes that model's timestamp names and default table, not this one's.
-                $onThis = $expr->var instanceof PhpParser\Node\Expr\Variable && $expr->var->name === 'this';
-                // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it.
-                $parsed['pivotTable'] = $onThis ? PivotColumnResolver::table($codebase, $expr, $name, $parsed['relatedModel'], $receiverClass) : false;
-                break;
-            }
-
-            $expr = $expr->var;
-        }
-
-        $parsed['pivotTable'] = $unresolvedUsing ? false : $parsed['pivotTable'];
+        $pivotModel = $parsed['pivotModel'];
+        $chain = PivotColumnResolver::readChain($codebase, $expr, $receiverClass, $parsed['relatedModel'], static fn(): ?string => $pivotModel);
+        $parsed['pivotColumns'] = $chain['columns'];
+        // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it. An invisible chain
+        // (a foreign factory, a `using()` that names no class) leaves the pivot class or table unknown.
+        $parsed['pivotTable'] = $chain['visible'] ? $chain['table'] : false;
 
         return $parsed;
     }
@@ -436,10 +419,8 @@ final class RelationMethodParser
                 if ($accessor === null) {
                     return null;
                 }
-            } elseif ($pivotAware && $name === 'withpivot') {
-                $pivotColumns = [...PivotColumnResolver::columnsFromArgs($call->args), ...$pivotColumns];
-            } elseif ($pivotAware && $name === 'withtimestamps') {
-                $pivotColumns = [...PivotColumnResolver::timestampColumns($codebase, $call, $receiverClass), ...$pivotColumns];
+            } elseif ($pivotAware && \in_array($name, ['withpivot', 'withtimestamps'], true)) {
+                $pivotColumns = [...PivotColumnResolver::callColumns($codebase, $call, $name, $receiverClass), ...$pivotColumns];
             } elseif (self::chainCallKeepsRelation($codebase, $parsed['relationClass'], $name) !== true) {
                 return null;
             }

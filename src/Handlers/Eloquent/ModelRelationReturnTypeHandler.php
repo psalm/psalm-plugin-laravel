@@ -379,14 +379,14 @@ final class ModelRelationReturnTypeHandler
         // the corresponding stub default.
         $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
         if ($pivotDefault !== null) {
-            $pivotType = new TNamedObject($pivot['pivotModel'] ?? $pivotDefault);
+            $pivotClass = $pivot['pivotModel'] ?? $pivotDefault;
+            $pivotType = new TNamedObject($pivotClass);
             // The parsed body shows the whole chain, `using()` included: the pivot kind is known.
             if ($pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
-                $pivotType = PivotColumnResolver::refine(
-                    $pivotType,
+                $pivotType = PivotColumnResolver::shapeOn(
+                    $pivotClass,
                     PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass, $pivot['pivotModel'], true),
-                    $pivot['pivotModel'],
-                ) ?? $pivotType;
+                );
             }
 
             $typeParams[] = new Union([$pivotType]);

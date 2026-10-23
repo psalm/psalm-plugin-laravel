@@ -7,9 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser\Node\Arg;
-use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\MethodCall;
-use PhpParser\Node\Identifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\PivotColumnResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -67,31 +65,38 @@ final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInt
             return null;
         }
 
-        $chain = self::chain($event, $stmt, $relation);
-        $slot = $relation->type_params[2]->getSingleAtomic();
+        $codebase = $event->getSource()->getCodebase();
+        $parent = self::className($relation->type_params[1]);
+        $chain = PivotColumnResolver::readChain(
+            $codebase,
+            $stmt,
+            $parent,
+            self::className($relation->type_params[0]),
+            static fn(MethodCall $using): ?string => self::classLiteral($event, $using),
+        );
         // `using()` has no columns of its own, and an unseen chain may carry one that moves the date casts.
-        if (
-            $chain['columns'] === [] || $chain['table'] === false
-            || $method === 'using' && !$chain['visible']
-            // Later calls see the custom class `using()` left in the slot.
-            || $method !== 'using' && $chain['using'] !== null && (!$slot instanceof TNamedObject || \strcasecmp($slot->value, $chain['using']) !== 0)
-        ) {
+        if ($chain['columns'] === [] || $chain['table'] === false || $method === 'using' && !$chain['visible']) {
             return null;
         }
 
-        $pivot = PivotColumnResolver::refine(
-            // A visible chain is rebuilt whole: the slot's shape would only keep columns typed before it was.
-            $chain['visible'] && $slot instanceof TNamedObject ? new TNamedObject($slot->value) : $slot,
-            PivotColumnResolver::columnTypes(
-                $event->getSource()->getCodebase(),
-                $chain['table'],
-                $chain['columns'],
-                self::className($relation->type_params[1]),
-                $chain['using'],
-                $chain['visible'],
-            ),
+        // Later calls see the custom class `using()` left in the slot.
+        $slot = $relation->type_params[2]->getSingleAtomic();
+        if ($method !== 'using' && $chain['using'] !== null && (!$slot instanceof TNamedObject || \strcasecmp($slot->value, $chain['using']) !== 0)) {
+            return null;
+        }
+
+        $types = PivotColumnResolver::columnTypes(
+            $codebase,
+            $chain['table'],
+            $chain['columns'],
+            $parent,
             $chain['using'],
+            $chain['visible'],
         );
+        $pivot = $chain['using'] !== null
+            ? PivotColumnResolver::shapeOn($chain['using'], $types)
+            // A visible chain is rebuilt whole: the slot's shape would only keep columns typed before it was.
+            : PivotColumnResolver::refine($chain['visible'] && $slot instanceof TNamedObject ? new TNamedObject($slot->value) : $slot, $types);
         if (!$pivot instanceof TNamedObject) {
             return null;
         }
@@ -101,40 +106,6 @@ final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInt
         $params[2] = new Union([$pivot]);
 
         return new Union([$relation->setTypeParams($params)]);
-    }
-
-    /**
-     * What the calls of the receiver chain below (and including) `$stmt` select: columns innermost first, the
-     * outermost `using()` class, and the pivot table of the `$this->belongsToMany(...)` call the chain starts
-     * from. `visible` is false when the chain starts elsewhere (a delegated relation method, a parameter) or
-     * a `using()` argument is not a class literal.
-     *
-     * @return array{columns: list<string>, using: ?string, table: string|false|null, visible: bool}
-     */
-    private static function chain(MethodReturnTypeProviderEvent $event, MethodCall $stmt, TGenericObject $relation): array
-    {
-        $codebase = $event->getSource()->getCodebase();
-        $parent = self::className($relation->type_params[1]);
-        $chain = ['columns' => [], 'using' => null, 'table' => null, 'visible' => false];
-        $usingSeen = false;
-        for ($expr = $stmt; $expr instanceof MethodCall && $expr->name instanceof Identifier; $expr = $expr->var) {
-            $name = \strtolower($expr->name->name);
-            if ($name === 'withpivot') {
-                $chain['columns'] = [...PivotColumnResolver::columnsFromArgs($expr->args), ...$chain['columns']];
-            } elseif ($name === 'withtimestamps') {
-                $chain['columns'] = [...PivotColumnResolver::timestampColumns($codebase, $expr, $parent), ...$chain['columns']];
-            } elseif ($name === 'using' && !$usingSeen) {
-                // The outermost runs last and wins.
-                $usingSeen = true;
-                $chain['using'] = self::classLiteral($event, $expr);
-            } elseif (isset(PivotColumnResolver::FACTORY_TABLE_POSITION[$name]) && $expr->var instanceof Expr\Variable && $expr->var->name === 'this') {
-                $chain['table'] = PivotColumnResolver::table($codebase, $expr, $name, self::className($relation->type_params[0]), $parent);
-                $chain['visible'] = !$usingSeen || $chain['using'] !== null;
-                break;
-            }
-        }
-
-        return $chain;
     }
 
     private static function classLiteral(MethodReturnTypeProviderEvent $event, MethodCall $using): ?string
