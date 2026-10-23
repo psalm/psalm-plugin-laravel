@@ -1130,7 +1130,7 @@ final class ContractParser
              *
              * @return list<string>|null
              *
-             * @psalm-capabilities read-props
+             * @psalm-pure
              */
             private function byReferenceParameters(string $function): ?array
             {

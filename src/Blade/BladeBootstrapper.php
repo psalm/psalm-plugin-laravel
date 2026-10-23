@@ -569,7 +569,7 @@ final class BladeBootstrapper
      *
      * @return array<string, true>
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private function sharedNames(?Factory $factory): array
     {
