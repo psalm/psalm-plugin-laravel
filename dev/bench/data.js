@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792794002631,
+  "lastUpdate": 1792796593693,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15605,6 +15605,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c7030d4ef5fc10129646a015f262708f58896fb0",
+          "message": "fix(blade): drop findings Psalm suppresses on the virtual offsetGet() call (#2020)",
+          "timestamp": "2026-10-24T00:59:43+02:00",
+          "tree_id": "a3491522b3e52186eb58d74f3e87e8c69557e325",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c7030d4ef5fc10129646a015f262708f58896fb0"
+        },
+        "date": 1792796592398,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.48,
+            "range": "± 0.77",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
