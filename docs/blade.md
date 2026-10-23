@@ -314,6 +314,8 @@ vendor/bin/psalm-laravel blade:annotate --dry-run  # print a unified diff instea
 
 It runs Psalm as a child process, because the producer types only exist during an analysis; flags you pass (`-c psalm.xml`) are forwarded to it, and `--threads=1` is forced, since plugin state collected in a forked worker never reaches the process that does the writing. It refuses to run against a subset of the project (`-f`, or a bare path), because agreement between call sites is a claim about all of them: a call site in a file the run skipped cannot disagree. A run that somehow ends up forked anyway refuses to write and says so, rather than leaving every variable untyped. Blade analysis is switched on for the run whether or not your config enables it; if it cannot boot, the command reports that the pass was never reached.
 
+Psalm's own issue report is not printed: on a real project it runs to hundreds of findings that would bury the result. What you see is the annotated list (or the diff) plus the names left unknown. Progress on stderr stays live, and if the pass never runs, the captured Psalm output is printed so you can see why.
+
 The command is the only way in. An ordinary `vendor/bin/psalm` run never writes to a template, whatever the configuration says, and the control file the command passes to its child carries a marker, so a `PSALM_LARAVEL_BLADE_ANNOTATE` left behind in a shell or a CI environment cannot arm the codemod or damage the file it names.
 
 The run skips taint analysis even when your config enables it: the command reports annotations, never Psalm's findings, so building the taint graph would only cost time and memory.
