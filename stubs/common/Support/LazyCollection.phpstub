@@ -204,4 +204,57 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @return static<TKey|int, TValue|TPadValue>
      */
     public function pad($size, $value) {}
+
+    /**
+     * Callback params name the class with its templates instead of Laravel's `callable($this)`;
+     * see `Illuminate\Support\Collection::tap()` in the Collection stub.
+     *
+     * @param  callable(\Illuminate\Support\LazyCollection<TKey, TValue>): mixed  $callback
+     * @return $this
+     */
+    public function tap(callable $callback) {}
+
+    /**
+     * @template TPipeReturnType
+     *
+     * @param  callable(\Illuminate\Support\LazyCollection<TKey, TValue>): TPipeReturnType  $callback
+     * @return TPipeReturnType
+     */
+    public function pipe(callable $callback) {}
+
+    /**
+     * @template TWhenEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
+     */
+    public function whenEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TWhenNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
+     */
+    public function whenNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
+     */
+    public function unlessEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
+     */
+    public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
 }

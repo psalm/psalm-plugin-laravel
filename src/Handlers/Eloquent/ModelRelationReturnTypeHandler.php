@@ -14,11 +14,14 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\PivotColumnResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TObjectWithProperties;
 use Psalm\Type\Union;
 
 /**
@@ -56,6 +59,7 @@ use Psalm\Type\Union;
  * pivot default (`Pivot` / `MorphPivot`) and slot 4 with `'pivot'` — emitting only 2
  * triggers `MissingTemplateParam` on consumers because Psalm rejects a partial form
  * even when the stub declares a default via `@template T of … = Default` (see #883).
+ * Captured `->withPivot()` columns refine that default to `Pivot&object{...}` (#1944).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
  * @internal
@@ -154,13 +158,44 @@ final class ModelRelationReturnTypeHandler
         // is less specific than a declared `HasMany<Post, $this>` (LessSpecificReturnStatement).
         $bindingIsStatic = self::isStaticReceiver($source, $event->getStmt(), $bindingClass);
 
-        return self::relationType(
+        $type = self::relationType(
             $source->getCodebase(),
             $declaringClass,
             $bindingClass,
             $methodName,
             $bindingIsStatic,
         );
+
+        // A declared pivot shape is the user's contract, and Psalm keeps it for callers on its own (#1944).
+        return $type instanceof Union && self::declaresPivotShape($source->getCodebase(), $declaringClass, $methodName) ? null : $type;
+    }
+
+    /** @psalm-capabilities read-props */
+    private static function declaresPivotShape(Codebase $codebase, string $declaringClass, string $methodName): bool
+    {
+        try {
+            $methodId = $codebase->methods->getDeclaringMethodId(MethodIdentifier::wrap($declaringClass . '::' . $methodName));
+            $declared = $methodId instanceof MethodIdentifier ? $codebase->methods->getStorage($methodId)->return_type : null;
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return false;
+        }
+
+        foreach ($declared?->getAtomicTypes() ?? [] as $atomic) {
+            if (!$atomic instanceof TGenericObject || !\is_a($atomic->value, BelongsToMany::class, true)) {
+                continue;
+            }
+
+            foreach (($atomic->type_params[2] ?? null)?->getAtomicTypes() ?? [] as $pivot) {
+                if ($pivot instanceof TObjectWithProperties || ($pivot instanceof TNamedObject && \array_filter(
+                    $pivot->extra_types,
+                    static fn(Type\Atomic $extra): bool => $extra instanceof TObjectWithProperties,
+                ) !== [])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -196,11 +231,11 @@ final class ModelRelationReturnTypeHandler
 
                 $result = $relatedModelType instanceof \Psalm\Type\Union
                     ? self::buildRelationType(
+                        $codebase,
                         $parsed['relationClass'],
                         $relatedModelType,
                         $parsed['intermediateModel'],
-                        $parsed['pivotModel'],
-                        $parsed['accessor'],
+                        $parsed,
                         $bindingClass,
                         $bindingIsStatic,
                     )
@@ -263,7 +298,7 @@ final class ModelRelationReturnTypeHandler
      * returns null because its target is runtime-selected. Returns null when no statically
      * known target exists.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool} $parsed
      * @psalm-pure
      */
     private static function resolveRelatedModelType(array $parsed): ?Union
@@ -295,15 +330,14 @@ final class ModelRelationReturnTypeHandler
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
      *
      * @param class-string $relationClass
-     *
-     * @psalm-pure
+     * @param array{pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, ...} $pivot
      */
     private static function buildRelationType(
+        Codebase $codebase,
         string $relationClass,
         Union $relatedModel,
         ?string $intermediateModel,
-        ?string $pivotModel,
-        ?string $accessor,
+        array $pivot,
         string $bindingClass,
         bool $bindingIsStatic,
     ): ?Union {
@@ -345,8 +379,17 @@ final class ModelRelationReturnTypeHandler
         // the corresponding stub default.
         $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
         if ($pivotDefault !== null) {
-            $typeParams[] = new Union([new TNamedObject($pivotModel ?? $pivotDefault)]);
-            $typeParams[] = new Union([TLiteralString::make($accessor ?? 'pivot')]);
+            $pivotType = new TNamedObject($pivot['pivotModel'] ?? $pivotDefault);
+            // A custom pivot class (using()) types its own attributes.
+            if ($pivot['pivotModel'] === null && $pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
+                $pivotType = PivotColumnResolver::refine(
+                    $pivotType,
+                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass),
+                ) ?? $pivotType;
+            }
+
+            $typeParams[] = new Union([$pivotType]);
+            $typeParams[] = new Union([TLiteralString::make($pivot['accessor'] ?? 'pivot')]);
         }
 
         return new Union([new TGenericObject($relationClass, $typeParams)]);

@@ -90,8 +90,8 @@ final class Plugin implements PluginEntryPointInterface
             // (finder fallback) and the always-on view() narrowing both need it.
             $viewFactory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
 
-            if ($pluginConfig->findMissingViews) {
-                $this->initMissingViewHandler($output, $viewFactory);
+            if ($pluginConfig->findMissingViews || $pluginConfig->bladeValidateViewData) {
+                $this->initMissingViewHandler(ApplicationProvider::getApp(), $output, $viewFactory, $pluginConfig->findMissingViews);
             }
 
             if ($pluginConfig->findUnconfiguredFilesystemDisks) {
@@ -431,6 +431,10 @@ final class Plugin implements PluginEntryPointInterface
         // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
         require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
+        // Adds `withPivot()` columns to the BelongsToMany / MorphToMany pivot slot (#1944).
+        require_once __DIR__ . '/Handlers/Eloquent/Support/PivotColumnResolver.php';
+        require_once __DIR__ . '/Handlers/Eloquent/BelongsToManyWithPivotHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\BelongsToManyWithPivotHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.
@@ -785,6 +789,12 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedModelAttributeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedModelAttributeHandler::class);
 
+        // Drops the `expects never` argument issues of read-only lookups on an empty collection (#1814).
+        // Registered BEFORE the Blade remap on purpose: Psalm's dispatcher stops at the first handler
+        // that returns a bool, so a drop here spares the remap the cost of rebuilding the issue.
+        require_once __DIR__ . '/Handlers/Collections/EmptyCollectionLookupIssueHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\EmptyCollectionLookupIssueHandler::class);
+
         // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
         // nothing the shadow analysis finds is visible without it. Registered LAST of the
         // BeforeAddIssue handlers on purpose: Psalm's dispatcher stops at the first handler that
@@ -910,42 +920,46 @@ final class Plugin implements PluginEntryPointInterface
      *
      * Uses the app's FileViewFinder which reflects config('view.paths') plus
      * any paths added by service providers during bootstrap.
+     *
+     * Also runs without findMissingViews ($report false) for Blade's validateViewData, which needs
+     * to know which `@includeFirst` candidate exists; a finder it cannot read then just leaves that
+     * unknown, so only the MissingView diagnostic warns.
      */
-    private function initMissingViewHandler(\Psalm\Progress\Progress $output, ?\Illuminate\View\Factory $factory): void
+    private function initMissingViewHandler(Application $app, \Psalm\Progress\Progress $output, ?\Illuminate\View\Factory $factory, bool $report): void
     {
-        $app = ApplicationProvider::getApp();
+        $finder = null;
+        $problem = null;
 
-        // Prefer the dedicated view.finder binding; fall back to the pre-resolved
-        // Factory's finder (ApplicationProvider may bind 'view' without 'view.finder').
-        if ($app->bound('view.finder')) {
-            /** @var \Illuminate\View\FileViewFinder $finder */
-            $finder = $app->make('view.finder');
-        } elseif ($factory instanceof \Illuminate\View\Factory) {
+        // Prefer the pre-resolved Factory's finder, the one views render through: 'view.finder' is
+        // bound transiently, so a fresh one lacks the locations and extensions added on the factory.
+        if ($factory instanceof \Illuminate\View\Factory) {
             $finder = $factory->getFinder();
+        } elseif ($app->bound('view.finder')) {
+            try {
+                /** @var \Illuminate\View\FileViewFinder $finder */
+                $finder = $app->make('view.finder');
+            } catch (\Throwable $throwable) {
+                // Degrades this one lookup, not the whole plugin (same policy as resolveViewFactory()).
+                $output->debug("Laravel plugin: resolving the 'view.finder' binding threw: {$throwable->getMessage()}\n");
+                $problem = 'the view finder could not be resolved (run with --debug for the underlying cause).';
+            }
         } elseif ($app->bound('view')) {
             // 'view' is bound but resolveViewFactory() returned null: the binding
             // threw (swallowed to a --debug line rather than disabling the plugin)
             // or resolved to a non-standard implementation.
-            $output->warning(
-                'Laravel plugin: findMissingViews is enabled but the view factory could not be resolved to a '
-                . 'standard instance (run with --debug for the underlying cause). The MissingView check will be skipped.',
-            );
-
-            return;
+            $problem = 'the view factory could not be resolved to a standard instance (run with --debug for the underlying cause).';
         } else {
-            $output->warning(
-                'Laravel plugin: findMissingViews is enabled but the view finder service is not bound. '
-                . 'The MissingView check will be skipped.',
-            );
-
-            return;
+            $problem = 'the view finder service is not bound.';
         }
 
         if (!$finder instanceof \Illuminate\View\FileViewFinder) {
-            $output->warning(
-                'Laravel plugin: findMissingViews is enabled but the view finder is not an instance of '
-                . 'Illuminate\View\FileViewFinder. The MissingView check will be skipped.',
-            );
+            if ($report) {
+                $output->warning(
+                    'Laravel plugin: findMissingViews is enabled but '
+                    . ($problem ?? 'the view finder is not an instance of Illuminate\View\FileViewFinder.')
+                    . ' The MissingView check will be skipped.',
+                );
+            }
 
             return;
         }
@@ -956,7 +970,7 @@ final class Plugin implements PluginEntryPointInterface
         /** @var list<string> $extensions */
         $extensions = $finder->getExtensions();
 
-        Handlers\Views\MissingViewHandler::init($paths, $extensions);
+        Handlers\Views\MissingViewHandler::init($paths, $extensions, $report);
     }
 
     /**
@@ -992,6 +1006,8 @@ final class Plugin implements PluginEntryPointInterface
      *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
      *              published nothing, so no Blade handler may register
+     *
+     * @throws Blade\BladeDisabledException when Blade disabled itself and `failOnInternalError` is on
      */
     private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, bool $annotating): bool
     {
@@ -1003,9 +1019,17 @@ final class Plugin implements PluginEntryPointInterface
             $output,
             $pluginConfig->bladeCacheDir,
             $pluginConfig->bladeReportUnusedViewData || $annotating,
+            $pluginConfig->failOnInternalError,
         );
 
         if (!$bootstrapper->boot()) {
+            $disabled = $bootstrapper->disabled();
+
+            // Blade is opt-in: a run that silently lost it would pass CI with zero template findings.
+            if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException && $pluginConfig->failOnInternalError) {
+                throw $disabled;
+            }
+
             return false;
         }
 
