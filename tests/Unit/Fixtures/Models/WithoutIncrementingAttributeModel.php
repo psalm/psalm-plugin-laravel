@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * Key name and type stay at their defaults here: this fixture isolates the incrementing flag.
  *
  * Laravel 13.2+ — later than the 13.0 `#[Table]` it takes precedence over, so the consuming test gates on
- * THIS attribute rather than that one. Moot under the `^13.3` floor; the gate is what keeps it moot.
+ * THIS attribute rather than that one. Moot on every supported 13.x (`^13.20`); the gate only skips 12.x.
  *
  * @internal fixture used by ModelMetadataRegistryTest
  */

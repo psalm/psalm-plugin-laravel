@@ -193,16 +193,16 @@ final class ModelInstancePreparerTest extends TestCase
             self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
         }
 
-        // #[Table(key:)] with no name, on a class that INHERITS $table. The table half is version-split inside
-        // the supported range (13.3-13.5's `??=` keeps the inherited name; 13.6+ force-nulls it so getTable()
-        // re-derives) — which is the case for invoking the real method rather than reproducing it, and why
+        // #[Table(key:)] with no name, on a class that INHERITS $table. The table half goes through the
+        // `$declaresTable` force-branch: Laravel nulls the inherited name so getTable() re-derives from the
+        // class name — which is the case for invoking the real method rather than reproducing it, and why
         // this reads a runtime oracle instead of a literal.
         $this->assertSame(
             (new TableKeyOnlyModel())->getTable(),
             $this->prepare(TableKeyOnlyModel::class)->getTable(),
         );
 
-        // The key half has no such split: it reaches the key on every supported release.
+        // The key half has no such branch: it reaches the key on every supported release.
         $this->assertSame('uuid', $this->prepare(TableKeyOnlyModel::class)->getKeyName());
     }
 

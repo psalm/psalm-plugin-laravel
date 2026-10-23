@@ -78,8 +78,8 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
     /**
      * Get / set the URL fragment to be appended to URLs.
      *
-     * Laravel declares the flat `$this|string|null` on every 12.x and on 13.x before 13.18.0,
-     * which breaks `->fragment('x')->links()` chains (the next call lands on `string|null`).
+     * Laravel 12.x declares the flat `$this|string|null`, which breaks `->fragment('x')->links()`
+     * chains (the next call lands on `string|null`).
      * The conditional keeps the getter `string|null` and the setter chainable.
      *
      * The template is explicit, not the implicit `($fragment is null ? ...)` form Laravel 13.18.0+

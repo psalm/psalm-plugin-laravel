@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\Schema;
 // Laravel version's @method block raises UndefinedMagicMethod; the stub declares each
 // modifier as a real method so it resolves before Psalm's sealed magic-method path.
 //
-// Guard scope: every Laravel version currently exercised (CI runs ^12.4 and ^13.0 at
-// highest, both resolving to blocks that already list all 7 modifiers) resolves these
+// Guard scope: every Laravel version currently exercised (CI runs ^12.27 and ^13.20 at
+// highest, both resolving to builds that already list all 7 modifiers) resolves these
 // via reflection even without the stub, so this test pins Blueprint's index-family
 // return type to IndexDefinition and documents the full modifier contract. The stub is
 // the load-bearing fix for installs on older Laravel whose @method block predates some
