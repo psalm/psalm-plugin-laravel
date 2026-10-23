@@ -21,7 +21,7 @@ final readonly class BladeCompileError
     ) {}
 
     /**
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     public static function fromThrowable(string $templatePath, \Throwable $e): self
     {

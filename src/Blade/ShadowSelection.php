@@ -28,7 +28,7 @@ final class ShadowSelection
      * Null on any Throwable: Psalm computes these lazily from file contents, and an unreadable
      * location is no evidence of anything, so every caller declines rather than crash or drop.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     public static function of(CodeLocation $location): ?self
     {

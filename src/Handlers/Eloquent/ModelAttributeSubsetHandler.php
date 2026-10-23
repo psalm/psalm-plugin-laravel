@@ -119,7 +119,9 @@ final class ModelAttributeSubsetHandler
         return $keys;
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function isArrayLike(Union $type): bool
     {
         foreach ($type->getAtomicTypes() as $atomic) {
@@ -145,7 +147,8 @@ final class ModelAttributeSubsetHandler
      * - Possibly-undefined entries, because the key may be absent at runtime.
      *
      * @return list<string>|null
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function extractLiteralStringsFromArray(Union $type): ?array
     {

@@ -298,7 +298,11 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         );
     }
 
-    /** True for a type carrying a template parameter or a conditional, at any depth. */
+    /**
+     * True for a type carrying a template parameter or a conditional, at any depth.
+     *
+     * @psalm-pure
+     */
     private static function isContextDependent(Union $union): bool
     {
         $visitor = new class extends TypeVisitor {
