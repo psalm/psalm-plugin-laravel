@@ -75,17 +75,18 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         $date = 'Illuminate\Support\Carbon|null';
 
         // Laravel casts the parent's created/updated column names as dates once `created_at` is selected:
-        // Ledger's `modified_at` is one, so it must not read as its raw schema type. A literal `updated_at`
-        // that the parent does not use is a plain column.
+        // Ledger's `modified_at` is one, so it must not read as its raw schema type. So is the default
+        // `updated_at`, even though the parent renamed it: forceFill() runs before the pivot knows its parent,
+        // so it date-normalizes the default names. Its integer column must not read as `int`.
         $this->assertContains(
             '$_entries: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Ledger, ' . self::RELATIONS
-            . "Pivot&object{created_at:{$date}, modified_at:{$date}, updated_at:null|string, amount:int}, 'pivot'>",
+            . "Pivot&object{created_at:{$date}, modified_at:{$date}, updated_at:mixed, amount:int}, 'pivot'>",
             $traces,
         );
         // At the call site inside the relation body.
         $this->assertContains(
             '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Ledger&static, ' . self::RELATIONS
-            . "Pivot&object{created_at:{$date}, modified_at:{$date}, updated_at:null|string, amount:int}, 'pivot'>",
+            . "Pivot&object{created_at:{$date}, modified_at:{$date}, updated_at:mixed, amount:int}, 'pivot'>",
             $traces,
         );
     }
@@ -109,10 +110,11 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
             . "Pivot&object{made_at:mixed, updated_at:mixed}, 'pivot'>",
             $traces,
         );
-        // Selecting `created_at` opens the gate; it is no date of Sheet's, only `made_at` and `updated_at` are.
+        // Selecting `created_at` opens the gate; it is no date of Sheet's (only `made_at` and `updated_at` are), and a plain
+        // pivot date-normalizes that default name before it has a parent: mixed, not Carbon nor the raw schema type.
         $this->assertContains(
             '$_plain_stamps_created: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Sheet, ' . self::RELATIONS
-            . "Pivot&object{made_at:{$date}, updated_at:{$date}, created_at:null|string}, 'pivot'>",
+            . "Pivot&object{made_at:{$date}, updated_at:{$date}, created_at:mixed}, 'pivot'>",
             $traces,
         );
         // A parent whose created column is overridden has unknown timestamp names: nothing to add for the

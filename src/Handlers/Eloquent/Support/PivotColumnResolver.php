@@ -185,6 +185,9 @@ final class PivotColumnResolver
         $stock = $using === null || self::hasStockDates($codebase, $using);
         $switch = $using === null ? Model::CREATED_AT : $parent[0] ?? null;
         $dates = $visible && $stock && $switch !== null && \in_array($switch, $columns, true);
+        // A plain pivot's forceFill() runs before it has a parent, so it date-normalizes the DEFAULT names into
+        // strings that the parent's own names never read back as dates; a using() pivot is filled raw.
+        $normalized = $using === null;
         $types = [];
         foreach ($columns as $column) {
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
@@ -192,7 +195,7 @@ final class PivotColumnResolver
             $isDate = $parent !== null && \in_array($column, $parent, true);
             if ($declared instanceof Union) {
                 $types[$column] = $declared;
-            } elseif ($parent === null || !$stock || $isDate && !$dates) {
+            } elseif ($parent === null || !$stock || $isDate && !$dates || $normalized && !$isDate && \in_array($column, ['created_at', 'updated_at'], true)) {
                 $types[$column] = Type::getMixed();
             } elseif ($isDate) {
                 $types[$column] = CastResolver::resolve($codebase, 'datetime', $schemaColumn?->nullable ?? true);
