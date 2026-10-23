@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Database\Eloquent\Castable;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Casts\AsEncryptedArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsEncryptedCollection;
 use Illuminate\Database\Eloquent\Casts\AsStringable;
 use Illuminate\Support\Collection as IlluminateCollection;
+use Illuminate\Support\DateFactory;
 use Illuminate\Support\Stringable as IlluminateStringable;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
@@ -31,6 +33,9 @@ use Psalm\Type\Union;
  * Mirrors the resolution priority of Larastan's `ModelCastHelper::getReadableType`
  * (see .cache/larastan/src/Properties/ModelCastHelper.php) so users of either tool
  * see the same inferred types for the same cast.
+ *
+ * `date` / `datetime` / `custom_datetime` follow the app's `Date::use()` class ({@see resolveDate()}), the same
+ * source the `withPivot()` timestamp columns use (#1999).
  *
  * Class lookups on a cast target (enum? Castable? CastsAttributes? ...) are two-tier (#1652):
  * 1. Psalm's storage, via {@see ClassLineage} (leading backslash and `class_alias()` names resolved).
@@ -106,7 +111,7 @@ final class CastResolver
         $baseCast = self::stripParameters($baseCast);
         $castClass = ClassLineage::canonicalName($codebase, self::stripParameters($cast));
 
-        $type = self::resolveBaseCast($baseCast, $nullable);
+        $type = self::resolveBaseCast($codebase, $baseCast, $nullable);
         if ($type instanceof Union) {
             return $type;
         }
@@ -204,7 +209,7 @@ final class CastResolver
         }
     }
 
-    private static function resolveBaseCast(string $baseCast, bool $nullable): ?Union
+    private static function resolveBaseCast(Codebase $codebase, string $baseCast, bool $nullable): ?Union
     {
         return match ($baseCast) {
             'int', 'integer' => self::makeNullable(Type::getInt(), $nullable),
@@ -218,10 +223,7 @@ final class CastResolver
                 new Union([new TNamedObject(IlluminateCollection::class)]),
                 $nullable,
             ),
-            'date', 'datetime', 'custom_datetime' => self::makeNullable(
-                new Union([new TNamedObject(\Illuminate\Support\Carbon::class)]),
-                $nullable,
-            ),
+            'date', 'datetime', 'custom_datetime' => self::resolveDate($codebase, $nullable),
             'immutable_date', 'immutable_datetime', 'immutable_custom_datetime' => self::makeNullable(
                 new Union([new TNamedObject(\Carbon\CarbonImmutable::class)]),
                 $nullable,
@@ -231,6 +233,42 @@ final class CastResolver
             'hashed' => self::makeNullable(Type::getString(), $nullable),
             default => null,
         };
+    }
+
+    /**
+     * The date class `Date::use()` left in the booted app, read from DateFactory's statics: `mixed` when a
+     * callable or a factory builds the dates (the class is unknowable), `Illuminate\Support\Carbon` when
+     * unconfigured. A configured class must be a Carbon in Psalm's storage: a TNamedObject without storage breaks analysis.
+     *
+     * `immutable_*` casts are not routed here: HasAttributes builds them with CarbonImmutable whatever
+     * `Date::use()` says.
+     */
+    private static function resolveDate(Codebase $codebase, bool $nullable): Union
+    {
+        // The statics are protected with no accessor; `dateClass` is only ever set to a class name by `use()`.
+        $read = static fn(string $name): mixed => (new \ReflectionProperty(DateFactory::class, $name))->getValue();
+        /** @var string|null $class */
+        $class = $read('dateClass');
+        $callable = $read('callable');
+        $factory = $read('factory');
+
+        if ($callable !== null || $factory !== null) {
+            return Type::getMixed();
+        }
+
+        if ($class === null) {
+            // No storage lookup: the framework default is always declared.
+            return self::makeNullable(new Union([new TNamedObject(\Illuminate\Support\Carbon::class)]), $nullable);
+        }
+
+        // Only a Carbon is provably what the factory hands back: CarbonInterface's `static` returns bind every
+        // override, while another class's `createFromFormat()` and friends may return anything.
+        $storage = ClassLineage::isA($codebase, $class, CarbonInterface::class) ? ClassLineage::storage($codebase, $class) : null;
+        if (!$storage instanceof ClassLikeStorage) {
+            return Type::getMixed();
+        }
+
+        return self::makeNullable(new Union([new TNamedObject($storage->name)]), $nullable);
     }
 
     /**
