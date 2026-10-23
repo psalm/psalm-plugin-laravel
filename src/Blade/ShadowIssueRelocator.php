@@ -94,8 +94,8 @@ final class ShadowIssueRelocator
         '/(?<statement>(?<target>\$\$__key) = \$\$__key \?\? \$__value;)/',
         '/(?<statement>(?<target>\$__newAttributes\[\$__key\]) = \$__value;)/',
         '/(?<statement>(?<target>\$\$__consumeVariable) = is_string\(\$__key\) \? [^;]*;)/',
-        // Livewire's RenderComponent::generate()
-        '/(?<statement>echo (?<target>\$__html);)/',
+        // Livewire's precompilers: the `wire:key` loop key, `@assets` dedup, `@livewire` key
+        '/(?<statement>(?<target>\\\\Livewire\\\\Features\\\\Support(?<feature>CompiledWireKeys|ScriptsAndAssets)\\\\Support\k<feature>::\$?\w+))/',
         // CompilesComponents::compileEndComponentClass(); the hash is newComponentHash()'s xxh128
         '/(?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};)/',
         // CompilesErrors::compileEnderror()
@@ -1083,19 +1083,20 @@ final class ShadowIssueRelocator
 
     /**
      * #1986: whether a `Mixed*` finding's `mixed` comes from the prelude's fallback rather than a
-     * declaration. Psalm's origin (traced only while the variable-use graph runs, so not under
-     * `findUnusedCode="false"`) is exact: a variable fetch in this shadow on a name in
-     * {@see ShadowTarget::$untypedNames} (compiled `$__*` bookkeeping is a local too) is the
-     * fallback, anything outside the shadow is a callee's `mixed`. A template local's origin stops
-     * at its own assignment, so a local is never proof of a declaration. Without an origin, the
-     * finding must read at least one variable, all of them declared; a method call is positioned on
-     * its name, so its receiver chain is read instead.
+     * declaration, judged against {@see ShadowTarget::$declaredNames}. Psalm's origin (traced only
+     * while the variable-use graph runs, so not under `findUnusedCode="false"`) is exact: a variable
+     * fetch in this shadow on an undeclared name (an undeclared variable, a template local, compiled
+     * `$__*` bookkeeping) is the fallback; anything else is a callee's `mixed`, outside the shadow or
+     * defined in it, unless its variables say otherwise. A template local's origin stops at its own
+     * assignment, so a local is never proof of a declaration. Without an origin, the finding must
+     * read at least one variable, all of them declared; a method call is positioned on its name, so
+     * its receiver chain is read instead.
      */
     private static function isFallbackMixed(MixedIssue&CodeIssue $issue, ShadowTarget $target): bool
     {
-        $untyped = $target->untypedNames;
+        $declared = $target->declaredNames;
 
-        if ($untyped === null) {
+        if ($declared === null) {
             return true;
         }
 
@@ -1108,36 +1109,32 @@ final class ShadowIssueRelocator
 
             $text = self::selectedText($origin);
 
-            if ($text !== null && \preg_match('/\A\$(' . PreludeBuilder::VARIABLE_NAME . ')\z/', $text, $name) === 1) {
-                return isset($untyped[$name[1]]);
+            if ($text !== null) {
+                $names = \preg_match('/\A\$(' . PreludeBuilder::VARIABLE_NAME . ')\z/', $text, $name) === 1 ? [$name[1]] : self::readNames($text);
+
+                return $names !== [] && \array_diff_key(\array_flip($names), $declared) !== [];
             }
         }
 
-        $names = self::readNames((string) self::selectedText($issue->code_location));
+        $names = ($issue instanceof MixedMethodCall ? self::receiverNames($issue->code_location, $target) : null)
+            ?? self::readNames((string) self::selectedText($issue->code_location));
 
-        if ($names === [] && $issue instanceof MixedMethodCall) {
-            $names = self::receiverNames($issue->code_location);
-        }
-
-        foreach ($names as $name) {
-            if (isset($untyped[$name])) {
-                return true;
-            }
-        }
-
-        return $names === [];
+        return $names === [] || \array_diff_key(\array_flip($names), $declared) !== [];
     }
 
     /**
      * The variables the receiver chain before a method name reads (`$data['x']?->` of
-     * `$data['x']?->foo()`), walked back token by token over `->`, `?->`, `::`, names and balanced
-     * `[...]`/`(...)`; empty when it reads none or a variable variable hides one.
+     * `$data['x']?->foo()`), walked back token by token over `->`, `?->`, `::`, names, comments and
+     * balanced `[...]`/`(...)`, through the shadow source so a chain begun on an earlier line is
+     * read too. Null when no operator precedes the selection (a static call's covers the whole
+     * call); empty when the chain reads no variable, a variable variable hides one, or the walk
+     * runs off the source.
      *
-     * @return list<string>
+     * @return list<string>|null
      *
      * @psalm-pure
      */
-    private static function receiverNames(CodeLocation $location): array
+    private static function receiverNames(CodeLocation $location, ShadowTarget $target): ?array
     {
         $selection = ShadowSelection::of($location);
 
@@ -1145,16 +1142,25 @@ final class ShadowIssueRelocator
             return [];
         }
 
-        $tokens = @\token_get_all('<?php ' . \substr($selection->snippet, 0, $selection->start));
+        try {
+            $prefix = $target->shadowSource !== ''
+                ? \substr($target->shadowSource, 0, $location->getSelectionBounds()[0])
+                : \substr($selection->snippet, 0, $selection->start);
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $tokens = @\token_get_all(\str_starts_with($prefix, '<?php') ? $prefix : '<?php ' . $prefix);
         $names = [];
         $depth = 0;
         $wantOperator = true;
+        $atSelection = true;
 
         for ($i = \count($tokens) - 1; $i > 0; $i--) {
             $token = $tokens[$i];
             $id = \is_array($token) ? $token[0] : $token;
 
-            if ($id === \T_WHITESPACE) {
+            if (\in_array($id, [\T_WHITESPACE, \T_COMMENT, \T_DOC_COMMENT], true)) {
                 continue;
             }
 
@@ -1162,7 +1168,7 @@ final class ShadowIssueRelocator
                 return [];
             }
 
-            if ($id === \T_VARIABLE) {
+            if (\is_array($token) && $token[0] === \T_VARIABLE) {
                 $names[] = \substr($token[1], 1);
             }
 
@@ -1174,7 +1180,7 @@ final class ShadowIssueRelocator
                 };
             } elseif ($wantOperator) {
                 if (!\in_array($id, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true)) {
-                    break;
+                    return $atSelection ? null : $names;
                 }
 
                 $wantOperator = false;
@@ -1183,11 +1189,13 @@ final class ShadowIssueRelocator
             } elseif (\in_array($id, [\T_VARIABLE, \T_STRING, \T_NAME_QUALIFIED, \T_NAME_FULLY_QUALIFIED], true)) {
                 $wantOperator = true;
             } else {
-                break;
+                return $names;
             }
+
+            $atSelection = false;
         }
 
-        return $names;
+        return [];
     }
 
     /**
@@ -1227,13 +1235,20 @@ final class ShadowIssueRelocator
     {
         $names = [];
 
+        $afterDoubleColon = false;
+
         foreach (\token_get_all('<?php ' . $expression) as $token) {
             if ($token === '$') {
                 return [];
             }
 
-            if (\is_array($token) && $token[0] === \T_VARIABLE) {
+            // `Foo::$bar` names a static property, not a variable.
+            if (\is_array($token) && $token[0] === \T_VARIABLE && !$afterDoubleColon) {
                 $names[] = \substr($token[1], 1);
+            }
+
+            if (!\is_array($token) || $token[0] !== \T_WHITESPACE) {
+                $afterDoubleColon = \is_array($token) && $token[0] === \T_DOUBLE_COLON;
             }
         }
 

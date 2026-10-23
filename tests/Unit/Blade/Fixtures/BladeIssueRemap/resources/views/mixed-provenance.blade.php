@@ -10,3 +10,4 @@
 @php $decoded = json_decode('1'); @endphp
 {{ $data['x']?->nulls() }}
 {{ $h?->nulls() }}
+{{ $data['x']?->first() /* c */ ?->last() }}

@@ -293,17 +293,27 @@ final class BladeIssueRemapTest extends TestCase
             'resources/views/contract-unqualified.blade.php:2 MixedArgument',
             'resources/views/contract-vendor-class.blade.php:2 MixedArgument',
             'resources/views/mixed-bookkeeping-authored.blade.php:1 MixedAssignment',
+            'resources/views/mixed-extract.blade.php:2 MixedArgument',
+            'resources/views/mixed-extract.blade.php:2 MixedMethodCall',
             'resources/views/mixed-leak-declared.blade.php:20 MixedArgument',
             'resources/views/mixed-leak-declared.blade.php:7 MixedArgument',
             'resources/views/mixed-provenance.blade.php:10 MixedAssignment',
             'resources/views/mixed-provenance.blade.php:11 MixedArgument',
             'resources/views/mixed-provenance.blade.php:11 MixedMethodCall',
+            'resources/views/mixed-provenance.blade.php:13 MixedArgument',
+            'resources/views/mixed-provenance.blade.php:13 MixedMethodCall',
+            'resources/views/mixed-provenance.blade.php:13 MixedMethodCall',
             'resources/views/mixed-provenance.blade.php:5 MixedArgument',
             'resources/views/mixed-provenance.blade.php:5 MixedMethodCall',
+            // A callee the template defines, declared `mixed`.
+            'resources/views/mixed-template-function.blade.php:5 MixedMethodCall',
             // An invalid fetch or call on a literal-defaulted prop.
             'resources/views/props/misuse.blade.php:2 MixedArgument',
             'resources/views/props/misuse.blade.php:3 MixedArgument',
             'resources/views/props/misuse.blade.php:4 MixedArgument',
+            // A literal-defaulted prop the template writes to later.
+            'resources/views/props/mixed-local-write.blade.php:2 MixedArgument',
+            'resources/views/props/mixed-local-write.blade.php:2 MixedMethodCall',
             'resources/views/session-previous.blade.php:2 MixedArgument',
             'resources/views/session-value-save-authored.blade.php:3 MixedArgument',
             'resources/views/session-value-save.blade.php:2 MixedArgument',
@@ -2065,8 +2075,8 @@ final class BladeIssueRemapTest extends TestCase
     {
         $template = 'resources/views/mixed-provenance.blade.php';
         $cases = [
-            'psalm.xml' => ['MixedMethodCall' => [5, 11], 'MixedArgument' => [5, 11], 'MixedAssignment' => [10]],
-            'psalm-unused-code-off.xml' => ['MixedMethodCall' => [5, 11], 'MixedArgument' => [5, 11]],
+            'psalm.xml' => ['MixedMethodCall' => [5, 11, 13, 13], 'MixedArgument' => [5, 11, 13], 'MixedAssignment' => [10]],
+            'psalm-unused-code-off.xml' => ['MixedMethodCall' => [5, 11, 13, 13], 'MixedArgument' => [5, 11, 13]],
             'psalm-level2.xml' => [],
         ];
 
@@ -2083,6 +2093,37 @@ final class BladeIssueRemapTest extends TestCase
             \ksort($reported);
             \ksort($expected);
             $this->assertSame($expected, $reported, $config . ': ' . \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        }
+    }
+
+    /**
+     * #1986: a declaration survives a later local write (`@props` default plus `$data['safe'] = 1`)
+     * and an `extract()`; a docblock-looking text in markup declares nothing. Both modes.
+     */
+    #[Test]
+    public function declared_mixed_findings_survive_local_writes_and_extract_but_not_inert_text(): void
+    {
+        $expected = [
+            'props/mixed-local-write.blade.php' => ['2 MixedArgument', '2 MixedMethodCall'],
+            'mixed-extract.blade.php' => ['2 MixedArgument', '2 MixedMethodCall'],
+            'mixed-inert-docblock.blade.php' => [],
+        ];
+
+        foreach (['psalm.xml', 'psalm-unused-code-off.xml'] as $config) {
+            $issues = $this->analyze($config);
+
+            foreach ($expected as $template => $lines) {
+                $reported = [];
+
+                foreach ($issues as $issue) {
+                    if (\str_starts_with($issue['type'], 'Mixed') && \str_ends_with($issue['file_path'], 'resources/views/' . $template)) {
+                        $reported[] = "{$issue['line_from']} {$issue['type']}";
+                    }
+                }
+
+                \sort($reported);
+                $this->assertSame($lines, $reported, "{$config} {$template}: " . \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+            }
         }
     }
 }

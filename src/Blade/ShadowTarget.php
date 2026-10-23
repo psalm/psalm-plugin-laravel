@@ -35,10 +35,14 @@ final class ShadowTarget
      * @param bool   $attributesFromTag {@see PreludeBuilder::declaresTagAttributes()} on the shadow
      * @param array<string, true> $undeclaredNames names the shadow types only through the prelude's
      *                                             `mixed` fallback; empty turns the #1909 gate off
-     * @param array<string, true>|null $untypedNames $undeclaredNames plus every name the template
-     *                                               binds without a `@var`, whose `mixed` cannot be
-     *                                               traced further (#1986); null when the body
-     *                                               cannot be read, which drops every `Mixed*`
+     * @param array<string, true>|null $declaredNames names the prelude types as something other
+     *                                                 than `mixed`, a body `@var` docblock names, or
+     *                                                 a component seed types (#1986); a `Mixed*` from
+     *                                                 any other name is the fallback's or
+     *                                                 untraceable. Null when the shadow does not
+     *                                                 parse, which drops every `Mixed*`
+     * @param string              $shadowSource   the shadow's bytes, for reading an expression that
+     *                                             starts on an earlier line than its issue
      */
     public function __construct(
         public readonly ShadowEntry $entry,
@@ -48,7 +52,8 @@ final class ShadowTarget
         private readonly string $markerPrefix,
         public readonly bool $attributesFromTag = false,
         public readonly array $undeclaredNames = [],
-        public readonly ?array $untypedNames = null,
+        public readonly ?array $declaredNames = [],
+        public readonly string $shadowSource = '',
     ) {}
 
     public function markerPrefix(): string
