@@ -40,18 +40,13 @@ final class ShadowCompiler
 
         // Psalm's global error handler would turn a PHP error raised by a directive (a prose
         // `@component` passes null to str_contains()) into an exception naming the vendor file and
-        // the whole Psalm command line. Raised here instead, it names the directive.
+        // the whole Psalm command line. Raised here instead (same class and code), it names the directive.
         \set_error_handler($this->throwCompileError(...));
 
         try {
             $compiled = $this->compiler->compileString($marked);
         } catch (\Throwable $throwable) {
-            // A typed compile method (`compileJs(string)`) rejects the null on entry, before any PHP error.
-            $trace = $throwable instanceof \TypeError ? $throwable->getTrace() : [];
-            $directive = $this->directiveOf($trace);
-            $advice = $directive !== null && ($trace[0]['function'] ?? null) === 'compile' . \ucfirst($directive[0])
-                ? $this->argumentAdvice($directive, $throwable->getMessage())
-                : null;
+            $advice = $throwable instanceof \TypeError ? $this->typedArgumentAdvice($throwable) : null;
 
             return $advice !== null
                 ? new BladeCompileError($templatePath, $advice)
@@ -77,9 +72,11 @@ final class ShadowCompiler
     }
 
     /**
-     * @throws \ErrorException for every error `error_reporting()` covers, `@`-silenced ones excluded
+     * @throws \RuntimeException for every error `error_reporting()` covers, `@`-silenced ones excluded:
+     *                           the class and code Psalm's own handler throws, so a directive or
+     *                           precompiler catching it compiles as it would under Psalm
      */
-    private function throwCompileError(int $severity, string $message, string $file, int $line): bool
+    private function throwCompileError(int $severity, string $message): bool
     {
         if ((\error_reporting() & $severity) === 0) {
             return false;
@@ -91,7 +88,7 @@ final class ShadowCompiler
             $message = $this->argumentAdvice($directive, $message) ?? "@{$directive[0]}: {$message}";
         }
 
-        throw new \ErrorException($message, 0, $severity, $file, $line);
+        throw new \RuntimeException($message, $severity);
     }
 
     /**
@@ -136,16 +133,48 @@ final class ShadowCompiler
     {
         [$name, $bare] = $directive;
 
-        if (!$bare || \preg_match('/Passing null to parameter|null given/', $message) !== 1
+        if (!$bare || !\str_contains($message, 'Passing null to parameter')
             || isset($this->compiler->getCustomDirectives()[$name])
             || !\method_exists($this->compiler, $method = 'compile' . \ucfirst($name))) {
             return null;
         }
 
-        $parameter = (new \ReflectionMethod($this->compiler, $method))->getParameters()[0] ?? null;
+        // Only Laravel's own methods: a subclass override may fail on a null of its own. A trait
+        // method reports the using class, so every built-in directive qualifies.
+        $reflection = new \ReflectionMethod($this->compiler, $method);
+        $parameter = $reflection->getParameters()[0] ?? null;
 
-        return $parameter !== null && !$parameter->isOptional()
-            ? "@{$name} needs arguments; write @@{$name} to print it as text"
+        return $reflection->getDeclaringClass()->getName() === BladeCompiler::class
+            && $parameter !== null && !$parameter->isOptional()
+            ? $this->needsArguments($name)
             : null;
+    }
+
+    /**
+     * A typed compile method (`compileJs(string)`) rejects the null on entry, before any PHP error.
+     * Read off the frame names alone, which survive `zend.exception_ignore_args`: compileStatement()
+     * passes a null first argument only for a directive written without arguments.
+     *
+     * @psalm-capabilities read-props
+     */
+    private function typedArgumentAdvice(\TypeError $error): ?string
+    {
+        $trace = $error->getTrace();
+        $method = $trace[0]['function'] ?? '';
+
+        if (($trace[0]['class'] ?? null) !== BladeCompiler::class
+            || ($trace[1]['function'] ?? null) !== 'compileStatement'
+            || !\str_starts_with($method, 'compile')
+            || \preg_match('/^[^ ]+::' . \preg_quote($method, '/') . '\(\): Argument #1 \(\$\w+\) must be of type [^,]+, null given/', $error->getMessage()) !== 1) {
+            return null;
+        }
+
+        return $this->needsArguments(\lcfirst(\substr($method, 7)));
+    }
+
+    /** @psalm-pure */
+    private function needsArguments(string $directive): string
+    {
+        return "@{$directive} needs arguments; write @@{$directive} to print it as text";
     }
 }

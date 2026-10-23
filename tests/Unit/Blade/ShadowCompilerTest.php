@@ -393,11 +393,20 @@ final class ShadowCompilerTest extends TestCase
     #[Test]
     public function an_argumentless_directive_whose_compile_method_is_typed_asks_for_arguments(): void
     {
-        // compileJs(string) throws a TypeError before any PHP error is raised.
-        $result = $this->compiler->compile('view.blade.php', "Use @js here\n");
+        // compileJs(string) throws a TypeError before any PHP error is raised. Production php.ini
+        // drops exception arguments from traces, which must not cost the advice.
+        foreach (['0', '1'] as $ignoreArgs) {
+            $previous = \ini_set('zend.exception_ignore_args', $ignoreArgs);
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
-        $this->assertSame('@js needs arguments; write @@js to print it as text', $result->message);
+            try {
+                $result = $this->compiler->compile('view.blade.php', "Use @js here\n");
+            } finally {
+                \ini_set('zend.exception_ignore_args', (string) $previous);
+            }
+
+            $this->assertInstanceOf(BladeCompileError::class, $result);
+            $this->assertSame('@js needs arguments; write @@js to print it as text', $result->message, "exception_ignore_args={$ignoreArgs}");
+        }
     }
 
     #[Test]
@@ -433,7 +442,7 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
-    public function only_a_null_reaching_the_compile_method_itself_gets_the_arguments_advice(): void
+    public function a_subclass_compile_method_never_gets_the_arguments_advice(): void
     {
         $compiler = new ShadowCompiler(new class (new Filesystem(), \sys_get_temp_dir()) extends BladeCompiler {
             public ?string $missing = null;
@@ -450,18 +459,53 @@ final class ShadowCompilerTest extends TestCase
             }
         });
 
-        $bare = $this->compileReportingAll($compiler, "@probe\n");
-        $given = $this->compileReportingAll($compiler, "@probe(\$user)\n");
-
-        $this->assertInstanceOf(BladeCompileError::class, $bare);
-        $this->assertSame('@probe needs arguments; write @@probe to print it as text', $bare->message);
-        $this->assertInstanceOf(BladeCompileError::class, $given);
-        $this->assertSame('@probe: mb_strtolower(): Passing null to parameter #1 ($string) of type string is deprecated', $given->message);
-
+        $deprecation = $this->compileReportingAll($compiler, "@probe\n");
         $typeError = $this->compileReportingAll($compiler, "@strictProbe\n");
 
+        $this->assertInstanceOf(BladeCompileError::class, $deprecation);
+        $this->assertSame('@probe: mb_strtolower(): Passing null to parameter #1 ($string) of type string is deprecated', $deprecation->message);
         $this->assertInstanceOf(BladeCompileError::class, $typeError);
         $this->assertSame('trim(): Argument #1 ($string) must be of type string, null given', $typeError->message);
+    }
+
+    #[Test]
+    public function a_built_in_directive_given_arguments_never_gets_the_arguments_advice(): void
+    {
+        // Laravel's own compileInclude() runs, but the null comes from the overridden helper it calls.
+        $compiler = new ShadowCompiler(new class (new Filesystem(), \sys_get_temp_dir()) extends BladeCompiler {
+            public ?string $missing = null;
+
+            #[\Override]
+            public function stripParentheses($expression): string
+            {
+                return Str::lower($this->missing);
+            }
+        });
+
+        $result = $this->compileReportingAll($compiler, "@include('header')\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertSame('@include: mb_strtolower(): Passing null to parameter #1 ($string) of type string is deprecated', $result->message);
+    }
+
+    #[Test]
+    public function a_directive_catching_the_runtime_exception_psalm_throws_still_compiles(): void
+    {
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('guarded', static function (): string {
+            try {
+                \trigger_error('optional feature unavailable', \E_USER_WARNING);
+            } catch (\RuntimeException $runtimeException) {
+                return "<?php /* {$runtimeException->getCode()} */ ?>";
+            }
+
+            return '';
+        });
+
+        $result = $this->compileReportingAll(new ShadowCompiler($blade), "@guarded\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('/* ' . \E_USER_WARNING . ' */', $result->contents);
     }
 
     #[Test]
