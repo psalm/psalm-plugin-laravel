@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792758487866,
+  "lastUpdate": 1792759435971,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15185,6 +15185,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1309,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9cd622e07d39bb4b8bfae19cedb9182cc720dfc8",
+          "message": "Type `withPivot()` columns on `BelongsToMany` pivots (#1951)\n\n* feat(relations): make BelongsToMany/MorphToMany TPivotModel covariant #1944\n\n* feat(relations): add withPivot() columns to the BelongsToMany pivot type #1944\n\n* feat(relations): carry withPivot() columns into relation method return types #1944\n\n* test(relations): pin withPivot() column types from pivot migrations #1944\n\n* style(relations): apply rector to PivotColumnResolver #1944\n\n* fix(relations): resolve multi-return relations that differ only in pivot columns #1944\n\n* fix(relations): decline withPivot() refinement on a dynamic first argument #1944\n\n* style(relations): apply rector to PivotColumnResolver #1944\n\n* fix(relations): type delegated pivot columns, skip overridden joiningTable() and unpacked withPivot() arrays #1944\n\n* test(relations): pin the relation property type of multi-return pivot relations #1944\n\n* fix(relations): ignore string-keyed withPivot() arrays that array_merge() can overwrite #1944\n\n* style(relations): apply rector to PivotColumnResolver #1944\n\n* fix(relations): ignore withPivot() arrays with explicit keys #1944\n\n* test(relations): pin pivot column fetch through the refined pivot type on Psalm rc3+ #1944\n\n* fix(relations): keep known pivot shape types when withPivot() reselects a column #1944\n\n* fix(relations): keep the parent's timestamp columns mixed in withPivot() shapes #1944\n\n* refactor(relations): mark pivot shape helpers @psalm-pure for Psalm rc8\n\n* docs(relations): drop obsolete Psalm rc2/rc3 caveats from the #1944 pivot docs and test\n\n* fix(relations): keep default created_at/updated_at mixed when the parent renames its timestamp columns #1944",
+          "timestamp": "2026-10-23T14:37:21+02:00",
+          "tree_id": "3d3852345e175ebeb4389a82ee99d52d6ec294f6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9cd622e07d39bb4b8bfae19cedb9182cc720dfc8"
+        },
+        "date": 1792759433756,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.08,
+            "range": "± 0.05",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
