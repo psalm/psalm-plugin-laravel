@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792753146208,
+  "lastUpdate": 1792754416445,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15005,6 +15005,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.65,
             "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1309,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5f792def53d157ef7b62eea0ec80448ba27543a5",
+          "message": "Use Psalm 7.0.0-rc8 public taint APIs and honor custom input taints (#1980)\n\n* refactor(taint): build timing-comparison sinks through the public Codebase taint API\n\nReplace DataFlowNode::getForTaint(), TaintFlowGraph::addSink()/addPath() and the\nStatementsAnalyzer::$taint_flow_graph read with Codebase::addTaintSink(),\naddTaintPath() and tracksTaintFlow() (vimeo/psalm#12454, Psalm 7.0.0-rc8). The\nhandler no longer imports any Psalm\\Internal class.\n\nBehavior change: tracksTaintFlow() is false where TaintedInput is suppressed, so\nthe rule now adds no sinks in that scope, matching core taint sinks.\n\n* fix(taint): give and strip custom input taints declared in psalm.xml\n\nPlugin sources and \"all input\" strips hardcoded TaintKind::ALL_INPUT, so a\ncustom taint a project aliases into `input` (vimeo/psalm#12330) never flowed\nfrom them. Use Codebase::getInputTaints() at the sources (TokenGuard\ngetTokenForRequest(), laravel/ai response reads, validated field reads) and at\nthe named-argument variadic strip.\n\nValidation rule masks stay built-in kinds; ValidationTaintHandler widens a\nmask that clears every built-in input kind (uuid, in, enum, ...) to the custom\ninput taints, while partial escapes (email, ip) keep them.\n\n* refactor(stubs): source getClientOriginalExtension() with a taint complement\n\nReplace the enumerated @psalm-taint-source list with\n`~(file|user_secret|system_secret)` (vimeo/psalm#12300). Same intent, every\ntaint but a file path or a secret, and it now also covers the kinds the list\npredated (nosql, url_component, url_path) and custom taints, instead of\nsilently missing each kind Psalm adds.\n\n* refactor(stubs): drop the unused @template workaround for vimeo/psalm#11837\n\nPsalm 7.0.0-rc8 ships the fix (vimeo/psalm#12413), so a conditional return in\na stub re-declaring a reflected method keeps both branches without a\nmethod-level template. Removes TUnused from Tappable::tap() and the\nCollection, Enumerable and LazyCollection random() stubs. The tap and random\ntype tests still assert both branches.\n\n* refactor(taint): gate taint handlers on a null graph, not an Internal instanceof\n\nCodebase::$taint_flow_graph is declared ?TaintFlowGraph, so `=== null` is the\nsame check without naming a Psalm\\Internal class. An instanceof of a renamed\ninternal class evaluates false and silently disables the handler, whereas the\nnull check keeps working. Applies to LlmOutputTaintHandler,\nNamedArgumentTaintHandler and WhereColumnTaintHandler.\n\nRector's FlipTypeControlToUseExclusiveTypeRector rewrites those null checks\n(and the timing handler's addTaintSink() result check) back into the internal\ninstanceof, so it is skipped for these four handlers. The contributing docs\ndescribe the gate and the timing handler's public taint API.\n\n* style: sort TimingUnsafeComparisonHandler imports",
+          "timestamp": "2026-10-23T13:16:38+02:00",
+          "tree_id": "a7c406b90e5b83512fbfeb6b9266c0ab3a840d0c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5f792def53d157ef7b62eea0ec80448ba27543a5"
+        },
+        "date": 1792754414491,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.05,
+            "range": "± 0.23",
             "unit": "s"
           },
           {
