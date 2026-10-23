@@ -231,6 +231,7 @@ final class ModelRelationReturnTypeHandler
 
                 $result = $relatedModelType instanceof \Psalm\Type\Union
                     ? self::buildRelationType(
+                        $codebase,
                         $parsed['relationClass'],
                         $relatedModelType,
                         $parsed['intermediateModel'],
@@ -332,6 +333,7 @@ final class ModelRelationReturnTypeHandler
      * @param array{pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, ...} $pivot
      */
     private static function buildRelationType(
+        Codebase $codebase,
         string $relationClass,
         Union $relatedModel,
         ?string $intermediateModel,
@@ -382,7 +384,7 @@ final class ModelRelationReturnTypeHandler
             if ($pivot['pivotModel'] === null && $pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
                 $pivotType = PivotColumnResolver::refine(
                     $pivotType,
-                    PivotColumnResolver::columnTypes($pivot['pivotTable'], $pivot['pivotColumns']),
+                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass),
                 ) ?? $pivotType;
             }
 

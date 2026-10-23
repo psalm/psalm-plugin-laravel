@@ -68,6 +68,27 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         );
     }
 
+    #[Test]
+    public function it_keeps_the_parents_timestamp_columns_mixed(): void
+    {
+        $traces = $this->runPsalm();
+
+        // Laravel casts the parent's created/updated column names as dates once `created_at` is selected:
+        // Ledger's `modified_at` is one, so it must not read as its raw schema type. A literal `updated_at`
+        // that the parent does not use is a plain column.
+        $this->assertContains(
+            '$_entries: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Ledger, ' . self::RELATIONS
+            . "Pivot&object{created_at:mixed, modified_at:mixed, updated_at:null|string, amount:int}, 'pivot'>",
+            $traces,
+        );
+        // At the call site inside the relation body.
+        $this->assertContains(
+            '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Ledger&static, ' . self::RELATIONS
+            . "Pivot&object{created_at:mixed, modified_at:mixed, updated_at:null|string, amount:int}, 'pivot'>",
+            $traces,
+        );
+    }
+
     /**
      * @return list<string> the `@psalm-trace` messages
      */

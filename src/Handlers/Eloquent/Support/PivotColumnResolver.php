@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 
 use Illuminate\Database\Eloquent\Concerns\HasRelationships;
+use Illuminate\Database\Eloquent\Concerns\HasTimestamps;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\Pivot;
@@ -147,19 +148,23 @@ final class PivotColumnResolver
     }
 
     /**
-     * Each column's type from the migration schema of $table, `mixed` when unknown.
+     * Each column's type from the migration schema of $table, `mixed` when unknown. A column that may be
+     * one of the relation parent's timestamp columns is `mixed` too: Laravel's pivot casts those as dates
+     * once `created_at` is selected, and which date class that is depends on the app, so neither the raw
+     * schema type nor Carbon is right.
      *
      * @param list<string> $columns
+     * @param ?string $parentClass the model the relation is called on
      * @return array<string, Union>
      */
-    public static function columnTypes(?string $table, array $columns): array
+    public static function columnTypes(Codebase $codebase, ?string $table, array $columns, ?string $parentClass): array
     {
         $schemaTable = $table === null ? null : SchemaStateProvider::getSchema()?->tables[$table] ?? null;
+        $timestamps = $parentClass === null ? null : self::timestampColumns($codebase, $parentClass);
         $types = [];
         foreach ($columns as $column) {
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
-            // Pivot::fromAttributes() enables timestamps when created_at is selected; they then read as Carbon.
-            if ($schemaColumn === null || $column === 'created_at' || $column === 'updated_at') {
+            if ($schemaColumn === null || $timestamps === null || \in_array($column, $timestamps, true)) {
                 $types[$column] = Type::getMixed();
                 continue;
             }
@@ -202,6 +207,48 @@ final class PivotColumnResolver
         return $pivot->setIntersectionTypes([$shape->getKey() => $shape]);
     }
 
+    /**
+     * The `CREATED_AT` / `UPDATED_AT` column names of $modelClass (a disabled one is skipped); null when
+     * unknown: a model that overrides `getCreatedAtColumn()` / `getUpdatedAtColumn()`, or a constant that
+     * is not a literal string or null.
+     *
+     * @return list<string>|null
+     */
+    private static function timestampColumns(Codebase $codebase, string $modelClass): ?array
+    {
+        if (
+            !self::inheritsDefault($codebase, $modelClass, 'getCreatedAtColumn')
+            || !self::inheritsDefault($codebase, $modelClass, 'getUpdatedAtColumn')
+        ) {
+            return null;
+        }
+
+        $columns = [];
+        foreach (['CREATED_AT', 'UPDATED_AT'] as $constant) {
+            try {
+                $type = $codebase->classlikes->getClassConstantType($modelClass, $constant, \ReflectionProperty::IS_PRIVATE);
+            } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
+                return null;
+            }
+
+            if (!$type instanceof Union) {
+                return null;
+            }
+
+            if ($type->isNull()) {
+                continue;
+            }
+
+            if (!$type->isSingleStringLiteral()) {
+                return null;
+            }
+
+            $columns[] = $type->getSingleStringLiteral()->value;
+        }
+
+        return $columns;
+    }
+
     /** @psalm-mutation-free */
     private static function argument(MethodCall $call, int $position, string $name): ?Expr
     {
@@ -226,6 +273,6 @@ final class PivotColumnResolver
         }
 
         return $declaring instanceof MethodIdentifier
-            && \in_array(\strtolower($declaring->fq_class_name), [\strtolower(HasRelationships::class), \strtolower(Model::class)], true);
+            && \in_array(\strtolower($declaring->fq_class_name), [\strtolower(HasRelationships::class), \strtolower(HasTimestamps::class), \strtolower(Model::class)], true);
     }
 }

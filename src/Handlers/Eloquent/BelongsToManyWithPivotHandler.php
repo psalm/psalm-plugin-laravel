@@ -71,7 +71,12 @@ final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInt
 
         $pivot = PivotColumnResolver::refine(
             $relation->type_params[2]->getSingleAtomic(),
-            PivotColumnResolver::columnTypes($table, $columns),
+            PivotColumnResolver::columnTypes(
+                $event->getSource()->getCodebase(),
+                $table,
+                $columns,
+                self::className($relation->type_params[1]),
+            ),
         );
         if (!$pivot instanceof TNamedObject) {
             return null;
