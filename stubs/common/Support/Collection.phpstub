@@ -16,7 +16,7 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
- * The list mirrors EnumeratesValues::$proxies at the 12.20 floor — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the 12.27 floor — do not edit without checking that array.
  * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
  * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
@@ -374,17 +374,14 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Group an associative array by a field or using a callback.
      *
-     * The 12.20 floor maps only a BackedEnum group key (to its value); a pure UnitEnum key reaches
-     * array_key_exists() and throws. Laravel 12.27.0 resolves pure enums too: `stubs/12.27.0/`.
-     *
-     * @template TGroupKey of array-key|\BackedEnum|\Stringable
+     * @template TGroupKey of array-key|\UnitEnum|\Stringable
      *
      * @param  (callable(TValue, TKey): TGroupKey)|array|string  $groupBy
      * @param  bool  $preserveKeys
      * @return static<
      *  ($groupBy is (array|string)
      *      ? array-key
-     *      : (TGroupKey is \BackedEnum ? array-key : (TGroupKey is \Stringable ? string : TGroupKey))),
+     *      : (TGroupKey is \UnitEnum ? array-key : (TGroupKey is \Stringable ? string : TGroupKey))),
      *  static<($preserveKeys is true ? TKey : int), ($groupBy is array ? mixed : TValue)>
      * >
      */
@@ -393,13 +390,10 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Key an associative array by a field or using a callback.
      *
-     * The 12.20 floor casts every object key with `(string)`, so any enum throws; Laravel 12.26.4
-     * resolves enums through enum_value() first. The enum-accepting contract is in `stubs/12.26.4/`.
-     *
-     * @template TNewKey of array-key
+     * @template TNewKey of array-key|\UnitEnum
      *
      * @param  (callable(TValue, TKey): TNewKey)|array|string  $keyBy
-     * @return static<($keyBy is (array|string) ? array-key : TNewKey), TValue>
+     * @return static<($keyBy is (array|string) ? array-key : (TNewKey is \UnitEnum ? array-key : TNewKey)), TValue>
      */
     public function keyBy($keyBy) {}
 
