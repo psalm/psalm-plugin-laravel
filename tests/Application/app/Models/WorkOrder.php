@@ -97,6 +97,18 @@ final class WorkOrder extends Model
         return $this->belongsToMany(Part::class)->withPivot('unit_price');
     }
 
+    /** `withTimestamps()` adds the parent's created/updated columns after `withPivot()`'s (#1944). */
+    public function stampedParts(): BelongsToMany
+    {
+        return $this->belongsToMany(Part::class)->withPivot('quantity')->withTimestamps();
+    }
+
+    /** Delegated `withTimestamps()` with explicit names (#1944): not the parent's, so plain columns. */
+    public function renamedStampParts(): BelongsToMany
+    {
+        return $this->parts()->withTimestamps('made_at', 'changed_at');
+    }
+
     /** Delegated `withPivot()` (#1944): the outer columns follow parts()'s own. */
     public function discountedParts(): BelongsToMany
     {

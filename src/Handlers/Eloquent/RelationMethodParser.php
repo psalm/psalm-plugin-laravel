@@ -337,11 +337,17 @@ final class RelationMethodParser
             return $parsed;
         }
 
+        $unresolvedUsing = false;
         while ($expr instanceof PhpParser\Node\Expr\MethodCall && $expr->name instanceof PhpParser\Node\Identifier) {
             $name = \strtolower($expr->name->name);
             if ($name === 'withpivot') {
                 // Outermost first: prepend so the innermost call's columns lead.
                 $parsed['pivotColumns'] = [...PivotColumnResolver::columnsFromArgs($expr->args), ...$parsed['pivotColumns']];
+            } elseif ($name === 'withtimestamps') {
+                $parsed['pivotColumns'] = [...PivotColumnResolver::timestampColumns($codebase, $expr, $receiverClass), ...$parsed['pivotColumns']];
+            } elseif ($name === 'using') {
+                // The outermost resolved using() wins; a chain with none resolved has a pivot class that is unknown.
+                $unresolvedUsing = $parsed['pivotModel'] === null;
             } elseif (isset(PivotColumnResolver::FACTORY_TABLE_POSITION[$name])) {
                 // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it.
                 $parsed['pivotTable'] = PivotColumnResolver::table($codebase, $expr, $name, $parsed['relatedModel'], $receiverClass);
@@ -350,6 +356,8 @@ final class RelationMethodParser
 
             $expr = $expr->var;
         }
+
+        $parsed['pivotTable'] = $unresolvedUsing ? false : $parsed['pivotTable'];
 
         return $parsed;
     }
@@ -384,7 +392,7 @@ final class RelationMethodParser
                 $parsed = self::parseDelegatedTarget($codebase, $scopeClass, $receiverClass, $name);
 
                 return $parsed !== null && \strcasecmp($parsed['relationClass'], $declaredClass) === 0
-                    ? self::applyChain($codebase, $parsed, $chain, $scopeClass, $parentClass)
+                    ? self::applyChain($codebase, $parsed, $chain, $scopeClass, $parentClass, $receiverClass)
                     : null;
             }
 
@@ -406,6 +414,7 @@ final class RelationMethodParser
         array $chain,
         string $scopeClass,
         ?string $parentClass,
+        string $receiverClass,
     ): ?array {
         // MorphToMany extends BelongsToMany; both carry the pivot / accessor slots.
         $pivotAware = \is_a($parsed['relationClass'], BelongsToMany::class, true);
@@ -427,6 +436,8 @@ final class RelationMethodParser
                 }
             } elseif ($pivotAware && $name === 'withpivot') {
                 $pivotColumns = [...PivotColumnResolver::columnsFromArgs($call->args), ...$pivotColumns];
+            } elseif ($pivotAware && $name === 'withtimestamps') {
+                $pivotColumns = [...PivotColumnResolver::timestampColumns($codebase, $call, $receiverClass), ...$pivotColumns];
             } elseif (self::chainCallKeepsRelation($codebase, $parsed['relationClass'], $name) !== true) {
                 return null;
             }

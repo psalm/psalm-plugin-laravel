@@ -6,10 +6,12 @@ namespace WithPivotFixture;
 
 use WithPivotFixture\Models\Crew;
 use WithPivotFixture\Models\Ledger;
+use WithPivotFixture\Models\Odd;
+use WithPivotFixture\Models\Sheet;
 use WithPivotFixture\Models\Squad;
 use WithPivotFixture\Models\Team;
 
-function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger): void
+function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $sheet, Odd $odd): void
 {
     $_members = $team->members();
     /** @psalm-trace $_members */
@@ -28,4 +30,31 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger): void
 
     $_entries = $ledger->entries();
     /** @psalm-trace $_entries */
+
+    $_assignments = $team->assignments();
+    /** @psalm-trace $_assignments */
+
+    $_rota = $team->rota();
+    /** @psalm-trace $_rota */
+
+    $_odd_rota = $team->oddRota();
+    /** @psalm-trace $_odd_rota */
+
+    $_dynamic_using = $team->dynamicUsing('x');
+    /** @psalm-trace $_dynamic_using */
+
+    $_plain_stamps = $sheet->plainStamps();
+    /** @psalm-trace $_plain_stamps */
+
+    $_plain_stamps_created = $sheet->plainStampsWithCreatedAt();
+    /** @psalm-trace $_plain_stamps_created */
+
+    $_rota_stamps = $sheet->rotaStamps();
+    /** @psalm-trace $_rota_stamps */
+
+    $_odd_default = $odd->defaultStamps();
+    /** @psalm-trace $_odd_default */
+
+    $_odd_hours = $odd->stampsWithHours();
+    /** @psalm-trace $_odd_hours */
 }

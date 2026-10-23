@@ -30,10 +30,10 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
     {
         $traces = $this->runPsalm();
 
-        // Default joining table: string, nullable, int; an unknown column and a timestamp stay mixed.
+        // Default joining table: string, nullable, int; an unknown column is mixed, and `created_at` is a date.
         $this->assertContains(
             '$_members: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
-            . "Pivot&object{role:string, note:null|string, rank:int, missing:mixed, created_at:mixed}, 'pivot'>",
+            . "Pivot&object{role:string, note:null|string, rank:int, missing:mixed, created_at:Illuminate\Support\Carbon|null}, 'pivot'>",
             $traces,
         );
         // Explicit table, at the call site inside the relation body.
@@ -69,22 +69,107 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
     }
 
     #[Test]
-    public function it_keeps_the_parents_timestamp_columns_mixed(): void
+    public function it_types_the_parents_timestamp_columns_as_dates_once_the_cast_is_provable(): void
     {
         $traces = $this->runPsalm();
+        $date = 'Illuminate\Support\Carbon|null';
 
         // Laravel casts the parent's created/updated column names as dates once `created_at` is selected:
         // Ledger's `modified_at` is one, so it must not read as its raw schema type. A literal `updated_at`
         // that the parent does not use is a plain column.
         $this->assertContains(
             '$_entries: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Ledger, ' . self::RELATIONS
-            . "Pivot&object{created_at:mixed, modified_at:mixed, updated_at:null|string, amount:int}, 'pivot'>",
+            . "Pivot&object{created_at:{$date}, modified_at:{$date}, updated_at:null|string, amount:int}, 'pivot'>",
             $traces,
         );
         // At the call site inside the relation body.
         $this->assertContains(
             '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Ledger&static, ' . self::RELATIONS
-            . "Pivot&object{created_at:mixed, modified_at:mixed, updated_at:null|string, amount:int}, 'pivot'>",
+            . "Pivot&object{created_at:{$date}, modified_at:{$date}, updated_at:null|string, amount:int}, 'pivot'>",
+            $traces,
+        );
+    }
+
+    #[Test]
+    public function it_types_with_timestamps_columns(): void
+    {
+        $traces = $this->runPsalm();
+        $date = 'Illuminate\Support\Carbon|null';
+
+        // In the relation body and for a caller of the registered method alike.
+        $this->assertContains(
+            '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team&static, ' . self::RELATIONS
+            . "Pivot&object{role:string, created_at:{$date}, updated_at:{$date}}, 'pivot'>",
+            $traces,
+        );
+        // Sheet renames its created column: a plain pivot gates its date casts on its OWN `created_at`,
+        // which is not selected, so `made_at` is not proven a date.
+        $this->assertContains(
+            '$_plain_stamps: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Sheet, ' . self::RELATIONS
+            . "Pivot&object{made_at:mixed, updated_at:mixed}, 'pivot'>",
+            $traces,
+        );
+        // Selecting `created_at` opens the gate; it is no date of Sheet's, only `made_at` and `updated_at` are.
+        $this->assertContains(
+            '$_plain_stamps_created: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Sheet, ' . self::RELATIONS
+            . "Pivot&object{made_at:{$date}, updated_at:{$date}, created_at:null|string}, 'pivot'>",
+            $traces,
+        );
+        // A parent whose created column is overridden has unknown timestamp names: nothing to add for the
+        // defaults, and no column type is proven.
+        $this->assertContains(
+            '$_odd_default: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Odd, ' . self::RELATIONS
+            . "Pivot, 'pivot'>",
+            $traces,
+        );
+        $this->assertContains(
+            '$_odd_hours: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Odd, ' . self::RELATIONS
+            . "Pivot&object{hours:mixed, made_at:mixed, updated_at:mixed}, 'pivot'>",
+            $traces,
+        );
+    }
+
+    #[Test]
+    public function it_refines_a_using_pivot_from_the_relation_table(): void
+    {
+        $traces = $this->runPsalm();
+        $date = 'Illuminate\Support\Carbon|null';
+
+        // `@property` (label) and an explicit cast (level) win over the relation's table; the pivot class's own
+        // table (`assignment_defaults`: hours is a string there) is never read; dates win over the raw schema.
+        $this->assertContains(
+            '$_assignments: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
+            . "Assignment&object{hours:int, label:non-empty-string, level:int, note:null|string, created_at:{$date}, updated_at:{$date}}, 'pivot'>",
+            $traces,
+        );
+        // No `@property`, no casts: a timestamped table must still give dates, not `null|string`.
+        $this->assertContains(
+            '$_rota: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
+            . "Rota&object{hours:int, created_at:{$date}, updated_at:{$date}}, 'pivot'>",
+            $traces,
+        );
+        // Order does not matter inside the relation body.
+        $this->assertContains(
+            '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team&static, ' . self::MODELS
+            . "Rota&object{created_at:{$date}, updated_at:{$date}, hours:int}, 'pivot'>",
+            $traces,
+        );
+        // A using() pivot gates its date casts on the parent's created column: Sheet's `made_at`.
+        $this->assertContains(
+            '$_rota_stamps: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Sheet, ' . self::MODELS
+            . "Rota&object{made_at:{$date}, updated_at:{$date}}, 'pivot'>",
+            $traces,
+        );
+        // A class that converts dates its own way proves no column.
+        $this->assertContains(
+            '$_odd_rota: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
+            . "OddRota&object{hours:mixed, created_at:mixed, updated_at:mixed}, 'pivot'>",
+            $traces,
+        );
+        // A non-literal using() leaves the pivot class unknown: no shape.
+        $this->assertContains(
+            '$_dynamic_using: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
+            . "Pivot, 'pivot'>",
             $traces,
         );
     }
