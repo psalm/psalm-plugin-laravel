@@ -61,6 +61,8 @@ final class PivotColumnResolver
         $columns = [];
         $using = null;
         $usingSeen = false;
+        $table = null;
+        $visible = false;
         for ($call = $outer; $call instanceof MethodCall && $call->name instanceof Identifier; $call = $call->var) {
             $name = \strtolower($call->name->name);
             if ($name === 'using') {
@@ -72,19 +74,15 @@ final class PivotColumnResolver
             } elseif (isset(self::FACTORY_TABLE_POSITION[$name])) {
                 // Another receiver's factory takes that model's timestamp names and default table, not this one's.
                 $onThis = $call->var instanceof Expr\Variable && $call->var->name === 'this';
-
-                return [
-                    'columns' => $columns,
-                    'using' => $using,
-                    'table' => $onThis ? self::table($codebase, $call, $name, $relatedClass, $parentClass) : null,
-                    'visible' => $onThis && ($using !== null || !$usingSeen),
-                ];
-            } else {
-                $columns = [...self::callColumns($codebase, $call, $name, $parentClass), ...$columns];
+                $table = $onThis ? self::table($codebase, $call, $name, $relatedClass, $parentClass) : null;
+                $visible = $onThis && ($using !== null || !$usingSeen);
+                break;
             }
+
+            $columns = [...self::callColumns($codebase, $call, $name, $parentClass), ...$columns];
         }
 
-        return ['columns' => $columns, 'using' => $using, 'table' => null, 'visible' => false];
+        return ['columns' => $columns, 'using' => $using, 'table' => $table, 'visible' => $visible];
     }
 
     /**
@@ -283,7 +281,7 @@ final class PivotColumnResolver
             $existing = $extra->properties;
         }
 
-        return self::withShape($pivot, $existing + $properties);
+        return self::shapeOn($pivot->value, $existing + $properties);
     }
 
     /**
@@ -294,18 +292,9 @@ final class PivotColumnResolver
      */
     public static function shapeOn(string $pivotClass, array $properties): TNamedObject
     {
-        return self::withShape(new TNamedObject($pivotClass), $properties);
-    }
-
-    /**
-     * @param array<string, Union> $properties
-     * @psalm-pure
-     */
-    private static function withShape(TNamedObject $pivot, array $properties): TNamedObject
-    {
         $shape = new TObjectWithProperties($properties);
 
-        return $pivot->setIntersectionTypes([$shape->getKey() => $shape]);
+        return (new TNamedObject($pivotClass))->setIntersectionTypes([$shape->getKey() => $shape]);
     }
 
     /**
