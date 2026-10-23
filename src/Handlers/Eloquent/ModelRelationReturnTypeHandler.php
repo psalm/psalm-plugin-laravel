@@ -380,11 +380,13 @@ final class ModelRelationReturnTypeHandler
         $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
         if ($pivotDefault !== null) {
             $pivotType = new TNamedObject($pivot['pivotModel'] ?? $pivotDefault);
-            // A custom pivot class (using()) types its own attributes.
-            if ($pivot['pivotModel'] === null && $pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
+            // `using(X::class)` refines X itself, from its own types and, on a visible chain, the relation table.
+            if ($pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
+                $using = PivotColumnResolver::usingFor($pivot['pivotModel'], $pivot['pivotVisible']);
                 $pivotType = PivotColumnResolver::refine(
                     $pivotType,
-                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass, $pivot['pivotVisible']),
+                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass, $pivot['pivotVisible'], $using),
+                    $using,
                 ) ?? $pivotType;
             }
 
