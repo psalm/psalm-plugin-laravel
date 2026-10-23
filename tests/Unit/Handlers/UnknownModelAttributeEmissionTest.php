@@ -30,6 +30,37 @@ use Symfony\Component\Process\Process;
 #[Group('subprocess')]
 final class UnknownModelAttributeEmissionTest extends TestCase
 {
+    /**
+     * Flagged key => ["Receiver::method" the message must start with, short name of the model it must
+     * name]; keys are unique across the fixture.
+     *
+     * @var array<string, array{string, string}>
+     */
+    private const EXPECTED_CREATION_PATH_FINDINGS = [
+        'typo_query' => ['Builder::create', 'KnownThing'],
+        'typo_postquery' => ['PostBuilder::create', 'Post'],
+        'typo_postbuilder' => ['PostBuilder::forceCreate', 'Post'],
+        'typo_genericbuilder' => ['GenericBuilder::make', 'Post'],
+        'typo_hasmany' => ['HasMany::create', 'Post'],
+        'typo_forcequiet' => ['HasMany::forceCreateQuietly', 'Post'],
+        'typo_chained' => ['HasMany::create', 'Post'],
+        'typo_named' => ['HasMany::create', 'Post'],
+        'typo_namedrecords' => ['HasMany::createMany', 'Post'],
+        'typo_make' => ['HasMany::make', 'Post'],
+        'typo_makemany' => ['HasMany::makeMany', 'Post'],
+        'typo_many' => ['HasMany::createMany', 'Post'],
+        'typo_tag' => ['BelongsToMany::create', 'Tag'],
+        'typo_tagmany' => ['BelongsToMany::createMany', 'Tag'],
+        'typo_morphmany' => ['MorphMany::create', 'Post'],
+        'typo_morphtomany' => ['MorphToMany::create', 'Tag'],
+        'typo_nullsafe' => ['Builder::create', 'Post'],
+        'typo_reordered' => ['BelongsToMany::create', 'Tag'],
+        'typo_reordered_many' => ['BelongsToMany::createMany', 'Tag'],
+        'typo_stock_control' => ['Tag::create', 'Tag'],
+        'typo_this_relation' => ['HasMany::create', 'Post'],
+        'typo_this_builder' => ['PostBuilder::create', 'Post'],
+    ];
+
     #[Test]
     public function it_reports_typos_through_every_receiver_form_and_stays_silent_on_clean_calls(): void
     {
@@ -41,17 +72,37 @@ final class UnknownModelAttributeEmissionTest extends TestCase
         );
         $joined = \implode("\n", $messages);
 
-        // One finding per typo'd key, through each of the three receiver forms exercised by the
-        // fixture: static::, self::, and a plain external class reference. The three "clean" call
-        // sites (makeClean, create_clean_from_outside) and the dynamically declared migration
-        // column must stay silent — asserting an exact count proves both that the rule fires and
-        // that it does not over-fire when a registered table has no statically parsed columns.
-        $this->assertCount(3, $findings, "Expected exactly 3 UnknownModelAttribute findings, got:\n{$joined}");
+        // One finding per typo'd key, through each of the three Model receiver forms exercised by the
+        // fixture: static::, self::, and a plain external class reference. The "clean" call sites
+        // (makeClean, create_clean_from_outside) and the dynamically declared migration column must
+        // stay silent — asserting an exact count proves both that the rule fires and that it does not
+        // over-fire when a registered table has no statically parsed columns.
         $this->assertStringContainsString("'nmae'", $joined, 'static::create() with a typo must be flagged.');
         $this->assertStringContainsString("'unknown_col'", $joined, 'self::create() with a typo must be flagged.');
         $this->assertStringContainsString("'bad_key'", $joined, 'A plain external Model::create() with a typo must be flagged.');
         $this->assertStringNotContainsString("'real_col'", $joined, 'A dynamically declared migration column must not be flagged.');
-        $this->assertSame(['info', 'info', 'info'], \array_column($findings, 'severity'));
+
+        // #1679: creation calls on builder and relation receivers (CreationPathsUsage.php). Each
+        // `typo_*` key names the receiver::method() and the model the message must carry.
+        foreach (self::EXPECTED_CREATION_PATH_FINDINGS as $key => [$prefix, $model]) {
+            $this->assertMatchesRegularExpression(
+                '/^' . \preg_quote($prefix, '/') . '\(\) is assigned an unknown attribute \'' . \preg_quote($key, '/') . '\'\..* of ' . $model . ' — check for a typo\.$/m',
+                $joined,
+                "'{$key}' must be flagged as {$prefix}() against {$model}.",
+            );
+        }
+
+        // Receivers/methods the rule must decline: update() bypasses fill(), pivot (second-arg) keys,
+        // unresolved templates, ambiguous receivers, unlisted methods — all carry a `silent_` prefix.
+        $this->assertStringNotContainsString("'custom_fields'", $joined, 'A model with a trait-widened guard must not be flagged.');
+        $this->assertStringNotContainsString("'silent_", $joined, 'A declined receiver/method must not be flagged.');
+
+        $this->assertCount(
+            3 + \count(self::EXPECTED_CREATION_PATH_FINDINGS),
+            $findings,
+            "Unexpected UnknownModelAttribute finding count, got:\n{$joined}",
+        );
+        $this->assertSame(\array_fill(0, \count($findings), 'info'), \array_column($findings, 'severity'));
     }
 
     #[Test]
@@ -59,8 +110,8 @@ final class UnknownModelAttributeEmissionTest extends TestCase
     {
         $findings = $this->runPsalmAndCollectFindings('psalm-experimental.xml');
 
-        $this->assertCount(3, $findings);
-        $this->assertSame(['error', 'error', 'error'], \array_column($findings, 'severity'));
+        $this->assertCount(3 + \count(self::EXPECTED_CREATION_PATH_FINDINGS), $findings);
+        $this->assertSame(\array_fill(0, \count($findings), 'error'), \array_column($findings, 'severity'));
     }
 
     /**

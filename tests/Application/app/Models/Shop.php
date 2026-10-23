@@ -382,7 +382,11 @@ final class Shop extends Model
         return $this->hasMany(WorkOrder::class)->exists();
     }
 
-    /** clone() returns a new Eloquent builder, which Relation::forwardDecoratedCallTo() does not map back. */
+    /**
+     * Before Laravel 13.38 clone() resolves to Eloquent\Builder::clone(), a new builder that
+     * Relation::forwardDecoratedCallTo() does not map back; since 13.38 Relation::clone() is
+     * declared `static`, so the relation survives.
+     */
     public function untypedClonedLastWorkOrder()
     {
         return $this->hasMany(WorkOrder::class)->one()->clone();

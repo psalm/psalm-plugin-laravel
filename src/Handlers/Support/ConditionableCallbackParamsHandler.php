@@ -13,6 +13,7 @@ use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
 use Psalm\Context;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\Statements\ExpressionAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
@@ -39,6 +40,8 @@ use Psalm\Type\Atomic\TObject;
 use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Atomic\TVoid;
 use Psalm\Type\Reconciler;
+use Psalm\Type\TypeNode;
+use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -92,6 +95,15 @@ final class ConditionableCallbackParamsHandler implements
     BeforeExpressionAnalysisInterface
 {
     /**
+     * when()/unless() calls awaiting their params lookup, keyed by the call's first Arg (the only
+     * call-identifying object the provider event exposes). Both ends are weak: the call owns its Arg, so a
+     * strong value would keep the key alive and the entry would outlive its AST.
+     *
+     * @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>>|null
+     */
+    private static ?\WeakMap $calls = null;
+
+    /**
      * Hosts already registered, so a repeated population does not stack closures. Psalm's
      * MethodParamsProvider constructor clears its handlers per Codebase, so this set must be
      * cleared with it ({@see reset()}) or a second Codebase in one process gets no registration.
@@ -100,9 +112,18 @@ final class ConditionableCallbackParamsHandler implements
      */
     private static array $registered = [];
 
+    /**
+     * Declared closure-literal param types by literal node (null: decline the slot).
+     *
+     * @psalm-var \WeakMap<Closure|ArrowFunction, array<int, Union>|null>|null
+     */
+    private static ?\WeakMap $declaredTypes = null;
+
     public static function reset(): void
     {
+        self::$calls = null;
         self::$registered = [];
+        self::$declaredTypes = null;
     }
 
     #[\Override]
@@ -149,7 +170,7 @@ final class ConditionableCallbackParamsHandler implements
         $args = $expr->getArgs();
 
         if (($method === 'when' || $method === 'unless') && \count($args) >= 2) {
-            CallbackCallSite::remember($expr);
+            (self::$calls ??= self::newCallMap())->offsetSet($args[0], \WeakReference::create($expr));
         }
 
         return null;
@@ -175,8 +196,8 @@ final class ConditionableCallbackParamsHandler implements
         }
 
         $literals = [
-            'callback' => CallbackCallSite::closureLiteral(ArgUtil::boundTo($args, 'callback', 1)),
-            'default' => CallbackCallSite::closureLiteral(ArgUtil::boundTo($args, 'default', 2)),
+            'callback' => self::closureLiteral(ArgUtil::boundTo($args, 'callback', 1)),
+            'default' => self::closureLiteral(ArgUtil::boundTo($args, 'default', 2)),
         ];
         if ($literals['callback'] === null && $literals['default'] === null) {
             return null;
@@ -192,12 +213,12 @@ final class ConditionableCallbackParamsHandler implements
         $source = $event->getStatementsSource();
         $context = $event->getContext();
         // A stash miss (static or forwarded call) leaves no receiver node to read.
-        $call = CallbackCallSite::callOf($args[0]);
+        $call = (self::$calls[$args[0]] ?? null)?->get();
         if (!$source instanceof StatementsAnalyzer || !$context instanceof Context || $call === null) {
             return null;
         }
 
-        $receiver = CallbackCallSite::receiver($source, $call, $event->getFqClasslikeName());
+        $receiver = self::receiver($source, $call, $event->getFqClasslikeName());
         if (!$receiver instanceof TNamedObject) {
             return null;
         }
@@ -233,6 +254,67 @@ final class ConditionableCallbackParamsHandler implements
         }
 
         return $result;
+    }
+
+    /**
+     * The slot's Closure/ArrowFunction literal, unless its first param is variadic.
+     *
+     * @psalm-mutation-free
+     */
+    private static function closureLiteral(?Arg $arg): Closure|ArrowFunction|null
+    {
+        $value = $arg?->value;
+        if (!$value instanceof Closure && !$value instanceof ArrowFunction) {
+            return null;
+        }
+
+        return isset($value->params[0]) && $value->params[0]->variadic ? null : $value;
+    }
+
+    /**
+     * The receiver as the callback will see it: exactly one object atomic of the dispatched class
+     * (null dropped for `?->`), else null. `$this` in a trait is `Host&static`; a final host has
+     * no subclass, and Psalm reads the expected param as the plain host, so `&static` is dropped.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function receiver(
+        StatementsAnalyzer $source,
+        MethodCall|NullsafeMethodCall $call,
+        string $dispatchedClass,
+    ): ?TNamedObject {
+        $type = $source->getNodeTypeProvider()->getType($call->var);
+        if (!$type instanceof Union) {
+            return null;
+        }
+
+        $atomics = [];
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNull) {
+                $atomics[] = $atomic;
+            }
+        }
+
+        if (\count($atomics) !== 1) {
+            return null;
+        }
+
+        $atomic = $atomics[0];
+        if (!$atomic instanceof TNamedObject || \strtolower($atomic->value) !== \strtolower($dispatchedClass)) {
+            return null;
+        }
+
+        if (!$atomic->is_static) {
+            return $atomic;
+        }
+
+        try {
+            $final = $source->getCodebase()->classlike_storage_provider->get($dispatchedClass)->final;
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return null;
+        }
+
+        return $final ? $atomic->setIsStatic(false) : $atomic;
     }
 
     /**
@@ -331,7 +413,7 @@ final class ConditionableCallbackParamsHandler implements
         Union $value,
         Closure|ArrowFunction $literal,
     ): ?Union {
-        $declared = CallbackCallSite::declaredParamTypes($source, $codebase, $literal);
+        $declared = self::declaredParamTypes($source, $codebase, $literal);
         if ($declared === null) {
             return null;
         }
@@ -353,5 +435,106 @@ final class ConditionableCallbackParamsHandler implements
         }
 
         return new Union([new TCallable($params, Type::getMixed()), new TNull()]);
+    }
+
+    /**
+     * Native or docblock param types a closure literal declares, by offset, or null to decline
+     * the slot: a late-bound type (`self`/`static`/`parent`, at any depth) is declared, or the
+     * closure storage is missing. Memoized on first sight: ArgumentsAnalyzer later overwrites the
+     * storage param type with the inferred one (marking it `type_inferred`), so a loop's second
+     * pass would no longer see the declaration.
+     *
+     * @return array<int, Union>|null
+     */
+    private static function declaredParamTypes(
+        StatementsAnalyzer $source,
+        Codebase $codebase,
+        Closure|ArrowFunction $literal,
+    ): ?array {
+        if (!self::$declaredTypes instanceof \WeakMap) {
+            /** @psalm-var \WeakMap<Closure|ArrowFunction, array<int, Union>|null> $fresh */
+            $fresh = new \WeakMap();
+            self::$declaredTypes = $fresh;
+        }
+
+        $memo = self::$declaredTypes;
+        if ($memo->offsetExists($literal)) {
+            return $memo->offsetGet($literal);
+        }
+
+        $types = self::readDeclaredParamTypes($source, $codebase, $literal);
+        $memo->offsetSet($literal, $types);
+
+        return $types;
+    }
+
+    /** @return array<int, Union>|null */
+    private static function readDeclaredParamTypes(
+        StatementsAnalyzer $source,
+        Codebase $codebase,
+        Closure|ArrowFunction $literal,
+    ): ?array {
+        // Same id scheme as Psalm's closure-param inference (ArgumentsAnalyzer).
+        $closureId = \strtolower($source->getFilePath())
+            . ':' . $literal->getLine()
+            . ':' . (int) $literal->getAttribute('startFilePos')
+            . ':-:closure';
+
+        try {
+            $storage = $codebase->getClosureStorage($source->getFilePath(), $closureId);
+        } catch (\UnexpectedValueException|\InvalidArgumentException) {
+            return null;
+        }
+
+        $types = [];
+        foreach ($storage->params as $offset => $param) {
+            if (!$param->type instanceof Union || $param->type_inferred) {
+                continue;
+            }
+
+            if (self::containsLateBound($param->type)) {
+                return null;
+            }
+
+            $types[$offset] = $param->type;
+        }
+
+        return $types;
+    }
+
+    /**
+     * Whether `self`/`static`/`parent` appears anywhere in the type, generics included. Closure
+     * storage keeps these unexpanded, and Psalm never matches them against the host type.
+     *
+     * @psalm-pure
+     */
+    private static function containsLateBound(Union $type): bool
+    {
+        $visitor = new class extends TypeVisitor {
+            /** @psalm-pure */
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                $lateBound = $type instanceof TNamedObject
+                    && \in_array(\strtolower($type->value), ['self', 'static', 'parent'], true);
+
+                return $lateBound ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        // traverse() returns false exactly when enterNode() stopped the traversal.
+        return !$visitor->traverse($type);
+    }
+
+    /**
+     * @return \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>>
+     * @psalm-pure
+     */
+    private static function newCallMap(): \WeakMap
+    {
+        /** @psalm-var \WeakMap<Arg, \WeakReference<MethodCall|NullsafeMethodCall>> $map */
+        $map = new \WeakMap();
+
+        return $map;
     }
 }

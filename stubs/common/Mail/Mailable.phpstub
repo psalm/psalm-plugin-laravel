@@ -7,6 +7,13 @@ use Illuminate\Contracts\Support\Renderable;
 
 class Mailable implements MailableContract, Renderable
 {
+    /*
+     * Only the address is a header sink. Display names are CR/LF-stripped by Symfony's Address, and the
+     * subject is RFC 2047-encoded by UnstructuredHeader when Symfony serializes the message, so neither can inject a header (#1958).
+     * An address can: a quoted local part or domain literal carrying CRLF reaches the header verbatim
+     * unless Laravel's Message::ensureAddressIsSafe() (12.60+/13.10+) or symfony/mime 7.4.12/8.0.12+
+     * (CVE-2026-45067) rejects it. Neither guard exists on all of the supported range (^12.20 || ^13.3).
+     */
     /**
      * Set the sender of the message.
      *
@@ -15,7 +22,6 @@ class Mailable implements MailableContract, Renderable
      * @return $this
      *
      * @psalm-taint-sink header $address
-     * @psalm-taint-sink header $name
      */
     public function from($address, $name = null) {}
 
@@ -27,7 +33,6 @@ class Mailable implements MailableContract, Renderable
      * @return $this
      *
      * @psalm-taint-sink header $address
-     * @psalm-taint-sink header $name
      */
     public function to($address, $name = null) {}
 
@@ -39,7 +44,6 @@ class Mailable implements MailableContract, Renderable
      * @return $this
      *
      * @psalm-taint-sink header $address
-     * @psalm-taint-sink header $name
      */
     public function cc($address, $name = null) {}
 
@@ -51,7 +55,6 @@ class Mailable implements MailableContract, Renderable
      * @return $this
      *
      * @psalm-taint-sink header $address
-     * @psalm-taint-sink header $name
      */
     public function bcc($address, $name = null) {}
 
@@ -63,7 +66,6 @@ class Mailable implements MailableContract, Renderable
      * @return $this
      *
      * @psalm-taint-sink header $address
-     * @psalm-taint-sink header $name
      */
     public function replyTo($address, $name = null) {}
 
@@ -72,8 +74,6 @@ class Mailable implements MailableContract, Renderable
      *
      * @param  string  $subject
      * @return $this
-     *
-     * @psalm-taint-sink header $subject
      */
     public function subject($subject) {}
 

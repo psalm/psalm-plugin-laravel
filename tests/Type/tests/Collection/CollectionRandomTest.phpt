@@ -21,9 +21,8 @@ use Illuminate\Support\LazyCollection;
  *  - `random(int, bool)` compiles without TooManyArguments — the `$preserveKeys`
  *    second parameter was missing from the stub.
  *
- * Non-null `$number` (int or callable) returns `static<int, TValue>`: the conditional
- * return needs the unused method-level `@template` in the stubs (vimeo/psalm#11837),
- * otherwise it collapses to the `TValue` branch (#903).
+ * Non-null `$number` (int or callable) returns `static<int, TValue>`, not the `TValue`
+ * branch (#903, vimeo/psalm#11837).
  *
  * Also covers (#1149): the same conditional on the `Enumerable` interface
  * and `LazyCollection` receivers, which previously fell back to Laravel's
