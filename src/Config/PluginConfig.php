@@ -296,13 +296,15 @@ final readonly class PluginConfig
      */
     private static function resolveBladeCacheDir(?\SimpleXMLElement $config, string $cachePath): string
     {
+        return self::configuredBladeCacheDir($config) ?? $cachePath . \DIRECTORY_SEPARATOR . 'blade';
+    }
+
+    /** The `<blade cacheDir>` the user set, null when absent or empty (the default under Psalm's cache then applies). */
+    public static function configuredBladeCacheDir(?\SimpleXMLElement $config): ?string
+    {
         $configured = \rtrim(self::xmlStringAttr($config?->blade, 'cacheDir', ''), \DIRECTORY_SEPARATOR);
 
-        if ($configured !== '') {
-            return $configured;
-        }
-
-        return $cachePath . \DIRECTORY_SEPARATOR . 'blade';
+        return $configured === '' ? null : $configured;
     }
 
     private static function resolveCachePath(): string

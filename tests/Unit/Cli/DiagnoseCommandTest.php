@@ -244,6 +244,54 @@ final class DiagnoseCommandTest extends TestCase
         );
     }
 
+    #[Test]
+    public function blade_reads_a_dist_config_when_there_is_no_psalm_xml(): void
+    {
+        foreach (['psalm.xml.dist', 'psalm.dist.xml'] as $fileName) {
+            $root = $this->bladeProject(null);
+            $this->writePsalmXml($root, '<pluginClass class="Psalm\\LaravelPlugin\\Plugin"><blade /></pluginClass>', $fileName);
+
+            $this->assertSame("disabled: loaded {$root}/{$fileName}", $this->psalmConfigLoadRecorder()->bladeStatus($root));
+        }
+    }
+
+    #[Test]
+    public function an_empty_blade_cache_dir_falls_back_to_the_psalm_cache_like_a_real_run(): void
+    {
+        $root = $this->bladeProject('');
+
+        $this->assertSame("disabled: loaded {$root}/psalm.xml", $this->psalmConfigLoadRecorder()->bladeStatus($root));
+    }
+
+    #[Test]
+    public function blade_reads_plugin_settings_pulled_in_through_xinclude(): void
+    {
+        $root = $this->bladeProject(null);
+        \file_put_contents($root . '/not-a-dir', '');
+        \file_put_contents(
+            $root . '/plugins.xml',
+            "<pluginClass xmlns=\"https://getpsalm.org/schema/config\" class=\"Psalm\\LaravelPlugin\\Plugin\"><blade cacheDir=\"{$root}/not-a-dir/blade\" /></pluginClass>",
+        );
+        $this->writePsalmXml($root, '<xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="plugins.xml" />');
+
+        $this->assertSame(
+            "disabled: the shadow cache directory '{$root}/not-a-dir/blade' could not be created",
+            (new Diagnostics())->bladeStatus($root),
+        );
+    }
+
+    /** Stops at the Psalm config load, naming the file it would load: loading plants Psalm's Config singleton. */
+    private function psalmConfigLoadRecorder(): Diagnostics
+    {
+        return new class extends Diagnostics {
+            #[\Override]
+            protected function loadPsalmConfig(string $psalmXml, string $projectRoot): void
+            {
+                throw new \RuntimeException('loaded ' . $psalmXml);
+            }
+        };
+    }
+
     /** @var list<string> */
     private array $tempDirs = [];
 
@@ -270,10 +318,10 @@ final class DiagnoseCommandTest extends TestCase
         return $root;
     }
 
-    private function writePsalmXml(string $root, string $plugins): void
+    private function writePsalmXml(string $root, string $plugins, string $fileName = 'psalm.xml'): void
     {
         \file_put_contents(
-            $root . '/psalm.xml',
+            $root . '/' . $fileName,
             '<?xml version="1.0"?><psalm xmlns="https://getpsalm.org/schema/config"><plugins>' . $plugins . '</plugins></psalm>',
         );
     }

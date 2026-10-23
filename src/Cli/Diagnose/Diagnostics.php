@@ -27,6 +27,9 @@ class Diagnostics
 {
     private const PLUGIN_PACKAGE = 'psalm/plugin-laravel';
 
+    /** Psalm's own `Config::DEFAULT_FILE_NAMES` (private there), in its lookup order. */
+    private const CONFIG_FILE_NAMES = ['psalm.xml', 'psalm.xml.dist', 'psalm.dist.xml'];
+
     public function collect(): Report
     {
         $bootstrapErrors = [];
@@ -83,8 +86,8 @@ class Diagnostics
      */
     public function bladeStatus(?string $projectRoot): string
     {
-        $psalmXml = $projectRoot === null ? null : $projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml';
-        $pluginXml = $psalmXml === null ? null : $this->readPluginXml($psalmXml);
+        $psalmXml = $projectRoot === null ? null : $this->locatePsalmXml($projectRoot);
+        $pluginXml = $this->readPluginXml($psalmXml);
 
         if ($pluginXml === false) {
             return 'off';
@@ -99,7 +102,7 @@ class Diagnostics
             }
 
             // The default cache directory derives from Psalm's own, which needs a loaded Psalm config.
-            if ($psalmXml !== null && $projectRoot !== null && !isset($pluginXml?->blade['cacheDir'])) {
+            if ($psalmXml !== null && $projectRoot !== null && PluginConfig::configuredBladeCacheDir($pluginXml) === null) {
                 $this->loadPsalmConfig($psalmXml, $projectRoot);
                 $config = PluginConfig::fromXml($pluginXml, $overrides);
             }
@@ -158,7 +161,8 @@ class Diagnostics
      * Loading reads the constant Psalm's CLI defines, and `exit(1)`s on any argv token that is not an
      * existing path (see {@see resolveAnalysisPhpVersion()}), so argv is hidden for the duration.
      */
-    private function loadPsalmConfig(string $psalmXml, string $projectRoot): void
+    /** Not private: a test stops here, since loading plants Psalm's Config singleton. */
+    protected function loadPsalmConfig(string $psalmXml, string $projectRoot): void
     {
         global $argv;
 
@@ -182,9 +186,9 @@ class Diagnostics
      * @return \SimpleXMLElement|null|false null when the plugin is registered without settings,
      *                                      false when it is not registered at all
      */
-    private function readPluginXml(string $psalmXml): \SimpleXMLElement|false|null
+    private function readPluginXml(?string $psalmXml): \SimpleXMLElement|false|null
     {
-        $xml = $this->loadPsalmXml($psalmXml);
+        $xml = $psalmXml === null ? null : $this->loadPsalmXml($psalmXml);
 
         foreach ($xml?->plugins->pluginClass ?? [] as $plugin) {
             if (\strcasecmp(\ltrim((string) $plugin['class'], '\\'), Plugin::class) === 0) {
@@ -244,12 +248,13 @@ class Diagnostics
     }
 
     /**
-     * Read the `phpVersion` attribute from `<projectRoot>/psalm.xml`. We don't
+     * Read the `phpVersion` attribute from the project root's Psalm config. We don't
      * walk parent directories — diagnose is intended for the project root.
      */
     private function readPsalmXmlPhpVersion(string $projectRoot): ?string
     {
-        $xml = $this->loadPsalmXml($projectRoot . \DIRECTORY_SEPARATOR . 'psalm.xml');
+        $path = $this->locatePsalmXml($projectRoot);
+        $xml = $path === null ? null : $this->loadPsalmXml($path);
 
         $attr = $xml['phpVersion'] ?? null;
         if (!$attr instanceof \SimpleXMLElement) {
@@ -260,21 +265,34 @@ class Diagnostics
         return $value === '' ? null : $value;
     }
 
+    private function locatePsalmXml(string $projectRoot): ?string
+    {
+        foreach (self::CONFIG_FILE_NAMES as $fileName) {
+            $path = $projectRoot . \DIRECTORY_SEPARATOR . $fileName;
+
+            if (\is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /** Expands `<xi:include>` relative to the file, as Psalm does before it reads the config. */
     private function loadPsalmXml(string $path): ?\SimpleXMLElement
     {
-        if (!\is_file($path)) {
-            return null;
-        }
-
-        $contents = \file_get_contents($path);
-        if ($contents === false) {
-            return null;
-        }
-
         // Toggle libxml's internal error buffer so a malformed psalm.xml never
         // bubbles a warning to STDOUT and breaks the diagnose report layout.
         $previous = \libxml_use_internal_errors(true);
-        $xml = \simplexml_load_string($contents);
+        $dom = new \DOMDocument();
+        $xml = null;
+
+        if ($dom->load($path, \LIBXML_NONET)) {
+            // Returns false for a file with nothing to include too, so, like Psalm, ignore the result.
+            $dom->xinclude(\LIBXML_NOWARNING | \LIBXML_NONET);
+            $xml = \simplexml_import_dom($dom);
+        }
+
         \libxml_clear_errors();
         \libxml_use_internal_errors($previous);
 
