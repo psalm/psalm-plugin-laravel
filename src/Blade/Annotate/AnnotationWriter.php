@@ -227,13 +227,11 @@ final class AnnotationWriter implements AfterAnalysisInterface
             throw new \RuntimeException('the template could not be read');
         }
 
-        $result = TemplateAnnotator::annotate($source, $vars, $optional);
+        $annotated = TemplateAnnotator::annotate($source, $vars, $optional);
 
-        if ($result === null) {
+        if ($annotated === null) {
             return null;
         }
-
-        $annotated = $result[0];
 
         if (!$dryRun && @\file_put_contents($templatePath, $annotated) === false) {
             throw new \RuntimeException('the template could not be written');
