@@ -214,7 +214,8 @@ final class AnnotateCommand extends Command
             }
 
             $io->error('The analysis never reached the annotate pass.');
-            $io->writeln('  Blade analysis has to be enabled and bootable: check `<blade />` in your Psalm config, and run `vendor/bin/psalm` without `--no-progress` to see why it degraded.');
+            // A Blade disable publishes its reason as `error` above, so this is a crash or a run with no template.
+            $io->writeln('  Psalm stopped before it, or found no Blade template to annotate: see its output above.');
 
             return $exitCode === 0 ? Command::FAILURE : $exitCode;
         }

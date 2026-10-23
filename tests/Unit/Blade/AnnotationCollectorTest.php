@@ -412,39 +412,36 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function prints_no_static_marker_or_unbounded_int_range_at_any_depth(): void
+    public function prints_an_unbounded_int_range_as_int_at_any_depth(): void
     {
-        $int = new Type\Union([new Type\Atomic\TInt()]);
-        $box = new Type\Atomic\TGenericObject('App\\Box', [$int, new Type\Union([new Type\Atomic\TString()])], is_static: true);
+        $int = new Type\Union([new Type\Atomic\TIntRange(null, null)]);
         $passed = new Type\Union([Type\Atomic\TKeyedArray::make([
-            'box' => new Type\Union([$box]),
-            'boxes' => new Type\Union([new Type\Atomic\TArray([$int, new Type\Union([$box])])]),
-            'total' => new Type\Union([new Type\Atomic\TIntRange(null, null)]),
+            'box' => new Type\Union([new Type\Atomic\TGenericObject('App\\Box', [$int])]),
+            'counts' => new Type\Union([new Type\Atomic\TArray([Type::getArrayKey(), $int])]),
+            'total' => $int,
             'positive' => new Type\Union([new Type\Atomic\TIntRange(1, null)]),
         ])]);
 
         // typeFor() also parses the id back, which needs a booted Psalm; the printed form is what matters.
-        $printable = new \ReflectionMethod(AnnotationCollector::class, 'printable');
-        $printed = $printable->invoke(null, $passed);
+        $normalize = new \ReflectionMethod(AnnotationCollector::class, 'withoutUnboundedIntRange');
+        $printed = $normalize->invoke(null, $passed);
         $this->assertInstanceOf(Type\Union::class, $printed);
 
+        $this->assertSame('array{box: App\\Box<int>, counts: array<array-key, int>, positive: int<1, max>, total: int}', $printed->getId(false));
         $this->assertSame(
-            'array{box: App\\Box<int, string>, boxes: array<int, App\\Box<int, string>>, positive: int<1, max>, total: int}',
-            $printed->getId(false),
+            'array{box: App\\Box<int<min, max>>, counts: array<array-key, int<min, max>>, positive: int<1, max>, total: int<min, max>}',
+            $passed->getId(false),
+            'the inferred type itself is left untouched',
         );
     }
 
     #[Test]
-    public function a_static_marked_type_agrees_with_the_same_type_unmarked(): void
+    public function an_unbounded_int_range_agrees_with_int(): void
     {
-        $plain = new Type\Atomic\TGenericObject('App\\Box', [new Type\Union([new Type\Atomic\TInt()])]);
+        AnnotationCollector::record('home', ['total' => new Type\Union([new Type\Atomic\TIntRange(null, null)])], true);
+        AnnotationCollector::record('home', ['total' => new Type\Union([new Type\Atomic\TInt()])], true);
 
-        AnnotationCollector::record('home', ['box' => new Type\Union([$plain->setIsStatic(true)])], true);
-        AnnotationCollector::record('home', ['box' => new Type\Union([$plain])], true);
-
-        $observed = (new \ReflectionProperty(AnnotationCollector::class, 'observed'))->getValue();
-        $this->assertIsArray($observed);
-        $this->assertInstanceOf(Type\Union::class, $observed['home']['box'] ?? null, 'the two call sites must agree');
+        $this->assertSame('int', AnnotationCollector::typeFor('home', 'total'));
     }
 
     #[Test]

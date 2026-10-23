@@ -54,22 +54,36 @@ final class Renderer
         return view('loop', ['items' => $this->items()]);
     }
 
+    /** Collection methods returning `static`: the inferred types carry Psalm's late-static marker. */
+    public function lateStatic(): View
+    {
+        $missing = collect(['a', 'b'])->diff(['b']);
+        $byRole = collect(['a', 'b'])->groupBy(static fn(string $name): int => \strlen($name))->all();
+
+        return view('collections', ['missing' => $missing, 'byRole' => $byRole, 'kind' => \get_class($missing)]);
+    }
+
+    /** The same names as plain `Collection`s, so the two producers differ only by `&static`. */
+    public function plain(): View
+    {
+        /** @var Collection<int<0, 1>, string> $missing */
+        $missing = new Collection(['a', 'b']);
+        /** @var array<int<1, max>, Collection<int, string>> $byRole */
+        $byRole = [];
+
+        return view('collections', ['missing' => $missing, 'byRole' => $byRole, 'kind' => \get_class($missing)]);
+    }
+
     /** An unresolvable producer: nothing proves what 'locals' is passed, so every name it reads is a candidate. */
     public function locals(): string
     {
         return view('locals', ['rows' => $this->items()])->render();
     }
 
-    /** `diff()` is declared `static`, and a count difference infers the unbounded `int<min, max>`. */
+    /** A count difference infers the unbounded `int<min, max>`. */
     public function statics(): View
     {
-        $all = new Collection($this->items());
-
-        return view('statics', [
-            'missing' => $all->diff(['b']),
-            'byKey' => $all->groupBy(static fn(string $item): string => $item)->all(),
-            'stats' => ['total' => \count($this->items()) - \count($all)],
-        ]);
+        return view('statics', ['stats' => ['total' => \count($this->items()) - \count($this->items())]]);
     }
 
     public function outerGiven(): View

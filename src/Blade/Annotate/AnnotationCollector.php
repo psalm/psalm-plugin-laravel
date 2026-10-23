@@ -10,6 +10,8 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
+use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
@@ -43,7 +45,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     private static bool $enabled = false;
 
     /**
-     * Keyed by view name then variable name. `false` marks a key two producers disagreed on.
+     * Keyed by view name then variable name. `false` marks a key two producers disagreed on, or one
+     * whose passed type has no declaration a template can carry.
      *
      * @var array<string, array<string, Union|false>>
      */
@@ -374,13 +377,19 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         foreach ($data as $name => $type) {
-            // Normalized before comparing, so `Foo&static` and `Foo` from two call sites agree.
-            $type = self::printable($type);
             $seen = self::$observed[$viewName][$name] ?? null;
 
             if ($seen === false) {
                 continue;
             }
+
+            if (!self::dropsLateStaticSafely($type)) {
+                self::$observed[$viewName][$name] = false;
+
+                continue;
+            }
+
+            $type = self::withoutUnboundedIntRange(self::withoutLateStatic($type));
 
             self::$observed[$viewName][$name] = $seen instanceof Union && $seen->getId(false) !== $type->getId(false)
                 ? false
@@ -477,11 +486,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * The type as a template can declare it, at any depth. A template has no class scope for a
-     * `static` marker to refer to, and `getId(false)` still prints it on a generic object
-     * (`Collection<int, string>&static`). An unbounded `int<min, max>` is plain `int`.
+     * `int<min, max>` is plain `int`, at any depth (a difference of two counts infers it). Normalized
+     * before the agreement check, so `int` and `int<min, max>` from two call sites agree.
      */
-    private static function printable(Union $union): Union
+    private static function withoutUnboundedIntRange(Union $union): Union
     {
         $visitor = new class extends MutableTypeVisitor {
             /**
@@ -490,9 +498,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             #[\Override]
             protected function enterNode(TypeNode &$type): ?int
             {
-                if ($type instanceof Atomic\TNamedObject && $type->is_static) {
-                    $type = $type->setIsStatic(false);
-                } elseif ($type instanceof Atomic\TIntRange && $type->min_bound === null && $type->max_bound === null) {
+                if ($type instanceof Atomic\TIntRange && $type->min_bound === null && $type->max_bound === null) {
                     $type = new Atomic\TInt($type->from_docblock);
                 }
 
@@ -512,26 +518,183 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     private static function isContextDependent(Union $union): bool
     {
-        $visitor = new class extends TypeVisitor {
+        return self::anyAtomic($union, static fn(Atomic $atomic): bool => $atomic instanceof Atomic\TTemplateParam
+            || $atomic instanceof Atomic\TTemplateParamClass
+            || $atomic instanceof Atomic\TTemplateIndexedAccess
+            || $atomic instanceof Atomic\TTemplateKeyOf
+            || $atomic instanceof Atomic\TTemplatePropertiesOf
+            || $atomic instanceof Atomic\TTemplateValueOf
+            || $atomic instanceof Atomic\TConditional);
+    }
+
+    /** @psalm-pure */
+    private static function carriesLateStatic(Union $union): bool
+    {
+        return self::anyAtomic($union, static fn(Atomic $atomic): bool => $atomic instanceof Atomic\TNamedObject && $atomic->is_static);
+    }
+
+    /**
+     * Whether any atomic in the type matches, at any depth. `get_class($x)` keeps the type of `$x` in
+     * `TDependentGetClass::$as_type`, which Psalm's visitor does not descend into, so this does.
+     *
+     * @param \Closure[pure](Atomic): bool $matches
+     *
+     * @psalm-pure
+     */
+    private static function anyAtomic(Union $union, \Closure $matches): bool
+    {
+        $visitor = new class ($matches) extends TypeVisitor {
             public bool $found = false;
 
-            /**
-             * @psalm-external-mutation-free
-             */
+            /** @param \Closure[pure](Atomic): bool $matches */
+            public function __construct(private readonly \Closure $matches) {}
+
+            /** @psalm-external-mutation-free */
             #[\Override]
             protected function enterNode(TypeNode $type): ?int
             {
-                if ($type instanceof Atomic\TTemplateParam
-                    || $type instanceof Atomic\TTemplateParamClass
-                    || $type instanceof Atomic\TTemplateIndexedAccess
-                    || $type instanceof Atomic\TTemplateKeyOf
-                    || $type instanceof Atomic\TTemplatePropertiesOf
-                    || $type instanceof Atomic\TTemplateValueOf
-                    || $type instanceof Atomic\TConditional
-                ) {
+                if ($type instanceof Atomic && ($this->matches)($type)) {
                     $this->found = true;
+                } elseif ($type instanceof Atomic\TDependentGetClass) {
+                    $this->traverse($type->as_type);
+                }
 
-                    return self::STOP_TRAVERSAL;
+                return $this->found ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        $visitor->traverse($union);
+
+        return $visitor->found;
+    }
+
+    /**
+     * Whether dropping every `&static` in the type only widens it. That holds where the marker sits
+     * in a covariant position: the top level, an array or iterable, a class-string, a callable's
+     * return, or a template parameter the class declares covariant. In a callable parameter the
+     * marker-free type promises to accept more; in an invariant template parameter Psalm rejects
+     * `Foo&static` against `Foo`. Either way the declaration would contradict the call site, so the
+     * name is left undeclared instead.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function dropsLateStaticSafely(Union $union): bool
+    {
+        foreach ($union->getAtomicTypes() as $atomic) {
+            if (!self::dropsLateStaticSafelyIn($atomic)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @psalm-capabilities read-props */
+    private static function dropsLateStaticSafelyIn(Atomic $atomic): bool
+    {
+        if ($atomic instanceof Atomic\TCallable || $atomic instanceof Atomic\TClosure) {
+            foreach ($atomic->params ?? [] as $param) {
+                if ($param->type instanceof Union && self::carriesLateStatic($param->type)) {
+                    return false;
+                }
+            }
+
+            return !$atomic->return_type instanceof Union || self::dropsLateStaticSafely($atomic->return_type);
+        }
+
+        if ($atomic instanceof Atomic\TGenericObject) {
+            foreach ($atomic->type_params as $offset => $param) {
+                if (self::carriesLateStatic($param)
+                    && (!self::isCovariantTemplate($atomic->value, $offset) || !self::dropsLateStaticSafely($param))
+                ) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if ($atomic instanceof Atomic\TArray || $atomic instanceof Atomic\TIterable) {
+            return self::allDropLateStaticSafely($atomic->type_params);
+        }
+
+        if ($atomic instanceof Atomic\TKeyedArray) {
+            return self::allDropLateStaticSafely([...\array_values($atomic->properties), ...($atomic->fallback_params ?? [])]);
+        }
+
+        if ($atomic instanceof Atomic\TDependentGetClass) {
+            return self::dropsLateStaticSafely($atomic->as_type);
+        }
+
+        // A plain object (its own marker) and a class-string of one are covariant in that class.
+        if ($atomic instanceof Atomic\TNamedObject || $atomic instanceof Atomic\TClassString) {
+            return true;
+        }
+
+        return !self::carriesLateStatic(new Union([$atomic]));
+    }
+
+    /**
+     * @param array<Union> $types
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function allDropLateStaticSafely(array $types): bool
+    {
+        foreach ($types as $type) {
+            if (!self::dropsLateStaticSafely($type)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Unproven (an unknown class, storage not populated, no project analyzer) counts as not covariant.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isCovariantTemplate(string $class, int $offset): bool
+    {
+        try {
+            $storage = ProjectAnalyzer::getInstance()->getCodebase()->classlike_storage_provider->get($class);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException|\RuntimeException|\Error) {
+            return false;
+        }
+
+        return $storage->template_covariants[$offset] ?? false;
+    }
+
+    /**
+     * A template has no class scope, so `&static` (what Collection methods return) has nothing to bind
+     * to. Stripped at every depth before the agreement check, so two producers differing only by it
+     * agree; reached only once {@see self::dropsLateStaticSafely()} proved that only widens the type.
+     * Types are copy-on-write: the instance Psalm inferred is never mutated.
+     */
+    private static function withoutLateStatic(Union $union): Union
+    {
+        $visitor = new class extends MutableTypeVisitor {
+            /**
+             * @template T of TypeNode
+             * @param T $type
+             * @param-out T $type
+             * @return MutableTypeVisitor::STOP_TRAVERSAL|MutableTypeVisitor::DONT_TRAVERSE_CHILDREN|null
+             * @psalm-suppress ReferenceConstraintViolation T is narrowed to the one atomic rebuilt here
+             */
+            #[\Override]
+            protected function enterNode(TypeNode &$type): ?int
+            {
+                if ($type instanceof Atomic\TNamedObject) {
+                    $type = $type->setIsStatic(false);
+                } elseif ($type instanceof Atomic\TDependentGetClass) {
+                    // `get_class($x)` keeps the type of `$x` in `as_type`, which Psalm's visitor does not descend into.
+                    $inner = $type->as_type;
+                    $this->traverse($inner);
+
+                    if ($inner !== $type->as_type) {
+                        $type = new Atomic\TDependentGetClass($type->typeof, $inner);
+                    }
                 }
 
                 return null;
@@ -540,6 +703,6 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         $visitor->traverse($union);
 
-        return $visitor->found;
+        return $union;
     }
 }
