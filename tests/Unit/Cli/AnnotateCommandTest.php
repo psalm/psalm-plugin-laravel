@@ -51,47 +51,15 @@ final class AnnotateCommandTest extends TestCase
     }
 
     #[Test]
-    public function forces_single_threaded_analysis(): void
+    public function forwards_the_callers_thread_count_so_the_scan_runs_in_parallel(): void
     {
-        // Plugin statics collected in a forked worker never reach the parent process, where the
-        // AfterAnalysis write runs, so a multi-threaded run would annotate nothing.
-        $command = new AnnotateCommand();
-
-        $this->assertSame(['--threads=1'], $command->forwardedArguments(['psalm-laravel', 'blade:annotate']));
-    }
-
-    #[Test]
-    public function overrides_a_thread_count_the_caller_asked_for(): void
-    {
+        // The plugin pins the analysis to one process itself; forcing `--threads=1` here would
+        // serialise the scan for nothing.
         $command = new AnnotateCommand();
 
         $this->assertSame(
-            ['--threads=1'],
-            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--threads=8']),
-        );
-    }
-
-    #[Test]
-    public function keeps_its_own_dry_run_flag_out_of_the_forwarded_tokens(): void
-    {
-        $command = new AnnotateCommand();
-
-        $this->assertSame(
-            ['--threads=1', '-c', 'psalm.xml'],
-            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--dry-run', '-c', 'psalm.xml']),
-        );
-    }
-
-    #[Test]
-    public function puts_the_forced_thread_count_before_the_forwarded_arguments(): void
-    {
-        // PHP's getopt() stops at the first positional argument, so a --threads=1 appended after one
-        // is never parsed: the child forks, and the pass then refuses to write anything.
-        $command = new AnnotateCommand();
-
-        $this->assertSame(
-            ['--threads=1', '-c', 'psalm.xml'],
-            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '-c', 'psalm.xml']),
+            ['--threads=8', '-c', 'psalm.xml'],
+            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--threads=8', '-c', 'psalm.xml']),
         );
     }
 
@@ -266,7 +234,7 @@ final class AnnotateCommandTest extends TestCase
         $command = new AnnotateCommand();
 
         $this->assertSame(
-            ['--threads=1', '-c', 'psalm.xml'],
+            ['-c', 'psalm.xml'],
             $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--dry-run', '--no-diffs', '-c', 'psalm.xml']),
         );
     }
