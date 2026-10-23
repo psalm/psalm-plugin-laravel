@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792756748145,
+  "lastUpdate": 1792757252961,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15115,6 +15115,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1309,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b819004995920a829e4061f91983bcc27879f92b",
+          "message": "Accept lookups on empty `Collection`s without widening lookup params (#1904)\n\n* fix(collections): drop never-key lookup issues on empty collections, declare get/except/only/hasAny like Laravel\n\nPsalm checks lookup arguments per receiver atomic, so an empty Collection<never, never>\nrejects every key in get/has/hasAny/contains/containsStrict/doesntContain/doesntContainStrict/\nsearch/offsetGet/offsetExists. EmptyCollectionLookupIssueHandler drops those issues only when the\nquoted expected type is the declaring method's parameter with every class template replaced by\nnever; populated atomics and user overrides keep reporting. get() takes TKey|null, and\nexcept()/only()/hasAny() are variadic (func_get_args()).\n\nRefs #1814\n\n* fix(collections): keep empty-collection lookup issues for runtime-invalid keys and match named arguments\n\nThe gate also requires the provided type to fit the declared parameter with each class template\nreplaced by its upper bound (array_key_exists(new stdClass) throws on an empty collection), and\nmatches the quoted expected type against every parameter naming a class template, because Psalm\nnumbers arguments by call-site position.\n\nRefs #1814\n\n* fix(collections): require the provided lookup type to round-trip through the type parser\n\nTLiteralString::getId() does not escape quotes, so 'it's'|stdClass parsed back as 'it' and the\ninvalid object key was dropped on an empty collection.\n\nRefs #1814\n\n* fix(collections): keep lookup issues whose quoted type cannot prove an empty receiver\n\nA class template occurring only at the top level of a parameter can be absorbed by another\ntop-level atomic (TValue|null quotes null for never and for Collection<int, null>). Such a\nparameter no longer drops. Positive phpt needles use objects so they exercise the drop.\n\nRefs #1814",
+          "timestamp": "2026-10-23T14:01:38+02:00",
+          "tree_id": "65ef4f33878d7c7bc73c1b7dd033b505896f82bd",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b819004995920a829e4061f91983bcc27879f92b"
+        },
+        "date": 1792757250990,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.02,
+            "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1308,
             "unit": "MB"
           }
         ]
