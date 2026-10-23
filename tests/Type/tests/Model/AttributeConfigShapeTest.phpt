@@ -2,7 +2,7 @@
 <?php
 require getcwd() . '/vendor/autoload.php';
 // Eloquent class-config attributes (#[Appends]/#[Hidden]/…) are Laravel 13.0+. Feature-detect rather
-// than version-pin so the gate self-corrects across the 12.4–13.x support range.
+// than version-pin so the gate self-corrects across the supported range.
 if (!class_exists(\Illuminate\Database\Eloquent\Attributes\Appends::class)) {
     echo 'skip needs Laravel >= 13.0 (Eloquent class-config attributes)';
 }

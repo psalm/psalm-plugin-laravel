@@ -290,12 +290,12 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 **Why:**
 - Display names are safe: `Symfony\Component\Mime\Address::__construct()` strips `\r`/`\n` from the name on every symfony/mime version Laravel allows (>=7.2).
 - Subjects are safe when Symfony serializes the MIME message (SMTP, sendmail, SES raw): `UnstructuredHeader` RFC 2047-encodes tokens containing CR/LF, so a line break becomes folded whitespace. API transports (Resend, Postmark API, Mailgun API) pass the raw subject as a structured field and build the header provider-side, outside this proof.
-- Addresses are not safe on part of the supported range (`^12.27 || ^13.3`): a quoted local part (`"x\r\nBcc: a@evil.com"@example.com`) or domain literal (`victim@[\r\nX-Evil: 1]`) passes egulias validation and is written verbatim, injecting header lines; a `bcc` also reaches the SMTP envelope.
-- Two independent guards close the address hole: Laravel's `Message::ensureAddressIsSafe()` (12.60.0+, 13.10.0+) and symfony/mime 6.4.40 / 7.4.12 / 8.0.12+ (CVE-2026-45067). Either one suffices; 12.27–12.59 and 13.3–13.9 on unpatched symfony/mime are vulnerable, so the address sinks are true positives there.
+- Addresses are not safe on part of the supported range: a quoted local part (`"x\r\nBcc: a@evil.com"@example.com`) or domain literal (`victim@[\r\nX-Evil: 1]`) passes egulias validation and is written verbatim, injecting header lines; a `bcc` also reaches the SMTP envelope.
+- Two independent guards close the address hole: Laravel's `Message::ensureAddressIsSafe()` (12.60.0+, 13.10.0+) and symfony/mime 6.4.40 / 7.4.12 / 8.0.12+ (CVE-2026-45067). Either one suffices. Every supported 13.x carries the Laravel guard, so only 12.x below 12.60 on unpatched symfony/mime is vulnerable and the address sinks are true positives there.
 
 **Rejected alternatives:**
 - Drop the address sinks too: misses CVE-2026-45067 on supported versions.
-- Gate the address sinks by Laravel version directory: needs three override dirs (`12.60.0`, `13`, `13.10.0`), because a `12.60.0` dir also loads on the vulnerable 13.3–13.9. It would still be blind to the installed symfony/mime version, which can close the hole independently.
+- Gate the address sinks by Laravel version directory: a single `12.60.0` override dir would now suffice (every supported 13.x is above the 13.10.0 fix). It would still be blind to the installed symfony/mime version, which can close the hole independently.
 
 **Known gaps (not covered):** Header-name injection via `metadata($key)`, and address sinks on `Illuminate\Mail\Message`, `Mailables\Address`, `Envelope` and `PendingMail`.
 

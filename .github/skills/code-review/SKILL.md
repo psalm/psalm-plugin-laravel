@@ -7,7 +7,7 @@ description: Review pull requests in psalm-plugin-laravel (the Psalm plugin for 
 
 The repository guide already loaded for this review holds the hard rules and code patterns; apply them as written. This file adds only what a reviewer needs on top.
 
-This branch is `4.x`: Psalm 7 (`vimeo/psalm ^7.0.0-rc8`), Laravel `^12.27 || ^13.3`. Fixes that also apply to Psalm 6 are backported to `3.x`.
+This branch is `4.x`: Psalm 7, Laravel 12 and 13 (exact constraints: `composer.json`). Fixes that also apply to Psalm 6 are backported to `3.x`.
 
 ## Procedure
 
