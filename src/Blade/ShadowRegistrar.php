@@ -78,7 +78,7 @@ interface ShadowRegistrar
      * after {@see self::markTemplatesReportable()} succeeded for it.
      *
      * @param string $source  the template source the compiler was given
-     * @param string $message the compiler's exception class and message
+     * @param string $message the compiler's cause, on one line
      *
      * @psalm-impure
      */
