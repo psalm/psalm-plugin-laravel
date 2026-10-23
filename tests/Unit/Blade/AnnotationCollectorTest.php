@@ -290,6 +290,75 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertSame('string', AnnotationCollector::typeFor('raw|empty', 'title'), 'a raw| string is text, not a view');
     }
 
+    #[Test]
+    public function marks_a_component_target_unreadable(): void
+    {
+        foreach (
+            [
+                "\$__env->startComponent('inner', ['title' => 42]);",
+                "\$__env->startComponentFirst(['missing', 'inner'], ['title' => 42]);",
+                "\$component = Illuminate\\View\\AnonymousComponent::resolve(['view' => 'inner', 'data' => ['title' => 42]]"
+                    . " + (isset(\$attributes) ? \$attributes->all() : []));",
+            ] as $component
+        ) {
+            AnnotationCollector::reset();
+            $this->analyzeStatements("view('inner', ['title' => 'text']);\n{$component}", [['title' => Type::getString()]]);
+
+            $this->assertNull(AnnotationCollector::typeFor('inner', 'title'), $component);
+        }
+    }
+
+    #[Test]
+    public function still_reads_a_rendering_call_nested_in_a_recorded_producer(): void
+    {
+        foreach (
+            [
+                "echo \$__env->make('inner', ['title' => view('inner', ['title' => 42])->render()])->render();",
+                "view('inner', ['title' => view('inner', ['title' => 42])->render()]);",
+            ] as $nested
+        ) {
+            AnnotationCollector::reset();
+            $this->analyzeStatements($nested, [['title' => Type::getString()], ['title' => $this->literal(42)]]);
+
+            $this->assertNull(AnnotationCollector::typeFor('inner', 'title'), $nested);
+        }
+    }
+
+    #[Test]
+    public function an_include_lookalike_rendering_with_a_callback_is_not_recorded_as_closed(): void
+    {
+        $this->analyzeStatements(
+            "echo \$__env->make('inner', ['title' => 'text'])->render(static fn (\$v) => \$v->with('title', 42)->render());",
+            [['title' => Type::getString()]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('inner', 'title'));
+    }
+
+    #[Test]
+    public function a_slash_and_a_dot_view_name_are_one_view(): void
+    {
+        $this->analyzeStatements("echo \$__env->make('cards.inner', ['title' => 'text'])->render();", [['title' => Type::getString()]]);
+
+        $this->assertSame('string', AnnotationCollector::typeFor('cards/inner', 'title'));
+
+        $this->analyzeStatements("echo \$__env->make('cards/inner', ['title' => \$n])->render();", [['title' => $this->literal(42)]]);
+
+        $this->assertNull(AnnotationCollector::typeFor('cards.inner', 'title'));
+        $this->assertNull(AnnotationCollector::typeFor('cards/inner', 'title'));
+    }
+
+    #[Test]
+    public function a_raw_prefixed_name_is_an_ordinary_view_outside_the_each_empty_argument(): void
+    {
+        $this->analyzeStatements(
+            "echo \$__env->make('raw|inner', ['title' => 'text'])->render();\necho view('raw|inner', ['title' => 42])->render();",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('raw|inner', 'title'));
+    }
+
     /**
      * Runs the statement hook over parsed PHP, with the shape each array literal infers to supplied
      * in source order: no analysis runs here, so nothing else would type the data arguments.
