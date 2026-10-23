@@ -59,7 +59,7 @@ use Psalm\Type\Union;
  * pivot default (`Pivot` / `MorphPivot`) and slot 4 with `'pivot'` — emitting only 2
  * triggers `MissingTemplateParam` on consumers because Psalm rejects a partial form
  * even when the stub declares a default via `@template T of … = Default` (see #883).
- * Captured `->withPivot()` / `->withTimestamps()` columns refine that default, or the `using()` class, to `Pivot&object{...}` (#1944).
+ * Captured `->withPivot()` / `->withTimestamps()` columns refine that default to `Pivot&object{...}` (#1944).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
  * @internal
@@ -379,14 +379,13 @@ final class ModelRelationReturnTypeHandler
         // the corresponding stub default.
         $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
         if ($pivotDefault !== null) {
-            $pivotClass = $pivot['pivotModel'] ?? $pivotDefault;
-            $pivotType = new TNamedObject($pivotClass);
-            // The parsed body shows the whole chain, `using()` included: the pivot kind is known.
-            if ($pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
-                $pivotType = PivotColumnResolver::shapeOn(
-                    $pivotClass,
-                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass, $pivot['pivotModel'], true),
-                );
+            $pivotType = new TNamedObject($pivot['pivotModel'] ?? $pivotDefault);
+            // A custom pivot class (using()) types its own attributes.
+            if ($pivot['pivotModel'] === null && $pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
+                $pivotType = PivotColumnResolver::refine(
+                    $pivotType,
+                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass, $pivot['pivotVisible']),
+                ) ?? $pivotType;
             }
 
             $typeParams[] = new Union([$pivotType]);

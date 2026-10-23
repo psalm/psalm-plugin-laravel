@@ -79,9 +79,11 @@ final class RelationMethodParser
      * pivotModel / accessor are non-null only when an explicit `->using(...)` / `->as(...)` was
      * detected on a BelongsToMany or MorphToMany chain with a statically resolvable argument.
      * Other relations leave them null. pivotColumns lists the literal `->withPivot(...)` columns of
-     * such a chain and pivotTable the table they live in ({@see PivotColumnResolver::table()}).
+     * such a chain and pivotTable the table they live in ({@see PivotColumnResolver::table()}; false:
+     * no refinement is safe). pivotVisible is true when every link of the chain is known to keep the relation
+     * and its pivot class ({@see PivotColumnResolver::keepsPivot()}).
      *
-     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}>
+     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}>
      */
     private static array $cache = [];
 
@@ -132,7 +134,7 @@ final class RelationMethodParser
      * through relations only) the intermediate model, and (for BelongsToMany / MorphToMany
      * only) any `->using()` / `->as()` mutations detected on the chain.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      *         null if the method cannot be parsed as a relationship method.
      *         relatedModel is null when polymorphic (morphTo) or when the first argument
      *         could not be statically resolved. intermediateModel is non-null only for
@@ -168,7 +170,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName, string $receiverClass): ?array
     {
@@ -259,8 +261,8 @@ final class RelationMethodParser
                 return null;
             }
 
-            // Returns that differ only in their pivot columns still build the same relation, without a shape.
-            $result = $result === null || $parsed === $result ? $parsed : self::withoutPivotShape($result);
+            // Returns that differ only in their pivot shape still build the same relation, without one.
+            $result = $result === null || $parsed === $result ? $parsed : self::mergePivotShapes($result, $parsed);
         }
 
         if ($result === null) {
@@ -273,16 +275,35 @@ final class RelationMethodParser
     }
 
     /**
-     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool} $parsed
-     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
+     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      * @psalm-pure
      */
     private static function withoutPivotShape(array $parsed): array
     {
         $parsed['pivotColumns'] = [];
         $parsed['pivotTable'] = null;
+        $parsed['pivotVisible'] = false;
 
         return $parsed;
+    }
+
+    /**
+     * Two returns that differ only in their pivot shape: no columns, but a refusal on either one stands and the
+     * chain is visible only when both are, so a delegating `->withTimestamps()` cannot undo either.
+     *
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $first
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $second
+     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
+     * @psalm-pure
+     */
+    private static function mergePivotShapes(array $first, array $second): array
+    {
+        $first['pivotColumns'] = [];
+        $first['pivotTable'] = $first['pivotTable'] === false || $second['pivotTable'] === false ? false : null;
+        $first['pivotVisible'] = $first['pivotVisible'] && $second['pivotVisible'];
+
+        return $first;
     }
 
     /**
@@ -294,7 +315,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function parseReturn(
         Codebase $codebase,
@@ -328,8 +349,8 @@ final class RelationMethodParser
      * Add the `->withPivot(...)` / `->withTimestamps(...)` columns of a direct BelongsToMany / MorphToMany
      * factory chain and the pivot table; the factory runs on the receiver, so its class names the default table.
      *
-     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool} $parsed
-     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
+     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function collectPivotColumns(Codebase $codebase, array $parsed, PhpParser\Node\Expr $expr, string $receiverClass): array
     {
@@ -337,12 +358,11 @@ final class RelationMethodParser
             return $parsed;
         }
 
-        $pivotModel = $parsed['pivotModel'];
-        $chain = PivotColumnResolver::readChain($codebase, $expr, $receiverClass, $parsed['relatedModel'], static fn(): ?string => $pivotModel);
+        $chain = PivotColumnResolver::readChain($codebase, $expr, $receiverClass, $parsed['relatedModel']);
         $parsed['pivotColumns'] = $chain['columns'];
-        // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it. An invisible chain
-        // (a foreign factory, a `using()` that names no class) leaves the pivot class or table unknown.
-        $parsed['pivotTable'] = $chain['visible'] ? $chain['table'] : false;
+        // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it.
+        $parsed['pivotTable'] = $chain['table'];
+        $parsed['pivotVisible'] = $chain['visible'];
 
         return $parsed;
     }
@@ -354,7 +374,7 @@ final class RelationMethodParser
      * - every chain call keeps the relation (`->when()` / `->getRelated()` may replace it);
      * - an outer `->using()` / `->as()` is statically resolvable; it runs after other()'s own, so it wins.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function parseDelegation(
         Codebase $codebase,
@@ -389,9 +409,9 @@ final class RelationMethodParser
     }
 
     /**
-     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool} $parsed
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
      * @param list<array{lowercase-string, PhpParser\Node\Expr\MethodCall}> $chain
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function applyChain(
         Codebase $codebase,
@@ -406,8 +426,11 @@ final class RelationMethodParser
         $pivotModel = null;
         $accessor = null;
         $pivotColumns = [];
+        // A delegated chain is visible only when the target's own chain is and every outer link keeps the relation.
+        $visible = $parsed['pivotVisible'];
 
         foreach ($chain as [$name, $call]) {
+            $visible = $visible && PivotColumnResolver::keepsPivot($name);
             // The outermost mutator runs last, so it wins; a dynamic argument leaves the slot unknown.
             if ($pivotAware && $name === 'using') {
                 $pivotModel ??= self::firstClassStringArg($call, $scopeClass, $parentClass);
@@ -429,6 +452,7 @@ final class RelationMethodParser
         $parsed['pivotModel'] = $pivotModel ?? $parsed['pivotModel'];
         $parsed['accessor'] = $accessor ?? $parsed['accessor'];
         $parsed['pivotColumns'] = [...$parsed['pivotColumns'], ...$pivotColumns];
+        $parsed['pivotVisible'] = $visible;
 
         return $parsed;
     }
@@ -438,7 +462,7 @@ final class RelationMethodParser
      * (the class declaring or composing the body) binds lexically; anything else dispatches on the
      * receiver, so a child override wins.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function parseDelegatedTarget(
         Codebase $codebase,
@@ -521,9 +545,9 @@ final class RelationMethodParser
      * resolve (scope / macro via `__call`) is accepted as keeping the relation. A declaration none
      * of whose alternatives admits the result also declines.
      *
-     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool} $parsed
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
      * @param list<lowercase-string> $chain outermost call first
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function applyDirectChain(Codebase $codebase, array $parsed, array $chain, ?Union $docblockType, ?Union $nativeType): ?array
     {
@@ -741,7 +765,7 @@ final class RelationMethodParser
      * @param ?string $pivotModel out-parameter: FQCN captured from `->using(...)` if found
      * @param ?string $accessor   out-parameter: literal string captured from `->as(...)` if found
      * @param list<lowercase-string> $chain out-parameter: names of the calls above the factory, outermost first
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function findRelationCallInExpr(
         PhpParser\Node\Expr $expr,
@@ -778,6 +802,7 @@ final class RelationMethodParser
                 'accessor' => $accessor,
                 'pivotColumns' => [],
                 'pivotTable' => null,
+                'pivotVisible' => false,
                 'nullable' => false,
             ];
         }

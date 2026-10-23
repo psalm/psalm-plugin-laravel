@@ -31,27 +31,8 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $she
     $_entries = $ledger->entries();
     /** @psalm-trace $_entries */
 
-    $_assignments = $team->assignments();
-    /** @psalm-trace $_assignments */
-
-    // The attribute read: the pivot class's own property types win over the shape.
-    $_hours = $team->assignments()->firstOrFail()->pivot->hours;
-    /** @psalm-trace $_hours */
-
-    $_grade = $team->assignments()->firstOrFail()->pivot->grade;
-    /** @psalm-trace $_grade */
-
     $_foreign = $team->foreignStamps();
     /** @psalm-trace $_foreign */
-
-    $_rota = $team->rota();
-    /** @psalm-trace $_rota */
-
-    $_odd_rota = $team->oddRota();
-    /** @psalm-trace $_odd_rota */
-
-    $_dynamic_using = $team->dynamicUsing('x');
-    /** @psalm-trace $_dynamic_using */
 
     $_plain_stamps = $sheet->plainStamps();
     /** @psalm-trace $_plain_stamps */
@@ -59,12 +40,18 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $she
     $_plain_stamps_created = $sheet->plainStampsWithCreatedAt();
     /** @psalm-trace $_plain_stamps_created */
 
-    $_rota_stamps = $sheet->rotaStamps();
-    /** @psalm-trace $_rota_stamps */
-
     $_odd_default = $odd->defaultStamps();
     /** @psalm-trace $_odd_default */
 
     $_odd_hours = $odd->stampsWithHours();
     /** @psalm-trace $_odd_hours */
+
+    $_filtered = $team->filteredStamps();
+    /** @psalm-trace $_filtered */
+
+    $_delegated_filtered = $team->delegatedFilteredStamps();
+    /** @psalm-trace $_delegated_filtered */
+
+    $_branched = $team->branchedStamps(true);
+    /** @psalm-trace $_branched */
 }

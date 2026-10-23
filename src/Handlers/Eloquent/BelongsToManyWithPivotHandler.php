@@ -6,13 +6,11 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
-use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\PivotColumnResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TGenericObject;
-use Psalm\Type\Atomic\TLiteralClassString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -20,11 +18,11 @@ use Psalm\Type\Union;
  * `->withPivot('role')` adds the selected columns to TPivotModel: `BelongsToMany<User, Team, Pivot&object{role: string}, 'pivot'>`,
  * so a declaration carrying that shape is accepted (#1944). The stub cannot express it: the
  * columns are call arguments, and the column types come from the pivot table's migration.
- * `withTimestamps()` adds its created/updated columns, and `using(X::class)` builds the shape on `X`.
+ * `withTimestamps()` adds its created/updated columns the same way.
  *
- * When the chain is visible down to its `$this->belongsToMany(...)` call, every call of it is read again
- * on each of these three methods, so the result does not depend on their order: the pivot kind decides
- * whether the timestamp columns are dates ({@see PivotColumnResolver::columnTypes()}).
+ * When every link down to the `$this->belongsToMany(...)` call is known to keep the relation, all calls of the
+ * chain are read again on each of these two methods, so the result does not depend on their order: the date
+ * columns need `created_at` selected anywhere ({@see PivotColumnResolver::columnTypes()}).
  *
  * @internal
  */
@@ -45,7 +43,7 @@ final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInt
     {
         $stmt = $event->getStmt();
         $method = $event->getMethodNameLowercase();
-        if (!\in_array($method, ['withpivot', 'withtimestamps', 'using'], true) || !$stmt instanceof MethodCall) {
+        if (!\in_array($method, ['withpivot', 'withtimestamps'], true) || !$stmt instanceof MethodCall) {
             return null;
         }
 
@@ -67,36 +65,24 @@ final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInt
 
         $codebase = $event->getSource()->getCodebase();
         $parent = self::className($relation->type_params[1]);
-        $chain = PivotColumnResolver::readChain(
-            $codebase,
-            $stmt,
-            $parent,
-            self::className($relation->type_params[0]),
-            static fn(MethodCall $using): ?string => self::classLiteral($event, $using),
-        );
-        // `using()` has no columns of its own, and an unseen chain may carry one that moves the date casts.
-        if ($chain['columns'] === [] || $chain['table'] === false || $method === 'using' && !$chain['visible']) {
+        $chain = PivotColumnResolver::readChain($codebase, $stmt, $parent, self::className($relation->type_params[0]));
+        if ($chain['table'] === false) {
             return null;
         }
 
-        // Later calls see the custom class `using()` left in the slot.
+        // Only a visible chain is read whole, so the result does not depend on call order (`created_at` may be
+        // selected after `withTimestamps()`). Elsewhere calls before this one may have been replaced.
+        $columns = $chain['visible'] ? $chain['columns'] : PivotColumnResolver::callColumns($codebase, $stmt, $method, $parent);
+        if ($columns === []) {
+            return null;
+        }
+
         $slot = $relation->type_params[2]->getSingleAtomic();
-        if ($method !== 'using' && $chain['using'] !== null && (!$slot instanceof TNamedObject || \strcasecmp($slot->value, $chain['using']) !== 0)) {
-            return null;
-        }
-
-        $types = PivotColumnResolver::columnTypes(
-            $codebase,
-            $chain['table'],
-            $chain['columns'],
-            $parent,
-            $chain['using'],
-            $chain['visible'],
-        );
-        $pivot = $chain['using'] !== null
-            ? PivotColumnResolver::shapeOn($chain['using'], $types)
+        $pivot = PivotColumnResolver::refine(
             // A visible chain is rebuilt whole: the slot's shape would only keep columns typed before it was.
-            : PivotColumnResolver::refine($chain['visible'] && $slot instanceof TNamedObject ? new TNamedObject($slot->value) : $slot, $types);
+            $chain['visible'] && $slot instanceof TNamedObject ? new TNamedObject($slot->value) : $slot,
+            PivotColumnResolver::columnTypes($codebase, $chain['table'], $columns, $parent, $chain['visible']),
+        );
         if (!$pivot instanceof TNamedObject) {
             return null;
         }
@@ -106,15 +92,6 @@ final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInt
         $params[2] = new Union([$pivot]);
 
         return new Union([$relation->setTypeParams($params)]);
-    }
-
-    private static function classLiteral(MethodReturnTypeProviderEvent $event, MethodCall $using): ?string
-    {
-        $arg = $using->args[0] ?? null;
-        $type = $arg instanceof Arg && !$arg->unpack ? $event->getSource()->getNodeTypeProvider()->getType($arg->value) : null;
-        $atomic = $type?->isSingle() === true ? $type->getSingleAtomic() : null;
-
-        return $atomic instanceof TLiteralClassString ? $atomic->value : null;
     }
 
     /** @psalm-pure */

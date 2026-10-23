@@ -40,23 +40,6 @@ return new class extends Migration {
             $table->timestamps();
         });
 
-        // The relation's table: what a custom pivot's columns read from. The pivot's own table differs.
-        Schema::create('staff_assignments', function (Blueprint $table): void {
-            $table->foreignId('team_id');
-            $table->foreignId('user_id');
-            $table->integer('hours');
-            $table->string('label');
-            $table->string('level');
-            $table->string('note')->nullable();
-            $table->integer('grade')->nullable();
-            $table->timestamps();
-        });
-
-        Schema::create('assignment_defaults', function (Blueprint $table): void {
-            $table->string('hours');
-            $table->string('level');
-        });
-
         // Sheet renames its created column to made_at.
         Schema::create('sheet_entries', function (Blueprint $table): void {
             $table->foreignId('sheet_id');

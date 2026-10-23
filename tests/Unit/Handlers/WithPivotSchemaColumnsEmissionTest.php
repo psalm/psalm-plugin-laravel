@@ -132,65 +132,67 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
     }
 
     #[Test]
-    public function it_refines_a_using_pivot_from_the_relation_table(): void
+    public function it_proves_no_dates_across_links_not_known_to_keep_the_relation(): void
     {
         $traces = $this->runPsalm();
-        $date = 'Illuminate\Support\Carbon|null';
 
-        // `@property` (label) and an explicit cast (level) win over the relation's table; the pivot class's own
-        // table (`assignment_defaults`: hours is a string there) is never read; dates win over the raw schema.
-        $this->assertContains(
-            '$_assignments: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
-            . "Assignment&object{hours:string, label:non-empty-string, level:int, note:null|string, grade:int|null, created_at:{$date}, updated_at:{$date}}, 'pivot'>",
-            $traces,
-        );
-        // Reads: a column the pivot class's own default table declares is read through the class, so the
-        // shape carries that type (`hours` is a string there, whatever the relation's table says).
-        $this->assertContains('$_hours: string', $traces);
-        // A cast on a column that default table lacks takes its nullability from the relation's table.
-        $this->assertContains('$_grade: int|null', $traces);
-        // No `@property`, no casts: a timestamped table must still give dates, not `null|string`.
-        $this->assertContains(
-            '$_rota: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
-            . "Rota&object{hours:int, created_at:{$date}, updated_at:{$date}}, 'pivot'>",
-            $traces,
-        );
-        // Order does not matter inside the relation body.
-        $this->assertContains(
-            '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team&static, ' . self::MODELS
-            . "Rota&object{created_at:{$date}, updated_at:{$date}, hours:int}, 'pivot'>",
-            $traces,
-        );
-        // A using() pivot gates its date casts on the parent's created column: Sheet's `made_at`.
-        $this->assertContains(
-            '$_rota_stamps: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Sheet, ' . self::MODELS
-            . "Rota&object{made_at:{$date}, updated_at:{$date}}, 'pivot'>",
-            $traces,
-        );
-        // A class that converts dates its own way proves no column.
-        $this->assertContains(
-            '$_odd_rota: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::MODELS
-            . "OddRota&object{hours:mixed, created_at:mixed, updated_at:mixed}, 'pivot'>",
-            $traces,
-        );
         // A factory called on another model reads that model's timestamp names: nothing is proven for this one.
         $this->assertContains(
             '$_foreign: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
             . "Pivot, 'pivot'>",
             $traces,
         );
-        // A non-literal using() leaves the pivot class unknown: no shape.
+        // A `where()` between the factory and `withTimestamps()` may be a replaced relation: names, no dates.
+        $mixed = "Pivot&object{created_at:mixed, updated_at:mixed}, 'pivot'>";
         $this->assertContains(
-            '$_dynamic_using: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
+            '$_filtered: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS . $mixed,
+            $traces,
+        );
+        $this->assertContains(
+            '$_delegated_filtered: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
+            . "Pivot&object{role:string, created_at:mixed, updated_at:mixed}, 'pivot'>",
+            $traces,
+        );
+    }
+
+    #[Test]
+    public function it_keeps_a_refusal_across_the_merge_of_returns(): void
+    {
+        $traces = $this->runPsalm();
+
+        // One return is another model's factory: the refusal survives the merge of the returns, so the
+        // delegating `withTimestamps()` adds nothing to the shape.
+        $this->assertContains(
+            '$_branched: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
             . "Pivot, 'pivot'>",
             $traces,
         );
     }
 
+    #[Test]
+    public function it_types_the_dates_as_the_configured_date_class(): void
+    {
+        $default = 'Illuminate\\Support\\Carbon|null';
+        $this->assertContains($this->stampedRelation($default), $this->runPsalm());
+
+        // Date::use(CarbonImmutable::class): the dates are that class.
+        $this->assertContains($this->stampedRelation('Carbon\\CarbonImmutable|null'), $this->runPsalm(['WITH_PIVOT_DATE' => 'immutable']));
+
+        // A callable builds the dates: nothing is proven.
+        $this->assertContains($this->stampedRelation('mixed'), $this->runPsalm(['WITH_PIVOT_DATE' => 'callable']));
+    }
+
+    private function stampedRelation(string $date): string
+    {
+        return '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team&static, ' . self::RELATIONS
+            . "Pivot&object{role:string, created_at:{$date}, updated_at:{$date}}, 'pivot'>";
+    }
+
     /**
+     * @param array<string, string> $env
      * @return list<string> the `@psalm-trace` messages
      */
-    private function runPsalm(): array
+    private function runPsalm(array $env = []): array
     {
         $fixtureDir = __DIR__ . '/Fixtures/WithPivotSchemaColumns';
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
@@ -200,6 +202,7 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         $process = new Process(
             [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--show-info=true', '--output-format=json'],
             $fixtureDir,
+            $env,
         );
         $process->setTimeout(300);
         // Psalm exits non-zero when it reports issues; that is expected here, so do not mustRun().

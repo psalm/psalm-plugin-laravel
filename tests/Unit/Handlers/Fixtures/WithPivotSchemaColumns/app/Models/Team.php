@@ -7,7 +7,6 @@ namespace WithPivotFixture\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
-use Illuminate\Database\Eloquent\Relations\Pivot;
 
 class Team extends Model
 {
@@ -43,41 +42,42 @@ class Team extends Model
         return $relation;
     }
 
-    /** The custom pivot's `@property` and cast win; the rest is the relation's table, dates included. */
-    public function assignments(): BelongsToMany
-    {
-        return $this->belongsToMany(User::class, 'staff_assignments')->using(Assignment::class)->withPivot('hours', 'label', 'level', 'note', 'grade')->withTimestamps();
-    }
-
-    /** No `@property`, no casts: the timestamp columns are dates, not their raw schema type. */
-    public function rota(): BelongsToMany
-    {
-        return $this->belongsToMany(User::class, 'staff_assignments')->using(Rota::class)->withPivot('hours')->withTimestamps();
-    }
-
-    public function rotaUsingFirst(): BelongsToMany
-    {
-        $relation = $this->belongsToMany(User::class, 'staff_assignments')->withTimestamps()->withPivot('hours')->using(Rota::class);
-        /** @psalm-trace $relation */
-
-        return $relation;
-    }
-
     /** Laravel reads the timestamp names off the factory's receiver (a Sheet), not off this model. */
     public function foreignStamps(): BelongsToMany
     {
         return (new Sheet())->belongsToMany(User::class, 'sheet_entries')->withTimestamps();
     }
 
-    public function oddRota(): BelongsToMany
+    /** A `where()` between the factory and `withTimestamps()` may be anything, so no date is proven. */
+    public function filteredStamps(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'staff_assignments')->using(OddRota::class)->withPivot('hours')->withTimestamps();
+        return $this->belongsToMany(User::class, 'memberships_stamped')->where('role', 'admin')->withTimestamps();
     }
 
-    /** @param class-string<Pivot> $pivotClass */
-    public function dynamicUsing(string $pivotClass): BelongsToMany
+    public function stampedBody(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'staff_assignments')->using($pivotClass)->withPivot('hours')->withTimestamps();
+        return $this->belongsToMany(User::class, 'memberships_stamped')->withPivot('role')->withTimestamps();
+    }
+
+    /** The outer `where()` is not known to keep the pivot class either: the delegated chain is not visible. */
+    public function delegatedFilteredStamps(): BelongsToMany
+    {
+        return $this->stampedBody()->where('role', 'admin');
+    }
+
+    /** One branch is another model's factory, which takes that model's timestamp names: no shape on either. */
+    public function branchedStamps(bool $foreign): BelongsToMany
+    {
+        return $this->branchedBase($foreign)->withTimestamps();
+    }
+
+    private function branchedBase(bool $foreign): BelongsToMany
+    {
+        if ($foreign) {
+            return (new Sheet())->belongsToMany(User::class, 'sheet_entries');
+        }
+
+        return $this->belongsToMany(User::class, 'sheet_entries');
     }
 
     public function tags(): MorphToMany

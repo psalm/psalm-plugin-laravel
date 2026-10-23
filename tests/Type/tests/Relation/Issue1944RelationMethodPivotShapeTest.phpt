@@ -29,9 +29,6 @@ function relation_method_carries_with_pivot_columns(WorkOrder $order, Mechanic $
     $_renamed_stamp = $order->renamedStampParts();
     /** @psalm-trace $_renamed_stamp */
 
-    $_stamped_specializations = $mechanic->stampedSpecializations();
-    /** @psalm-trace $_stamped_specializations */
-
     $_branch_table = $order->branchTableParts();
     /** @psalm-trace $_branch_table */
 
@@ -49,10 +46,9 @@ function relation_method_carries_with_pivot_columns(WorkOrder $order, Mechanic $
 Trace on line %d: $_parts: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed}, 'pivot'>
 Trace on line %d: $_discounted: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed, discount:mixed}, 'pivot'>
 Trace on line %d: $_priced: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:int}, 'pivot'>
-Trace on line %d: $_certified: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, App\Models\SpecializationPivot&object{certified_at:null|string}, 'pivot'>
+Trace on line %d: $_certified: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, App\Models\SpecializationPivot, 'pivot'>
 Trace on line %d: $_stamped: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, created_at:Illuminate\Support\Carbon|null, updated_at:Illuminate\Support\Carbon|null}, 'pivot'>
 Trace on line %d: $_renamed_stamp: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed, made_at:mixed, changed_at:mixed}, 'pivot'>
-Trace on line %d: $_stamped_specializations: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, App\Models\SpecializationPivot&object{created_at:Illuminate\Support\Carbon|null, updated_at:Illuminate\Support\Carbon|null}, 'pivot'>
 Trace on line %d: $_branch_table: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
 Trace on line %d: $_branch_columns: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
 Trace on line %d: $_branch_table_property: App\Collections\PartCollection<int, App\Models\Part>
