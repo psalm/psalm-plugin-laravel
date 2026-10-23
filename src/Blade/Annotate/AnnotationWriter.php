@@ -23,7 +23,8 @@ use SebastianBergmann\Diff\Output\StrictUnifiedDiffOutputBuilder;
  * A name no call site types is listed back instead of declared: a `mixed` declaration adds no
  * type, yet makes the name required at every call site and hides that it is still untyped.
  *
- * Insertion only (see {@see TemplateAnnotator} for where). A variable the template already declares is never rewritten, in either spelling —
+ * One splice per template (see {@see TemplateAnnotator} for where): at most a one-line header docblock
+ * is opened out. A variable the template already declares is never rewritten, in either spelling —
  * narrowing a declaration a human wrote needs a containment check this release does not make.
  *
  * @internal
