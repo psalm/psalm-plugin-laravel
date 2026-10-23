@@ -51,6 +51,12 @@ class TaggedPivot extends MorphPivot {}
  */
 class Relative extends Pivot {}
 
+/**
+ * @property-read 'static' $mode
+ * @property-read object{static: int} $box
+ */
+class Literal extends Pivot {}
+
 /** @template T of Model */
 class GenericMembership extends Pivot {}
 
@@ -115,6 +121,10 @@ class Team extends Model
         $_relative_read = $_relative->first()?->pivot->peer;
         /** @psalm-trace $_relative_read */
 
+        // Text that merely looks relative is no relative type: a literal and a shape key keep their types.
+        $_literal = $this->belongsToMany(User::class)->using(Literal::class)->withPivot('mode', 'box');
+        /** @psalm-trace $_literal */
+
         // A templated pivot class would lose its parameters when rebuilt from its name: declined.
         $_generic_first = $this->belongsToMany(User::class)->using(GenericMembership::class)->withPivot('role');
         /** @psalm-trace $_generic_first */
@@ -172,6 +182,7 @@ Trace on line %d: $_native: Illuminate\Database\Eloquent\Relations\BelongsToMany
 Trace on line %d: $_odd: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\OddDates&object{seen_at:mixed, note:mixed}, 'pivot'>
 Trace on line %d: $_relative: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative&object{peer:Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative, me:Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative, peers:list<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative>}, 'pivot'>&static
 Trace on line %d: $_relative_read: Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative|null
+Trace on line %d: $_literal: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Literal&object{mode:'static', box:object{static:int}}, 'pivot'>&static
 Trace on line %d: $_generic_first: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\GenericMembership<Illuminate\Database\Eloquent\Model>, 'pivot'>&static
 Trace on line %d: $_generic_last: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\GenericMembership<Illuminate\Database\Eloquent\Model>, 'pivot'>&static
 Trace on line %d: $_dynamic: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Plain&object{role:mixed}, 'pivot'>&static

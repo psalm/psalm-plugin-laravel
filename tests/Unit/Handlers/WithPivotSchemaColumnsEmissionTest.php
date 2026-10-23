@@ -209,16 +209,20 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
     {
         $traces = $this->runPsalm();
 
-        // A `where()` may replace the relation: the slot is still Score, so its accessor and casts hold (a cast on
-        // a column its table lacks is nullable here: the relation table is unknown), the rest is not proven.
+        // A `where()` may replace the relation, and the slot is only an upper bound of the class that hydrates: just
+        // the pivot's own answer (the accessor) holds; the cast fallback on `flags` is not proven.
         $this->assertContains(
-            $this->usingRelation('$_hidden_scored', 'Team', 'Score&object{score:int|null, flags:array<array-key, mixed>|null, note:mixed}'),
+            $this->usingRelation('$_hidden_scored', 'Team', 'Score&object{score:int|null, flags:mixed, note:mixed}'),
             $traces,
         );
-        // The relation table is not consulted behind an unseen link on either path, so the cast on `rank` stays
-        // nullable for a caller and in the relation body alike.
-        $this->assertContains($this->usingRelation('$_delegated_hidden_scored', 'Team', 'Score&object{rank:null|string}'), $traces);
-        $this->assertContains($this->usingRelation('$relation', 'Team&static', 'Score&object{rank:null|string}') . '&static', $traces);
+        // The same on both paths: for a caller and in the relation body alike.
+        $this->assertContains($this->usingRelation('$_delegated_hidden_scored', 'Team', 'Score&object{rank:mixed}'), $traces);
+        $this->assertContains($this->usingRelation('$relation', 'Team&static', 'Score&object{rank:mixed}') . '&static', $traces);
+        // A cast's `static` is the caster, not the pivot, whether the column is in the pivot's table or not.
+        $this->assertContains($this->usingRelation('$_caster_scored', 'Team', 'CasterScore&object{kind:mixed, rank:mixed}'), $traces);
+        // Overriding a Laravel attribute method (`hasCast()`) proves no cast; the `casts()` method is no override.
+        $this->assertContains($this->usingRelation('$_has_cast_scored', 'Team', 'HasCastScore&object{rank:mixed}'), $traces);
+        $this->assertContains($this->usingRelation('$_casts_method_scored', 'Team', 'CastsMethodScore&object{rank:string}'), $traces);
         // A pivot class that changes how raw values are stored proves no cast, whatever its table.
         $this->assertContains($this->usingRelation('$_raw_scored', 'Team', 'RawScore&object{rank:mixed, note:mixed}'), $traces);
         // Another model's factory, alone or in one branch of the returns: no shape.

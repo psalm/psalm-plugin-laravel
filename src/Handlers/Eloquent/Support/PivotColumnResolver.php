@@ -35,6 +35,8 @@ use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TObjectWithProperties;
+use Psalm\Type\TypeNode;
+use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -261,15 +263,14 @@ final class PivotColumnResolver
         // A plain pivot's `fromAttributes()` switches its date casts on when its OWN `created_at` is selected. Any
         // `using()` pivot hydrates raw attributes and checks the parent's column instead, so only a visible chain
         // proves which kind it is, and a class that moves its date handling or raw reads proves nothing.
-        $stock = $using !== null && self::hasStockHydration($codebase, $using);
-        $raw = $stock && $visible;
+        $raw = $using !== null && $visible && self::hasStockHydration($codebase, $using);
         $dates = $using === null
             ? $visible && \in_array(Model::CREATED_AT, $columns, true)
             : $raw && $parent !== null && $parent[0] !== null && \in_array($parent[0], $columns, true);
         $types = [];
         foreach ($columns as $column) {
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
-            $own = $using === null || self::isFramework($using) ? null : self::ownType($codebase, $using, $column, $schemaColumn?->nullable ?? true, $stock);
+            $own = $using === null || self::isFramework($using) ? null : self::ownType($codebase, $using, $column, $schemaColumn?->nullable ?? true, $raw);
             if ($own instanceof Union) {
                 $types[$column] = $own;
             } elseif ($parent !== null && ($column === $parent[0] || $column === $parent[1])) {
@@ -468,9 +469,9 @@ final class PivotColumnResolver
      * primitive casts, unless the class changes how raw values are read.
      *
      * @param bool $nullable whether the column may be null in the relation's table
-     * @param bool $stock the class keeps the stock hydration and attribute reads
+     * @param bool $proven the chain is visible and the class keeps the stock hydration, so the cast fallback applies
      */
-    private static function ownType(Codebase $codebase, string $class, string $column, bool $nullable, bool $stock): ?Union
+    private static function ownType(Codebase $codebase, string $class, string $column, bool $nullable, bool $proven): ?Union
     {
         try {
             $storage = $codebase->classlike_storage_provider->get($class);
@@ -493,9 +494,15 @@ final class PivotColumnResolver
             return Type::getMixed();
         }
 
-        $own = $metadata->accessor($column)?->returnType ?? ModelPropertyHandler::resolveColumnType($codebase, $class, $column);
+        $accessor = $metadata->accessor($column)?->returnType;
+        if ($accessor instanceof Union) {
+            return self::bind($codebase, $storage, $accessor);
+        }
+
+        // Cast-derived types belong to the cast's class, not to the pivot.
+        $own = ModelPropertyHandler::resolveColumnType($codebase, $class, $column);
         if ($own instanceof Union) {
-            return self::bind($codebase, $storage, $own);
+            return self::unbound($own);
         }
 
         $cast = ($metadata->casts()[$column] ?? null)?->psalmType;
@@ -503,7 +510,7 @@ final class PivotColumnResolver
             return null;
         }
 
-        return !$stock ? Type::getMixed() : ($nullable ? Type::combineUnionTypes($cast, Type::getNull()) : $cast);
+        return !$proven ? Type::getMixed() : self::unbound($nullable ? Type::combineUnionTypes($cast, Type::getNull()) : $cast);
     }
 
     /**
@@ -516,14 +523,39 @@ final class PivotColumnResolver
             return Type::getMixed();
         }
 
-        $bound = TypeExpander::expandUnion($codebase, $type, $storage->name, $storage->name, $storage->parent_class, final: true);
+        return self::unbound(TypeExpander::expandUnion($codebase, $type, $storage->name, $storage->name, $storage->parent_class, final: true));
+    }
 
-        return \preg_match('/\bstatic\b|\$this/i', $bound->getId()) === 1 ? Type::getMixed() : $bound;
+    /**
+     * $type, or `mixed` when `self` / `static` / `$this` / `parent` is left in it, generics, shapes and callables
+     * included: a type the pivot did not declare (a cast's) is relative to another class.
+     *
+     * @psalm-pure
+     */
+    private static function unbound(Union $type): Union
+    {
+        $visitor = new class extends TypeVisitor {
+            /** @psalm-pure */
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                $relative = $type instanceof TNamedObject
+                    && ($type->is_static || \in_array(\strtolower($type->value), ['self', 'static', 'parent', '$this'], true));
+
+                return $relative ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        // traverse() returns false exactly when enterNode() stopped the traversal.
+        return $visitor->traverse($type) ? $type : Type::getMixed();
     }
 
     /**
      * Whether the pivot class hydrates and reads attributes as stock Laravel does, so the parent's created column
      * and `getDates()` alone decide which columns are dates and the relation table's raw values are what is read.
+     * The class (own body, ancestors, traits) must override no method of `HasAttributes`, `HasTimestamps` or
+     * `AsPivot` except `casts()`, nor `__get()` / `__call()` of `Model`. Accessors, mutators, relations and
+     * lifecycle hooks are no Laravel methods, so they stay stock.
      *
      * @psalm-capabilities read-props
      */
@@ -533,14 +565,23 @@ final class PivotColumnResolver
             return true;
         }
 
-        foreach (
-            [
-                'getDates', 'usesTimestamps', 'hasTimestampAttributes', 'getCreatedAtColumn', 'getUpdatedAtColumn', 'asDateTime',
-                'fromRawAttributes', 'fromAttributes', 'setRawAttributes', 'transformModelValue', 'getAttribute', 'getAttributeValue',
-                'getAttributeFromArray', 'castAttribute', '__get',
-            ] as $method
-        ) {
-            if (!self::inheritsDefault($codebase, $class, $method)) {
+        try {
+            $declared = $codebase->classlike_storage_provider->get($class)->declaring_method_ids;
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        $surface = ['__get' => true, '__call' => true];
+        foreach ([HasAttributes::class, HasTimestamps::class, AsPivot::class] as $concern) {
+            foreach ((new \ReflectionClass($concern))->getMethods() as $method) {
+                $surface[\strtolower($method->name)] = true;
+            }
+        }
+
+        unset($surface['casts']);
+
+        foreach ($declared as $name => $id) {
+            if (isset($surface[$name]) && !\in_array($id->fq_class_name, self::STOCK_DECLARERS, true)) {
                 return false;
             }
         }

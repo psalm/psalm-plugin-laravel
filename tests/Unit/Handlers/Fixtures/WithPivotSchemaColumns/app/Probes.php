@@ -98,4 +98,13 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $she
 
     $_raw_scored = $team->rawScored();
     /** @psalm-trace $_raw_scored */
+
+    $_caster_scored = $team->casterScored();
+    /** @psalm-trace $_caster_scored */
+
+    $_has_cast_scored = $team->hasCastScored();
+    /** @psalm-trace $_has_cast_scored */
+
+    $_casts_method_scored = $team->castsMethodScored();
+    /** @psalm-trace $_casts_method_scored */
 }

@@ -93,6 +93,22 @@ class Team extends Model
         return $relation;
     }
 
+    /** A cast's `static` is the caster, not the pivot: no relative type survives. */
+    public function casterScored(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_scores')->using(CasterScore::class)->withPivot('kind', 'rank');
+    }
+
+    public function hasCastScored(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_scores')->using(HasCastScore::class)->withPivot('rank');
+    }
+
+    public function castsMethodScored(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_scores')->using(CastsMethodScore::class)->withPivot('rank');
+    }
+
     public function rawScored(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'team_scores')->using(RawScore::class)->withPivot('rank', 'note');
