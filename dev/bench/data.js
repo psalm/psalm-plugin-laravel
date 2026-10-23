@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792755115890,
+  "lastUpdate": 1792756748145,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15080,6 +15080,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1310,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9ee6c2512ae6198ad8c70cbf0dd369edc038aa3e",
+          "message": "Move the Blade skipped-cache message to --debug and surface Blade disables under --no-progress (#1931)\n\n* fix(blade): make boot diagnostics actionable\n\n- Untrusted compiler inputs now carry their declaring file. When every\n  input is declared under the project's vendor directory, the skipped\n  shadow cache message goes to --debug only, without the `static fn`\n  advice. Project inputs keep the warning, and the advice names only them.\n  A compiler subclass and undescribable compiler state are now listed as\n  inputs too, so the split never hides an unlisted cause.\n- A Blade disable is mirrored to STDERR under VoidProgress (--no-progress,\n  CI), and fails the run when failOnInternalError is on. Discovering no\n  templates is still not a disable.\n\nRefs #1930\n\n* fix(blade): disable on unreadable view roots and tighten the vendor split\n\n- Canonicalize an untrusted input's file before the vendor check, as the\n  hint roots already are, so a mis-cased path still counts as vendor.\n- Scope the caching advice to callbacks; a compiler subclass or compiler\n  state is never fingerprinted.\n- Unreadable view directories with no template found elsewhere now\n  disable Blade through degrade(), so the message reaches STDERR and\n  escalates under failOnInternalError.\n\nRefs #1930\n\n* test(blade): pin disable visibility and the failOnInternalError gate\n\nRun each subprocess in a private fixture copy, and cover the single\ndisable message under normal progress and an empty view tree passing\nunder failOnInternalError.\n\nRefs #1930\n\n* fix(blade): keep a closed STDERR from disabling the plugin, classify Blade disables\n\n- Guard the VoidProgress STDERR mirror in `degrade()`. With STDERR closed,\n  Psalm turned the `fwrite()` notice into an exception that skipped\n  registering every handler and stub, so the whole plugin went silent.\n- Throw `BladeDisabledException` under `failOnInternalError`, chaining the\n  crash that caused the disable. The classifier names project settings as\n  the likely cause instead of \"plugin bug\", or classifies the chained crash.\n- Docs: Psalm also picks VoidProgress by itself under an AI agent outside\n  CI; a disable cannot pass CI silently (an all-unreadable template set\n  still passes).\n\n* fix(blade): list untrusted compiler inputs with project-relative paths\n\nThe --debug list printed each input's absolute declaring file. Paths are now relative to the project root (the vendor directory's parent), matching Psalm's issue paths; a file outside the project keeps its absolute path.\n\n* refactor(blade): list the skipped-cache inputs under --debug only and trim tests\n\nThe skipped shadow cache costs about a second and changes no result, so it never warns: --debug lists every input with its project-relative file. Drops the vendor/project split, the extra CompilerEnvironment reasons, three subprocess tests and the split-specific unit tests. The disable state is one BladeDisabledException the caller rethrows.",
+          "timestamp": "2026-10-23T13:54:14+02:00",
+          "tree_id": "a6271381d7b1a17f051dbd7d097093ea814cc0ea",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9ee6c2512ae6198ad8c70cbf0dd369edc038aa3e"
+        },
+        "date": 1792756746461,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.86,
+            "range": "± 0.4",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1309,
             "unit": "MB"
           }
         ]
