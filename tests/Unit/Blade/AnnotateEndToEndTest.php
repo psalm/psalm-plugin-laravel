@@ -43,6 +43,7 @@ final class AnnotateEndToEndTest extends TestCase
         'note' => "<p>{{ \$note ?? '' }}</p>\n",
         'conflict' => "<p>{{ \$flag }}</p>\n",
         'loop' => "@foreach (\$items as \$item)\n  <li>{{ \$item }} {{ \$loop->index }}</li>\n@endforeach\n",
+        'collections' => "{{ \$missing->count() }} {{ count(\$byRole) }} {{ \$kind }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
     ];
@@ -162,6 +163,22 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     #[Test]
+    public function declares_a_collection_without_the_late_static_marker(): void
+    {
+        // A template has no class scope, so `&static` would bind to nothing. It must also not make
+        // a `static` Collection and a plain one disagree about the same name.
+        $result = $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var array<int<1, max>, \\Illuminate\\Support\\Collection<int, string>> \$byRole\n"
+            . " * @var class-string<\\Illuminate\\Support\\Collection<int<0, 1>, string>> \$kind\n"
+            . " * @var \\Illuminate\\Support\\Collection<int<0, 1>, string> \$missing\n */\n?>\n" . self::TEMPLATES['collections'],
+            $this->template('collections'),
+        );
+        $this->assertNull($this->unknownFor($result, 'collections'), 'a template with nothing unknown has no entry');
+    }
+
+    #[Test]
     public function refuses_a_control_file_this_cli_did_not_write(): void
     {
         // A leaked PSALM_LARAVEL_BLADE_ANNOTATE (a stale shell, a .envrc, a CI export) must not turn
@@ -203,7 +220,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(6, $result['changed']);
+        $this->assertCount(7, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
