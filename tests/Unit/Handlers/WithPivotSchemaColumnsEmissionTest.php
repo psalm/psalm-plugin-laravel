@@ -162,6 +162,75 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
     }
 
     #[Test]
+    public function it_gives_a_using_pivot_its_own_types_before_the_relation_table(): void
+    {
+        $traces = $this->runPsalm();
+        $date = 'Illuminate\Support\Carbon|null';
+
+        // `score` has an accessor on a NOT NULL string column: never `string`. `flags` and `rank` are casts on columns
+        // Score's own table lacks (a nullable relation column stays nullable); `kind` is a column of that table;
+        // `note` is typed by the relation table; the parent's `created_at` is selected, so its dates are Carbon.
+        $this->assertContains(
+            $this->usingRelation('$_scored', 'Team', 'Score&object{score:int|null, flags:array<array-key, mixed>|null, rank:string, note:null|string, kind:string, '
+                . "created_at:{$date}, updated_at:{$date}}"),
+            $traces,
+        );
+        // `using()` last, and at the call site inside the relation body: the shape is rebuilt on the new class.
+        $this->assertContains($this->usingRelation('$_scored_last', 'Team', 'Score&object{score:int|null, note:null|string}'), $traces);
+        $this->assertContains($this->usingRelation('$relation', 'Team&static', 'Score&object{note:null|string, score:int|null}'), $traces);
+        // Delegation: the outer `using()` and columns read the delegated relation's table.
+        $this->assertContains($this->usingRelation('$_delegated_scored', 'Team', 'Score&object{score:int|null, note:null|string}'), $traces);
+    }
+
+    #[Test]
+    public function it_proves_the_raw_dates_of_a_using_pivot_only_when_the_parents_created_column_is_selected(): void
+    {
+        $traces = $this->runPsalm();
+        $date = 'Illuminate\Support\Carbon|null';
+
+        $this->assertContains($this->usingRelation('$_scored_stamps', 'Team', "Score&object{created_at:{$date}, updated_at:{$date}}"), $traces);
+        // `created_at` is not selected: the date gate is not proven, the other columns are still raw.
+        $this->assertContains($this->usingRelation('$_scored_unstamped', 'Team', 'Score&object{note:null|string, updated_at:mixed}'), $traces);
+        // `using(Pivot::class)` hydrates raw too: the schema types, dates behind the gate.
+        $this->assertContains($this->usingRelation('$_plain_scored', 'Team', "Pivot&object{rank:int, note:null|string, created_at:{$date}}"), $traces);
+        // Sheet renames its created column: `made_at` and the default `updated_at` are the parent's dates, but
+        // a raw-hydrated `created_at` is no date there: its schema type.
+        $this->assertContains(
+            $this->usingRelation('$_raw_entries', 'Sheet', "Pivot&object{hours:int, made_at:{$date}, created_at:null|string, updated_at:{$date}}"),
+            $traces,
+        );
+        // A pivot class that moves the date handling proves no raw type, dates included.
+        $this->assertContains($this->usingRelation('$_dated_scored', 'Team', 'DatedScore&object{note:mixed, created_at:mixed}'), $traces);
+        $this->assertContains($this->usingRelation('$_converting_scored', 'Team', 'ConvertingScore&object{note:mixed, created_at:mixed}'), $traces);
+    }
+
+    #[Test]
+    public function it_proves_only_the_own_types_of_a_using_pivot_behind_an_unseen_link(): void
+    {
+        $traces = $this->runPsalm();
+
+        // A `where()` may replace the relation, and the slot is only an upper bound of the class that hydrates: just
+        // the pivot's own answer (the accessor) holds; the cast fallback on `flags` is not proven.
+        $this->assertContains(
+            $this->usingRelation('$_hidden_scored', 'Team', 'Score&object{score:int|null, flags:mixed, note:mixed}'),
+            $traces,
+        );
+        // The same on both paths: for a caller and in the relation body alike.
+        $this->assertContains($this->usingRelation('$_delegated_hidden_scored', 'Team', 'Score&object{rank:mixed}'), $traces);
+        $this->assertContains($this->usingRelation('$relation', 'Team&static', 'Score&object{rank:mixed}') . '&static', $traces);
+        // A cast's `static` is the caster, not the pivot, whether the column is in the pivot's table or not.
+        $this->assertContains($this->usingRelation('$_caster_scored', 'Team', 'CasterScore&object{kind:mixed, rank:mixed}'), $traces);
+        // Overriding a Laravel attribute method (`hasCast()`) proves no cast; the `casts()` method is no override.
+        $this->assertContains($this->usingRelation('$_has_cast_scored', 'Team', 'HasCastScore&object{rank:mixed}'), $traces);
+        $this->assertContains($this->usingRelation('$_casts_method_scored', 'Team', 'CastsMethodScore&object{rank:string}'), $traces);
+        // A pivot class that changes how raw values are stored proves no cast, whatever its table.
+        $this->assertContains($this->usingRelation('$_raw_scored', 'Team', 'RawScore&object{rank:mixed, note:mixed}'), $traces);
+        // Another model's factory, alone or in one branch of the returns: no shape.
+        $this->assertContains($this->usingRelation('$_foreign_scored', 'Team', 'Score'), $traces);
+        $this->assertContains($this->usingRelation('$_branched_scored', 'Team', 'Score'), $traces);
+    }
+
+    #[Test]
     public function it_trusts_only_the_named_pivot_preserving_methods(): void
     {
         $this->assertTrue(PivotColumnResolver::keepsPivot('wherepivotnotbetween'));
@@ -197,6 +266,13 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
 
         // A callable builds the dates: nothing is proven.
         $this->assertContains($this->stampedRelation('mixed'), $this->runPsalm(['WITH_PIVOT_DATE' => 'callable']));
+    }
+
+    private function usingRelation(string $variable, string $parent, string $pivot): string
+    {
+        $pivot = (\str_starts_with($pivot, 'Pivot') ? self::RELATIONS : self::MODELS) . $pivot;
+
+        return $variable . ': ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . $parent . ', ' . $pivot . ", 'pivot'>";
     }
 
     private function stampedRelation(string $date): string

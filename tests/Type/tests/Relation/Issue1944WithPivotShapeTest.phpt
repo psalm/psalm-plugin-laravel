@@ -80,7 +80,7 @@ function skips_dynamic_and_dotted(BelongsToMany $relation, string $column): void
 }
 
 /** @param BelongsToMany<User, Team, Membership, 'pivot'> $relation */
-function custom_pivot_declines(BelongsToMany $relation): void
+function custom_pivot_refines(BelongsToMany $relation): void
 {
     $_custom = $relation->withPivot('role');
     /** @psalm-trace $_custom */
@@ -113,6 +113,6 @@ Trace on line %d: $_string_keys: Illuminate\Database\Eloquent\Relations\BelongsT
 Trace on line %d: $_string_key_unpacked: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
 DuplicateArrayKey on line %d: Key '0' already exists on array
 Trace on line %d: $_int_key: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
-Trace on line %d: $_custom: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Membership, 'pivot'>&static
+Trace on line %d: $_custom: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Membership&object{role:mixed}, 'pivot'>
 Trace on line %d: $_morph: Illuminate\Database\Eloquent\Relations\MorphToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\MorphPivot&object{role:mixed}, 'pivot'>
 Trace on line %d: $_reselected: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{role:string, extra:mixed}, 'pivot'>
