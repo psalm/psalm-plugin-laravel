@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Cli;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotateRequest;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -25,6 +26,10 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  *    parent process, where the write runs;
  *  - the control file in the environment, which is the entire gate on writing to the source tree.
  *    An ordinary `vendor/bin/psalm` run has none and can never annotate anything.
+ *
+ * The child's issue report (hundreds of findings on a real project) would bury this command's own
+ * summary, so its stdout is captured to a file and shown only when the pass never ran; progress
+ * on stderr stays live.
  */
 #[AsCommand(name: 'blade:annotate', description: "Declare a Blade template's variables from the view() call sites that render it.")]
 final class AnnotateCommand extends Command
@@ -121,8 +126,9 @@ final class AnnotateCommand extends Command
         }
 
         $controlFile = \tempnam(\sys_get_temp_dir(), 'psalm-laravel-annotate');
+        $psalmOutput = \tempnam(\sys_get_temp_dir(), 'psalm-laravel-annotate-out');
 
-        if ($controlFile === false) {
+        if ($controlFile === false || $psalmOutput === false) {
             $io->error('Unable to create the control file the annotate pass reports through.');
 
             return Command::FAILURE;
@@ -135,15 +141,16 @@ final class AnnotateCommand extends Command
                 'dryRun' => $dryRun,
             ]));
 
-            $exitCode = $this->runPsalm($psalmBin, $cwd, $controlFile);
+            $exitCode = $this->runPsalm($psalmBin, $cwd, $controlFile, $psalmOutput);
 
-            return $this->report($io, $controlFile, $exitCode);
+            return $this->report($io, $controlFile, $exitCode, $psalmOutput);
         } finally {
             @\unlink($controlFile);
+            @\unlink($psalmOutput);
         }
     }
 
-    private function runPsalm(string $psalmBin, string $cwd, string $controlFile): int
+    private function runPsalm(string $psalmBin, string $cwd, string $controlFile, string $psalmOutput): int
     {
         $command = [\PHP_BINARY, $psalmBin, ...$this->forwardedArguments()];
 
@@ -152,7 +159,9 @@ final class AnnotateCommand extends Command
         $env = \getenv();
         $env[AnnotateRequest::ENV_VAR] = $controlFile;
 
-        $process = \proc_open($command, [0 => \STDIN, 1 => \STDOUT, 2 => \STDERR], $pipes, $cwd, $env);
+        // Progress goes to stderr and stays live; the issue report on stdout goes to a file, because
+        // a whole-project run prints hundreds of findings that bury this command's own summary.
+        $process = \proc_open($command, [0 => \STDIN, 1 => ['file', $psalmOutput, 'w'], 2 => \STDERR], $pipes, $cwd, $env);
 
         return \is_resource($process) ? \proc_close($process) : Command::FAILURE;
     }
@@ -176,7 +185,7 @@ final class AnnotateCommand extends Command
         return $tokens;
     }
 
-    private function report(SymfonyStyle $io, string $controlFile, int $exitCode): int
+    private function report(SymfonyStyle $io, string $controlFile, int $exitCode, ?string $psalmOutput = null): int
     {
         $raw = @\file_get_contents($controlFile);
 
@@ -197,6 +206,13 @@ final class AnnotateCommand extends Command
         $changed = \is_array($result) ? $result['changed'] ?? null : null;
 
         if ($changed === null) {
+            // The pass never ran, so Psalm's own output is the only clue why: show it now.
+            $captured = $psalmOutput === null ? '' : \trim((string) @\file_get_contents($psalmOutput));
+
+            if ($captured !== '') {
+                $io->writeln(OutputFormatter::escape($captured));
+            }
+
             $io->error('The analysis never reached the annotate pass.');
             $io->writeln('  Blade analysis has to be enabled and bootable: check `<blade />` in your Psalm config, and run `vendor/bin/psalm` without `--no-progress` to see why it degraded.');
 

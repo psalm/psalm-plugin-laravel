@@ -226,13 +226,36 @@ final class AnnotateCommandTest extends TestCase
         }
     }
 
+    #[Test]
+    public function shows_psalms_own_output_only_when_the_pass_never_ran(): void
+    {
+        // A whole-project run prints hundreds of findings that bury the summary, so a run that
+        // annotated (or found nothing to) hides them; one that never reached the pass shows them,
+        // since they are the only clue why.
+        $psalmOutput = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm-output.txt';
+        \file_put_contents($psalmOutput, "ERROR: ParseError - app/Broken.php:3:1\n");
+
+        $neverRan = new BufferedOutput();
+        $this->reportExitCode(['dryRun' => false], $neverRan, $psalmOutput);
+        $this->assertStringContainsString('ParseError - app/Broken.php', $neverRan->fetch());
+
+        $ran = new BufferedOutput();
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => [],
+            'failures' => [],
+            'diff' => '',
+        ], $ran, $psalmOutput));
+        $this->assertStringNotContainsString('ParseError', $ran->fetch());
+    }
+
     /**
      * Drives the reporting half of the command directly: the exit code depends on what the child
      * published, and no CommandTester run can produce a child.
      *
      * @param array<string, mixed> $published
      */
-    private function reportExitCode(array $published, ?BufferedOutput $output = null): int
+    private function reportExitCode(array $published, ?BufferedOutput $output = null, ?string $psalmOutput = null): int
     {
         $controlFile = $this->tempDir . \DIRECTORY_SEPARATOR . 'control.json';
         \file_put_contents($controlFile, (string) \json_encode($published));
@@ -242,6 +265,6 @@ final class AnnotateCommandTest extends TestCase
         $io = new SymfonyStyle(new ArrayInput([]), $output ?? new BufferedOutput());
 
         /** @var int */
-        return $report->invoke($command, $io, $controlFile, 0);
+        return $report->invoke($command, $io, $controlFile, 0, $psalmOutput);
     }
 }
