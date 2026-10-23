@@ -28,12 +28,14 @@ use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedArgument;
 use Psalm\Issue\MixedAssignment;
+use Psalm\Issue\MixedMethodCall;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\NullArgument;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
@@ -1195,6 +1197,61 @@ final class ShadowIssueRelocatorTest extends TestCase
         foreach (self::ATTRIBUTES_CHECK_LINES as $name => $line) {
             yield $name => [$line];
         }
+    }
+
+    /**
+     * #1909: Psalm's virtual `offsetGet()`/`offsetExists()` call is positioned on the subject of
+     * the access, so the selection is immediately followed by `[`.
+     */
+    #[Test]
+    #[DataProvider('virtualOffsetCalls')]
+    public function a_method_call_issue_on_the_subject_of_an_array_access_is_dropped(CodeIssue $issue): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+    }
+
+    /** @return iterable<string, array{CodeIssue}> */
+    public static function virtualOffsetCalls(): iterable
+    {
+        $line = "<?php echo e(\$x['k']['n']); ?>";
+
+        // The subject of the outer access (`$x['k']`) and of the inner one (`$x`).
+        yield 'PossiblyInvalidMethodCall' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, mixed> variable $x', self::selectionLocation("\$x['k']", 7, $line))];
+        yield 'MixedMethodCall naming the variable' => [new MixedMethodCall('Cannot determine the type of $x when calling method offsetGet', self::selectionLocation('$x', 2, $line))];
+        yield 'MixedMethodCall without a variable' => [new MixedMethodCall('Cannot determine the type of the object on the left hand side of this expression', self::selectionLocation("\$x['k']", 7, $line))];
+    }
+
+    /** Negatives: each differs from the dropped case in ONE gate condition. */
+    #[Test]
+    #[DataProvider('callsNotBeforeABracket')]
+    public function a_method_call_issue_not_on_the_subject_of_an_array_access_keeps_reporting(CodeIssue $issue): void
+    {
+        $this->assertInstanceOf(CodeIssue::class, $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+    }
+
+    /** @return iterable<string, array{CodeIssue}> */
+    public static function callsNotBeforeABracket(): iterable
+    {
+        $real = "<?php echo e(\$obj->items()['k']); ?>";
+        $static = "<?php echo e(\$cls::make()['k']); ?>";
+
+        // A real call is positioned on its method name, followed by `(`.
+        yield 'PossiblyInvalidMethodCall on a real call' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, string> variable $obj', self::selectionLocation('$obj->items', 5, $real))];
+        yield 'MixedMethodCall on a real call' => [new MixedMethodCall('Cannot determine the type of $obj when calling method items', self::selectionLocation('$obj->items', 5, $real))];
+        // A static call's location covers the whole call, so `[` follows it too: only the message tells it apart.
+        yield 'MixedMethodCall on a static call' => [new MixedMethodCall('Cannot call method on an unknown class', self::selectionLocation('$cls::make()', 12, $static))];
+        // The selection ends the snippet: nothing follows.
+        yield 'no text after the selection' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, mixed> variable $x', self::selectionLocation('$x', 2, '$x'))];
+        // Whitespace before the `[` is not skipped.
+        yield 'whitespace before the bracket' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, mixed> variable $x', self::selectionLocation('$x', 2, "<?php echo e(\$x ['k']); ?>"))];
+    }
+
+    #[Test]
+    public function a_method_call_issue_at_an_unreadable_location_keeps_reporting(): void
+    {
+        $issue = new PossiblyInvalidMethodCall('Cannot call method on possible array<string, mixed> variable $x', $this->shadowLocation(9));
+
+        $this->assertInstanceOf(PossiblyInvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
     }
 
     /** Negatives: each differs from the dropped case in ONE gate condition. */

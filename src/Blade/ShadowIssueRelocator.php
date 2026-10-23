@@ -18,6 +18,7 @@ use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedIssue;
+use Psalm\Issue\MixedMethodCall;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\ParseError;
@@ -236,6 +237,21 @@ final class ShadowIssueRelocator
         if (
             ($issue instanceof PossiblyInvalidMethodCall || $issue instanceof PossiblyUndefinedMethod)
             && self::selectedText($issue->code_location) === '$__currentLoopData'
+        ) {
+            return false;
+        }
+
+        // `$x['k']` on a subject that may be an `ArrayAccess`: Psalm analyzes a virtual
+        // `offsetGet()`/`offsetExists()`/`offsetSet()` call and suppresses these two classes around
+        // it (ArrayFetchAnalyzer.php), but `BeforeAddIssue` fires before that suppression is checked,
+        // so the re-emit reported what plain PHP never does (#1909). The virtual call takes the
+        // subject's position, which is followed by `[`; a real call is positioned on its method name,
+        // followed by `(`. The wording check keeps a static call, whose location spans the whole
+        // call, out of this gate.
+        if (
+            ($issue instanceof PossiblyInvalidMethodCall
+                || ($issue instanceof MixedMethodCall && \str_starts_with($issue->message, 'Cannot determine the type of ')))
+            && self::selectionFollowedBy($issue->code_location, '[')
         ) {
             return false;
         }
@@ -978,6 +994,20 @@ final class ShadowIssueRelocator
         return $selection instanceof ShadowSelection
             ? \substr($selection->snippet, $selection->start, $selection->end - $selection->start)
             : null;
+    }
+
+    /**
+     * Whether the shadow text right after the selection starts with $next. False when unreadable
+     * or when the selection ends the snippet.
+     *
+     * @psalm-pure
+     */
+    private static function selectionFollowedBy(CodeLocation $location, string $next): bool
+    {
+        $selection = ShadowSelection::of($location);
+
+        return $selection instanceof ShadowSelection
+            && \substr($selection->snippet, $selection->end, \strlen($next)) === $next;
     }
 
     /**
