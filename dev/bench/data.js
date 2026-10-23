@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792791635941,
+  "lastUpdate": 1792792561234,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15460,6 +15460,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 28.91,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4914f116c0b82bc80ce2a9d0868e4da54267ab72",
+          "message": "perf(blade): parallelise the blade:annotate scan, keep analysis in one process (#2015)\n\nThe command forced --threads=1 on the child, serialising the scan too. Only analysis must stay in one process; the plugin now pins ProjectAnalyzer::$threads itself in annotate mode, so --threads sizes the scan.",
+          "timestamp": "2026-10-23T23:50:25+02:00",
+          "tree_id": "c0eed02fb8d4681d6c32255911664eb64bcec613",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/4914f116c0b82bc80ce2a9d0868e4da54267ab72"
+        },
+        "date": 1792792559499,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.76,
+            "range": "± 0.06",
             "unit": "s"
           },
           {
