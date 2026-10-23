@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792792888853,
+  "lastUpdate": 1792793595702,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15530,6 +15530,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.66,
             "range": "± 1.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cdc27c3fd031ef1aca8d3d3c4e39080e444cc6f9",
+          "message": "Drop `&static` from `blade:annotate` declarations (#2017)\n\n* fix(blade): drop &static from blade:annotate declarations\n\nA template has no class scope, so the late-static marker Collection methods carry leaked into the written @var and bound to nothing. It is now stripped at every depth before producers are compared, so call sites differing only by it agree. Refs #2011 (part 1).\n\n* fix(blade): keep &static undeclared where dropping it changes the type\n\n- Strip the marker only in covariant positions; a callable parameter or\n  an invariant template parameter leaves the name undeclared\n- Read through get_class() when rejecting template parameters",
+          "timestamp": "2026-10-24T00:09:15+02:00",
+          "tree_id": "bfe384df234d221dfdc4bafa2da928739c743cc2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/cdc27c3fd031ef1aca8d3d3c4e39080e444cc6f9"
+        },
+        "date": 1792793594398,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.81,
+            "range": "± 0.15",
             "unit": "s"
           },
           {
