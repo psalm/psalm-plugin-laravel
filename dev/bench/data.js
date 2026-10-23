@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792754416445,
+  "lastUpdate": 1792755115890,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15045,6 +15045,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1309,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "94f05a0e713a81f8f6938e2e78b6d7eb91d8af9c",
+          "message": "Report `:columns` on relations paired with a constraint closure in `UndefinedModelRelation` (#1949)\n\n* feat(rules): report ':columns' on relations paired with a constraint closure\n\nLaravel only parses the `:columns` suffix for list entries and nested-array\nkeys. A string key whose value is a Closure, and `Builder::with('rel:cols',\nClosure)`, keep the name verbatim and throw RelationNotFoundException.\nUndefinedModelRelation now validates those names unstripped and adds a hint\nto select the columns inside the closure.\n\nRefs #1946\n\n* docs(rules): select the foreign key in the UndefinedModelRelation column examples\n\n* fix(rules): mark isProvenClosure pure for Psalm 7.0.0-rc8",
+          "timestamp": "2026-10-23T13:28:18+02:00",
+          "tree_id": "19e0cfeb0ef77b4f847dbb34ddf7608c844a4344",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/94f05a0e713a81f8f6938e2e78b6d7eb91d8af9c"
+        },
+        "date": 1792755114651,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.12,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1310,
             "unit": "MB"
           }
         ]
