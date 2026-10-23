@@ -18,7 +18,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Concerns\ForcesIntKeyType;
  *    overwrites it, and `getKeyType()` is `int`.
  *
  * The `$table` force-branch is the other way to catch the hoist. The `keyType` guard has no force branch
- * and is byte-identical from 13.3 to 13.38, so this discriminates across the whole `^13.20` range.
+ * and is byte-identical across every supported 13.x, so this discriminates across the whole 13.x range.
  *
  * Laravel 13.0+ (`#[Table]`); the consuming test is gated on `class_exists()`.
  *

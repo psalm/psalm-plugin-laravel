@@ -25,8 +25,7 @@ use Illuminate\Support\Collection;
  * "normalization ran and was selective" from "the map was rebuilt" or "this key merely survived".
  *
  * Both array forms are expressible on every supported release — `ensureCastsAreStringValues()`'s `is_array`
- * Both array forms are expressible on every supported release — `ensureCastsAreStringValues()`'s `is_array`
- * branch is byte-identical across `illuminate/database: ^12.27 || ^13.20` — so this fixture needs no gate.
+ * branch is byte-identical across the supported range — so this fixture needs no gate.
  *
  * @internal fixture used by ModelInstancePreparerTest and ModelMetadataRegistryTest
  */

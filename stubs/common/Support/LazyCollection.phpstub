@@ -14,7 +14,7 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
- * The list mirrors EnumeratesValues::$proxies at the 12.27 floor — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the lowest supported 12.x — do not edit without checking that array.
  * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
  * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
@@ -83,7 +83,7 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @template TMakeValue
      *
      * `...$args` is claimed unconditionally: it's real on every supported 13.x (since 13.3.0), and
-     * on the 12.x floor (12.27+) PHP silently ignores excess call-site arguments beyond the native
+     * on 12.x PHP silently ignores excess call-site arguments beyond the native
      * parameter list, so the wider claim is harmless there too.
      *
      * Known limitation: a bare (non-closure) `Generator` passed directly - e.g. `make($generator)` -
