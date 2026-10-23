@@ -173,12 +173,12 @@ final class BladeTaintRemapTest extends TestCase
     #[Test]
     public function json_directive_with_default_flags_reports_no_taint(): void
     {
-        // Default flags 15 include JSON_HEX_TAG, JSON_HEX_APOS and JSON_HEX_QUOT.
+        // Default flags 15 are all four HEX flags (TAG, APOS, QUOT, AMP).
         $this->assertSame([], $this->taintIssuesFor('resources/views/json.blade.php'), $this->report()[0]);
     }
 
     #[Test]
-    public function json_directive_with_hex_tag_only_keeps_quotes(): void
+    public function json_directive_with_html_flags_only_keeps_quotes(): void
     {
         $types = \array_column($this->taintIssuesFor('resources/views/json-hex-tag.blade.php'), 'type');
 
