@@ -46,8 +46,25 @@ Customer::with(['typoKeyed' => function (Relation $query): void {
 // Select syntax: the ':columns' part is stripped before checking.
 Customer::with('typoSelect:id,name');
 
+// ':columns' on a key paired with a Closure is NOT parsed by Laravel (the key is looked up
+// verbatim), so the relation is reported with the verbatim name and a fix hint.
+Customer::with(['vehicles:id,name' => fn (Relation $query) => $query]);
+Customer::with(['vehicles:id' => function (Relation $query): void {
+    $query->getResults();
+}]);
+Customer::query()->with(['vehicles:id' => fn (Relation $query) => $query]);
+// Dot-notation still splits: the verbatim ':columns' lands on the last (or an inner) segment.
+Customer::with(['vehicles.workOrders:id' => fn (Relation $query) => $query]);
+Customer::with(['vehicles:id.workOrders' => fn (Relation $query) => $query]);
+// Builder::with($relations, $callback) wraps the pair as [$relations => $callback].
+Customer::query()->with('vehicles:id', fn (Relation $query) => $query);
+Customer::query()->with(callback: fn (Relation $query) => $query, relations: 'vehicles:id');
+
 function undefined_relations_on_model_instance(Customer $c): void
 {
+    $c->load(['vehicles:id' => fn (Relation $query) => $query]);
+    $c->loadMissing(['vehicles:id' => fn (Relation $query) => $query]);
+
     // load() on a loaded model.
     $c->load('typoLoad');
 
@@ -73,6 +90,15 @@ UndefinedModelRelation on line %d: Relation 'typoOnVehicle' is not defined on Ap
 UndefinedModelRelation on line %d: Relation 'typoInArray' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'typoKeyed' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'typoSelect' is not defined on App\Models\Customer.
+UndefinedModelRelation on line %d: Relation 'vehicles:id,name' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'workOrders:id' is not defined on App\Models\Vehicle: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
+UndefinedModelRelation on line %d: Relation 'vehicles:id' is not defined on App\Models\Customer: Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.
 UndefinedModelRelation on line %d: Relation 'typoLoad' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'typoCount' is not defined on App\Models\Customer.
 UndefinedModelRelation on line %d: Relation 'typoAggregate' is not defined on App\Models\Customer.
