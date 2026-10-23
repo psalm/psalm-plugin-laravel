@@ -160,8 +160,8 @@ class Diagnostics
     /**
      * Loading reads the constant Psalm's CLI defines, and `exit(1)`s on any argv token that is not an
      * existing path (see {@see resolveAnalysisPhpVersion()}), so argv is hidden for the duration.
+     * Not private: a test stops here, since loading plants Psalm's Config singleton.
      */
-    /** Not private: a test stops here, since loading plants Psalm's Config singleton. */
     protected function loadPsalmConfig(string $psalmXml, string $projectRoot): void
     {
         global $argv;
