@@ -905,7 +905,7 @@ final class BladeBootstrapperTest extends TestCase
         // The compile failure is an issue instead, so it is not named in a warning `--no-progress` would discard.
         $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
         $this->assertSame(
-            [[$broken, "{{ \$x }}\n@unparseable\n", 'RuntimeException: unexpected end of file']],
+            [[$broken, "{{ \$x }}\n@unparseable\n", 'unexpected end of file']],
             $registrar->compileFailures,
         );
         $this->assertStringContainsString("skipped Blade template '{$broken}'", \implode("\n", $this->progress->debugMessages));
@@ -943,7 +943,7 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
 
         $this->assertSame([$broken], $registrar->reportableTemplates);
-        $this->assertSame([[$broken, "@unparseable\n", 'RuntimeException: unexpected end of file']], $registrar->compileFailures);
+        $this->assertSame([[$broken, "@unparseable\n", 'unexpected end of file']], $registrar->compileFailures);
         $this->assertSame([], $registrar->analyzedShadows);
         $this->assertSame([], ViewReferenceRegistry::templates(), 'no template facts on a run that never activated');
         $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());

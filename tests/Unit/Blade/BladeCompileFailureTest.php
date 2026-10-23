@@ -56,18 +56,54 @@ final class BladeCompileFailureTest extends TestCase
         return \array_values(\array_filter($issues, static fn(array $issue): bool => $issue['type'] === $type));
     }
 
+    /**
+     * @param list<array{type: string, file_name: string, line_from: int, severity: string, message: string}> $issues
+     *
+     * @return array<string, array{type: string, file_name: string, line_from: int, severity: string, message: string}>
+     */
+    private function failuresByFile(array $issues): array
+    {
+        $failures = [];
+
+        foreach ($this->ofType($issues, 'BladeCompileFailure') as $failure) {
+            $failures[$failure['file_name']] = $failure;
+        }
+
+        \ksort($failures);
+
+        return $failures;
+    }
+
     #[Test]
-    public function a_template_the_compiler_throws_on_is_reported_at_its_first_line(): void
+    public function a_template_the_compiler_throws_on_is_reported_as_an_error_at_its_first_line(): void
     {
         $issues = $this->analyze('psalm.xml');
-        $failures = $this->ofType($issues, 'BladeCompileFailure');
+        $failure = $this->failuresByFile($issues)['resources/views/broken.blade.php'] ?? null;
 
-        $this->assertCount(1, $failures, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
-        $this->assertSame('resources/views/broken.blade.php', $failures[0]['file_name']);
-        // The directive sits on line 2: line 1 is the anchor, not where the compiler stopped.
-        $this->assertSame(1, $failures[0]['line_from']);
-        $this->assertStringContainsString('LogicException: the explode directive needs a request', $failures[0]['message']);
-        $this->assertSame('info', $failures[0]['severity'], 'experimental issues default to info');
+        $this->assertNotNull($failure, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        // The directive sits on line 2, but the exception carries a line of the provider file, not
+        // of the template: line 1 is the anchor.
+        $this->assertSame(1, $failure['line_from']);
+        $this->assertSame('Template not analysed: the explode directive needs a request', $failure['message']);
+        $this->assertSame('error', $failure['severity']);
+    }
+
+    #[Test]
+    public function a_php_error_raised_by_the_compiler_names_the_directive_instead_of_the_psalm_cli_args(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $failure = $this->failuresByFile($issues)['resources/views/prose-directive.blade.php'] ?? null;
+
+        // Prose `@component` reaches Laravel's compileComponent(null), whose str_contains(null)
+        // deprecation Psalm's own error handler would turn into a message carrying the vendor path
+        // and the full Psalm command line.
+        $this->assertNotNull($failure, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+        $this->assertSame(1, $failure['line_from']);
+        $this->assertSame(
+            'Template not analysed: @component needs arguments; write @@component to print it as text',
+            $failure['message'],
+        );
+        $this->assertSame('error', $failure['severity']);
     }
 
     #[Test]
@@ -86,11 +122,14 @@ final class BladeCompileFailureTest extends TestCase
     }
 
     #[Test]
-    public function experimental_mode_reports_it_as_an_error(): void
+    public function issue_handlers_suppress_it_per_template_path(): void
     {
-        $failures = $this->ofType($this->analyze('psalm-experimental.xml'), 'BladeCompileFailure');
+        $issues = $this->analyze('psalm-suppressed.xml');
 
-        $this->assertCount(1, $failures);
-        $this->assertSame('error', $failures[0]['severity']);
+        $this->assertSame(
+            ['resources/views/prose-directive.blade.php'],
+            \array_keys($this->failuresByFile($issues)),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 }

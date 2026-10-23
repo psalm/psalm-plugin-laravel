@@ -25,6 +25,9 @@ final readonly class BladeCompileError
      */
     public static function fromThrowable(string $templatePath, \Throwable $e): self
     {
-        return new self($templatePath, $e::class . ': ' . $e->getMessage());
+        // One line: it ends up in an issue message.
+        $message = \trim((string) \preg_replace('/\s+/', ' ', $e->getMessage()));
+
+        return new self($templatePath, $message === '' ? $e::class : $message);
     }
 }
