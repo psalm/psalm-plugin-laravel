@@ -39,7 +39,7 @@ final class ExperimentalIssuePolicyTest extends TestCase
 
         ExperimentalIssuePolicy::apply($enforced);
 
-        foreach (['UnknownModelAttribute', 'UndefinedModelRelation', 'BladeCompileFailure'] as $issueType) {
+        foreach (['UnknownModelAttribute', 'UndefinedModelRelation'] as $issueType) {
             $this->assertSame($expectedLevel, $config->getReportingLevelForFile($issueType, __FILE__));
         }
     }
@@ -94,7 +94,7 @@ final class ExperimentalIssuePolicyTest extends TestCase
         ExperimentalIssuePolicy::apply($initial);
         ExperimentalIssuePolicy::apply($subsequent);
 
-        foreach (['UnknownModelAttribute', 'UndefinedModelRelation', 'BladeCompileFailure'] as $issueType) {
+        foreach (['UnknownModelAttribute', 'UndefinedModelRelation'] as $issueType) {
             $this->assertSame($expectedLevel, $config->getReportingLevelForFile($issueType, __FILE__));
         }
     }

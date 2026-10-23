@@ -90,7 +90,7 @@ final class ModelInstancePreparer
         // they carry. Runs after initializeTraits at runtime, so last here too. The method is Laravel 13.0;
         // the 12.x floor has no such phase at all, which is what the guard is for (12.x reaching the call
         // would route it through Model::__call() to the query builder). Not every attribute it reads is 13.0
-        // — `#[WithoutIncrementing]` is 13.2 — but `^13.3` puts the whole set below the floor.
+        // — `#[WithoutIncrementing]` is 13.2 — but the whole set is below the 13.x floor.
         if (\method_exists($instance, 'initializeModelAttributes')) {
             $instance->initializeModelAttributes();
         }
@@ -114,10 +114,10 @@ final class ModelInstancePreparer
      *  - `$dateFormat`, which nothing stores.
      *  - `mergeAppends()`, called below.
      *
-     * The normalizer is CALLED, never copied: it is version-split inside the supported range — 12.20–12.25
-     * has no `is_object` branch, 12.26+ adds one throwing `InvalidArgumentException` on a non-Stringable
-     * object cast — so a copy would carry a gate that calling tracks for free. The `is_array` branch this
-     * exists for is byte-identical across `illuminate/database: ^12.20 || ^13.3`, so it needs no gate.
+     * The normalizer is CALLED, never copied: Laravel 12.26+ adds an `is_object` branch that throws
+     * `InvalidArgumentException` on a non-Stringable object cast — so a copy would need to track that
+     * behavior, while calling tracks it for free. The `is_array` branch this exists for is byte-identical
+     * across the supported range, so it needs no gate.
      *
      * Built from `$instance`, never `Model::class`: `ReflectionMethod::invoke()` dispatches NON-virtually and
      * does not complain about a foreign receiver, so a `Model::class` handle would silently run the
@@ -126,8 +126,8 @@ final class ModelInstancePreparer
      * paired with — `getCasts()` — would bake the implicit key cast permanently into the property and defeat
      * computeCasts()'s setIncrementing() suppression.
      *
-     * `#[Appends]` is Laravel 13.0+; below it classAttribute() matches nothing and that half no-ops — so
-     * `mergeAppends()`, absent on 12.20–12.24, is never called and cannot crash warm-up.
+     * `#[Appends]` is Laravel 13.0+; on 12.x classAttribute() returns null, so mergeAppends()
+     * is not called.
      *
      * @param \ReflectionClass<Model> $reflection
      */
@@ -159,7 +159,7 @@ final class ModelInstancePreparer
      * Mirrors {@see Model}::resolveClassAttribute(): first ancestor's first instance, no cross-ancestor merge.
      *
      * Name-matches an attribute whose class may be absent, and throws on `newInstance()` if so. The
-     * `illuminate/database: ^12.20 || ^13.3` floor is what keeps that unreachable — only a model naming a
+     * supported `illuminate/database` range is what keeps that unreachable — only a model naming a
      * class its own framework lacks reaches it, code Laravel fatals on too, since `Error` escapes
      * resolveClassAttribute()'s `catch (Exception)`. Re-check this if the floor ever widens.
      *

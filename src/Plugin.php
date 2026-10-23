@@ -431,6 +431,10 @@ final class Plugin implements PluginEntryPointInterface
         // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
         require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
+        // Adds `withPivot()` columns to the BelongsToMany / MorphToMany pivot slot (#1944).
+        require_once __DIR__ . '/Handlers/Eloquent/Support/PivotColumnResolver.php';
+        require_once __DIR__ . '/Handlers/Eloquent/BelongsToManyWithPivotHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\BelongsToManyWithPivotHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.
@@ -784,6 +788,12 @@ final class Plugin implements PluginEntryPointInterface
         // registration order. Enabled by default; silence via the issueHandlers config.
         require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedModelAttributeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedModelAttributeHandler::class);
+
+        // Drops the `expects never` argument issues of read-only lookups on an empty collection (#1814).
+        // Registered BEFORE the Blade remap on purpose: Psalm's dispatcher stops at the first handler
+        // that returns a bool, so a drop here spares the remap the cost of rebuilding the issue.
+        require_once __DIR__ . '/Handlers/Collections/EmptyCollectionLookupIssueHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\EmptyCollectionLookupIssueHandler::class);
 
         // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
         // nothing the shadow analysis finds is visible without it. Registered LAST of the

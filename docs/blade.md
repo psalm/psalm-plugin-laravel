@@ -83,6 +83,11 @@ Two suppression paths work exactly as they do for ordinary PHP files:
   </issueHandlers>
   ```
 
+Template findings work with `errorLevel`, `<issueHandlers>`, `@psalm-suppress` and a baseline (`--set-baseline`, `--use-baseline`) like findings in PHP files. Two baseline differences:
+
+* **An entry matches the trimmed text of the whole template line, not the flagged expression.** Moving the line or changing its leading or trailing whitespace keeps the entry. Any other change to that text, even a CSS class, reports the finding again.
+* **A baseline holds one Blade mode.** A run with Blade off (`--no-blade`) against a baseline written with Blade on reports the template's baseline entries as `UnusedBaselineEntry` (one per file and issue type, while `findUnusedBaselineEntry` is on, its default).
+
 ## Tuning template findings
 
 Re-emitted template issues pass through Psalm's normal suppression with the `.blade.php` path, so the standard per-path `<issueHandlers>` config applies to a template line exactly as it does to a PHP file. Downgrade a whole issue type over `resources/views` the same way as for any other directory:
@@ -255,7 +260,7 @@ By default Blade analysis never fails a run. If the compiler or view finder cann
 
 Degradation is all-or-nothing: the template facts the compile pass collects (contracts, data-include sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [`validateViewData`](config.md#validateviewdata) and [`reportUnusedViewData`](config.md#reportunusedviewdata) checks stay silent for that run.
 
-A template that fails to compile (see [Known limits](#known-limits)), or whose declarations crash the plugin's own parser, is skipped rather than aborting the run, and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md) on its line 1, with the exception class and message. Being an issue, it survives `--no-progress` and reaches `<issueHandlers>`. At its default `info` level Psalm prints it only with `--show-info=true`; under [`<experimental value="true" />`](config.md#experimental) it is an `error`, so it fails the run and enters baselines. This holds even when no template compiled. Other skipped templates (one that cannot be read, or whose shadow cannot be written) are summarized in one warning instead: up to three paths are named directly, and `--debug` lists every individual cause.
+A template that fails to compile (see [Known limits](#known-limits)), or whose declarations crash the plugin's own parser, is skipped rather than aborting the run, and reported as a [`BladeCompileFailure`](issues/BladeCompileFailure.md) error on its line 1 (`Template not analysed: <cause>`). Being an issue, it survives `--no-progress`, fails the run, enters baselines, and reaches `<issueHandlers>`. This holds even when no template compiled. Other skipped templates (one that cannot be read, or whose shadow cannot be written) are summarized in one warning instead: up to three paths are named directly, and `--debug` lists every individual cause.
 
 
 ## Declaring view variables

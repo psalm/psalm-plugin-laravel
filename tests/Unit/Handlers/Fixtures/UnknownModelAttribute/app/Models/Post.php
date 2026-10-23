@@ -16,7 +16,7 @@ class Post extends Model
 
     /**
      * Declared through a `newEloquentBuilder()` override (the detection form that exists at the
-     * Laravel 12.20 floor; `#[UseEloquentBuilder]` is newer).
+     * Laravel 12.x floor; `#[UseEloquentBuilder]` is newer).
      *
      * @param \Illuminate\Database\Query\Builder $query
      */

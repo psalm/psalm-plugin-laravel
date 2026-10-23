@@ -281,7 +281,7 @@ Authoring an override:
 
 ### Testing version-specific stubs
 
-A type test that asserts a `stubs/<version>/` override would fail on the lower cells of the CI matrix (`.github/workflows/tests.yml` runs `test:type` over Laravel `^13.3` and `^12.20`), because the override does not load on the older Laravel. Gate such a test with a `--SKIPIF--` section so it runs only where the stub applies:
+A type test that asserts a `stubs/<version>/` override would fail on the lower cells of the CI matrix (`.github/workflows/tests.yml` runs `test:type` over the highest 12.x and 13.x), because the override does not load on the older Laravel. Gate such a test with a `--SKIPIF--` section so it runs only where the stub applies:
 
 ```
 --SKIPIF--
@@ -308,6 +308,8 @@ Most taint handlers live under the Laravel feature directory whose API they cove
 - Registration and receiver: a params provider per Eloquent `Builder` subclass (params providers dispatch on the called class and carry no receiver). The receiver's model is recovered from the call node via a `beforeExpressionAnalysis` stash keyed by the first arg, as in `ConditionableCallbackParamsHandler`, for builder, custom-builder, static (`Model::whereHas()`) and Relation receivers.
 - Contracts: plain slots get the related model's builder (its custom builder when it has one); `withWhere*()` slots get `Builder|Relation` (the closure also runs as the eager-load constraint); morph slots get `($q, $type)` over the literal types.
 - Declines: anything not provably one model's builder keeps the stub signature (union receivers, userland overrides, non-literal names or types, MorphTo on a dot path, a possible `static::class` leak, ...); the handler docblock lists them.
+
+`BelongsToManyWithPivotHandler` adds the literal `withPivot()` and `withTimestamps()` columns to TPivotModel (`Pivot&object{role: string}`), typed from the pivot table's migration (`mixed` when unknown) through `Support\PivotColumnResolver`, which `RelationMethodParser` shares so callers of a relation method see the same shape. The parent's timestamp columns are dates only when the chain provably keeps the plain pivot and the app's `Date::use()` class is known. It declines for a custom pivot class, a union receiver, a `$table` argument that may name a model class, and a factory called on another model (#1944). `ModelRelationReturnTypeHandler` keeps a relation method's own declared pivot shape for its callers.
 
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#11923).
 `JsonEncodeTaintHandler` is a second `Handlers/Taint/` handler: core Psalm clears html from `json_encode()` with `JSON_HEX_TAG | JSON_HEX_AMP` but keeps the quoted-text taint by design, so this handler clears it for literal `JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP` (including the Blade `@json` directive's defaults). It is permanent, not a stop-gap: core rejected the has_quotes half (vimeo/psalm#12453).
@@ -402,6 +404,10 @@ from the issue plus `Codebase::getStatementsForFile()`, which reads the parser
 cache. The hook fires for every issue in the run, so bail on the issue class first
 and only then do anything expensive. Every uncertain path returns `null` and keeps
 the finding.
+
+#### Dropping a false positive Psalm raises per receiver atomic
+
+`Collections\EmptyCollectionLookupIssueHandler` (`BeforeAddIssueInterface`, registered from `registerHooksFromClass()` before `Blade\BladeIssueRemapHandler`) drops the `expects never` argument issue a lookup (`get`/`has`/`contains`/...) raises on an empty `Collection<never, never>` (#1814). It bails on the issue class, the method id and the message before it touches storage, then resolves the declaring method from storage (Laravel's collections only) and compares the quoted expected type with its parameter whose class templates are replaced by `never`; every miss returns `null` and keeps the issue. Stateless, so no `reset()`. Rationale and the rejected stub widenings: [Architecture Decisions](decisions.md), "Lookups on an empty collection".
 
 See [Architecture Decisions](decisions.md) for design rationale, [Laravel Magic Call Patterns](laravel-magic-call-patterns.md) for how Laravel's __call/__callStatic chains work, [Psalm Type Syntax](types.md), [Docblock Annotations](annotations.md) and [Purity and Capabilities](purity.md) for Psalm references, and [Debugging with Xdebug](xdebug.md) for stepping through handler code.
 

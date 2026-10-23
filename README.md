@@ -35,7 +35,7 @@ composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0@RC"
 ./vendor/bin/psalm-laravel analyze
 ```
 
-Requires PHP 8.2+ and Laravel 12 or 13.
+Requires PHP 8.2+ and Laravel 12.27+ or 13.20+.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
 * [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently a release candidate. The `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
