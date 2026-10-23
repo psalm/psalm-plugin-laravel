@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792792561234,
+  "lastUpdate": 1792792888853,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15495,6 +15495,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 38.76,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "262834e2125f5bf4aedbe90be3902b48efdfaf03",
+          "message": "Type `withPivot()` columns on `using()` custom pivots (#2008)\n\n* feat(relations): type withPivot() columns on using() pivots #1998\n\n- Rebuild the pivot slot as X&object{col: T} behind a literal using(X::class), on the call-site handler and the relation-method parser alike.\n- A shape repeats X's own answer (native property, @property, accessor, cast/column of its table): Psalm reads those before an object shape.\n\n* fix(relations): bind, gate and decline unsafe using() pivot shapes #1998\n\n- Bind self/static/$this/parent in X's own types to X: an unbound static made reads through the refined relation never settle.\n- Decline templated pivot classes; read the relation table only on a visible chain; treat overridden attribute reads and setRawAttributes as non-stock.\n\n* fix(relations): inspect relative atoms and close the hydration gate #1998\n\n- Detect self/static/$this/parent by atom, not by rendered text; bind only types the pivot declares, cast-derived ones become mixed.\n- Gate rules 2-4 on no override of any HasAttributes/HasTimestamps/AsPivot method but casts(), and on a visible chain.",
+          "timestamp": "2026-10-23T23:56:55+02:00",
+          "tree_id": "fb54d8d262585b2605c477ae2047de5588bcd6ed",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/262834e2125f5bf4aedbe90be3902b48efdfaf03"
+        },
+        "date": 1792792887303,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.66,
+            "range": "± 1.15",
             "unit": "s"
           },
           {
