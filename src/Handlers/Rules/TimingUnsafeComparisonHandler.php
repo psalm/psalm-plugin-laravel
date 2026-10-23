@@ -15,11 +15,10 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar;
 use Psalm\CodeLocation;
-use Psalm\Internal\Analyzer\StatementsAnalyzer;
-use Psalm\Internal\Codebase\TaintFlowGraph;
-use Psalm\Internal\DataFlow\DataFlowNode;
+use Psalm\Codebase;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
+use Psalm\StatementsSource;
 use Psalm\Type\TaintKind;
 use Psalm\Type\Union;
 
@@ -74,19 +73,16 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
     {
+        $codebase = $event->getCodebase();
+
+        // Cheap property read: runs per expression, so the suppression-aware
+        // tracksTaintFlow() check waits until a comparison actually matches.
+        if ($codebase->taint_flow_graph === null) {
+            return null;
+        }
+
         $expr = $event->getExpr();
         $source = $event->getStatementsSource();
-
-        if (!$source instanceof StatementsAnalyzer) {
-            return null;
-        }
-
-        $taintFlowGraph = $source->taint_flow_graph;
-
-        // TaintFlowGraph exists only under --taint-analysis; bail early so normal runs pay ~zero.
-        if (!$taintFlowGraph instanceof TaintFlowGraph) {
-            return null;
-        }
 
         // BinaryOp gate first: this method runs for every expression, so the cheap check
         // skips the FuncCall branch for the BinaryOp majority and the narrower instanceofs
@@ -104,8 +100,8 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
                 || $expr instanceof BinaryOp\GreaterOrEqual
             ) {
                 self::addSinksForOperands(
+                    $codebase,
                     $source,
-                    $taintFlowGraph,
                     $expr,
                     $expr->left,
                     $expr->right,
@@ -132,8 +128,8 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
 
                 if ($leftExpr instanceof Expr && $rightExpr instanceof Expr) {
                     self::addSinksForOperands(
+                        $codebase,
                         $source,
-                        $taintFlowGraph,
                         $expr,
                         $leftExpr,
                         $rightExpr,
@@ -199,8 +195,8 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
      * false positives on idiomatic checks.
      */
     private static function addSinksForOperands(
-        StatementsAnalyzer $source,
-        TaintFlowGraph $graph,
+        Codebase $codebase,
+        StatementsSource $source,
         Expr $comparisonExpr,
         Expr $leftExpr,
         Expr $rightExpr,
@@ -211,13 +207,18 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
             return;
         }
 
+        // False where TaintedInput is suppressed, matching core sinks.
+        if (!$codebase->tracksTaintFlow($source)) {
+            return;
+        }
+
         $codeLocation = new CodeLocation($source, $comparisonExpr);
         $locationId = \strtolower($codeLocation->file_name)
             . ':' . $codeLocation->raw_file_start
             . '-' . $codeLocation->raw_file_end;
 
-        self::addSinkForType($graph, $leftType, 'timing-comparison-left', $locationId, $codeLocation);
-        self::addSinkForType($graph, $rightType, 'timing-comparison-right', $locationId, $codeLocation);
+        self::addSinkForType($codebase, $source, $leftType, 'timing-comparison-left', $locationId, $codeLocation);
+        self::addSinkForType($codebase, $source, $rightType, 'timing-comparison-right', $locationId, $codeLocation);
     }
 
     /**
@@ -265,7 +266,8 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
      * so only secret-tainted data triggers an issue — ordinary input taint is unaffected.
      */
     private static function addSinkForType(
-        TaintFlowGraph $graph,
+        Codebase $codebase,
+        StatementsSource $source,
         ?Union $type,
         string $sinkLabel,
         string $locationId,
@@ -275,22 +277,18 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
             return;
         }
 
-        // getForTaint() uses one string as both the node id and its display label, so $sinkId
-        // doubles as the label shown in taint flow traces.
+        // The sink id doubles as the label shown in taint flow traces.
         // Keeping locationId in it is still required: sinks are keyed by id in the graph, so two
         // comparison sites reusing the bare $sinkLabel would collide and drop one site's sink.
         $sinkId = $sinkLabel . '-' . $locationId;
 
-        $sink = DataFlowNode::getForTaint(
-            $sinkId,
-            $codeLocation,
-            self::SECRET_TAINTS,
-        );
-
-        $graph->addSink($sink);
+        $sink = $codebase->addTaintSink($sinkId, $codeLocation, self::SECRET_TAINTS);
+        if ($sink === null) {
+            return;
+        }
 
         foreach ($type->parent_nodes as $parentNode) {
-            $graph->addPath($parentNode, $sink, 'timing-comparison');
+            $codebase->addTaintPath($source, $parentNode, $sink, 'timing-comparison');
         }
     }
 }
