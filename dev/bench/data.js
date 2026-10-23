@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792790573480,
+  "lastUpdate": 1792791052687,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15390,6 +15390,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.48,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "beacac20524abada68aebb4f803244a7e5ef176d",
+          "message": "fix(blade): keep bare-CR endings in annotated templates\n\ndominantLineEnding() counted only LF and CRLF, so a CR-only template\ngained LF lines inside its header docblock.",
+          "timestamp": "2026-10-23T23:28:20+02:00",
+          "tree_id": "bab31aca80d2a07ca35eb4171177284e103f3b33",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/beacac20524abada68aebb4f803244a7e5ef176d"
+        },
+        "date": 1792791051055,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.52,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
