@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792767169097,
+  "lastUpdate": 1792774305371,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15285,6 +15285,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 21.71,
             "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a78ce529635ee6cebd77d44c8b8476aec4017a8a",
+          "message": "Type `withTimestamps()` columns in `BelongsToMany` pivot shapes (#1992)\n\n* feat(relations): make BelongsToMany/MorphToMany TPivotModel covariant #1944\n\n* feat(relations): add withPivot() columns to the BelongsToMany pivot type #1944\n\n* feat(relations): carry withPivot() columns into relation method return types #1944\n\n* test(relations): pin withPivot() column types from pivot migrations #1944\n\n* style(relations): apply rector to PivotColumnResolver #1944\n\n* fix(relations): resolve multi-return relations that differ only in pivot columns #1944\n\n* fix(relations): decline withPivot() refinement on a dynamic first argument #1944\n\n* style(relations): apply rector to PivotColumnResolver #1944\n\n* fix(relations): type delegated pivot columns, skip overridden joiningTable() and unpacked withPivot() arrays #1944\n\n* test(relations): pin the relation property type of multi-return pivot relations #1944\n\n* fix(relations): ignore string-keyed withPivot() arrays that array_merge() can overwrite #1944\n\n* style(relations): apply rector to PivotColumnResolver #1944\n\n* fix(relations): ignore withPivot() arrays with explicit keys #1944\n\n* test(relations): pin pivot column fetch through the refined pivot type on Psalm rc3+ #1944\n\n* fix(relations): keep known pivot shape types when withPivot() reselects a column #1944\n\n* fix(relations): keep the parent's timestamp columns mixed in withPivot() shapes #1944\n\n* refactor(relations): mark pivot shape helpers @psalm-pure for Psalm rc8\n\n* docs(relations): drop obsolete Psalm rc2/rc3 caveats from the #1944 pivot docs and test\n\n* feat(relations): type withTimestamps() columns and using() pivots in withPivot shapes #1944\n\nCover the two cases #1951 left out: withTimestamps() columns and\nusing(X::class) combined with withPivot().\n\n- the parent's created/updated column is the date type only where the\n  pivot kind's hydration gate is provable (plain Pivot: its own\n  created_at; using(): the parent's created-at column), else mixed\n- a using() pivot reads its own @property/cast, then dates, then the\n  relation's table schema, never the pivot class's default table\n\n* docs(relations): record withTimestamps() and using() pivot shape boundaries #1944\n\n* fix(relations): keep pivot shape types consistent with the pivot class and factory receiver #1944\n\n- a using() pivot's own property types win over the shape on reads, so\n  the shape carries them; casts on columns its table lacks take the\n  relation table's nullability\n- a belongsToMany() factory called on another receiver declines the\n  parsed shape: timestamp names and default table are that model's\n\n* fix(relations): keep default created_at/updated_at mixed when the parent renames its timestamp columns #1944\n\n* fix(relations): narrow pivot date columns for Psalm and drop PHP 8.3 typed constants from fixtures #1944\n\n- in_array() against the nullable timestamp pair widened $column to\n  null|string; compare against the non-null names instead\n- Sheet and the withTimestamps phpt used typed class constants, a PHP\n  8.3 feature: the fixture class failed to parse on the 8.2 CI cells\n\n* test(relations): keep typed constants in the withTimestamps phpt #1944\n\nPsalm parses typed class constants on every PHP version, so the phpt passes on the PHP 8.2 cells; only the subprocess fixture, which loads the classes at runtime, needs untyped constants. The per-constant suppressions were unused on PHP 8.2.\n\n* refactor(relations): share the pivot chain walk between handler and parser #1944\n\n- PivotColumnResolver::readChain() replaces the duplicated chain loops of\n  BelongsToManyWithPivotHandler and RelationMethodParser::collectPivotColumns();\n  callColumns() serves the delegation path too.\n- Split shapeOn() from refine(): a using() pivot is built fresh and no longer\n  threads a $using flag through the plain-pivot merge; the relation handler\n  needs no framework-pivot check for a fresh default.\n- columnTypes(): flat date/mixed branches, no array_filter allocation, schema\n  nullability via ModelPropertyHandler::mapColumnType().\n- inheritsDefault()/isFrameworkPivot(): no per-call strtolower allocations.\n\n* refactor(relations): build a using() pivot shape in one place #1944\n\n* fix(relations): prove pivot dates before typing them, drop the using() refinement #1944\n\n- The using() refinement leaves this change: a using() slot stays the plain\n  custom class as before, and a chain containing using() types no dates.\n- Timestamp columns are typed as dates only for a visible chain: every link\n  between the factory and the call must be on an allowlist of methods that\n  return the same relation (withPivot, withTimestamps, as, wherePivot*,\n  withPivotValue, orderByPivot). when(), unless(), tap() and forwarded query\n  calls leave the dates mixed.\n- The date class is read from the booted app's DateFactory: the default Carbon,\n  the class Date::use() set, or mixed for a callable or a factory.\n- A foreign-factory refusal survives the merge of several returns, and a\n  delegated chain is visible only when the delegated body is.\n\n* fix(relations): trust only named pivot-preserving calls and drop the table of an unproven chain #1944\n\n* fix(relations): keep the table refusal behind an unproven pivot chain #1944\n\n* fix(relations): add pivotVisible to the parsed relation shapes in ModelRelationReturnTypeHandler #1944",
+          "timestamp": "2026-10-23T18:48:45+02:00",
+          "tree_id": "4a1042ad22b68dd3aeff793173a386b747012dd8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a78ce529635ee6cebd77d44c8b8476aec4017a8a"
+        },
+        "date": 1792774303715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.02,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
