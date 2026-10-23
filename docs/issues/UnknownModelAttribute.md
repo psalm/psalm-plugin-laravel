@@ -6,7 +6,7 @@ nav_order: 11
 
 # UnknownModelAttribute
 
-Emitted when an array passed to an Eloquent mass-assignment method, or to a creation method on a query builder or relation, names a key that is not a known attribute of the model being filled. This catches typos such as `User::create(['nmae' => $name])` and `$user->posts()->create(['titel' => $title])`.
+Emitted when an array passed to an Eloquent mass-assignment method, or to a creation method on a query builder or relation, names a key that is not a known attribute of the model being filled. This catches typos such as `User::create(['nmae' => $name])` and `$user->roles()->create(['nmae' => $name])`.
 
 ## Why this is a problem
 

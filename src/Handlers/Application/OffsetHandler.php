@@ -58,14 +58,18 @@ final class OffsetHandler implements
         return null;
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     #[\Override]
     public static function doesMethodExist(MethodExistenceProviderEvent $event): ?bool
     {
         return self::isOffsetMethod($event->getMethodNameLowercase()) ? true : null;
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     #[\Override]
     public static function isMethodVisible(MethodVisibilityProviderEvent $event): ?bool
     {

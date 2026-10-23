@@ -315,7 +315,7 @@ final class DynamicWhereResolver
      * Schema-derived argument type: Laravel binds any int, so an unsigned/increments column's
      * `int<0, max>` is widened to `int`. Nullability and every other atomic are kept.
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function widenIntRanges(Union $type): Union
     {
