@@ -1014,6 +1014,51 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * Psalm analyzes a virtual `offsetGet()`/`offsetExists()`/`offsetSet()` call for an array access
+     * whose subject may be an `ArrayAccess`, and suppresses `PossiblyInvalidMethodCall` and
+     * `MixedMethodCall` around it (ArrayFetchAnalyzer.php). `BeforeAddIssue` fires before that
+     * suppression is checked, so the re-emit surfaced findings plain PHP never reports (#1909):
+     * `PossiblyInvalidMethodCall` on `$x` (line 4, one per union member), `$rows['k']` (line 5) and
+     * the `$x['q'] = 1` write (line 8), plus under `reportMixedIssues` a `MixedMethodCall` for
+     * `offsetGet` (line 6) and `offsetExists` (line 7).
+     */
+    #[Test]
+    #[DataProvider('offsetGetSubjectConfigs')]
+    public function an_array_access_on_a_possible_array_access_reports_no_virtual_method_call(string $config): void
+    {
+        $issues = $this->analyze($config);
+        $template = 'offsetget-suppressed.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyInvalidMethodCall', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'MixedMethodCall', $template), $json);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function offsetGetSubjectConfigs(): iterable
+    {
+        yield 'default' => ['psalm.xml'];
+        yield 'reportMixedIssues' => ['psalm-blade-report-mixed.xml'];
+    }
+
+    /**
+     * Real calls written before a `[` keep reporting: the gate keys on the selection sitting on the
+     * SUBJECT of the access, and a real call selects its method name (followed by `(`). Line 3 is a
+     * possibly-invalid instance receiver, line 4 a mixed one, line 5 a static call on a mixed class.
+     */
+    #[Test]
+    public function a_real_call_before_an_array_access_keeps_reporting(): void
+    {
+        $template = 'offsetget-real-calls.blade.php';
+        $default = $this->analyze('psalm.xml');
+        $mixed = $this->analyze('psalm-blade-report-mixed.xml');
+
+        $this->assertSame([3], $this->linesFor($default, 'PossiblyInvalidMethodCall', $template));
+        $this->assertSame([3], $this->linesFor($mixed, 'PossiblyInvalidMethodCall', $template));
+        $this->assertSame([4, 5], $this->linesFor($mixed, 'MixedMethodCall', $template));
+    }
+
+    /**
      * #1696: `$loop->parent` stays nullable in the ambient loop shape, so a nested loop's
      * `$loop->parent->iteration` (line 4) and `$loop->parent->parent->iteration` (line 6, one
      * finding per level) reported PossiblyNullPropertyFetch. An author's own nullable `->parent`
