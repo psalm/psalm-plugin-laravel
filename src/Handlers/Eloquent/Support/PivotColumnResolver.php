@@ -67,11 +67,13 @@ final class PivotColumnResolver
             $name = \strtolower($call->name->name);
             if (isset(self::FACTORY_TABLE_POSITION[$name])) {
                 $onThis = $call->var instanceof Expr\Variable && $call->var->name === 'this';
+                $table = $onThis ? self::table($codebase, $call, $name, $relatedClass, $parentClass) : false;
 
-                // An unproven link may have swapped in another factory's relation: its table is not the pivot's.
+                // An unproven link may have swapped in another factory's relation: a table NAME is not the pivot's,
+                // but a refusal (false) stands.
                 return [
                     'columns' => $columns,
-                    'table' => !$onThis ? false : ($visible ? self::table($codebase, $call, $name, $relatedClass, $parentClass) : null),
+                    'table' => \is_string($table) && !$visible ? null : $table,
                     'visible' => $visible && $onThis,
                 ];
             }

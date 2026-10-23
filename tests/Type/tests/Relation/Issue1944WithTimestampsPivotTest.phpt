@@ -80,6 +80,10 @@ class Team extends Model
         $_where = $this->belongsToMany(User::class)->where('x', 1)->withTimestamps();
         /** @psalm-trace $_where */
 
+        // A class-string `$table` may name a pivot model: the refusal stands behind an unproven link too.
+        $_class_table = $this->belongsToMany(User::class, Pivot::class)->where('active', true)->withPivot('role');
+        /** @psalm-trace $_class_table */
+
         $_pivot_calls = $this->belongsToMany(User::class)->wherePivot('x', 1)->as('stamp')->orderByPivot('x')->withTimestamps();
         /** @psalm-trace $_pivot_calls */
     }
@@ -161,6 +165,7 @@ Trace on line %d: $_when: Illuminate\Database\Eloquent\Relations\BelongsToMany<T
 Trace on line %d: $_unless: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\User, Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\Team&static, Illuminate\Database\Eloquent\Relations\Pivot&object{created_at:mixed}, 'pivot'>
 Trace on line %d: $_when_morph: Illuminate\Database\Eloquent\Relations\MorphToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\User, Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\Team&static, Illuminate\Database\Eloquent\Relations\MorphPivot&object{created_at:mixed, updated_at:mixed}, 'pivot'>
 Trace on line %d: $_where: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\User, Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\Team&static, Illuminate\Database\Eloquent\Relations\Pivot&object{created_at:mixed, updated_at:mixed}, 'pivot'>
+Trace on line %d: $_class_table: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\User, Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\Team&static, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
 Trace on line %d: $_pivot_calls: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\User, Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\Team&static, Illuminate\Database\Eloquent\Relations\Pivot&object{created_at:Illuminate\Support\Carbon|null, updated_at:Illuminate\Support\Carbon|null}, 'stamp'>&static
 Trace on line %d: $_unprovable: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\User, Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\Renamed&static, Illuminate\Database\Eloquent\Relations\Pivot&object{made_at:mixed, changed_at:mixed}, 'pivot'>
 Trace on line %d: $_opened: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\User, Tests\Psalm\LaravelPlugin\Sandbox\WithTimestampsPivot\Renamed&static, Illuminate\Database\Eloquent\Relations\Pivot&object{made_at:Illuminate\Support\Carbon|null, changed_at:Illuminate\Support\Carbon|null, created_at:mixed}, 'pivot'>
