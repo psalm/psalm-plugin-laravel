@@ -678,7 +678,7 @@ function checkSafe(\Illuminate\Foundation\Auth\User $user, string $given): bool 
 }
 ```
 
-**Runtime cost.** The handler hooks `AfterExpressionAnalysisInterface`, which fires per expression. It exits immediately when `taint_flow_graph` is null (i.e. when `--taint-analysis` is not enabled), so the only cost in regular analysis is an `instanceof` check against the event's expression. Sink registration only happens during taint analysis runs.
+**Runtime cost.** The handler hooks `AfterExpressionAnalysisInterface`, which fires per expression. It exits immediately when `Codebase::$taint_flow_graph` is null (i.e. when taint analysis is off), so the only cost in regular analysis is that null check. Sinks are added through the public `Codebase` taint API (`addTaintSink()`, `addTaintPath()`), and only where `Codebase::tracksTaintFlow()` holds, so a scope suppressing `TaintedInput` gets no timing sinks, like core sinks.
 
 **Issue-message limitation.** Psalm 7 hardcodes the issue message per taint kind in `TaintFlowGraph::connectSinksAndSources()`, so the emitted text is the generic `"Detected tainted user secret leaking"` rather than something CWE-208-specific. Tracked upstream as [vimeo/psalm#11762](https://github.com/vimeo/psalm/issues/11762); the handler will switch to a CWE-tagged message once a custom-message API lands. The data-flow trace itself still pinpoints the timing-unsafe comparison site, so the report is actionable today.
 
