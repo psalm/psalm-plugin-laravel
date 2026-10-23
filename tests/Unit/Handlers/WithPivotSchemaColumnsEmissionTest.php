@@ -215,6 +215,12 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
             $this->usingRelation('$_hidden_scored', 'Team', 'Score&object{score:int|null, flags:array<array-key, mixed>|null, note:mixed}'),
             $traces,
         );
+        // The relation table is not consulted behind an unseen link on either path, so the cast on `rank` stays
+        // nullable for a caller and in the relation body alike.
+        $this->assertContains($this->usingRelation('$_delegated_hidden_scored', 'Team', 'Score&object{rank:null|string}'), $traces);
+        $this->assertContains($this->usingRelation('$relation', 'Team&static', 'Score&object{rank:null|string}') . '&static', $traces);
+        // A pivot class that changes how raw values are stored proves no cast, whatever its table.
+        $this->assertContains($this->usingRelation('$_raw_scored', 'Team', 'RawScore&object{rank:mixed, note:mixed}'), $traces);
         // Another model's factory, alone or in one branch of the returns: no shape.
         $this->assertContains($this->usingRelation('$_foreign_scored', 'Team', 'Score'), $traces);
         $this->assertContains($this->usingRelation('$_branched_scored', 'Team', 'Score'), $traces);

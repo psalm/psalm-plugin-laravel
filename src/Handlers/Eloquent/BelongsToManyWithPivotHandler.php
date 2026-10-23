@@ -89,7 +89,12 @@ final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInt
         }
 
         // A visible chain names its own pivot class; a hidden one is whatever the slot already is.
-        $using = PivotColumnResolver::usingFor($chain['visible'] ? $chain['using'] : $slot->value, $chain['visible']);
+        $using = PivotColumnResolver::usingFor($codebase, $chain['visible'] ? $chain['using'] : $slot->value, $chain['visible']);
+        // A templated `using()` class cannot be rebuilt from its name without losing its parameters.
+        if ($using === null && $chain['visible'] && $chain['using'] !== null) {
+            return null;
+        }
+
         $pivot = PivotColumnResolver::refine(
             // A visible chain is rebuilt whole: the slot's shape would only keep columns typed before it was.
             $chain['visible'] ? new TNamedObject($using ?? $slot->value) : $slot,

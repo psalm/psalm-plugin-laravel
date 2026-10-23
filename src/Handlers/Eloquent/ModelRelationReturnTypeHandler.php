@@ -382,7 +382,7 @@ final class ModelRelationReturnTypeHandler
             $pivotType = new TNamedObject($pivot['pivotModel'] ?? $pivotDefault);
             // `using(X::class)` refines X itself, from its own types and, on a visible chain, the relation table.
             if ($pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
-                $using = PivotColumnResolver::usingFor($pivot['pivotModel'], $pivot['pivotVisible']);
+                $using = PivotColumnResolver::usingFor($codebase, $pivot['pivotModel'], $pivot['pivotVisible']);
                 $pivotType = PivotColumnResolver::refine(
                     $pivotType,
                     PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass, $pivot['pivotVisible'], $using),

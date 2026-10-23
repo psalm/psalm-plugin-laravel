@@ -44,6 +44,16 @@ class OddDates extends Pivot
 
 class TaggedPivot extends MorphPivot {}
 
+/**
+ * @property-read static $peer
+ * @property-read self $me
+ * @property-read list<static> $peers
+ */
+class Relative extends Pivot {}
+
+/** @template T of Model */
+class GenericMembership extends Pivot {}
+
 class Team extends Model
 {
     // Issue reproducer.
@@ -96,6 +106,23 @@ class Team extends Model
         /** @psalm-trace $_odd */
     }
 
+    public function relative(): void
+    {
+        // Relative types are bound to the pivot class, as a direct read binds them; unbound they never settle.
+        $_relative = $this->belongsToMany(User::class)->using(Relative::class)->withPivot('peer', 'me', 'peers');
+        /** @psalm-trace $_relative */
+
+        $_relative_read = $_relative->first()?->pivot->peer;
+        /** @psalm-trace $_relative_read */
+
+        // A templated pivot class would lose its parameters when rebuilt from its name: declined.
+        $_generic_first = $this->belongsToMany(User::class)->using(GenericMembership::class)->withPivot('role');
+        /** @psalm-trace $_generic_first */
+
+        $_generic_last = $this->belongsToMany(User::class)->withPivot('role')->using(GenericMembership::class);
+        /** @psalm-trace $_generic_last */
+    }
+
     /** @param class-string<Plain> $class */
     public function dynamic(string $class): void
     {
@@ -107,6 +134,13 @@ class Team extends Model
         $_dynamic_outer = $this->belongsToMany(User::class)->using(Described::class)->withPivot('role')->using($class);
         /** @psalm-trace $_dynamic_outer */
     }
+}
+
+/** @param BelongsToMany<User, Team, GenericMembership<User>, 'pivot'> $relation */
+function hidden_generic_receiver(BelongsToMany $relation): void
+{
+    $_hidden_generic = $relation->withPivot('role');
+    /** @psalm-trace $_hidden_generic */
 }
 
 /** @param BelongsToMany<User, Team, Described, 'pivot'> $relation */
@@ -136,8 +170,13 @@ Trace on line %d: $_no_columns: Illuminate\Database\Eloquent\Relations\BelongsTo
 Trace on line %d: $_property: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Described&object{role:int, other:mixed}, 'pivot'>&static
 Trace on line %d: $_native: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Native&object{label:null|string, score:mixed}, 'pivot'>&static
 Trace on line %d: $_odd: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\OddDates&object{seen_at:mixed, note:mixed}, 'pivot'>
+Trace on line %d: $_relative: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative&object{peer:Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative, me:Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative, peers:list<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative>}, 'pivot'>&static
+Trace on line %d: $_relative_read: Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Relative|null
+Trace on line %d: $_generic_first: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\GenericMembership<Illuminate\Database\Eloquent\Model>, 'pivot'>&static
+Trace on line %d: $_generic_last: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\GenericMembership<Illuminate\Database\Eloquent\Model>, 'pivot'>&static
 Trace on line %d: $_dynamic: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Plain&object{role:mixed}, 'pivot'>&static
 Trace on line %d: $_dynamic_outer: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team&static, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Plain, 'pivot'>&static
+Trace on line %d: $_hidden_generic: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\GenericMembership<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User>, 'pivot'>&static
 Trace on line %d: $_hidden: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Described&object{role:int, other:mixed}, 'pivot'>
 Trace on line %d: $_hidden_stamps: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Described&object{created_at:mixed, updated_at:mixed}, 'pivot'>
 Trace on line %d: $_using_hidden: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Team, Tests\Psalm\LaravelPlugin\Sandbox\UsingPivotShape\Plain, 'pivot'>&static

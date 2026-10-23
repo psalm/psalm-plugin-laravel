@@ -92,4 +92,10 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $she
 
     $_raw_entries = $sheet->rawEntries();
     /** @psalm-trace $_raw_entries */
+
+    $_delegated_hidden_scored = $team->delegatedHiddenScored();
+    /** @psalm-trace $_delegated_hidden_scored */
+
+    $_raw_scored = $team->rawScored();
+    /** @psalm-trace $_raw_scored */
 }

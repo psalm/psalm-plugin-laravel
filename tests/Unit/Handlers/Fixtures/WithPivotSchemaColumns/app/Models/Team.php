@@ -78,6 +78,26 @@ class Team extends Model
         return $this->stampedBody()->where('role', 'admin');
     }
 
+    /** A `where()` hides the chain: the relation table is not read, so the cast on `rank` stays nullable. */
+    public function delegatedHiddenScored(): BelongsToMany
+    {
+        return $this->scoredBase()->where('kind', 'x')->using(Score::class)->withPivot('rank');
+    }
+
+    /** The same expression at the call site: both paths must agree. */
+    public function delegatedHiddenScoredInBody(): BelongsToMany
+    {
+        $relation = $this->scoredBase()->where('kind', 'x')->using(Score::class)->withPivot('rank');
+        /** @psalm-trace $relation */
+
+        return $relation;
+    }
+
+    public function rawScored(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'team_scores')->using(RawScore::class)->withPivot('rank', 'note');
+    }
+
     /** One branch is another model's factory, which takes that model's timestamp names: no shape on either. */
     public function branchedStamps(bool $foreign): BelongsToMany
     {

@@ -22,6 +22,7 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
@@ -29,6 +30,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TNamedObject;
@@ -253,19 +255,21 @@ final class PivotColumnResolver
      */
     public static function columnTypes(Codebase $codebase, ?string $table, array $columns, ?string $parentClass, bool $visible, ?string $using = null): array
     {
-        $schemaTable = $table === null ? null : SchemaStateProvider::getSchema()?->tables[$table] ?? null;
+        // On the `using()` path the relation table is read only on a visible chain: a hidden one may have swapped it.
+        $schemaTable = $table === null || $using !== null && !$visible ? null : SchemaStateProvider::getSchema()?->tables[$table] ?? null;
         $parent = $parentClass === null ? null : self::parentTimestamps($codebase, $parentClass);
         // A plain pivot's `fromAttributes()` switches its date casts on when its OWN `created_at` is selected. Any
         // `using()` pivot hydrates raw attributes and checks the parent's column instead, so only a visible chain
-        // proves which kind it is, and a class that moves its date handling proves nothing.
-        $raw = $using !== null && $visible && self::hasStockHydration($codebase, $using);
+        // proves which kind it is, and a class that moves its date handling or raw reads proves nothing.
+        $stock = $using !== null && self::hasStockHydration($codebase, $using);
+        $raw = $stock && $visible;
         $dates = $using === null
             ? $visible && \in_array(Model::CREATED_AT, $columns, true)
             : $raw && $parent !== null && $parent[0] !== null && \in_array($parent[0], $columns, true);
         $types = [];
         foreach ($columns as $column) {
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
-            $own = $using === null || self::isFramework($using) ? null : self::ownType($codebase, $using, $column, $schemaColumn?->nullable ?? true);
+            $own = $using === null || self::isFramework($using) ? null : self::ownType($codebase, $using, $column, $schemaColumn?->nullable ?? true, $stock);
             if ($own instanceof Union) {
                 $types[$column] = $own;
             } elseif ($parent !== null && ($column === $parent[0] || $column === $parent[1])) {
@@ -288,13 +292,14 @@ final class PivotColumnResolver
 
     /**
      * The pivot class whose own types the columns read: a visible chain's `using()` class, else a hidden slot
-     * that is a custom pivot. Null for the framework's plain pivot, where a hidden chain proves nothing.
+     * that is a custom pivot. Null for the framework's plain pivot, where a hidden chain proves nothing, and for a
+     * templated class, whose parameters a rebuilt shape would lose.
      *
-     * @psalm-pure
+     * @psalm-capabilities read-props
      */
-    public static function usingFor(?string $class, bool $visible): ?string
+    public static function usingFor(Codebase $codebase, ?string $class, bool $visible): ?string
     {
-        return $class !== null && ($visible || !self::isFramework($class)) ? $class : null;
+        return $class !== null && ($visible || !self::isFramework($class)) && !self::isGeneric($codebase, $class) ? $class : null;
     }
 
     /**
@@ -457,19 +462,21 @@ final class PivotColumnResolver
     /**
      * The type custom pivot $class gives $column itself, null when it says nothing. Psalm's direct-read order:
      * a native property, an `@property`, an accessor, then the cast or column of the class's default table; those
-     * beat an object shape on read, so the shape must repeat them. A class the registry does not hold completely
-     * may transform the column past the first two: `mixed`. A cast on a column the default table lacks still
-     * applies to the relation table's column, which is null-passing for primitive casts.
+     * beat an object shape on read, so the shape must repeat them, bound to $class as a direct read binds them.
+     * A class the registry does not hold completely may transform the column past the first two: `mixed`. A cast on
+     * a column the default table lacks still applies to the relation table's column, which is null-passing for
+     * primitive casts, unless the class changes how raw values are read.
      *
      * @param bool $nullable whether the column may be null in the relation's table
+     * @param bool $stock the class keeps the stock hydration and attribute reads
      */
-    private static function ownType(Codebase $codebase, string $class, string $column, bool $nullable): ?Union
+    private static function ownType(Codebase $codebase, string $class, string $column, bool $nullable, bool $stock): ?Union
     {
         try {
             $storage = $codebase->classlike_storage_provider->get($class);
             $declaring = $storage->declaring_property_ids[$column] ?? null;
             if ($declaring !== null) {
-                return ($codebase->classlike_storage_provider->get($declaring)->properties[$column] ?? null)?->type ?? Type::getMixed();
+                return self::bind($codebase, $storage, ($codebase->classlike_storage_provider->get($declaring)->properties[$column] ?? null)?->type);
             }
         } catch (\InvalidArgumentException) {
             return Type::getMixed();
@@ -477,7 +484,7 @@ final class PivotColumnResolver
 
         $pseudo = $storage->pseudo_property_get_types['$' . $column] ?? null;
         if ($pseudo instanceof Union) {
-            return $pseudo;
+            return self::bind($codebase, $storage, $pseudo);
         }
 
         /** @var class-string<Model> $class */
@@ -488,17 +495,35 @@ final class PivotColumnResolver
 
         $own = $metadata->accessor($column)?->returnType ?? ModelPropertyHandler::resolveColumnType($codebase, $class, $column);
         if ($own instanceof Union) {
-            return $own;
+            return self::bind($codebase, $storage, $own);
         }
 
         $cast = ($metadata->casts()[$column] ?? null)?->psalmType;
+        if (!$cast instanceof Union) {
+            return null;
+        }
 
-        return $cast instanceof Union && $nullable ? Type::combineUnionTypes($cast, Type::getNull()) : $cast;
+        return !$stock ? Type::getMixed() : ($nullable ? Type::combineUnionTypes($cast, Type::getNull()) : $cast);
     }
 
     /**
-     * Whether the pivot class hydrates and converts dates as stock Laravel does, so the parent's created column
-     * and `getDates()` alone decide which columns are dates.
+     * $type as a direct read of the property binds it: `self`, `static`, `$this` and `parent` are the pivot class
+     * itself. Left relative they would resolve against whatever class reads the shape. `mixed` when not provable.
+     */
+    private static function bind(Codebase $codebase, ClassLikeStorage $storage, ?Union $type): Union
+    {
+        if (!$type instanceof Union) {
+            return Type::getMixed();
+        }
+
+        $bound = TypeExpander::expandUnion($codebase, $type, $storage->name, $storage->name, $storage->parent_class, final: true);
+
+        return \preg_match('/\bstatic\b|\$this/i', $bound->getId()) === 1 ? Type::getMixed() : $bound;
+    }
+
+    /**
+     * Whether the pivot class hydrates and reads attributes as stock Laravel does, so the parent's created column
+     * and `getDates()` alone decide which columns are dates and the relation table's raw values are what is read.
      *
      * @psalm-capabilities read-props
      */
@@ -508,13 +533,33 @@ final class PivotColumnResolver
             return true;
         }
 
-        foreach (['getDates', 'usesTimestamps', 'hasTimestampAttributes', 'getCreatedAtColumn', 'getUpdatedAtColumn', 'asDateTime', 'fromRawAttributes', 'fromAttributes'] as $method) {
+        foreach (
+            [
+                'getDates', 'usesTimestamps', 'hasTimestampAttributes', 'getCreatedAtColumn', 'getUpdatedAtColumn', 'asDateTime',
+                'fromRawAttributes', 'fromAttributes', 'setRawAttributes', 'transformModelValue', 'getAttribute', 'getAttributeValue',
+                'getAttributeFromArray', 'castAttribute', '__get',
+            ] as $method
+        ) {
             if (!self::inheritsDefault($codebase, $class, $method)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /**
+     * A templated pivot class loses its parameters when rebuilt from its name.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isGeneric(Codebase $codebase, string $class): bool
+    {
+        try {
+            return $codebase->classlike_storage_provider->get($class)->template_types !== null;
+        } catch (\InvalidArgumentException) {
+            return true;
+        }
     }
 
     /** @psalm-pure */
