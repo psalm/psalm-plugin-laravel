@@ -113,7 +113,7 @@ final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInt
         return null;
     }
 
-    /** @psalm-mutation-free */
+    /** @psalm-pure */
     private static function className(Union $type): ?string
     {
         $atomic = $type->isSingle() ? $type->getSingleAtomic() : null;

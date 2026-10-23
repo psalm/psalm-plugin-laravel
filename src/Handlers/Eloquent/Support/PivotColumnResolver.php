@@ -182,7 +182,7 @@ final class PivotColumnResolver
      * null unless $pivot is exactly `Pivot` / `MorphPivot`, optionally already carrying one shape.
      *
      * @param array<string, Union> $properties
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     public static function refine(Atomic $pivot, array $properties): ?TNamedObject
     {
