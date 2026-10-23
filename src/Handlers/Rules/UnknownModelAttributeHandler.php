@@ -616,7 +616,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
      * Pure verdict over the declaring class of each scanned method. A given called method must be declared
      * by a trusted class (else its behaviour is unknown: decline). Every other scanned name declines only
      * when it IS declared by an untrusted class; an absent name is ignored — BelongsToMany's `*Quietly`
-     * methods do not exist at the Laravel 12.20 floor, and their absence is not an override.
+     * methods do not exist at the Laravel 12.27 floor, and their absence is not an override.
      *
      * @param array<lowercase-string, string> $declaringClasses declaring class per scanned name; absent names omitted
      * @param list<lowercase-string>          $scanned
