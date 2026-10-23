@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792757252961,
+  "lastUpdate": 1792758487866,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15150,6 +15150,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1308,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "68202795ac1cd1085435b2ff973f3a98f4b00b5c",
+          "message": "Type closure params of `Collection::tap()`/`pipe()`/`chunkWhile()` and the `whenEmpty()` family (#1901)\n\n* fix(collections): type closure params of tap/pipe/chunkWhile and whenEmpty family #1900\n\n* fix(collections): type chunkWhile chunk as plain Collection, add empty-family value param, bind named callback\n\n* fix(collections): decline chunk types with nested templates, keep when() inference past trailing unpack\n\n* fix(collections): decline template-derived chunk types, honor declared empty-family value param, union $default return\n\n* fix(collections): type collection callback params via class stubs, drop the params handler #1900\n\nCollection, LazyCollection and Eloquent Collection stubs name the class with its templates in the tap()/pipe()/whenEmpty()-family callbacks instead of Laravel's callable($this); chunkWhile() passes a plain Collection chunk. The per-call-site params handler and its helper are removed. User subclasses keep the trait declaration (vimeo/psalm#12158), pinned as a known limitation.",
+          "timestamp": "2026-10-23T14:25:08+02:00",
+          "tree_id": "3e4beb673fe9d09b9e424d0d328cdefa28070c40",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/68202795ac1cd1085435b2ff973f3a98f4b00b5c"
+        },
+        "date": 1792758486047,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.23,
+            "range": "± 0.03",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1309,
             "unit": "MB"
           }
         ]
