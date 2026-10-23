@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\Contracts\Support\Renderable;
-use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
@@ -48,9 +47,10 @@ use Psalm\Type;
  * ({@see UnusedViewData}) — the same walk and the same resolved chain, asked from the other side.
  *
  * Inside a template, the `$__env->make()` call an `@include` compiles to is checked as the
- * `Factory::make()` call site it is. `@include` passes the including scope as `$mergeData`, which
- * leaves the key set open, so only its explicit keys are type-checked; `@includeIsolated` passes no
- * scope and is checked in full.
+ * `Factory::make()` call site it is, and so are the `renderWhen()`, `renderUnless()` and `first()`
+ * calls of `@includeWhen`, `@includeUnless` and `@includeFirst`. Each passes the including scope as
+ * `$mergeData`, which leaves the key set open, so only its explicit keys are type-checked;
+ * `@includeIsolated` passes no scope and is checked in full.
  *
  * Every check is conservative in the same direction: anything that cannot be proven declines.
  * A missing variable needs the supplied key set to be provably closed, so an open data array
@@ -117,7 +117,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         }
 
         $source = $event->getStatementsSource();
-        $chain = ViewCallChain::from($expr, $source);
+        $chain = $include instanceof Expr\MethodCall ? ViewCallChain::fromInclude($include, $source) : ViewCallChain::from($expr, $source);
 
         if (!$chain instanceof \Psalm\LaravelPlugin\Handlers\Views\ViewCallChain) {
             return null;
@@ -135,28 +135,30 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
     }
 
     /**
-     * The `make()` call of `echo $__env->make('view', [...], <the including scope>)->render();`,
-     * which `@include`, `@includeIf` and `@extends` compile to, or of `@includeIsolated`'s forms
-     * without the scope: `make('view', [...])`, and `make('view')`, whose data set is closed and empty.
-     * Only a literal data array is read: `@include('view')` also compiles to two arguments, its second
-     * being the scope.
+     * The Factory call of a statement Blade compiles an include directive to:
+     * `echo $__env->make(...)->render();` (`@include`, `@includeIf`, `@extends`, `@includeIsolated`),
+     * `echo $__env->first(...)->render();` (`@includeFirst`), and
+     * `echo $__env->renderWhen(...);` / `renderUnless(...)` (`@includeWhen`, `@includeUnless`).
+     * {@see ViewCallChain::fromInclude()} reads its arguments.
      */
     private static function compiledInclude(Stmt\Echo_ $stmt): ?Expr\MethodCall
     {
-        $render = \count($stmt->exprs) === 1 ? $stmt->exprs[0] : null;
-        $make = $render instanceof Expr\MethodCall && self::isNamed($render, 'render') ? $render->var : null;
+        $echoed = \count($stmt->exprs) === 1 ? $stmt->exprs[0] : null;
 
-        if (!$make instanceof Expr\MethodCall
-            || !self::isNamed($make, 'make')
-            || !$make->var instanceof Expr\Variable
-            || $make->var->name !== '__env'
-        ) {
+        if (!$echoed instanceof Expr\MethodCall) {
             return null;
         }
 
-        $data = $make->args[1] ?? null;
+        $call = self::isNamed($echoed, 'render') ? $echoed->var : $echoed;
+        $names = $call === $echoed ? ['renderwhen', 'renderunless'] : ['make', 'first'];
 
-        return \count($make->args) === 1 || ($data instanceof Arg && $data->value instanceof Expr\Array_) ? $make : null;
+        return $call instanceof Expr\MethodCall
+            && $call->name instanceof Identifier
+            && \in_array($call->name->toLowerString(), $names, true)
+            && $call->var instanceof Expr\Variable
+            && $call->var->name === '__env'
+                ? $call
+                : null;
     }
 
     private static function isNamed(Expr\MethodCall $call, string $name): bool
