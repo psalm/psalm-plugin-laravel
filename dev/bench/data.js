@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792784659875,
+  "lastUpdate": 1792790573480,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15355,6 +15355,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.14,
             "range": "± 0.36",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c6f141b4800705eb2620a5d5628234666d26ff27",
+          "message": "Align `blade:annotate` declarations when extending a one-line docblock (#2012)\n\n* fix(blade): open a one-line docblock into aligned tag lines\n\nblade:annotate appended to a one-line header docblock by moving only\nthe closer, leaving the first tag on the /** line:\n\n  /** @var A $a\n   * @var B $b\n   */\n\nText on the opener's line now moves to its own line too.\n\n* refactor(blade): normalize the header docblock, then insert\n\n- intoDocblock() opens a one-line docblock out with two anchored\n  replaces, then inserts before the */ by one rule instead of two\n- annotate() returns the source only: the line number and declaration\n  list were read by tests alone",
+          "timestamp": "2026-10-23T23:18:08+02:00",
+          "tree_id": "adeaeacdc897cce23eddcd85496a7ac8daf61996",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c6f141b4800705eb2620a5d5628234666d26ff27"
+        },
+        "date": 1792790571702,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.48,
+            "range": "± 0.25",
             "unit": "s"
           },
           {
