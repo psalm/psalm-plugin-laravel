@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792762340568,
+  "lastUpdate": 1792767169097,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15255,6 +15255,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1310,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "35c26d01e6271d7d908564e65b04e6d69804e96a",
+          "message": "Require Laravel 13.20 on the 13.x line (#1995)\n\n* chore(deps): require Laravel ^13.20 on the 13.x line\n\n- composer: illuminate/* and laravel/framework `^12.20 || ^13.20`\n- CI: unit floor cell 13.20.0, type matrix and exclude `^13.20`\n- docs/comments: drop 13.3 floor claims; mail address vulnerable range\n  is now 12.20-12.59 only; reword `#[Table]` version-split rationale\n\n* docs(readme): state the Laravel 13.20 floor\n\n* test(taint): expect TaintedHtml on sibling returns from Psalm rc9\n\nvimeo/psalm#12471 (rc9) no longer leaks json_encode() html removal into later returns. Skip on rc8, which composer.json still allows.\n\nFixes #1996\n\n* docs: stop restating the supported Laravel range\n\n- composer.json is the source of truth; comments name \"the supported range\" or the major instead\n- AGENTS.md and the code-review skill list majors only",
+          "timestamp": "2026-10-23T16:50:35+02:00",
+          "tree_id": "a89797be33c8ae5143e78378e1a4664979b9fced",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/35c26d01e6271d7d908564e65b04e6d69804e96a"
+        },
+        "date": 1792767167615,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.71,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
