@@ -40,6 +40,8 @@ Customer::with(['vehicles' => fn (Relation $query) => $query]);
 // Builder::with($relations, $callback) pairing, so the string keeps its ':columns' parsing.
 Customer::with('vehicles:id');
 Customer::with('vehicles:id', fn (Relation $query) => $query);
+// withWhereHas() keeps Laravel's own ':columns' strip (Str::before($relation, ':')), unlike has()/whereHas().
+Customer::query()->withWhereHas('vehicles:id');
 
 // morphTo intermediate: the target model is polymorphic, so deeper segments must NOT
 // be flagged (defer). Both DamageReport::reportable() (@phpstan-return) and

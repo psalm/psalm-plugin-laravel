@@ -307,7 +307,7 @@ Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` fa
 
 Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call.
 
-Inside templates, the literal data array of `@include`, `@includeIf` and `@extends` is type-checked, and `@includeIsolated` is checked in full. See [Included templates](blade.md#included-templates).
+Inside templates, the literal data array of `@include`, `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@extends` and `@extendsFirst` is type-checked, and `@includeIsolated` is checked in full. See [Included templates](blade.md#included-templates).
 
 
 ### `reportUnusedViewData`
@@ -342,9 +342,9 @@ For some but not all of the family back, first set `reportMixedIssues="true"`, t
 
 ### Degradation
 
-Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. Templates that fail to compile are skipped and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md) issues. Other skipped templates are summarized in a single warning; run with `--debug` for the individual causes.
+By default Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if a view directory cannot be read and no template was found elsewhere, if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. With [`failOnInternalError`](#failoninternalerror) enabled, that disable fails the run instead. Templates that fail to compile are skipped and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md) issues. Other skipped templates are summarized in a single warning; run with `--debug` for the individual causes.
 
-Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
+Psalm's `--no-progress` installs a progress implementation that discards warnings, and Psalm also picks it by itself when an AI agent runs it outside CI, so the disable warning is written to STDERR directly in that mode. Other Blade warnings stay invisible under that flag.
 
 ## Per-run overrides
 
@@ -432,6 +432,8 @@ When the plugin encounters an internal error (e.g. failing to boot the Laravel a
 Set this to `true` to throw the exception instead.
 
 This also covers partial boots. When the app's `bootstrap()` throws partway (for example, a `config/*.php` file that calls `parse_url(env('UNSET'))`), the plugin normally keeps running in a degraded mode (service providers never booted, so model, facade and container inference is reduced) and prints a warning about it. With `failOnInternalError` enabled, that swallowed bootstrap failure fails the run instead of degrading silently.
+
+The same holds for [Blade analysis](blade.md): when it is enabled but turns itself off for the run (for example, the booted app never bound `blade.compiler`), the run fails instead of reporting zero template findings. A view tree with no templates is not a failure.
 
 **Recommended for CI.** Without this, a misconfigured environment causes the plugin to silently disable itself — your pipeline passes but without any plugin analysis.
 With `failOnInternalError`, the Psalm run fails immediately, so you know the plugin isn't working.

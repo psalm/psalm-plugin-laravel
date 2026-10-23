@@ -681,6 +681,52 @@ final class ViewContractValidationTest extends TestCase
         }
     }
 
+    /**
+     * `@includeWhen`/`@includeUnless` compile to `renderWhen()`/`renderUnless()` and `@includeFirst`
+     * to `first()->render()`, all with the includer's scope as `$mergeData`. `@includeFirst` checks
+     * the first candidate that exists, as `Factory::first()` renders it.
+     */
+    #[Test]
+    public function a_conditional_or_first_include_value_of_the_wrong_type_is_reported_on_its_line(): void
+    {
+        $reported = $this->templateContractIssues('conditional-wrong-type.blade.php');
+
+        $this->assertSame([2, 3, 4, 5], \array_column($reported, 'line_from'), \var_export($reported, true));
+
+        foreach ($reported as $issue) {
+            $this->assertSame(self::WRONG_TYPE, $issue['type']);
+            $this->assertStringContainsString("View 'inc.card' declares \$title as string, but int", (string) $issue['message']);
+        }
+    }
+
+    /** `@extendsFirst` compiles to the `@includeFirst` call, emitted after the template body. */
+    #[Test]
+    public function an_extends_first_value_of_the_wrong_type_is_reported_on_the_directive_line(): void
+    {
+        $reported = $this->templateContractIssues('extends-first-data.blade.php');
+
+        $this->assertSame([2], \array_column($reported, 'line_from'), \var_export($reported, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+    }
+
+    /** Each pins a different decline gate of the conditional and first include forms. */
+    #[Test]
+    public function every_conditional_or_first_include_decline_gate_stays_silent(): void
+    {
+        // `inc.override` exists, so it renders, and it declares `$title` as int.
+        $this->assertSame([], $this->templateContractIssues('first-existing-candidate.blade.php'));
+        // A dynamic, namespaced or keyed candidate before `inc.card` may be the one that renders; so
+        // may one Laravel trims, and a keyed one after it can overwrite it.
+        $this->assertSame([], $this->templateContractIssues('first-unprovable-candidate.blade.php'));
+        // Data in a variable: a sealed `array{title: int}` would report if it were read.
+        $this->assertSame([], $this->templateContractIssues('conditional-dynamic-data.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('conditional-dynamic-name.blade.php'));
+        // The includer's scope is `$mergeData`, so the omitted `count` may still arrive; an authored
+        // `first()` without it is not closed either.
+        $this->assertSame([], $this->templateContractIssues('conditional-omitted.blade.php'));
+        $this->assertSame([], $this->templateContractIssues('conditional-matching.blade.php'));
+    }
+
     /** `@includeIsolated` arrives in Laravel 12.47; below that Blade leaves the directive as text. */
     private function requireIncludeIsolated(): void
     {

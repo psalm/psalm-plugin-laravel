@@ -92,7 +92,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TGetDefault
      * @template TGetClosureReturn
      *
-     * @param  TKey  $key
+     * @param  TKey|null  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
      * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
      *
@@ -400,10 +400,73 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Chunk the collection into chunks with a callback.
      *
-     * @param  callable(TValue, TKey, static<TKey, TValue>): bool  $callback
+     * The chunk is a plain `Collection` (built by `LazyCollection::chunkWhile()`); it becomes `static`
+     * only after the callback ran. Laravel's `static<TKey, TValue>` leaves an untyped closure param
+     * as an unresolved `static`, which the check then rejects.
+     *
+     * @param  callable(TValue, TKey, \Illuminate\Support\Collection<TKey, TValue>): bool  $callback
      * @return static<int, static<TKey, TValue>>
      */
     public function chunkWhile(callable $callback) {}
+
+    /**
+     * Laravel's `callable($this)` gives an untyped closure param the unresolved `static` (the
+     * enclosing class inside a class body), so every untyped closure was rejected. The callbacks
+     * below name the class with its templates instead. These stubs reach `Collection` itself only:
+     * a subclass keeps the `EnumeratesValues` declaration (vimeo/psalm#12158).
+     *
+     * @param  callable(\Illuminate\Support\Collection<TKey, TValue>): mixed  $callback
+     * @return $this
+     */
+    public function tap(callable $callback) {}
+
+    /**
+     * @template TPipeReturnType
+     *
+     * @param  callable(\Illuminate\Support\Collection<TKey, TValue>): TPipeReturnType  $callback
+     * @return TPipeReturnType
+     */
+    public function pipe(callable $callback) {}
+
+    /**
+     * The whenEmpty() family runs `when($condition, $callback, $default)`, which passes the condition
+     * as the second argument and returns `$callback(...) ?? $this`. The callable return is
+     * `T|null` so a null or void callback leaves only `$this`.
+     *
+     * @template TWhenEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
+     */
+    public function whenEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TWhenNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
+     */
+    public function whenNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
+     */
+    public function unlessEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
+     */
+    public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
 
     /**
      * Get the sum of the given values.
@@ -437,6 +500,42 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-variadic
      */
     public function has($key) {}
+
+    /**
+     * Determine if any of the keys exist in the collection.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  TKey|array<array-key, TKey>  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function hasAny($key) {}
+
+    /**
+     * Get all items except for those with the specified keys.
+     *
+     * Accepts an array/Enumerable of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \Illuminate\Support\Enumerable<array-key, TKey>|array<array-key, TKey>|string  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function except($keys) {}
+
+    /**
+     * Get the items with the specified keys.
+     *
+     * Accepts an array/Enumerable of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \Illuminate\Support\Enumerable<array-key, TKey>|array<array-key, TKey>|string|null  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function only($keys) {}
 
     /**
      * Determine if an item is not contained in the collection.
