@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792793595702,
+  "lastUpdate": 1792794002631,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15570,6 +15570,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "017a37c61a59a611b80004cb0bc8a364c7afe264",
+          "message": "Show Blade status in `diagnose` and the disable reason in `blade:annotate` (#2010)\n\n* fix(blade): show Blade status in diagnose and the disable reason in blade:annotate #1989\n\n- diagnose runs the same Blade boot as a Psalm run against a counting registrar and prints\n  Blade: off / on (N templates, cache <dir>) / disabled: <reason>\n- the annotate child publishes the disable reason, replacing the stale config advice\n\n* fix(blade): resolve diagnose's Blade config like Psalm does #1989\n\n- find psalm.xml, psalm.xml.dist, psalm.dist.xml in Psalm's order (phpVersion read too)\n- expand <xi:include> before reading the plugin settings\n- an empty <blade cacheDir> falls back to Psalm's cache, sharing PluginConfig's emptiness rule\n\n* style(blade): merge loadPsalmConfig docblocks #1989\n\n* refactor(blade): read diagnose's Blade status from the config only #1989\n\nBooting Blade in diagnose compiled every template and needed a counting\nregistrar, a bare-cause accessor, and a hand-written copy of Psalm's config\nlookup. Psalm's own Config API finds and loads the config (dist names,\nparent directories, xi:include), which also yields the default cache dir.\nA run that disables Blade already says why in its own warning.",
+          "timestamp": "2026-10-24T00:16:42+02:00",
+          "tree_id": "0a6876e97dd8e090c14984f16a326ba995802cf9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/017a37c61a59a611b80004cb0bc8a364c7afe264"
+        },
+        "date": 1792794001224,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.87,
+            "range": "± 0.55",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
             "unit": "MB"
           }
         ]
