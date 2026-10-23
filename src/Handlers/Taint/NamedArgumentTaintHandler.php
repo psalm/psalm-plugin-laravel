@@ -25,7 +25,6 @@ use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\TaintKind;
 
 /**
  * Strips taint from a named-argument value that Psalm binds to the callee's variadic parameter.
@@ -40,7 +39,7 @@ use Psalm\Type\TaintKind;
  * abstract or interface method is never stripped), and never inside a trait body: see
  * {@see isExactDispatch()} and {@see isInsideTrait()}.
  *
- * Accepted trade: the strip drops the argument's whole flow ({@see TaintKind::ALL_INPUT}), so a
+ * Accepted trade: the strip drops the argument's whole input flow ({@see \Psalm\Codebase::getInputTaints()}), so a
  * genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (pinned
  * by `TaintedNamedArgumentVariadicKnownLimitation.phpt`; rationale in decisions.md).
  *
@@ -91,7 +90,7 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
         }
 
         // A plain type-check run has no taint graph to poison, so skip the work entirely.
-        if (!$event->getCodebase()->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
+        if ($event->getCodebase()->taint_flow_graph === null) {
             return null;
         }
 
@@ -402,6 +401,6 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
             return 0;
         }
 
-        return TaintKind::ALL_INPUT;
+        return $event->getCodebase()->getInputTaints();
     }
 }

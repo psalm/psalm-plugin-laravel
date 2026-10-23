@@ -302,7 +302,7 @@ Create the handler class in the appropriate `src/Handlers/` subdirectory, then r
 `CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
 `ConditionableWhenHandler` narrows the return type of `Conditionable::when()`/`unless()`. `ConditionableCallbackParamsHandler` types their closure-literal callback params from the receiver and the `$value` narrowed to truthy/falsy. It is a params provider registered per host class, because params providers dispatch on the called class, not on the declaring trait.
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#12251).
-`Tappable::tap()` has no handler: its `$callback is null` conditional return lives in `stubs/common/Support/Traits/Tappable.phpstub`. A conditional return in a stub that re-declares a reflected method collapses to a single branch (vimeo/psalm#11837) unless the method carries a `@template` tag, so that stub keeps an unused one; drop it once the upstream fix lands.
+`Tappable::tap()` has no handler: its `$callback is null` conditional return lives in `stubs/common/Support/Traits/Tappable.phpstub`. Psalm before 7.0.0-rc8 collapsed such a conditional return in a stub that re-declares a reflected method to a single branch (vimeo/psalm#11837); `CollectionRandomTest.phpt` and the `tap()` type tests pin that it no longer does.
 
 `RelationCallbackParamsHandler` types the closure-literal callback of Eloquent relation-query methods (`whereHas()`, `has()`, `whereRelation()`, `withWhereHas()`, `whereHasMorph()`, ...):
 
@@ -311,7 +311,7 @@ Most taint handlers live under the Laravel feature directory whose API they cove
 - Declines: anything not provably one model's builder keeps the stub signature (union receivers, userland overrides, non-literal names or types, MorphTo on a dot path, a possible `static::class` leak, ...); the handler docblock lists them.
 
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#11923).
-`JsonEncodeTaintHandler` is a second `Handlers/Taint/` stop-gap: core Psalm has no `json_encode()` branch in its `htmlspecialchars()` flag handling, so literal HEX flags (including the Blade `@json` directive's defaults) are treated as escapes here: `JSON_HEX_TAG` clears the html taint, `JSON_HEX_APOS` plus `JSON_HEX_QUOT` the quoted-text taint. Delete the handler once core covers the function.
+`JsonEncodeTaintHandler` is a second `Handlers/Taint/` handler: core Psalm clears html from `json_encode()` with `JSON_HEX_TAG | JSON_HEX_AMP` but keeps the quoted-text taint by design, so this handler clears it for literal `JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP` (including the Blade `@json` directive's defaults). It is permanent, not a stop-gap: core rejected the has_quotes half (vimeo/psalm#12453).
 
 ### Experimental issue lifecycle
 

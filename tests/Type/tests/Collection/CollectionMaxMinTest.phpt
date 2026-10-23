@@ -30,7 +30,7 @@ final class CollectionMaxMinTest
         /** @psalm-check-type-exact $_maxFn = float|null */
 
         $_minFn = $items->min(static fn (int $i): string => (string) $i);
-        /** @psalm-check-type-exact $_minFn = numeric-string|null */
+        /** @psalm-check-type-exact $_minFn = decimal-int-string|null */
 
         $_column = $items->max('column');
         /** @psalm-check-type-exact $_column = mixed */

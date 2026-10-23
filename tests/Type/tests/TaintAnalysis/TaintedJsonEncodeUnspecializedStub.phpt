@@ -6,7 +6,8 @@
 /**
  * With an unspecialized json_encode() stub the argument-to-return edge is shared by every call, so the
  * flags of the second call would overwrite the removal of the first and silence its finding. Psalm's own
- * pooling also taints the second call's output, hence the second pair of findings.
+ * pooling also taints the second call's output, hence the second finding. TaintedHtml is lost on both
+ * lines by core's own json_encode() html removal, which does not check specialization.
  */
 function render(\Illuminate\Http\Request $request): void {
     $v = (string) $request->input('v');
@@ -16,7 +17,5 @@ function render(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
-TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

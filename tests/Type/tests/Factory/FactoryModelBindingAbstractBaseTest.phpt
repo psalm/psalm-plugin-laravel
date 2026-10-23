@@ -90,15 +90,15 @@ namespace App\Sandbox\AbstractBase {
 
     // Annotated leaf: chain through the abstract base resolves the model.
     $_bastion = (new BastionFactory())->create();
-    /** @psalm-check-type-exact $_bastion = \App\Models\Bastion */;
+    /** @psalm-check-type-exact $_bastion = \App\Models\Bastion|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Bastion> */;
 
     // Trap leaf: direct-parent guard skips it, collapses to base's `Model`.
     $_citadel = (new CitadelFactory())->create();
-    /** @psalm-check-type-exact $_citadel = \Illuminate\Database\Eloquent\Model */;
+    /** @psalm-check-type-exact $_citadel = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
 
     // Direct `extends Factory` leaf: handler injects via convention.
     $_rampart = (new RampartFactory())->create();
-    /** @psalm-check-type-exact $_rampart = \App\Models\Rampart */;
+    /** @psalm-check-type-exact $_rampart = \App\Models\Rampart|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Rampart> */;
 }
 ?>
 --EXPECTF--

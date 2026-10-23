@@ -23,12 +23,17 @@ use Psalm\Type\Union;
  * exceptions uniformly so both callers get the same semantics.
  *
  * @internal
+ *
+ * @psalm-immutable
  */
 final class ValidationCallerResolver
 {
     /**
      * @param class-string $baseClass
+     *
      * @return class-string|null
+     *
+     * @psalm-capabilities read-props
      */
     public static function resolveCallerClass(
         MethodCall $expr,
