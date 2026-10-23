@@ -407,7 +407,7 @@ final class HigherOrderCollectionProxyTest
     {
         $_result = $users->each->getKey();
         $_count = $_result->count();
-        /** @psalm-check-type-exact $_count = int */
+        /** @psalm-check-type-exact $_count = int<0, max> */
     }
 
     /**

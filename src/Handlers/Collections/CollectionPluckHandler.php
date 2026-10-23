@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -18,8 +19,9 @@ use Psalm\Type\Union;
  * Handles the common pattern: User::all()->pluck('email') or
  * User::query()->get()->pluck('email').
  *
- * Both Support\Collection and Eloquent\Collection are registered because Psalm
- * dispatches handlers based on the called class, not the declaring class.
+ * Support\Collection, Eloquent\Collection and LazyCollection are registered because Psalm
+ * dispatches handlers based on the called class, not the declaring class. LazyCollection
+ * receivers keep a LazyCollection result.
  *
  * Not covered: Relation::pluck() (e.g. $user->phone()->pluck('number')) — relationship
  * query builders are not intercepted by this handler.
@@ -36,13 +38,19 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
     #[\Override]
     public static function getClassLikeNames(): array
     {
-        return [Collection::class, EloquentCollection::class];
+        return [Collection::class, EloquentCollection::class, LazyCollection::class];
     }
 
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
         if ($event->getMethodNameLowercase() !== 'pluck') {
+            return null;
+        }
+
+        $class = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+        $codebase = $event->getSource()->getCodebase();
+        if (ModelPropertyResolver::isLazyCollectionSubclass($class, $codebase)) {
             return null;
         }
 
@@ -57,8 +65,9 @@ final class CollectionPluckHandler implements MethodReturnTypeProviderInterface
             templateParams: $event->getTemplateTypeParameters(),
             modelTemplateIndex: 1,
             nodeTypeProvider: $event->getSource()->getNodeTypeProvider(),
-            codebase: $event->getSource()->getCodebase(),
+            codebase: $codebase,
             lhsExpr: $lhsExpr,
+            collectionClass: $class === LazyCollection::class ? LazyCollection::class : Collection::class,
         );
     }
 }
