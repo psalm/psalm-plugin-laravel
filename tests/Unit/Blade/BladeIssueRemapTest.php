@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeIssueRemapHandler;
+use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ShadowIssueRelocator;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 
@@ -291,6 +292,7 @@ final class BladeIssueRemapTest extends TestCase
             'resources/views/contract-typed-body.blade.php:2 MixedArgument',
             'resources/views/contract-unqualified.blade.php:2 MixedArgument',
             'resources/views/contract-vendor-class.blade.php:2 MixedArgument',
+            'resources/views/mixed-bookkeeping-authored.blade.php:1 MixedAssignment',
             'resources/views/mixed-leak-declared.blade.php:20 MixedArgument',
             'resources/views/mixed-leak-declared.blade.php:7 MixedArgument',
             'resources/views/mixed-provenance.blade.php:10 MixedAssignment',
@@ -306,20 +308,6 @@ final class BladeIssueRemapTest extends TestCase
             'resources/views/session-value-save.blade.php:5 MixedArgument',
             'resources/views/session-value-save.blade.php:8 MixedArgument',
         ], $reported, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
-    }
-
-    #[Test]
-    public function reportmixedissues_reinstates_the_family_on_a_warm_manifest(): void
-    {
-        // Warm the manifest with the default (off) config first: reusing it under the opt-in config
-        // is itself the proof that the flag needs no cache invalidation.
-        $issues = $this->analyzeWarm(['psalm.xml', 'psalm-blade-report-mixed.xml']);
-
-        $this->assertSame(
-            [2],
-            $this->linesFor($issues, 'MixedArgument', 'resources/views/untyped.blade.php'),
-            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
-        );
     }
 
     /**
@@ -655,13 +643,13 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1873: a plain caller's `<x-...>` save/restore reads only names the prelude types from that
      * bookkeeping (`$component`, `$attributes`, each saved original), so the tag's own line reports
-     * no `Mixed*` and no ambient guard, single and nested. Under `psalm-blade-report-mixed.xml`:
-     * the default config drops every `MixedIssue`.
+     * no `Mixed*` and no ambient guard, single and nested. The prelude assertion carries the
+     * `Mixed*` half: a name left to the `mixed` fallback would have its findings dropped (#1986).
      */
     #[Test]
     public function a_plain_callers_tag_bookkeeping_is_typed(): void
     {
-        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $issues = $this->analyze('psalm.xml');
 
         foreach (['resources/views/compiler-bookkeeping.blade.php', 'resources/views/nested-component-tags.blade.php'] as $template) {
             $onTagLine = \array_values(\array_filter(
@@ -674,7 +662,7 @@ final class BladeIssueRemapTest extends TestCase
             $this->assertSame([], $onTagLine, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
             $this->assertStringContainsString(
                 '@var \Illuminate\View\Component|null $component */',
-                $this->shadowSourceFor($template, 'psalm-blade-report-mixed.xml'),
+                $this->shadowSourceFor($template),
             );
         }
     }
@@ -703,16 +691,19 @@ final class BladeIssueRemapTest extends TestCase
 
     /**
      * #1525 acceptance (c): `$attributes->merge()` and `$slot` stay typed in a plain `@props`
-     * component view. Run under `psalm-blade-report-mixed.xml`, not the default `psalm.xml`:
-     * `MixedIssue` (which `MixedMethodCall` implements) is dropped unconditionally when
-     * `reportMixedIssues` is off (#1495), so that assertion is vacuous under the default config —
-     * it would pass whether or not `$attributes`/`$slot` got a real type.
+     * component view. A `MixedMethodCall` on a name left to the prelude's `mixed` fallback is
+     * dropped (#1986), so the prelude assertion keeps the `MixedMethodCall` check from passing
+     * vacuously.
      */
     #[Test]
     public function attributes_merge_and_slot_stay_typed_in_a_props_component_view(): void
     {
-        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $issues = $this->analyze('psalm.xml');
         $template = 'components/typed-attributes.blade.php';
+        $fallback = PreludeBuilder::fallbackNames($this->shadowSourceFor('resources/views/' . $template));
+
+        $this->assertNotContains('attributes', $fallback);
+        $this->assertNotContains('slot', $fallback);
 
         foreach (['PossiblyNullReference', 'UndefinedGlobalVariable', 'MixedMethodCall'] as $family) {
             $this->assertSame(
@@ -911,22 +902,23 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1722: the prelude declares the `@session`/`@context` save stacks `list<mixed>`, so neither
      * the `array_pop()` in `@endsession`/`@endcontext` nor the append in a nested or repeated block
-     * sees a `mixed` stack. `MixedArgument` stays only on the author's own lines: the echo of the
-     * mixed session value (line 2) and `count($__authorLocal)` (line 9).
+     * sees a `mixed` stack. `MixedArgument` stays only on the author's echo of the mixed session
+     * value (line 2). The author's `count($__authorLocal)` (line 9) is dropped with the compiler's
+     * own `$__*` names (#1986).
      */
     #[Test]
-    public function session_and_context_stacks_are_typed_under_report_mixed(): void
+    public function session_and_context_stacks_are_typed(): void
     {
-        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $issues = $this->analyze('psalm.xml');
         $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
 
-        $this->assertSame([2, 9], $this->linesFor($issues, 'MixedArgument', 'session-previous.blade.php'), $json);
+        $this->assertSame([2], $this->linesFor($issues, 'MixedArgument', 'session-previous.blade.php'), $json);
         $this->assertSame([2], $this->linesFor($issues, 'MixedArgument', 'context-previous.blade.php'), $json);
 
-        // `MixedAssignment` on `$value = session()->get()`/`context()->get()` is genuine; the
-        // stack push and pop of that value are dropped (#1872).
+        // The directive's `$value = session()->get()`/`context()->get()` read, and the stack push
+        // and pop of that value, are dropped (#1872, #1986).
         $stacks = \array_values(\array_filter($issues, static fn(array $issue): bool
-            => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php') && $issue['type'] !== 'MixedAssignment'));
+            => \str_ends_with($issue['file_path'], 'session-context-stacks.blade.php')));
         $this->assertSame([], $stacks, $json);
     }
 
@@ -939,12 +931,12 @@ final class BladeIssueRemapTest extends TestCase
     #[Test]
     public function compiled_save_restore_bookkeeping_reports_no_mixed_assignment(): void
     {
-        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $issues = $this->analyze('psalm.xml');
         $template = 'mixed-bookkeeping.blade.php';
         $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
 
         // Guard against a vacuous pass: every construct must have compiled its restore.
-        $shadow = $this->shadowSourceFor('resources/views/' . $template, 'psalm-blade-report-mixed.xml');
+        $shadow = $this->shadowSourceFor('resources/views/' . $template);
         foreach (['$attributes = $__attributesOriginal', '$message = $__messageOriginal;', '$__sessionPrevious[] = $value;', '$value = array_pop($__contextPrevious);', '$value = session()->get($__sessionArgs[0]);', '$value = context()->get($__contextArgs[0]);'] as $statement) {
             $this->assertStringContainsString($statement, $shadow);
         }
@@ -953,17 +945,17 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1872 negative: an author's own `$attributes` assignment (line 1) does not have the compiled
-     * shape, and an author who writes the compiled restore verbatim (line 2) keeps the finding. The
-     * tag's own restore (line 3) differs from line 2 by its hash and is still dropped.
+     * #1872 negative: an author's own `$attributes` assignment from a callee's `mixed` (line 1) does
+     * not have the compiled shape and keeps reporting. Residual (#1986): the compiled restore
+     * written verbatim (line 2) reads a `$__*` name and is dropped like the tag's own (line 3).
      */
     #[Test]
     public function an_author_written_save_restore_look_alike_keeps_reporting(): void
     {
-        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $issues = $this->analyze('psalm.xml');
 
         $this->assertSame(
-            [1, 2],
+            [1],
             $this->linesFor($issues, 'MixedAssignment', 'mixed-bookkeeping-authored.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
@@ -1423,15 +1415,16 @@ final class BladeIssueRemapTest extends TestCase
      * #1525 §0.1: the `@component('view', [...])` directive path hands `$slot` a ComponentSlot
      * too (ManagesComponents::componentData() builds the same default slot either way), so it
      * needs no union and no weakening — `$slot->isEmpty()` must type-check exactly as it does on
-     * the `<x-*>` path. Run under `psalm-blade-report-mixed.xml`: see the docblock on
-     * attributes_merge_and_slot_stay_typed_in_a_props_component_view() for why the default config
-     * makes the `MixedMethodCall` half of this assertion vacuous.
+     * the `<x-*>` path. The prelude assertion keeps the `MixedMethodCall` half from passing
+     * vacuously, see attributes_merge_and_slot_stay_typed_in_a_props_component_view().
      */
     #[Test]
     public function slot_is_typed_the_same_way_on_the_component_directive_path(): void
     {
-        $issues = $this->analyze('psalm-blade-report-mixed.xml');
+        $issues = $this->analyze('psalm.xml');
         $template = 'resources/views/classic-slot.blade.php';
+
+        $this->assertNotContains('slot', PreludeBuilder::fallbackNames($this->shadowSourceFor($template)));
 
         foreach (['UndefinedMethod', 'MixedMethodCall', 'PossiblyUndefinedMethod'] as $family) {
             $this->assertSame(
@@ -2003,33 +1996,22 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1909: an undeclared variable is `mixed`, and Psalm narrows (`?? false`, `?->`) or coerces (a
      * `mixed` argument to `?BaseModel`) it into findings outside the Mixed family. They are the
-     * fallback type's artifact, so `reportMixedIssues` governs them too.
+     * fallback type's artifact and dropped; the declared twins below keep reporting.
      */
     #[Test]
-    public function findings_about_undeclared_variables_follow_report_mixed_issues(): void
+    public function findings_about_undeclared_variables_are_dropped(): void
     {
-        $template = 'mixed-leak-undeclared.blade.php';
-        $expected = [
-            'RiskyTruthyFalsyComparison' => [1, 4],
-            'UndefinedMagicMethod' => [8],
-            'PossiblyInvalidArgument' => [10],
-            'PossiblyInvalidCast' => [10],
-        ];
+        $issues = $this->analyze('psalm.xml');
+        $reported = \array_values(\array_filter($issues, static fn(array $issue): bool
+            => \str_ends_with($issue['file_path'], 'mixed-leak-undeclared.blade.php')));
 
-        foreach (['psalm.xml' => false, 'psalm-blade-report-mixed.xml' => true] as $config => $reported) {
-            $issues = $this->analyze($config);
-            $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
-
-            foreach ($expected as $type => $lines) {
-                $this->assertSame($reported ? $lines : [], $this->linesFor($issues, $type, $template), "{$config} {$type}: {$json}");
-            }
-        }
+        $this->assertSame([], $reported, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
     }
 
     /**
      * #1909: the same findings on a variable the template declares (raw `@var`, multi-line included,
      * and `@psalm-var`), assigns, binds as a loop alias, or gets from a class component keep
-     * reporting with `reportMixedIssues` off.
+     * reporting.
      */
     #[Test]
     public function findings_about_declared_and_local_variables_keep_reporting(): void
@@ -2055,20 +2037,18 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * #1909: `$acct['avatar']` on a possible `ArrayAccess` runs a virtual `offsetGet()` that Psalm
      * analyzes with `PossiblyInvalidMethodCall` suppressed (ArrayFetchAnalyzer.php); the re-emit lost
-     * that suppression under either config.
+     * that suppression.
      */
     #[Test]
     public function array_access_on_a_possible_array_access_does_not_report_the_virtual_offset_call(): void
     {
-        foreach (['psalm.xml', 'psalm-blade-report-mixed.xml'] as $config) {
-            $issues = $this->analyze($config);
+        $issues = $this->analyze('psalm.xml');
 
-            $this->assertSame(
-                [],
-                $this->linesFor($issues, 'PossiblyInvalidMethodCall', 'undeclared-isset-offset.blade.php'),
-                $config . ': ' . \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
-            );
-        }
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'PossiblyInvalidMethodCall', 'undeclared-isset-offset.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     /**

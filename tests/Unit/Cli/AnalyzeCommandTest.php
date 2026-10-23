@@ -333,7 +333,7 @@ final class AnalyzeCommandTest extends TestCase
         yield 'cli blade' => [['--plugin-option=blade=true', 'src'], [$flag, 'src']];
         yield '--no-blade shorthand' => [['--no-blade', 'src'], [$flag, 'src']];
         yield 'once for several blade overrides' => [['--blade', '--plugin-option=blade=false'], [$flag]];
-        yield 'blade sub-settings only' => [['--plugin-option=blade.reportMixedIssues=true'], []];
+        yield 'blade sub-settings only' => [['--plugin-option=blade.validateViewData=true'], []];
         yield 'other keys only' => [['--plugin-option=experimental=true'], []];
         yield 'no overrides' => [['--threads=1'], ['--threads=1']];
         // psalm tolerates the duplicates; the wrapper cannot know which flags psalm's getopt will parse.

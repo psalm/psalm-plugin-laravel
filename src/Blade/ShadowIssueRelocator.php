@@ -126,18 +126,15 @@ final class ShadowIssueRelocator
     ];
 
     /**
-     * @param ShadowTarget                    $target      the shadow the issue was found in
-     * @param \Closure(string): ?ShadowTarget $resolve     any OTHER shadow a taint journey passes
-     *                                                     through; a journey crosses files, so one
-     *                                                     target is not enough
-     * @param bool                            $reportMixed `<blade reportMixedIssues="true" />`; false
-     *                                                      drops the whole `MixedIssue` family instead
-     *                                                      of relocating it (#1495)
+     * @param ShadowTarget                    $target  the shadow the issue was found in
+     * @param \Closure(string): ?ShadowTarget $resolve any OTHER shadow a taint journey passes
+     *                                                 through; a journey crosses files, so one
+     *                                                 target is not enough
      *
      * @return CodeIssue|false|null the issue to re-emit on the template, `false` to drop it, `null`
      *                              to decline and leave Psalm's own handling of the original alone
      */
-    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve, bool $reportMixed): CodeIssue|false|null
+    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve): CodeIssue|false|null
     {
         // A compiled directive (Livewire tags in particular) injects untyped closures the template
         // author cannot reach, and they dominate this family inside a shadow. Dropped
@@ -478,14 +475,14 @@ final class ShadowIssueRelocator
         // inside a shadow are overwhelmingly this artifact rather than a real template bug. Dropped
         // when derived from it (#1986); one from a declared variable or a callee's `mixed` reports as
         // in a PHP file. The prelude's own unmapped lines are dropped below either way.
-        if ($issue instanceof MixedIssue && !$reportMixed && self::isFallbackMixed($issue, $target)) {
+        if ($issue instanceof MixedIssue && self::isFallbackMixed($issue, $target)) {
             return false;
         }
 
         // The same `mixed` narrowed (`$x['k'] ?? false`, `$x?->p`) or coerced to a parameter type
         // (ArgumentAnalyzer keeps a `mixed` argument as the param type once the call returns) yields
         // findings outside the family. Dropped with it when they are only about such variables.
-        if (!$reportMixed && $target->undeclaredNames !== [] && self::isOnlyAboutUndeclared($issue, $target->undeclaredNames)) {
+        if ($target->undeclaredNames !== [] && self::isOnlyAboutUndeclared($issue, $target->undeclaredNames)) {
             return false;
         }
 
@@ -503,10 +500,8 @@ final class ShadowIssueRelocator
         if ($templateLine < 1) {
             // The prelude and any line the marker pass could not map have no template position. A
             // `MixedIssue` there is an artifact of the prelude typing every unresolved template
-            // variable as `mixed`, so it is dropped rather than parked on line 1 regardless of
-            // $reportMixed: opting back in is about seeing the family on real template lines, not
-            // about the prelude's own noise. Anything else is worth showing even without an exact
-            // line.
+            // variable as `mixed`, so it is dropped rather than parked on line 1. Anything else is
+            // worth showing even without an exact line.
             if ($issue instanceof MixedIssue) {
                 return false;
             }

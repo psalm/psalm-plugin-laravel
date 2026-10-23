@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 
 #[CoversClass(PluginConfig::class)]
 final class BladeConfigTest extends TestCase
@@ -87,50 +88,24 @@ final class BladeConfigTest extends TestCase
         $this->assertSame('build/blade-shadows', $config->bladeCacheDir);
     }
 
+    /** #1986: the attribute is gone; an existing config carrying it, in any value, still loads. */
     #[Test]
-    public function report_mixed_issues_is_disabled_when_the_element_is_absent(): void
-    {
-        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass />'));
-
-        $this->assertFalse($config->bladeReportMixedIssues);
-    }
-
-    #[Test]
-    public function report_mixed_issues_is_disabled_when_the_element_carries_no_such_attribute(): void
-    {
-        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'));
-
-        $this->assertFalse($config->bladeReportMixedIssues);
-    }
-
-    #[Test]
-    public function report_mixed_issues_is_enabled_by_the_attribute(): void
+    public function a_removed_report_mixed_issues_attribute_is_ignored(): void
     {
         $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade reportMixedIssues="true" /></pluginClass>'),
-        );
-
-        $this->assertTrue($config->bladeReportMixedIssues);
-    }
-
-    #[Test]
-    public function report_mixed_issues_false_is_accepted(): void
-    {
-        $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade reportMixedIssues="false" /></pluginClass>'),
-        );
-
-        $this->assertFalse($config->bladeReportMixedIssues);
-    }
-
-    #[Test]
-    public function report_mixed_issues_rejects_a_non_boolean_value(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/Invalid blade reportMixedIssues value 'yes'/");
-
-        PluginConfig::fromXml(
             new \SimpleXMLElement('<pluginClass><blade reportMixedIssues="yes" /></pluginClass>'),
         );
+
+        $this->assertTrue($config->bladeEnabled);
+    }
+
+    /** #1986: an override names a key explicitly, so the removed one fails loudly instead. */
+    #[Test]
+    public function a_removed_report_mixed_issues_override_is_rejected(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches("/unknown key 'blade.reportMixedIssues'/");
+
+        PluginOverrides::parse('blade.reportMixedIssues=true');
     }
 }

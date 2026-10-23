@@ -58,8 +58,6 @@ final readonly class PluginConfig
         public bool $bladeValidateViewData,
         /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
         public bool $bladeReportUnusedViewData,
-        /** Opt back in to the `MixedIssue` family inside templates, and to the findings derived from an undeclared variable's `mixed`, suppressed by default (`<blade reportMixedIssues="true" />`). */
-        public bool $bladeReportMixedIssues,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -104,7 +102,6 @@ final readonly class PluginConfig
         $xmlBladeEnabled = self::xmlBladeEnabled($config);
         $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
         $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
-        $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
         $cachePath = self::resolveCachePath();
 
         return new self(
@@ -126,7 +123,6 @@ final readonly class PluginConfig
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             bladeValidateViewData: $overrides->bool('blade.validateViewData') ?? $bladeValidateViewData,
             bladeReportUnusedViewData: $overrides->bool('blade.reportUnusedViewData') ?? $bladeReportUnusedViewData,
-            bladeReportMixedIssues: $overrides->bool('blade.reportMixedIssues') ?? $bladeReportMixedIssues,
             experimental: $experimental,
             failOnInternalError: $overrides->bool('failOnInternalError') ?? $failOnInternalError,
         );

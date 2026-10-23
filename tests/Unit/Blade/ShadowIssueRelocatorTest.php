@@ -118,7 +118,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     private function relocate(
         CodeIssue $issue,
         ShadowEntry $entry,
-        bool $reportMixed = false,
         bool $isComponentView = false,
         string $templateSource = self::TEMPLATE_SOURCE,
         bool $attributesFromTag = false,
@@ -129,7 +128,7 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
-        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null, $reportMixed);
+        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null);
     }
 
     #[Test]
@@ -170,11 +169,11 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function it_drops_an_unmapped_mixed_issue(): void
     {
         // Prelude lines map to 0: the prelude types every unresolved template variable as mixed,
-        // so a Mixed* issue there says nothing about the template. Run with the flag ON so this
-        // keeps pinning the unmapped-line path specifically, not the new default-off behavior.
-        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(2));
+        // so a Mixed* issue there says nothing about the template. A callee's origin keeps it past
+        // the provenance gate, so this pins the unmapped-line path specifically.
+        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(2), self::stubOrigin());
 
-        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0]), reportMixed: true));
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0]), untypedNames: []));
     }
 
     #[Test]
@@ -183,31 +182,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    #[Test]
-    public function a_mapped_mixed_issue_is_rebuilt_when_reportmixed_is_on(): void
-    {
-        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
-
-        $this->assertInstanceOf(MixedAssignment::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    #[Test]
-    public function a_mapped_non_mixed_issue_is_unaffected_by_the_flag(): void
-    {
-        $issue = new UndefinedVariable('Cannot find referenced variable $x', $this->shadowLocation(9));
-
-        $off = $this->relocate($issue, $this->entry([9 => 3]));
-        $on = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
-
-        $this->assertInstanceOf(CodeIssue::class, $off);
-        $this->assertInstanceOf(CodeIssue::class, $on);
-        $this->assertSame(3, $off->code_location->getLineNumber());
-        $this->assertSame(3, $on->code_location->getLineNumber());
     }
 
     #[Test]
@@ -907,7 +881,7 @@ final class ShadowIssueRelocatorTest extends TestCase
     #[DataProvider('compiledSaveRestoreIssues')]
     public function a_mixed_issue_on_a_compiled_save_or_restore_is_dropped(CodeIssue $issue): void
     {
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), untypedNames: []));
     }
 
     /** @return iterable<string, array{CodeIssue}> */
@@ -948,7 +922,7 @@ final class ShadowIssueRelocatorTest extends TestCase
     #[DataProvider('authorSaveRestoreLookAlikes')]
     public function a_save_or_restore_look_alike_keeps_reporting(CodeIssue $issue, string $templateSource = self::TEMPLATE_SOURCE): void
     {
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true, templateSource: $templateSource);
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource, untypedNames: []);
 
         $this->assertInstanceOf($issue::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
@@ -963,9 +937,9 @@ final class ShadowIssueRelocatorTest extends TestCase
         yield 'hash shorter than xxh128' => [self::mixedAssignment('<?php $attributes = $__attributesOriginalabc123; ?>', '<?php $attributes', 11, 'attributes')];
         yield 'original of the other name' => [self::mixedAssignment('<?php $attributes = $__componentOriginal' . self::COMPONENT_HASH . '; ?>', '<?php $attributes', 11, 'attributes')];
         yield 'not the assignment target' => [new MixedArgument(
-            'Argument 1 of array_pop cannot be mixed, expecting array<array-key, mixed>',
-            self::selectionLocation('array_pop($__sessionPrevious', 18, 'if (isset($__sessionPrevious) && !empty($__sessionPrevious)) { $value = array_pop($__sessionPrevious); }'),
-            'array_pop',
+            'Argument 1 of e cannot be mixed',
+            self::selectionLocation('= $value', 6, 'if (isset($value)) { $__sessionPrevious[] = $value; }'),
+            'e',
         )];
         yield 'statement written in the template' => [
             self::mixedAssignment($restore, '<?php $attributes', 11, 'attributes'),
@@ -1746,29 +1720,27 @@ final class ShadowIssueRelocatorTest extends TestCase
     /**
      * #1909: array access on a possible `ArrayAccess` runs a virtual `offsetGet()` call that Psalm
      * analyzes with `PossiblyInvalidMethodCall`/`MixedMethodCall` suppressed. The re-emit lost that
-     * suppression, whatever the variable's origin and whatever `reportMixedIssues` says.
+     * suppression, whatever the variable's origin. A declared `$acct` keeps the `MixedMethodCall`
+     * past the provenance gate.
      */
     #[Test]
     #[DataProvider('virtualOffsetCallIssues')]
-    public function a_virtual_offset_call_issue_is_dropped(CodeIssue $issue, bool $reportMixed): void
+    public function a_virtual_offset_call_issue_is_dropped(CodeIssue $issue): void
     {
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: $reportMixed));
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), untypedNames: []));
     }
 
-    /** @return iterable<string, array{CodeIssue, bool}> */
+    /** @return iterable<string, array{CodeIssue}> */
     public static function virtualOffsetCallIssues(): iterable
     {
-        $possibly = new PossiblyInvalidMethodCall(
+        yield 'PossiblyInvalidMethodCall' => [new PossiblyInvalidMethodCall(
             'Cannot call method on possible array{id: mixed, ...<array-key, mixed>} variable $acct',
             self::selectionLocation('$acct', 5, self::OFFSET_SNIPPET),
-        );
-
-        yield 'PossiblyInvalidMethodCall' => [$possibly, false];
-        yield 'PossiblyInvalidMethodCall, Mixed reporting on' => [$possibly, true];
-        yield 'MixedMethodCall, Mixed reporting on' => [new MixedMethodCall(
+        )];
+        yield 'MixedMethodCall' => [new MixedMethodCall(
             'Cannot determine the type of $acct when calling method offsetGet',
             self::selectionLocation('$acct', 5, self::OFFSET_SNIPPET),
-        ), true];
+        )];
     }
 
     /** A real call is positioned on its method name, which `(` follows, never `[`. */
@@ -1796,13 +1768,12 @@ final class ShadowIssueRelocatorTest extends TestCase
             self::selectionLocation('$cls::make()', 12, "<?php echo e(\$cls::make()['k']); ?>"),
         );
 
-        $this->assertInstanceOf(MixedMethodCall::class, $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+        $this->assertInstanceOf(MixedMethodCall::class, $this->relocate($issue, $this->entry([9 => 3]), untypedNames: []));
     }
 
     /**
      * #1909: the prelude types a variable no contract declares as `mixed`, and Psalm narrows or
-     * coerces that `mixed` into findings outside the Mixed family. With `reportMixedIssues` off
-     * they are dropped when the expression they are about reads only such variables.
+     * coerces that `mixed` into findings outside the Mixed family. They are dropped when the expression they are about reads only such variables.
      */
     #[Test]
     #[DataProvider('undeclaredSubjectIssues')]
@@ -1854,22 +1825,20 @@ final class ShadowIssueRelocatorTest extends TestCase
     /** Declared, local, and look-alike subjects keep reporting. */
     #[Test]
     #[DataProvider('authoredSubjectIssues')]
-    public function a_finding_not_only_about_undeclared_variables_keeps_reporting(CodeIssue $issue, array $undeclaredNames, bool $reportMixed = false): void
+    public function a_finding_not_only_about_undeclared_variables_keeps_reporting(CodeIssue $issue, array $undeclaredNames): void
     {
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: $reportMixed, undeclaredNames: $undeclaredNames);
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), undeclaredNames: $undeclaredNames);
 
         $this->assertInstanceOf($issue::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
-    /** @return iterable<string, array{0: CodeIssue, 1: array<string, true>, 2?: bool}> */
+    /** @return iterable<string, array{CodeIssue, array<string, true>}> */
     public static function authoredSubjectIssues(): iterable
     {
-        yield 'Mixed reporting on' => [self::riskyOnEndpoint(), ['endpoint' => true], true];
         yield 'Risky on a declared variable' => [self::riskyOnEndpoint(), ['other' => true]];
         yield 'magic method on a declared receiver' => [self::magicOnBook(), ['other' => true]];
         yield 'argument on a declared variable' => [self::stripTagsArgument(), []];
-        yield 'argument on a declared variable, Mixed reporting on' => [self::stripTagsArgument(), ['status' => true], true];
         yield 'Risky without mixed in the operand' => [new RiskyTruthyFalsyComparison(
             "Operand of type ''|0 contains type ''|0, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead.",
             self::selectionLocation("\$endpoint['body_params'] ?? false", 33, self::RISKY_SNIPPET),
@@ -1961,14 +1930,14 @@ final class ShadowIssueRelocatorTest extends TestCase
         ];
         yield 'no origin, loop alias' => [self::mixedAssignment('<?php foreach($__currentLoopData as $item): ?>', '$item', 5, 'item'), ['item' => true]];
         yield 'compiled props assignment, origin in a callee' => [
-            new MixedAssignment('Unable to determine the type of this assignment', self::selectionLocation('$$__key', 7, '<?php $$__key = $$__key ?? $__value; ?>'), self::selectionLocation('mixed', 5, ' * @return mixed', '/vendor/stub.phpstub')),
+            new MixedAssignment('Unable to determine the type of this assignment', self::selectionLocation('$$__key', 7, '<?php $$__key = $$__key ?? $__value; ?>'), self::stubOrigin()),
             [],
         ];
         yield 'no origin, no variable read' => [
             new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation("session('k')", 12, "<?php echo e(session('k')); ?>"), 'e'),
             [],
         ];
-        yield 'body unreadable' => [self::mixedCall('$data', 'foo', '<?php echo e($data->foo()); ?>', self::selectionLocation('mixed', 5, ' * @return mixed', '/vendor/stub.phpstub')), null];
+        yield 'body unreadable' => [self::mixedCall('$data', 'foo', '<?php echo e($data->foo()); ?>', self::stubOrigin()), null];
     }
 
     /**
@@ -1995,11 +1964,11 @@ final class ShadowIssueRelocatorTest extends TestCase
         yield 'origin on a declared variable' => [self::mixedCall("\$data['x']", 'foo', $call, self::selectionLocation('$data', 5, $call)), ['x' => true]];
         yield 'origin on a name an undeclared one prefixes' => [self::mixedCall('$xy', 'foo', '<?php echo e($xy->foo()); ?>', self::selectionLocation('$xy', 3, '<?php echo e($xy->foo()); ?>')), ['x' => true]];
         yield 'origin in a callee outside the shadow' => [
-            self::mixedCall('$decoded', 'baz', '<?php echo e($decoded->baz()); ?>', self::selectionLocation('mixed', 5, ' * @return mixed', '/vendor/stub.phpstub')),
+            self::mixedCall('$decoded', 'baz', '<?php echo e($decoded->baz()); ?>', self::stubOrigin()),
             ['decoded' => true],
         ];
         yield 'origin in a callee, a name with an inner double underscore' => [
-            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation('$a__b', 5, '<?php echo e($a__b); ?>'), 'e', self::selectionLocation('mixed', 5, ' * @return mixed', '/vendor/stub.phpstub')),
+            new MixedArgument('Argument 1 of e cannot be mixed', self::selectionLocation('$a__b', 5, '<?php echo e($a__b); ?>'), 'e', self::stubOrigin()),
             [],
         ];
         yield 'no origin, declared receiver' => [self::mixedCall("\$data['x']", 'foo', $call), ['x' => true]];
@@ -2020,11 +1989,17 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame(self::TEMPLATE, $relocated->getOriginalLocation()?->file_path);
         $this->assertSame(3, $relocated->getOriginalLocation()->getLineNumber());
 
-        $stub = self::selectionLocation('mixed', 5, ' * @return mixed', '/vendor/stub.phpstub');
+        $stub = self::stubOrigin();
         $relocated = $this->relocate(self::mixedCall('$decoded', 'baz', '<?php echo e($decoded->baz()); ?>', $stub), $this->entry([9 => 3]), untypedNames: []);
 
         $this->assertInstanceOf(MixedMethodCall::class, $relocated);
         $this->assertSame($stub, $relocated->getOriginalLocation());
+    }
+
+    /** A callee's `@return mixed`, the origin Psalm gives a `mixed` that a stub or vendor method returns. */
+    private static function stubOrigin(): CodeLocation
+    {
+        return self::selectionLocation('mixed', 5, ' * @return mixed', '/vendor/stub.phpstub');
     }
 
     private static function mixedCall(string $receiver, string $method, string $snippet, ?CodeLocation $origin = null): MixedMethodCall
