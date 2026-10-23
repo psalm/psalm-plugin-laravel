@@ -152,6 +152,22 @@ final class MissingViewHandlerTest extends TestCase
         MissingViewHandler::init([self::$fixtureDir], ['blade.php', 'php', 'css', 'html']);
     }
 
+    /** Blade's `@includeFirst` check reads existence without turning MissingView on. */
+    #[Test]
+    public function view_existence_is_known_only_once_the_paths_are_read(): void
+    {
+        $this->assertTrue(MissingViewHandler::viewExists('legacy'));
+        $this->assertFalse(MissingViewHandler::viewExists('nonexistent'));
+        $this->assertNull(MissingViewHandler::viewExists('mail::html.header'));
+
+        MissingViewHandler::reset();
+        $this->assertNull(MissingViewHandler::viewExists('welcome'));
+
+        MissingViewHandler::init([self::$fixtureDir], ['blade.php', 'php', 'css', 'html'], false);
+        $this->assertTrue(MissingViewHandler::viewExists('welcome'));
+        $this->assertFalse((new \ReflectionProperty(MissingViewHandler::class, 'enabled'))->getValue());
+    }
+
     #[Test]
     public function reset_disables_diagnostics_and_view_factory_narrowing(): void
     {
