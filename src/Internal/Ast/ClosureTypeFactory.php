@@ -512,7 +512,7 @@ final class ClosureTypeFactory
      * accept fully-known numeric unions — partial unions like `int|string`
      * would force us to drop into a wider type that defeats the inference.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function isNumericUnion(Union $union): bool
     {

@@ -310,7 +310,8 @@ final class ProducerReturnTypeHandler implements MethodReturnTypeProviderInterfa
      *
      * @param class-string $expectedContract
      * @param class-string $concrete
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function narrowContract(?Union $declared, string $expectedContract, string $concrete): ?Union
     {

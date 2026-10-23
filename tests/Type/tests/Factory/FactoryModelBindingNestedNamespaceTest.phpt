@@ -45,7 +45,7 @@ namespace App\Sandbox\Nested {
     use Database\Factories\Admin\UserFactory;
 
     $_one = (new UserFactory())->create();
-    /** @psalm-check-type-exact $_one = \App\User */;
+    /** @psalm-check-type-exact $_one = \App\User|\Illuminate\Database\Eloquent\Collection<int, \App\User> */;
 }
 ?>
 --EXPECTF--

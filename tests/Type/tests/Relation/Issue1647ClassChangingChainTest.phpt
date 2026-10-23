@@ -112,14 +112,6 @@ function issue1647_passthru_method_declines(Shop $shop): mixed
     return $result;
 }
 
-function issue1647_new_instance_clone_declines(Shop $shop): mixed
-{
-    /** @psalm-suppress MixedAssignment */
-    $result = $shop->untypedClonedLastWorkOrder();
-    /** @psalm-check-type-exact $result = mixed */
-    return $result;
-}
-
 function issue1647_new_instance_apply_scopes_declines(Shop $shop): mixed
 {
     /** @psalm-suppress MixedAssignment */

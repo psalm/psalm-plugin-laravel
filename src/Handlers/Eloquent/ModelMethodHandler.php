@@ -11,6 +11,7 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
@@ -630,14 +631,42 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // (so we can't reconstruct the original camel-cased suffix here). The return-
         // type and params providers still run the strict camel-cased validation via
         // DynamicWhereResolver::resolveColumnType when they fire on the confirmed call.
+        //
+        // A PUBLIC real method declared on the concrete model (own, trait, or parent) is dispatched by
+        // PHP before __callStatic/__call, so it is never a dynamic where; an inaccessible one is not.
         if (
             DynamicWhereResolver::isEnabled()
+            && !self::hasPublicMethod($codebase, $modelClass, $methodName)
             && DynamicWhereResolver::methodMatchesColumns($codebase, $modelClass, $methodName)
         ) {
             return self::$unresolvedCache[$key] = true;
         }
 
         return self::$unresolvedCache[$key] = false;
+    }
+
+    /**
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodName
+     * @psalm-capabilities read-props
+     */
+    private static function hasPublicMethod(Codebase $codebase, string $modelClass, string $methodName): bool
+    {
+        $methodId = new MethodIdentifier($modelClass, $methodName);
+        $declaringId = $codebase->methods->getDeclaringMethodId($methodId);
+
+        if (!$declaringId instanceof MethodIdentifier) {
+            return false;
+        }
+
+        // `use T { f as private; }` leaves the trait method's own visibility untouched; Psalm keeps the
+        // adaptation on the class the method appears in, so that view wins over the declaration.
+        $appearingId = $codebase->methods->getAppearingMethodId($methodId);
+        $adapted = $appearingId instanceof MethodIdentifier
+            ? $codebase->classlike_storage_provider->get($appearingId->fq_class_name)->trait_visibility_map[$methodName] ?? null
+            : null;
+
+        return ($adapted ?? $codebase->methods->getStorage($declaringId)->visibility) === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
     }
 
     /**

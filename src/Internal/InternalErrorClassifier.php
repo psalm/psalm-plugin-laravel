@@ -24,7 +24,9 @@ use Psalm\LaravelPlugin\Blade\BladeDisabledException;
  */
 final class InternalErrorClassifier
 {
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     public static function hint(\Throwable $throwable): ?string
     {
         // Thrown from the plugin's own file, so the frame walk would call every Blade disable a
@@ -125,7 +127,7 @@ final class InternalErrorClassifier
      *
      * @return list<string>
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function frameFiles(\Throwable $throwable): array
     {

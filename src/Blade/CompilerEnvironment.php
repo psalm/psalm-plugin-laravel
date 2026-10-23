@@ -112,7 +112,7 @@ final class CompilerEnvironment
      *
      * @return array{class: string, file?: string, hash?: string}
      *
-     * @psalm-external-mutation-free
+     * @psalm-capabilities read-props|write-this-props|write-refs|io
      */
     private static function describeCompilerClass(BladeCompiler $compiler, bool &$trustworthy, array &$reasons): array
     {

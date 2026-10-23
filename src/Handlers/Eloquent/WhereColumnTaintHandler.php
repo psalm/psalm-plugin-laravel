@@ -396,7 +396,7 @@ final class WhereColumnTaintHandler implements
      * True when `$className` is Eloquent's `Model` (or a subclass) or one of {@see BUILDER_CLASSES}
      * (or a subclass/implementor). Assumes the caller has already verified `$className` exists.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function isModelOrBuilderClass(string $className, string $className_lower, \Psalm\Codebase $codebase): bool
     {
@@ -578,6 +578,8 @@ final class WhereColumnTaintHandler implements
      * ancestry through its base or any intersection `extra_types`: intersection conjuncts refine
      * the same receiver, so one proven Builder component is sufficient. A template first checks its
      * `as` bound; an unbounded or otherwise non-Builder base may still have a Builder extra type. #1339
+     *
+     * @psalm-capabilities read-props
      */
     private static function isLaravelBuilder(
         Expr $receiver,
@@ -784,6 +786,8 @@ final class WhereColumnTaintHandler implements
      * True when the element cannot hold an array at runtime, which is what keeps it on
      * `addArrayOfWheres`' binding branch. Anything wider (`mixed`, a template, an object) keeps the
      * sink.
+     *
+     * @psalm-capabilities read-props
      */
     private static function isScalarValued(ArrayItem $item, StatementsAnalyzer $statements_source): bool
     {
@@ -827,7 +831,7 @@ final class WhereColumnTaintHandler implements
      * Hence the coarse numeric-key rejection stays: without the elements it cannot tell the bound
      * `[1 => $value]` from the raw-column `[1 => [$value]]`.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function isBoundValueMap(Union $type): bool
     {

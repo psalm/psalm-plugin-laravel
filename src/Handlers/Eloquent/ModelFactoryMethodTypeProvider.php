@@ -16,6 +16,7 @@ use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\PropertyStorage;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TLiteralClassString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
@@ -131,11 +132,16 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
             return new Union([new TNamedObject($factoryClass)]);
         }
 
+        // `factory(3)` / `factory(0)` count the factory (an array or callable is a state), so an
+        // argument means the count is unknown: claiming `null` would type `make()` as a single model
+        // where Laravel returns a Collection.
+        $hasArgs = $event->getCallArgs() !== [];
+
         // Generic fallback keeps TModel and TCount bound.
-        return self::$factoryUnionCache[$modelFqcn] ??= new Union([
+        return self::$factoryUnionCache[$modelFqcn . ($hasArgs ? ':args' : '')] ??= new Union([
             new TGenericObject(Factory::class, [
                 new Union([new TNamedObject($modelFqcn)]),
-                new Union([new TNull()]),
+                new Union($hasArgs ? [new TInt(), new TNull()] : [new TNull()]),
             ]),
         ]);
     }
@@ -235,7 +241,9 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
         return [true, self::factoryClassFromClassString($property->type ?? $property->suggested_type)];
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function factoryClassFromObjectType(?Union $type): ?string
     {
         if (!$type instanceof \Psalm\Type\Union || \count($type->getAtomicTypes()) !== 1) {
@@ -247,7 +255,9 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
         return $atomic instanceof TNamedObject ? $atomic->value : null;
     }
 
-    /** @psalm-mutation-free */
+    /**
+     * @psalm-pure
+     */
     private static function factoryClassFromClassString(?Union $type): ?string
     {
         if (!$type instanceof \Psalm\Type\Union || \count($type->getAtomicTypes()) !== 1) {
