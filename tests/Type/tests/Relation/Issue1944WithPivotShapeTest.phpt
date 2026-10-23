@@ -49,7 +49,8 @@ function merges(BelongsToMany $relation): void
     $_merged = $relation->withPivot('a')->withPivot(['b'])->withPivot('a', 'c');
     /** @psalm-trace $_merged */
 
-    // Forwarded builder calls and `$this` returns keep the refined slot.
+    // Forwarded builder calls and `$this` returns keep the refined slot; the receiver chain is hidden, so
+    // `withTimestamps()` adds the parent's columns without proving the date casts.
     $_chained = $relation->withPivot('role')->where('active', true)->withTimestamps()->orderByPivot('role');
     /** @psalm-trace $_chained */
 }
@@ -103,7 +104,7 @@ function reselect_keeps_known_types(BelongsToMany $relation): void
 --EXPECTF--
 Trace on line %d: $relation: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team&static, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static
 Trace on line %d: $_merged: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{a:mixed, b:mixed, c:mixed}, 'pivot'>
-Trace on line %d: $_chained: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{role:mixed}, 'pivot'>&static
+Trace on line %d: $_chained: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{role:mixed, created_at:mixed, updated_at:mixed}, 'pivot'>&static
 Trace on line %d: $_skipped: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{ok:mixed}, 'pivot'>
 Trace on line %d: $_array_only: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot&object{a:mixed}, 'pivot'>
 Trace on line %d: $_none: Illuminate\Database\Eloquent\Relations\BelongsToMany<Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\User, Tests\Psalm\LaravelPlugin\Sandbox\WithPivotShape\Team, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>&static

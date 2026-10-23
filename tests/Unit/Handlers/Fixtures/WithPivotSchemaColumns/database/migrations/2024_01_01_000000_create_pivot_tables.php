@@ -33,6 +33,30 @@ return new class extends Migration {
             $table->integer('amount');
         });
 
+        Schema::create('memberships_stamped', function (Blueprint $table): void {
+            $table->foreignId('team_id');
+            $table->foreignId('user_id');
+            $table->string('role');
+            $table->timestamps();
+        });
+
+        Schema::create('memberships_other', function (Blueprint $table): void {
+            $table->foreignId('team_id');
+            $table->foreignId('user_id');
+            $table->integer('role');
+            $table->string('rank');
+        });
+
+        // Sheet renames its created column to made_at.
+        Schema::create('sheet_entries', function (Blueprint $table): void {
+            $table->foreignId('sheet_id');
+            $table->foreignId('user_id');
+            $table->integer('hours');
+            $table->timestamp('made_at')->nullable();
+            $table->timestamp('created_at')->nullable();
+            $table->timestamp('updated_at')->nullable();
+        });
+
         // The conventional table of Crew <-> User, which Crew::joiningTable() overrides.
         Schema::create('crew_user', function (Blueprint $table): void {
             $table->integer('admin');

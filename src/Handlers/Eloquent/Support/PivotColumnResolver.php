@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Concerns\HasTimestamps;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Support\DateFactory;
 use Illuminate\Support\Str;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
@@ -20,6 +21,7 @@ use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\Type;
@@ -37,7 +39,78 @@ use Psalm\Type\Union;
 final class PivotColumnResolver
 {
     /** Many-to-many factories mapped to the position of their `$table` parameter. */
-    public const FACTORY_TABLE_POSITION = ['belongstomany' => 1, 'morphtomany' => 2, 'morphedbymany' => 2];
+    private const FACTORY_TABLE_POSITION = ['belongstomany' => 1, 'morphtomany' => 2, 'morphedbymany' => 2];
+
+    /** Declarers of the Laravel defaults a model may inherit. */
+    private const STOCK_DECLARERS = [HasRelationships::class, HasTimestamps::class, Model::class];
+
+    /** Relation methods that return `$this` and cannot change the pivot class or table (Laravel 12.20 and 13). */
+    private const PIVOT_PRESERVING = [
+        'withpivot', 'withtimestamps', 'as', 'withpivotvalue', 'orderbypivot',
+        'wherepivot', 'wherepivotbetween', 'wherepivotnotbetween', 'wherepivotin', 'wherepivotnotin', 'wherepivotnull', 'wherepivotnotnull',
+        'orwherepivot', 'orwherepivotbetween', 'orwherepivotnotbetween', 'orwherepivotin', 'orwherepivotnotin', 'orwherepivotnull', 'orwherepivotnotnull',
+    ];
+
+    /**
+     * Reads the receiver chain from $outer down to its many-to-many factory call: the columns its calls select
+     * (innermost first) and the pivot table. `table` is false when the factory is not called on `$this`: it takes
+     * that model's timestamp names and default table, not the receiver's. `visible` is true only when every link
+     * is a method that returns the same relation with the same pivot class.
+     *
+     * @return array{columns: list<string>, table: string|false|null, visible: bool}
+     */
+    public static function readChain(Codebase $codebase, Expr $outer, ?string $parentClass, ?string $relatedClass): array
+    {
+        $columns = [];
+        $visible = true;
+        for ($call = $outer; $call instanceof MethodCall && $call->name instanceof Identifier; $call = $call->var) {
+            $name = \strtolower($call->name->name);
+            if (isset(self::FACTORY_TABLE_POSITION[$name])) {
+                $onThis = $call->var instanceof Expr\Variable && $call->var->name === 'this';
+                $table = $onThis ? self::table($codebase, $call, $name, $relatedClass, $parentClass) : false;
+
+                // An unproven link may have swapped in another factory's relation: a table NAME is not the pivot's,
+                // but a refusal (false) stands.
+                return [
+                    'columns' => $columns,
+                    'table' => \is_string($table) && !$visible ? null : $table,
+                    'visible' => $visible && $onThis,
+                ];
+            }
+
+            $visible = $visible && self::keepsPivot($name);
+            $columns = [...self::callColumns($codebase, $call, $name, $parentClass), ...$columns];
+        }
+
+        return ['columns' => $columns, 'table' => null, 'visible' => false];
+    }
+
+    /**
+     * Whether a call returns the relation it was made on, with the same pivot class. `using()`, `when()`,
+     * `tap()`, macros and forwarded query calls can replace the relation, so they are not on the list.
+     *
+     * @param lowercase-string $name the call's method name
+     * @psalm-pure
+     */
+    public static function keepsPivot(string $name): bool
+    {
+        return \in_array($name, self::PIVOT_PRESERVING, true);
+    }
+
+    /**
+     * The columns one chain call selects: a `withPivot()` call's literals, a `withTimestamps()` call's names.
+     *
+     * @param lowercase-string $name the call's method name
+     * @return list<string>
+     */
+    public static function callColumns(Codebase $codebase, MethodCall $call, string $name, ?string $parentClass): array
+    {
+        return match ($name) {
+            'withpivot' => self::columnsFromArgs($call->args),
+            'withtimestamps' => self::timestampColumns($codebase, $call, $parentClass),
+            default => [],
+        };
+    }
 
     /**
      * Literal column names, read as Laravel does: the first argument when it is an array, else every
@@ -49,7 +122,7 @@ final class PivotColumnResolver
      * @return list<string>
      * @psalm-mutation-free
      */
-    public static function columnsFromArgs(array $args): array
+    private static function columnsFromArgs(array $args): array
     {
         $first = $args[0] ?? null;
         if (!$first instanceof Arg || $first->unpack || !$first->value instanceof String_ && !$first->value instanceof Expr\Array_) {
@@ -76,7 +149,7 @@ final class PivotColumnResolver
 
         $columns = [];
         foreach ($values as $value) {
-            if ($value instanceof String_ && $value->value !== '' && !\str_contains($value->value, '.')) {
+            if ($value instanceof String_ && self::isColumnName($value->value)) {
                 $columns[] = $value->value;
             }
         }
@@ -91,7 +164,7 @@ final class PivotColumnResolver
      *
      * @param lowercase-string $factory
      */
-    public static function table(
+    private static function table(
         Codebase $codebase,
         MethodCall $call,
         string $factory,
@@ -148,31 +221,35 @@ final class PivotColumnResolver
     }
 
     /**
-     * Each column's type from the migration schema of $table, `mixed` when unknown. A column that may be
-     * one of the relation parent's timestamp columns, or a default `created_at` / `updated_at`, is `mixed`
-     * too: Laravel's pivot casts those as dates once `created_at` is selected, and which date class that is
-     * depends on the app, so neither the raw schema type nor Carbon is right.
+     * Each column's type, first hit wins: the date type of the parent's created/updated column when the pivot's
+     * hydration provably casts it, the relation table's schema type, `mixed` (rationale: decisions.md,
+     * "`withPivot()` columns refine TPivotModel").
      *
      * @param list<string> $columns
      * @param ?string $parentClass the model the relation is called on
+     * @param bool $visible every link between the factory and the call is a pivot-preserving method
      * @return array<string, Union>
      */
-    public static function columnTypes(Codebase $codebase, ?string $table, array $columns, ?string $parentClass): array
+    public static function columnTypes(Codebase $codebase, ?string $table, array $columns, ?string $parentClass, bool $visible): array
     {
         $schemaTable = $table === null ? null : SchemaStateProvider::getSchema()?->tables[$table] ?? null;
-        $parentTimestamps = $parentClass === null ? null : self::timestampColumns($codebase, $parentClass);
-        // forceFill() runs before the pivot has its parent, so the default names are date-cast too.
-        $timestamps = $parentTimestamps === null ? null : [...$parentTimestamps, 'created_at', 'updated_at'];
+        $parent = $parentClass === null ? null : self::parentTimestamps($codebase, $parentClass);
+        // `Pivot::fromAttributes()` switches its date casts on when its OWN `created_at` is selected. A
+        // `using()` pivot checks the parent's column instead, so only a visible chain proves which kind it is.
+        $dates = $visible && \in_array(Model::CREATED_AT, $columns, true);
         $types = [];
         foreach ($columns as $column) {
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
-            if ($schemaColumn === null || $timestamps === null || \in_array($column, $timestamps, true)) {
+            if ($parent !== null && ($column === $parent[0] || $column === $parent[1])) {
+                $types[$column] = ($dates ? self::dateType($codebase, $schemaColumn?->nullable ?? true) : null) ?? Type::getMixed();
+            } elseif ($parent === null || $schemaColumn === null || \in_array($column, [Model::CREATED_AT, Model::UPDATED_AT], true)) {
+                // A plain pivot's forceFill() runs before it has a parent, so it date-normalizes the DEFAULT
+                // names into strings that the parent's own names never read back as dates.
                 $types[$column] = Type::getMixed();
-                continue;
+            } else {
+                $type = ColumnTypeMapper::mapBaseType(ModelMetadataRegistryBuilder::buildColumnInfo($schemaColumn));
+                $types[$column] = $schemaColumn->nullable ? Type::combineUnionTypes($type, Type::getNull()) : $type;
             }
-
-            $type = ColumnTypeMapper::mapBaseType(ModelMetadataRegistryBuilder::buildColumnInfo($schemaColumn));
-            $types[$column] = $schemaColumn->nullable ? Type::combineUnionTypes($type, Type::getNull()) : $type;
         }
 
         return $types;
@@ -180,18 +257,15 @@ final class PivotColumnResolver
 
     /**
      * $pivot with $properties added to its object shape (a column already in it keeps its type: Laravel
-     * only appends pivot columns, it never retypes one), or
-     * null unless $pivot is exactly `Pivot` / `MorphPivot`, optionally already carrying one shape.
+     * only appends pivot columns, it never retypes one), or null unless $pivot is exactly `Pivot` /
+     * `MorphPivot`, optionally already carrying one shape.
      *
      * @param array<string, Union> $properties
      * @psalm-pure
      */
     public static function refine(Atomic $pivot, array $properties): ?TNamedObject
     {
-        if (
-            $pivot::class !== TNamedObject::class
-            || !\in_array(\strtolower($pivot->value), [\strtolower(Pivot::class), \strtolower(MorphPivot::class)], true)
-        ) {
+        if ($pivot::class !== TNamedObject::class || \strcasecmp($pivot->value, Pivot::class) !== 0 && \strcasecmp($pivot->value, MorphPivot::class) !== 0) {
             return null;
         }
 
@@ -210,13 +284,48 @@ final class PivotColumnResolver
     }
 
     /**
-     * The `CREATED_AT` / `UPDATED_AT` column names of $modelClass (a disabled one is skipped); null when
-     * unknown: a model that overrides `getCreatedAtColumn()` / `getUpdatedAtColumn()`, or a constant that
-     * is not a literal string or null.
+     * The columns a `withTimestamps($createdAt, $updatedAt)` call selects: a literal name is itself, an absent
+     * or `null` one is the parent's column (`createdAt()` falls back to `created_at` for a disabled constant).
+     * `false` disables the column in Laravel 13 and names none in 12.20, a dynamic name is unknown: neither adds one.
      *
-     * @return list<string>|null
+     * @return list<string>
      */
-    private static function timestampColumns(Codebase $codebase, string $modelClass): ?array
+    private static function timestampColumns(Codebase $codebase, MethodCall $call, ?string $parentClass): array
+    {
+        foreach ($call->args as $arg) {
+            if (!$arg instanceof Arg || $arg->unpack) {
+                return [];
+            }
+        }
+
+        $parent = $parentClass === null ? null : self::parentTimestamps($codebase, $parentClass);
+        $columns = [];
+        foreach ([['createdAt', Model::CREATED_AT], ['updatedAt', Model::UPDATED_AT]] as $index => [$name, $default]) {
+            $value = self::argument($call, $index, $name);
+            if ($value instanceof String_) {
+                $column = $value->value;
+            } elseif ($parent !== null && (!$value instanceof Expr || $value instanceof Expr\ConstFetch && $value->name->toLowerString() === 'null')) {
+                $column = $parent[$index] ?? $default;
+            } else {
+                continue;
+            }
+
+            if (self::isColumnName($column)) {
+                $columns[] = $column;
+            }
+        }
+
+        return $columns;
+    }
+
+    /**
+     * The `CREATED_AT` / `UPDATED_AT` column names of $modelClass (null: disabled); null when unknown:
+     * a model that overrides `getCreatedAtColumn()` / `getUpdatedAtColumn()`, or a constant that is not
+     * a literal string or null.
+     *
+     * @return array{?string, ?string}|null
+     */
+    private static function parentTimestamps(Codebase $codebase, string $modelClass): ?array
     {
         if (
             !self::inheritsDefault($codebase, $modelClass, 'getCreatedAtColumn')
@@ -233,22 +342,48 @@ final class PivotColumnResolver
                 return null;
             }
 
-            if (!$type instanceof Union) {
+            if (!$type instanceof Union || !$type->isNull() && !$type->isSingleStringLiteral()) {
                 return null;
             }
 
-            if ($type->isNull()) {
-                continue;
-            }
-
-            if (!$type->isSingleStringLiteral()) {
-                return null;
-            }
-
-            $columns[] = $type->getSingleStringLiteral()->value;
+            $columns[] = $type->isNull() ? null : $type->getSingleStringLiteral()->value;
         }
 
-        return $columns;
+        return [$columns[0], $columns[1]];
+    }
+
+    /**
+     * The configured date class, as `Date::use()` left it in the booted app: null when a callable or a factory
+     * builds the dates (the class is unknowable), the framework default when unconfigured.
+     */
+    private static function dateType(Codebase $codebase, bool $nullable): ?Union
+    {
+        [$class, $callable, $factory] = \array_map(
+            static fn(string $name): mixed => (new \ReflectionProperty(DateFactory::class, $name))->getValue(),
+            ['dateClass', 'callable', 'factory'],
+        );
+
+        if ($callable !== null || $factory !== null) {
+            return null;
+        }
+
+        if ($class === null) {
+            return CastResolver::resolve($codebase, 'datetime', $nullable);
+        }
+
+        if (!\is_string($class) || !$codebase->classlikes->classExists($class)) {
+            return null;
+        }
+
+        $type = new Union([new TNamedObject($class)]);
+
+        return $nullable ? Type::combineUnionTypes($type, Type::getNull()) : $type;
+    }
+
+    /** @psalm-pure */
+    private static function isColumnName(string $name): bool
+    {
+        return $name !== '' && !\str_contains($name, '.');
     }
 
     /** @psalm-mutation-free */
@@ -274,7 +409,6 @@ final class PivotColumnResolver
             return false;
         }
 
-        return $declaring instanceof MethodIdentifier
-            && \in_array(\strtolower($declaring->fq_class_name), [\strtolower(HasRelationships::class), \strtolower(HasTimestamps::class), \strtolower(Model::class)], true);
+        return $declaring instanceof MethodIdentifier && \in_array($declaring->fq_class_name, self::STOCK_DECLARERS, true);
     }
 }
