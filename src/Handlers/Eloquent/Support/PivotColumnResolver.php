@@ -172,7 +172,8 @@ final class PivotColumnResolver
     }
 
     /**
-     * $pivot with $properties added to its object shape (a repeated column takes the new type), or
+     * $pivot with $properties added to its object shape (a column already in it keeps its type: Laravel
+     * only appends pivot columns, it never retypes one), or
      * null unless $pivot is exactly `Pivot` / `MorphPivot`, optionally already carrying one shape.
      *
      * @param array<string, Union> $properties
@@ -196,7 +197,7 @@ final class PivotColumnResolver
             $existing = $extra->properties;
         }
 
-        $shape = new TObjectWithProperties(\array_replace($existing, $properties));
+        $shape = new TObjectWithProperties($existing + $properties);
 
         return $pivot->setIntersectionTypes([$shape->getKey() => $shape]);
     }
