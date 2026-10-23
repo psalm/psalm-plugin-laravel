@@ -6,7 +6,7 @@ nav_order: 13
 
 # BladeCompileFailure
 
-Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on, so the template is not analyzed. The message is `Template not analysed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
+Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on. The template is skipped, and the message reads `Template not analysed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
 
 ## Why it matters
 
@@ -29,7 +29,7 @@ ERROR: BladeCompileFailure - resources/views/help.blade.php:1:1 - Template not a
 * A malformed directive, such as `@foreach` without `as`.
 * A directive, condition, or precompiler callback that throws when called outside a request.
 * A component tag (`<x-...>`) whose class or view cannot be resolved by the booted application (see [Known limits](../blade.md#known-limits)).
-* The plugin's own declaration parser crashed on the template (a cause naming a plugin class). This is a plugin bug: report it with the template.
+* The plugin's own declaration parser crashed on the template. This is a plugin bug: report it with the template.
 
 The line is always 1: the compiler reports no template line.
 

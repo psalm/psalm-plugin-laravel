@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Illuminate\View\Compilers\BladeCompiler;
 use PhpParser\Error as PhpParserError;
 use PhpParser\ParserFactory;
@@ -387,6 +388,80 @@ final class ShadowCompilerTest extends TestCase
 
         $this->assertInstanceOf(BladeCompileError::class, $result);
         $this->assertSame('@component needs arguments; write @@component to print it as text', $result->message);
+    }
+
+    #[Test]
+    public function an_argumentless_directive_whose_compile_method_is_typed_asks_for_arguments(): void
+    {
+        // compileJs(string) throws a TypeError before any PHP error is raised.
+        $result = $this->compiler->compile('view.blade.php', "Use @js here\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertSame('@js needs arguments; write @@js to print it as text', $result->message);
+    }
+
+    #[Test]
+    public function a_custom_directive_never_gets_the_arguments_advice(): void
+    {
+        // callCustomDirective() passes '' for a bare directive, so the null is the closure's own. Str is
+        // not strict, so the null raises the deprecation rather than a TypeError.
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('analytics', static fn(): string => Str::lower(null));
+        // Overrides a built-in directive whose compile method does require an argument.
+        $blade->directive('section', static fn(): string => Str::lower(null));
+
+        foreach (['analytics', 'section'] as $directive) {
+            $result = $this->compileReportingAll(new ShadowCompiler($blade), "Track it with @{$directive} today\n");
+
+            $this->assertInstanceOf(BladeCompileError::class, $result);
+            $this->assertSame(
+                "@{$directive}: mb_strtolower(): Passing null to parameter #1 (\$string) of type string is deprecated",
+                $result->message,
+            );
+        }
+    }
+
+    #[Test]
+    public function a_directive_that_takes_no_arguments_never_gets_the_arguments_advice(): void
+    {
+        // compileParent() has no parameter: its null is the section stack, empty before any @section.
+        $result = $this->compileReportingAll($this->compiler, "Ask your @parent first\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertStringStartsWith('@parent: ', $result->message);
+        $this->assertStringNotContainsString('needs arguments', $result->message);
+    }
+
+    #[Test]
+    public function only_a_null_reaching_the_compile_method_itself_gets_the_arguments_advice(): void
+    {
+        $compiler = new ShadowCompiler(new class (new Filesystem(), \sys_get_temp_dir()) extends BladeCompiler {
+            public ?string $missing = null;
+
+            protected function compileProbe(?string $expression): string
+            {
+                return Str::lower($this->missing) . $expression;
+            }
+
+            protected function compileStrictProbe(?string $expression): string
+            {
+                // This file is strict: the null is a TypeError inside the method, not on its entry.
+                return \trim($this->missing) . $expression;
+            }
+        });
+
+        $bare = $this->compileReportingAll($compiler, "@probe\n");
+        $given = $this->compileReportingAll($compiler, "@probe(\$user)\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $bare);
+        $this->assertSame('@probe needs arguments; write @@probe to print it as text', $bare->message);
+        $this->assertInstanceOf(BladeCompileError::class, $given);
+        $this->assertSame('@probe: mb_strtolower(): Passing null to parameter #1 ($string) of type string is deprecated', $given->message);
+
+        $typeError = $this->compileReportingAll($compiler, "@strictProbe\n");
+
+        $this->assertInstanceOf(BladeCompileError::class, $typeError);
+        $this->assertSame('trim(): Argument #1 ($string) must be of type string, null given', $typeError->message);
     }
 
     #[Test]

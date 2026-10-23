@@ -46,7 +46,16 @@ final class ShadowCompiler
         try {
             $compiled = $this->compiler->compileString($marked);
         } catch (\Throwable $throwable) {
-            return BladeCompileError::fromThrowable($templatePath, $throwable);
+            // A typed compile method (`compileJs(string)`) rejects the null on entry, before any PHP error.
+            $trace = $throwable instanceof \TypeError ? $throwable->getTrace() : [];
+            $directive = $this->directiveOf($trace);
+            $advice = $directive !== null && ($trace[0]['function'] ?? null) === 'compile' . \ucfirst($directive[0])
+                ? $this->argumentAdvice($directive, $throwable->getMessage())
+                : null;
+
+            return $advice !== null
+                ? new BladeCompileError($templatePath, $advice)
+                : BladeCompileError::fromThrowable($templatePath, $throwable);
         } finally {
             \restore_error_handler();
         }
@@ -76,32 +85,67 @@ final class ShadowCompiler
             return false;
         }
 
-        foreach (\debug_backtrace() as $frame) {
-            // compileStatement() receives Blade's match: [1] the directive name, [3] its
-            // parenthesized arguments, null when the directive has none.
-            if ($frame['function'] !== 'compileStatement' || ($frame['class'] ?? null) !== BladeCompiler::class) {
-                continue;
-            }
+        $directive = $this->directiveOf(\debug_backtrace());
 
-            $match = $frame['args'][0] ?? null;
-
-            if (!\is_array($match) || !isset($match[1]) || !\is_string($match[1])) {
-                break;
-            }
-
-            $directive = $match[1];
-
-            // PHP's deprecation for a null passed to a string parameter: the directive needed the
-            // arguments it was not given.
-            if (($match[3] ?? null) === null && \str_contains($message, 'Passing null to parameter')) {
-                $message = "@{$directive} needs arguments; write @@{$directive} to print it as text";
-            } else {
-                $message = "@{$directive}: {$message}";
-            }
-
-            break;
+        if ($directive !== null) {
+            $message = $this->argumentAdvice($directive, $message) ?? "@{$directive[0]}: {$message}";
         }
 
         throw new \ErrorException($message, 0, $severity, $file, $line);
+    }
+
+    /**
+     * The directive being compiled, read off compileStatement()'s argument: Blade's match, [1] the
+     * directive name, [3] its parenthesized arguments, null when the directive has none.
+     *
+     * @param list<array{args?: array<array-key, mixed>, class?: string, file?: string, function?: string, line?: int, object?: object, type?: string}> $trace
+     *
+     * @return array{string, bool}|null the directive name, and whether it was written without arguments
+     *
+     * @psalm-pure
+     */
+    private function directiveOf(array $trace): ?array
+    {
+        foreach ($trace as $frame) {
+            if (($frame['function'] ?? null) !== 'compileStatement' || ($frame['class'] ?? null) !== BladeCompiler::class) {
+                continue;
+            }
+
+            $args = $frame['args'] ?? [];
+
+            if (!isset($args[0]) || !\is_array($args[0])) {
+                return null;
+            }
+
+            $match = $args[0];
+
+            return isset($match[1]) && \is_string($match[1]) ? [$match[1], !isset($match[3])] : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Advice for a built-in directive written without the argument its compile method requires, when
+     * the error is that null reaching it. A custom directive never gets null (callCustomDirective()
+     * passes ''), and a method without a required parameter (`compileParent()`) fails for another reason.
+     *
+     * @param array{string, bool} $directive
+     */
+    private function argumentAdvice(array $directive, string $message): ?string
+    {
+        [$name, $bare] = $directive;
+
+        if (!$bare || \preg_match('/Passing null to parameter|null given/', $message) !== 1
+            || isset($this->compiler->getCustomDirectives()[$name])
+            || !\method_exists($this->compiler, $method = 'compile' . \ucfirst($name))) {
+            return null;
+        }
+
+        $parameter = (new \ReflectionMethod($this->compiler, $method))->getParameters()[0] ?? null;
+
+        return $parameter !== null && !$parameter->isOptional()
+            ? "@{$name} needs arguments; write @@{$name} to print it as text"
+            : null;
     }
 }
