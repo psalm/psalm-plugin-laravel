@@ -276,6 +276,20 @@ final class AnnotationCollectorTest extends TestCase
         }
     }
 
+    #[Test]
+    public function marks_the_empty_view_of_an_each_unreadable_but_not_a_raw_one(): void
+    {
+        // `renderEach()` renders the empty view with no data at all.
+        $this->analyzeStatements(
+            "view('empty', ['title' => 'text']);\nview('raw|empty', ['title' => 'text']);\n"
+            . "echo \$__env->renderEach('row', \$items, 'item', 'empty');\necho \$__env->renderEach('row', \$items, 'item', 'raw|empty');",
+            [['title' => Type::getString()], ['title' => Type::getString()]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('empty', 'title'));
+        $this->assertSame('string', AnnotationCollector::typeFor('raw|empty', 'title'), 'a raw| string is text, not a view');
+    }
+
     /**
      * Runs the statement hook over parsed PHP, with the shape each array literal infers to supplied
      * in source order: no analysis runs here, so nothing else would type the data arguments.

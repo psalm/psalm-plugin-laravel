@@ -159,6 +159,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return;
         }
 
+        // Matching `make`/`view`/`markdown` on any receiver here only costs coverage (a view marked
+        // open), never a wrong declaration.
         foreach ($stmt->exprs as $expr) {
             foreach (self::viewNamesIn($expr) as $viewName) {
                 self::markUnreadable($viewName);
@@ -185,30 +187,35 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             $method = $call instanceof Expr\FuncCall ? 'view' : self::methodName($call);
 
             // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
-            $nameArg = match ($method) {
-                'renderwhen', 'renderunless' => ArgUtil::byNameOrPosition($args, 1, 'view'),
-                'first' => ArgUtil::byNameOrPosition($args, 0, 'views'),
-                default => ArgUtil::byNameOrPosition($args, 0, 'view'),
+            $nameArgs = match ($method) {
+                'renderwhen', 'renderunless' => [ArgUtil::byNameOrPosition($args, 1, 'view')],
+                'first' => [ArgUtil::byNameOrPosition($args, 0, 'views')],
+                // `@each` renders its empty view with no data at all.
+                'rendereach' => [ArgUtil::byNameOrPosition($args, 0, 'view'), ArgUtil::byNameOrPosition($args, 3, 'empty')],
+                default => [ArgUtil::byNameOrPosition($args, 0, 'view')],
             };
 
-            if (!$nameArg instanceof Node\Arg || $nameArg->unpack) {
-                continue;
-            }
-
-            $candidates = [$nameArg->value];
-
-            // `first()` renders whichever candidate exists, so every literal one may be the view.
-            if ($nameArg->value instanceof Expr\Array_) {
-                $candidates = [];
-
-                foreach ($nameArg->value->items as $item) {
-                    $candidates[] = $item?->value;
+            foreach ($nameArgs as $nameArg) {
+                if (!$nameArg instanceof Node\Arg || $nameArg->unpack) {
+                    continue;
                 }
-            }
 
-            foreach ($candidates as $candidate) {
-                if ($candidate instanceof String_ && $candidate->value !== '') {
-                    $names[] = $candidate->value;
+                $candidates = [$nameArg->value];
+
+                // `first()` renders whichever candidate exists, so every literal one may be the view.
+                if ($nameArg->value instanceof Expr\Array_) {
+                    $candidates = [];
+
+                    foreach ($nameArg->value->items as $item) {
+                        $candidates[] = $item?->value;
+                    }
+                }
+
+                foreach ($candidates as $candidate) {
+                    // A `raw|` empty view is literal text, not a view name.
+                    if ($candidate instanceof String_ && $candidate->value !== '' && !\str_starts_with($candidate->value, 'raw|')) {
+                        $names[] = $candidate->value;
+                    }
                 }
             }
         }
