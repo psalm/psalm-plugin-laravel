@@ -55,6 +55,12 @@ final class Mechanic extends Model
         return $this->belongsToMany(MechanicSpecialization::class)->using(SpecializationPivot::class);
     }
 
+    /** A custom pivot types its own attributes: `withPivot()` leaves it as is (#1944). */
+    public function certifiedSpecializations(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->using(SpecializationPivot::class)->withPivot('certified_at');
+    }
+
     /**
      * Specializations with both a custom pivot model and a custom accessor name —
      * exercises the chain capture for `->as('alias')` in addition to `->using()`.

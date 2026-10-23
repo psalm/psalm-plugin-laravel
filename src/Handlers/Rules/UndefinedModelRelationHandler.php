@@ -93,28 +93,34 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * variadic (extra positional relation names are accepted); those extra
      * positions are not validated, only the first argument. Keys are lowercase to
      * match the case-insensitive method-name compare.
+     *
+     * Values say whether a `:columns` suffix is safe to strip before the lookup: `true` where
+     * Laravel parses it (eager loading, and `withWhereHas()` via `Str::before()`) or where it is
+     * harmless (`without()` removes eager-load keys verbatim and never throws), `false` for the
+     * relationship existence queries, which look the name up verbatim (`has()` and everything
+     * delegating to it), so a `:columns` suffix never resolves.
      */
     private const RELATION_NAME_METHODS = [
         // Eager loading
         'with' => true,
         'without' => true,
         // Relationship existence queries
-        'has' => true,
-        'orhas' => true,
-        'doesnthave' => true,
-        'ordoesnthave' => true,
-        'wherehas' => true,
-        'orwherehas' => true,
-        'wheredoesnthave' => true,
-        'orwheredoesnthave' => true,
+        'has' => false,
+        'orhas' => false,
+        'doesnthave' => false,
+        'ordoesnthave' => false,
+        'wherehas' => false,
+        'orwherehas' => false,
+        'wheredoesnthave' => false,
+        'orwheredoesnthave' => false,
         'withwherehas' => true,
-        'whererelation' => true,
-        'orwhererelation' => true,
-        'withwhererelation' => true,
-        'wheredoesnthaverelation' => true,
-        'orwheredoesnthaverelation' => true,
-        'wheremorphrelation' => true,
-        'orwheremorphrelation' => true,
+        'whererelation' => false,
+        'orwhererelation' => false,
+        'withwhererelation' => false,
+        'wheredoesnthaverelation' => false,
+        'orwheredoesnthaverelation' => false,
+        'wheremorphrelation' => false,
+        'orwheremorphrelation' => false,
         // Lazy eager loading on a loaded model
         'load' => true,
         'loadmissing' => true,
@@ -125,6 +131,10 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
         'loadmin' => true,
         'loadexists' => true,
     ];
+
+    private const CLOSURE_COLUMNS_HINT = ": Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure.";
+
+    private const EXISTENCE_COLUMNS_HINT = ": Laravel does not parse ':columns' in a relationship existence query; remove the suffix.";
 
     /**
      * The subset of {@see RELATION_NAME_METHODS} that resolve through
@@ -249,6 +259,8 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             ? self::callbackArg($args)
             : null;
 
+        $methodParsesColumns = self::RELATION_NAME_METHODS[$methodNameLc];
+
         foreach (self::extractRelationNames($source, $relationArg, $callbackArg) as [$relationName, $parsesColumns]) {
             self::validateRelationPath(
                 $codebase,
@@ -258,7 +270,8 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
                 $source->getSuppressedIssues(),
                 allowsAlias: $allowsAlias,
                 allowsPaths: true,
-                allowsColumns: $parsesColumns,
+                allowsColumns: $methodParsesColumns && $parsesColumns,
+                verbatimColumnsHint: $methodParsesColumns ? self::CLOSURE_COLUMNS_HINT : self::EXISTENCE_COLUMNS_HINT,
             );
         }
 
@@ -548,6 +561,8 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * @param bool $allowsPaths whether dot notation is meaningful for this declaration surface
      * @param bool $allowsColumns whether eager-load `:columns` syntax is meaningful
      * @param array<array-key, string> $suppressedIssues
+     * @param ?string $verbatimColumnsHint message suffix used when a name that is looked up verbatim
+     *                                     (`$allowsColumns` false) still contains `:`; null reports plainly
      */
     private static function validateRelationPath(
         Codebase $codebase,
@@ -559,6 +574,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
         bool $allowsPaths,
         bool $allowsColumns,
         ?string $property = null,
+        ?string $verbatimColumnsHint = null,
     ): void {
         $segments = $allowsPaths ? \explode('.', $relationName) : [$relationName];
         $lastIndex = \count($segments) - 1;
@@ -582,9 +598,9 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
 
             if (!RelationResolver::relationMethodExists($codebase, $current, $name)) {
                 $context = $property === null ? '' : " from {$modelFqcn}::\${$property}";
-                // A verbatim (closure-paired) name containing ':' is the unparsed `:columns` mistake.
-                $hint = !$allowsColumns && $property === null && \str_contains($name, ':')
-                    ? ": Laravel does not parse ':columns' on a relation paired with a constraint closure; select the columns inside the closure."
+                // A verbatim name containing ':' is the unparsed `:columns` mistake.
+                $hint = !$allowsColumns && $verbatimColumnsHint !== null && \str_contains($name, ':')
+                    ? $verbatimColumnsHint
                     : '.';
                 IssueBuffer::accepts(
                     new UndefinedModelRelation(
