@@ -291,17 +291,21 @@ Where the compiled shadows and their manifest are written. Absolute, or relative
 
 The default deliberately sits outside your project tree. A shadow file that one of your `<projectFiles>` patterns happens to match is treated by Psalm as a file of your own, which both reports issues at their compiled locations instead of the template's and makes Psalm drop taint flows that start in it. If you point `cacheDir` inside the project, exclude it from `<projectFiles>` (and from version control).
 
-### `validateViewData`
+### View data checks
 
-**default**: off
+No setting of their own: with Blade analysis on, every run checks `view()` call sites against their templates. The three issues are [experimental](#experimental), reported as `info` by default and as `error` under `<experimental value="true" />`. An `issueHandlers` entry sets any one of them on its own:
 
 ```xml
-<blade validateViewData="true" />
+<issueHandlers>
+    <PluginIssue name="MissingViewVariable" errorLevel="error" />
+    <PluginIssue name="InvalidViewVariableType" errorLevel="error" />
+    <PluginIssue name="UnusedViewData" errorLevel="suppress" />
+</issueHandlers>
 ```
 
-Check `view()` call sites against the contract their template declares, and report a declared variable the call never passes ([MissingViewVariable](issues/MissingViewVariable.md)) or a value that does not satisfy the declared type ([InvalidViewVariableType](issues/InvalidViewVariableType.md)).
+[MissingViewVariable](issues/MissingViewVariable.md) reports a declared variable the call never passes, and [InvalidViewVariableType](issues/InvalidViewVariableType.md) a value that does not satisfy the declared type.
 
-A template declares its variables with `/** @var \App\Models\User $user */` docblocks in a `<?php` or `@php` block (every declared variable is required, `T|null` and `mixed` included; a trailing `= null` makes it optional; a name the template binds itself, such as a `@foreach` alias, or one the framework supplies, such as `$errors`, `$slot` or `$app`, is never a declaration), see [Declaring view variables](blade.md#declaring-view-variables), and `@props([...])` entries. A template that declares nothing is never checked, so the rule costs you nothing until you annotate a template.
+A template declares its variables with `/** @var \App\Models\User $user */` docblocks in a `<?php` or `@php` block (every declared variable is required, `T|null` and `mixed` included; a trailing `= null` makes it optional; a name the template binds itself, such as a `@foreach` alias, or one the framework supplies, such as `$errors`, `$slot` or `$app`, is never a declaration), see [Declaring view variables](blade.md#declaring-view-variables), and `@props([...])` entries. A template that declares nothing is never checked, so these two rules cost you nothing until you annotate a template.
 
 Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` facade forms, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls chained on top of them. The whole chain is read at once, so `view('profile')->with('name', $n)` is checked against the data the chain supplies in total, not against the empty data of its inner call.
 
@@ -309,22 +313,7 @@ Both checks decline rather than guess. The per-issue pages list every gate; the 
 
 Inside templates, the literal data array of `@include`, `@includeIf`, `@includeWhen`, `@includeUnless`, `@includeFirst`, `@extends` and `@extendsFirst` is type-checked, and `@includeIsolated` is checked in full. See [Included templates](blade.md#included-templates).
 
-
-### `reportUnusedViewData`
-
-**default**: off
-
-```xml
-<blade reportUnusedViewData="true" />
-```
-
-Report a data key ([UnusedViewData](issues/UnusedViewData.md)) that the rendered template neither reads nor declares. Independent of `validateViewData`: same call shapes, opposite direction (that rule checks what the template asks for, this one checks what the call site hands over).
-
-A key that a template reached through `@include` or `@extends` reads or declares counts as consumed, because those directives inherit the including template's whole scope. The chain is followed as far as every include in it names a literal template; one dynamic `@include($name)` at any depth silences the check for that call site alone, not for the run.
-
-Enabling it makes every template recompile once, because the read set and the include graph are collected during compilation and a cache warmed without the flag holds neither. Declines rather than guesses: the issue page lists every gate, the load-bearing one being that a template whose compiled body does something that hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked.
-
-Has no effect under `<blade value="false" />`: the read sets only exist once the compile pass has read the templates.
+[UnusedViewData](issues/UnusedViewData.md) looks the other way: it reports a data key the rendered template neither reads nor declares. A key that a template reached through `@include` or `@extends` reads or declares counts as consumed, because those directives inherit the including template's whole scope. The chain is followed as far as every include in it names a literal template; one dynamic `@include($name)` at any depth silences the check for that call site alone, not for the run. A template whose compiled body hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked; the issue page lists every gate.
 
 ### `reportMixedIssues`
 
@@ -354,7 +343,7 @@ Bool and enum settings on this page can be overridden for one run without touchi
 vendor/bin/psalm-laravel analyze --experimental --plugin-option=modelProperties.columnFallback=none
 ```
 
-* Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`, `blade.validateViewData`). `psalm-laravel analyze --help` lists every key with its values.
+* Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`, `blade.reportMixedIssues`). `psalm-laravel analyze --help` lists every key with its values.
 * Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
 * Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
 * `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false` and `--experimental` for `experimental=true`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.

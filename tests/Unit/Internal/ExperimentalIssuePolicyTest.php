@@ -17,6 +17,14 @@ final class ExperimentalIssuePolicyTest extends TestCase
 {
     use LoadsPsalmConfigFromXml;
 
+    private const EXPERIMENTAL_ISSUES = [
+        'UnknownModelAttribute',
+        'UndefinedModelRelation',
+        'MissingViewVariable',
+        'InvalidViewVariableType',
+        'UnusedViewData',
+    ];
+
     protected function tearDown(): void
     {
         (new \ReflectionClass(Config::class))->getProperty('instance')->setValue(null, null);
@@ -39,7 +47,7 @@ final class ExperimentalIssuePolicyTest extends TestCase
 
         ExperimentalIssuePolicy::apply($enforced);
 
-        foreach (['UnknownModelAttribute', 'UndefinedModelRelation'] as $issueType) {
+        foreach (self::EXPERIMENTAL_ISSUES as $issueType) {
             $this->assertSame($expectedLevel, $config->getReportingLevelForFile($issueType, __FILE__));
         }
     }
@@ -94,7 +102,7 @@ final class ExperimentalIssuePolicyTest extends TestCase
         ExperimentalIssuePolicy::apply($initial);
         ExperimentalIssuePolicy::apply($subsequent);
 
-        foreach (['UnknownModelAttribute', 'UndefinedModelRelation'] as $issueType) {
+        foreach (self::EXPERIMENTAL_ISSUES as $issueType) {
             $this->assertSame($expectedLevel, $config->getReportingLevelForFile($issueType, __FILE__));
         }
     }

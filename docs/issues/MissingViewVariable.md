@@ -55,17 +55,26 @@ In a template, `@includeIsolated('profile', [...])` is checked the same way, and
 2. Declare it optional if it genuinely is: give it a default in the template's `@props([...])`, or end the declaration with `= null` (`@var string|null $subtitle = null`).
 3. Drop the declaration if the template no longer reads that variable.
 
-## Configuration
+## Reporting level
 
-This check is disabled by default, and needs Blade analysis enabled. Enable it in your `psalm.xml`:
+Runs whenever [Blade analysis](../blade.md) is on. Without an explicit issue handler, it is reported as `info` by default: hidden unless Psalm runs with `--show-info=true`, never failing the run, and left out of a baseline. Promote that default to an error in `psalm.xml`:
 
 ```xml
-<plugins>
-    <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <blade validateViewData="true" />
-    </pluginClass>
-</plugins>
+<pluginClass class="Psalm\LaravelPlugin\Plugin">
+    <blade />
+    <experimental value="true" />
+</pluginClass>
 ```
+
+Or promote this issue alone:
+
+```xml
+<issueHandlers>
+    <PluginIssue name="MissingViewVariable" errorLevel="error" />
+</issueHandlers>
+```
+
+Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy, regardless of `<experimental>`.
 
 ## Limitations
 

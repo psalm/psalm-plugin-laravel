@@ -38,12 +38,13 @@ final class ViewContractValidationTest extends TestCase
 
     /**
      * The command a case's `$config` resolves to. Cases naming the same config share one run.
+     * `--show-info` keeps the `info` default of these experimental issues in the report.
      *
      * @return list<string>
      */
     private function arguments(string $config): array
     {
-        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
+        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json', '--show-info=true'];
     }
 
     /**
@@ -673,7 +674,7 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_include_never_reports_unused_view_data(): void
     {
-        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm-unused-data.xml')) as $issue) {
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
             $this->assertFalse(
                 $issue['type'] === 'UnusedViewData' && \basename((string) $issue['file_name']) === 'extra-key.blade.php',
                 \var_export($issue, true),
@@ -802,7 +803,7 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_unknown_or_vendor_namespace_is_never_checked(): void
     {
-        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm-unused-data.xml')) as $issue) {
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
             $this->assertFalse(
                 \in_array($issue['type'], [self::MISSING, self::WRONG_TYPE, 'UnusedViewData'], true)
                     && (\str_contains((string) $issue['message'], "'nope::") || \str_contains((string) $issue['message'], "'notifications::")),
@@ -811,9 +812,33 @@ final class ViewContractValidationTest extends TestCase
         }
     }
 
+    /** Experimental issues: `info` under a bare `<blade />`, `error` under `<experimental value="true" />`. */
     #[Test]
-    public function the_check_is_off_unless_the_config_flag_opts_in(): void
+    public function the_checks_run_under_bare_blade_and_only_their_severity_follows_experimental(): void
     {
-        $this->assertSame([], $this->contractIssues('psalm-validation-off.xml'));
+        $enforced = $this->contractSeverities('psalm.xml');
+        $advisory = $this->contractSeverities('psalm-blade-only.xml');
+
+        $this->assertNotSame([], $enforced);
+        $this->assertSame(['error'], \array_values(\array_unique($enforced)));
+        $this->assertSame(['info'], \array_values(\array_unique($advisory)));
+        $this->assertSame(\array_keys($enforced), \array_keys($advisory));
+    }
+
+    /**
+     * @return array<string, string> one entry per contract issue, its identity => its severity
+     */
+    private function contractSeverities(string $config): array
+    {
+        $severities = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments($config)) as $issue) {
+            if (\in_array($issue['type'], [self::MISSING, self::WRONG_TYPE], true)) {
+                $key = \implode(':', [$issue['type'], \basename((string) $issue['file_name']), (string) $issue['line_from'], (string) $issue['message']]);
+                $severities[$key] = (string) $issue['severity'];
+            }
+        }
+
+        return $severities;
     }
 }

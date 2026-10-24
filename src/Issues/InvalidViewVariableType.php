@@ -13,6 +13,4 @@ use Psalm\Issue\PluginIssue;
 final class InvalidViewVariableType extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/InvalidViewVariableType/';
-
-    // No ERROR_LEVEL override: controlled by the plugin setting blade validateViewData
 }
