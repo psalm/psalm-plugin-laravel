@@ -187,7 +187,7 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertNotSame([], $this->viewIssuesAtMerger());
     }
 
-    /** @return list<mixed> InvalidViewVariableType and MissingViewVariable reported at the merge fixture's call sites */
+    /** @return list<mixed> InvalidViewData and MissingViewData reported at the merge fixture's call sites */
     private function viewIssuesAtMerger(): array
     {
         $this->runPsalm(null);
@@ -198,7 +198,7 @@ final class AnnotateEndToEndTest extends TestCase
         return \array_values(\array_filter(
             $report,
             static fn(mixed $issue): bool => \is_array($issue)
-                && \in_array($issue['type'] ?? null, ['InvalidViewVariableType', 'MissingViewVariable'], true)
+                && \in_array($issue['type'] ?? null, ['InvalidViewData', 'MissingViewData'], true)
                 && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php'),
         ));
     }
@@ -250,7 +250,7 @@ final class AnnotateEndToEndTest extends TestCase
     #[Test]
     public function never_declares_a_loop_alias_the_template_binds_itself(): void
     {
-        // A declared `$item` makes every correct call site report MissingViewVariable: the alias is
+        // A declared `$item` makes every correct call site report MissingViewData: the alias is
         // the template's own, not something the caller is expected to pass.
         $this->annotate();
 
@@ -264,7 +264,7 @@ final class AnnotateEndToEndTest extends TestCase
     public function never_declares_a_name_the_template_binds_for_itself(): void
     {
         // `@php($heading = ...)` and a closure parameter are template locals, not inputs: declaring
-        // either reports MissingViewVariable at every correct call site. The only call site is one the
+        // either reports MissingViewData at every correct call site. The only call site is one the
         // plugin cannot read, so `$rows` is listed, not declared `mixed`.
         $result = $this->annotate(dryRun: true);
 
@@ -410,7 +410,7 @@ final class AnnotateEndToEndTest extends TestCase
         foreach ($decoded as $issue) {
             $this->assertIsArray($issue);
 
-            if (\in_array($issue['type'], ['MissingViewVariable', 'InvalidViewVariableType', 'UnusedViewData'], true)) {
+            if (\in_array($issue['type'], ['MissingViewData', 'InvalidViewData', 'UnusedViewData'], true)) {
                 $types[] = (string) $issue['type'];
             }
         }

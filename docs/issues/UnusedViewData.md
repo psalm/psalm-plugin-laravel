@@ -84,4 +84,4 @@ Every gate below silences the check for that call site rather than guessing:
 - **Ambient names are never reported.** `$errors`, `$slot`, `$attributes`, `$component`, `$loop`, and `$__env` are Blade's own, so passing one is never wrong about the template.
 - **Loop aliases count as read.** `@foreach ($items as $item)` marks both `items` and `item` as read: the read set is deliberately template-wide rather than scope-aware, and over-counting a name as used is the safe direction.
 - **A write-only variable does not count as a read.** `@php $key = 1; @endphp` with `key` passed in is reported, because the passed value is provably discarded.
-- The call shapes recognized are the same ones [MissingViewVariable](MissingViewVariable.md) recognizes, and a key is only checked when it is a literal string in the data array or a `with()` call.
+- The call shapes recognized are the same ones [MissingViewData](MissingViewData.md) recognizes, and a key is only checked when it is a literal string in the data array or a `with()` call.

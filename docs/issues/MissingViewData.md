@@ -1,10 +1,10 @@
 ---
-title: MissingViewVariable
+title: MissingViewData
 parent: Custom Issues
 nav_order: 12
 ---
 
-# MissingViewVariable
+# MissingViewData
 
 Emitted when a Blade template declares a variable that the call site rendering it never passes.
 
@@ -38,7 +38,7 @@ producing an empty string.
 
 ```php
 // Bad: the template declares two variables, the call passes neither
-view('profile', []); // MissingViewVariable, twice
+view('profile', []); // MissingViewData, twice
 
 // Good
 view('profile', ['name' => 'Ada', 'age' => 36]);
@@ -70,7 +70,7 @@ Or promote this issue alone:
 
 ```xml
 <issueHandlers>
-    <PluginIssue name="MissingViewVariable" errorLevel="error" />
+    <PluginIssue name="MissingViewData" errorLevel="error" />
 </issueHandlers>
 ```
 
@@ -93,7 +93,7 @@ A view rendered from the `render()` of an `Illuminate\View\Component` subclass I
 merges `Component::data()` — every public non-static property, every public method minus
 `ignoredMethods()`, and `$attributes` — into the view's data, so those names count as supplied even
 though the `render()` passes only `['component' => $this]`. Property types are kept, so
-[InvalidViewVariableType](InvalidViewVariableType.md) still checks them against the template's
+[InvalidViewData](InvalidViewData.md) still checks them against the template's
 declarations. A component with its own `data()` override can add names nothing can enumerate, so its
 supplied set is treated as open and this check declines for it.
 
@@ -103,7 +103,7 @@ A composer or creator registered for the view (exact name or a wildcard such as 
 supply any key. A creator runs inside `view()` (`Factory::make()`), after the data array is set but
 before any chained `->with()`; a composer runs at render time, after the whole call site. The plugin
 reads the method instead of running it and exempts only the keys it passes; every other declared
-variable is checked as usual. [InvalidViewVariableType](InvalidViewVariableType.md) skips those keys
+variable is checked as usual. [InvalidViewData](InvalidViewData.md) skips those keys
 too, since the composer or creator may overwrite the passed value (a chained `->with()` beats a
 creator, so skipping it there is merely conservative).
 
@@ -151,7 +151,7 @@ site, so it is reported. Either drop its `@var` declaration, or silence the rule
 call sites it affects:
 
 ```php
-/** @psalm-suppress MissingViewVariable */
+/** @psalm-suppress MissingViewData */
 return view('profile', []);
 ```
 
@@ -159,7 +159,7 @@ Application wide, suppress it through `issueHandlers` in your `psalm.xml`:
 
 ```xml
 <issueHandlers>
-    <MissingViewVariable errorLevel="suppress" />
+    <MissingViewData errorLevel="suppress" />
 </issueHandlers>
 ```
 
