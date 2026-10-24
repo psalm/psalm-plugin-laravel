@@ -1,1 +1,1 @@
-@php echo e(old('k')); @endphp
+@php echo e(\Fx\Source::opt('k')); @endphp

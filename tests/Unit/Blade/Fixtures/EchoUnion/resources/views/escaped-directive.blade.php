@@ -1,1 +1,1 @@
-{{ e(old('@@foo')) }}
+{{ e(\Fx\Source::opt('@@foo')) }}
