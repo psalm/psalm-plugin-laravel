@@ -790,7 +790,16 @@ final class PluginConfigTest extends TestCase
     {
         yield 'validateViewData' => ['validateViewData', '<experimental value="true" />'];
         yield 'reportUnusedViewData' => ['reportUnusedViewData', 'issueHandlers'];
-        yield 'reportMixedIssues' => ['reportMixedIssues', 'findings from undeclared variables are always dropped'];
+        yield 'reportMixedIssues' => ['reportMixedIssues', "Psalm's Mixed* issues are always dropped in templates."];
+    }
+
+    #[Test]
+    public function blade_validates_every_blade_element_not_only_the_first(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("<blade>: unknown attribute 'validateViewData'");
+
+        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /><blade validateViewData="true" /></pluginClass>'));
     }
 
     #[Test]

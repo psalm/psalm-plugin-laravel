@@ -22,7 +22,7 @@ final readonly class PluginConfig
     private const REMOVED_BLADE_ATTRIBUTES = [
         'validateViewData' => 'the view-data rules are experimental issues, so enable them with <experimental value="true" /> or set their level in issueHandlers.',
         'reportUnusedViewData' => 'the view-data rules are experimental issues, so enable them with <experimental value="true" /> or set their level in issueHandlers.',
-        'reportMixedIssues' => 'findings from undeclared variables are always dropped.',
+        'reportMixedIssues' => "Psalm's Mixed* issues are always dropped in templates.",
     ];
 
     /**
@@ -278,7 +278,11 @@ final readonly class PluginConfig
             return false;
         }
 
-        self::assertKnownBladeAttributes($blade);
+        // Value and cacheDir are read from the first element only, but a typo on any repeat must not slip through.
+        /** @psalm-var \SimpleXMLElement $element */
+        foreach ($config->blade as $element) {
+            self::assertKnownBladeAttributes($element);
+        }
 
         return self::xmlBoolAttr($blade, 'blade', true);
     }
