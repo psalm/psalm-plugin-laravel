@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792831674109,
+  "lastUpdate": 1792835149238,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15780,6 +15780,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df993b4980262eba25a9cf6f9b76c3ad73492026",
+          "message": "fix(stubs): type a keyed old() read as mixed (#2029)\n\nFlashed input holds whatever reached the session: JSON scalars from\n$request->input(), any value passed to withInput(array), and a Model\ndefault's attribute. Laravel's string|array|null was narrower than the\nruntime, for both Request::old() and the old() helper.\n\nWithout a key, the input array has array-key keys (PHP turns numeric\nfield names into int keys), and a request without a session returns\nthe default, so null joins that branch.\n\nThe EchoUnion Blade fixtures used old() as their string|array|null\nproducer; they now use a fixture method with that return type.",
+          "timestamp": "2026-10-24T11:42:14+02:00",
+          "tree_id": "0e13b5fdcda8d3e26a1947d0f4df585646e9f559",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/df993b4980262eba25a9cf6f9b76c3ad73492026"
+        },
+        "date": 1792835147446,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.22,
+            "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
             "unit": "MB"
           }
         ]
