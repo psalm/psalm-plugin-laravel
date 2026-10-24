@@ -21,7 +21,8 @@ use SebastianBergmann\Diff\Output\StrictUnifiedDiffOutputBuilder;
  * every-producer-agrees rule answerable at all.
  *
  * A name no call site types is listed back instead of declared: a `mixed` declaration adds no
- * type, yet makes the name required at every call site and hides that it is still untyped.
+ * type, yet makes the name required at every call site and hides that it is still untyped. So is a
+ * name the call sites type in ways no declaration covers, with each type they pass.
  *
  * One splice per template (see {@see TemplateAnnotator} for where): at most a one-line header docblock
  * is opened out. A variable the template already declares is never rewritten, in either spelling —
@@ -82,12 +83,14 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $failures = [];
         $unknown = [];
         $diff = '';
+        [$plans, $disagreed] = self::plans();
 
-        foreach (self::plans() as $templatePath => [$planned, $optional]) {
+        foreach ($plans as $templatePath => [$planned, $optional, $disagreeing]) {
             $vars = \array_filter($planned, static fn(?string $type): bool => $type !== null);
+            $untyped = \array_keys(\array_diff_key($planned, $vars, $disagreeing));
 
-            if (\count($vars) < \count($planned)) {
-                $unknown[$templatePath] = \array_keys(\array_diff_key($planned, $vars));
+            if ($untyped !== []) {
+                $unknown[$templatePath] = $untyped;
             }
 
             if ($vars === []) {
@@ -113,7 +116,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
             $diff .= $hunk;
         }
 
-        $request->publish($changed, $failures, $diff, $unknown);
+        $request->publish($changed, $failures, $diff, $unknown, $disagreed);
     }
 
     /**
@@ -121,13 +124,19 @@ final class AnnotationWriter implements AfterAnalysisInterface
      * default-root name and its namespace's qualified name, and annotating the file twice would
      * report it twice. A name the two names' call sites type differently has no type.
      *
-     * @return array<string, array{0: array<string, string|null>, 1: array<string, true>}> template path =>
-     *         [variable name => type string (null when unknown), the names a closed call site omits]
+     * @return array{
+     *     0: array<string, array{0: array<string, string|null>, 1: array<string, true>, 2: array<string, true>}>,
+     *     1: array<string, array<string, list<string>>>,
+     * } template path => [variable name => type string (null when unknown), the names a closed call
+     *   site omits, the names its call sites disagree on]; and per view name, each name its call sites
+     *   disagree on => the distinct types they pass
      */
     private static function plans(): array
     {
         $plans = [];
         $required = [];
+        $disagreeing = [];
+        $disagreed = [];
 
         foreach (ViewReferenceRegistry::templates() as $viewName => $templatePath) {
             // PHP stored a numeric view name (`123.blade.php` is legal) under the int it cast the
@@ -146,6 +155,13 @@ final class AnnotationWriter implements AfterAnalysisInterface
                 if (!AnnotationCollector::isOptional((string) $viewName, $name)) {
                     $required[$templatePath][$name] = true;
                 }
+
+                $types = $type === null ? AnnotationCollector::disagreeingTypes((string) $viewName, $name) : null;
+
+                if ($types !== null) {
+                    $disagreeing[$templatePath][$name] = true;
+                    $disagreed[(string) $viewName][$name] = $types;
+                }
             }
         }
 
@@ -160,10 +176,10 @@ final class AnnotationWriter implements AfterAnalysisInterface
                 }
             }
 
-            $result[$templatePath] = [$vars, $optional];
+            $result[$templatePath] = [$vars, $optional, $disagreeing[$templatePath] ?? []];
         }
 
-        return $result;
+        return [$result, $disagreed];
     }
 
     /**

@@ -261,6 +261,36 @@ final class AnnotateCommandTest extends TestCase
     }
 
     #[Test]
+    public function lists_one_line_per_name_its_call_sites_disagree_on_in_either_mode(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $output = new BufferedOutput();
+
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => [],
+                'failures' => [],
+                'diff' => '',
+                'unknown' => [],
+                'disagreed' => ['posts.index' => [
+                    'key' => ['int', 'string'],
+                    'rows' => ['Illuminate\Support\Collection<int, App\Post>', 'Illuminate\Support\Collection<int, App\Video>'],
+                ]],
+            ], $output));
+
+            $display = $output->fetch();
+            $this->assertStringContainsString('call sites disagree', $display);
+            $this->assertStringContainsString('posts.index $key: int vs string', $display);
+            $this->assertStringContainsString(
+                'posts.index $rows: Illuminate\Support\Collection<int, App\Post> vs Illuminate\Support\Collection<int, App\Video>',
+                $display,
+                'a generic type is printed as is, never read as a console style tag',
+            );
+            $this->assertStringNotContainsString('Every template already declares', $display);
+        }
+    }
+
+    #[Test]
     public function shows_psalms_own_output_only_when_the_pass_never_ran(): void
     {
         // A whole-project run prints hundreds of findings that bury the summary, so a run that

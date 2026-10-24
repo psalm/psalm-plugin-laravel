@@ -207,6 +207,24 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
+    public function lists_a_name_its_call_sites_disagree_on_with_each_type_they_pass(): void
+    {
+        // "type unknown" would be wrong here: every call site types it, just not the same way.
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>{{ \$body }}\n", ['title', 'body']);
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString(), 'body' => Type::getMixed()], true);
+        AnnotationCollector::record('page', ['title' => Type::getInt(), 'body' => Type::getMixed()], true);
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame($before, \md5_file($path));
+        $result = $this->publishedResult();
+        $this->assertSame([$path => ['body']], $result['unknown'] ?? null);
+        $this->assertSame(['page' => ['title' => ['int', 'string']]], $result['disagreed'] ?? null);
+    }
+
+    #[Test]
     public function lists_a_name_two_view_names_of_one_file_type_differently(): void
     {
         $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");

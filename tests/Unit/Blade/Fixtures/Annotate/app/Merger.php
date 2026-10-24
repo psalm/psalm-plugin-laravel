@@ -1,0 +1,85 @@
+<?php
+
+declare(strict_types=1);
+
+namespace AnnotateFixture;
+
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
+
+/**
+ * Four producers of one view that disagree on most names: the merges `blade:annotate` writes
+ * (nullability, sibling classes, `true`/`false`, one class with different generic params) and the
+ * ones it lists instead (a fourth class, two scalar kinds).
+ */
+final class Merger
+{
+    public function first(): View
+    {
+        return view('merged', [
+            'author' => new Post(),
+            'media' => new Post(),
+            'trio' => new Post(),
+            'flag' => true,
+            'posts' => $this->posts(),
+            'any' => new Post(),
+            'key' => 1,
+        ]);
+    }
+
+    public function second(): View
+    {
+        return view('merged', [
+            'author' => null,
+            'media' => new Video(),
+            'trio' => new Video(),
+            'flag' => false,
+            'posts' => $this->videos(),
+            'any' => new Video(),
+            'key' => 'k',
+        ]);
+    }
+
+    public function third(): View
+    {
+        return view('merged', [
+            'author' => $this->maybeAuthor(),
+            'media' => new Video(),
+            'trio' => new Panel(),
+            'flag' => true,
+            'posts' => $this->posts(),
+            'any' => new Panel(),
+            'key' => 1,
+        ]);
+    }
+
+    public function fourth(): View
+    {
+        return view('merged', [
+            'author' => new Post(),
+            'media' => new Post(),
+            'trio' => new Panel(),
+            'flag' => false,
+            'posts' => $this->posts(),
+            'any' => $this,
+            'key' => 1,
+        ]);
+    }
+
+    private function maybeAuthor(): ?Post
+    {
+        return \random_int(0, 1) === 1 ? new Post() : null;
+    }
+
+    /** @return Collection<int, Post> */
+    private function posts(): Collection
+    {
+        return new Collection([new Post()]);
+    }
+
+    /** @return Collection<int, Video> */
+    private function videos(): Collection
+    {
+        return new Collection([new Video()]);
+    }
+}

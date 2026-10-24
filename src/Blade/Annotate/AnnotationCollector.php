@@ -32,20 +32,27 @@ use Psalm\Type\Union;
  *
  * The confidence rule is deliberately narrow, because a wrong annotation becomes a false positive
  * at every call site that renders the template. A type is answered only when every producer of that
- * view agreed on it AND no producer left the view's data set open — an open set can carry the same
- * key with another type, invisibly.
+ * view agreed on it, or disagreed in a way one declaration covers ({@see self::merged()}), AND no
+ * producer left the view's data set open — an open set can carry the same key with another type,
+ * invisibly.
  *
  * @internal
  */
 final class AnnotationCollector implements AfterStatementAnalysisInterface
 {
+    /**
+     * Beyond three classes a union stops reading as a contract and starts reading as a call site
+     * passing the wrong thing.
+     */
+    private const MAX_MERGED_ATOMICS = 3;
+
     private static bool $enabled = false;
 
     /**
-     * Keyed by view name then variable name. `false` marks a key two producers disagreed on, or one
-     * whose passed type has no declaration a template can carry.
+     * Keyed by view name then variable name, then the distinct types passed for it by id. `false`
+     * marks a key whose passed type has no declaration a template can carry.
      *
-     * @var array<string, array<string, Union|false>>
+     * @var array<string, array<string, array<string, Union>|false>>
      */
     private static array $observed = [];
 
@@ -217,11 +224,31 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             }
 
             $type = self::withoutLateStatic($type);
-
-            self::$observed[$viewName][$name] = $seen instanceof Union && $seen->getId(false) !== $type->getId(false)
-                ? false
-                : $type;
+            $seen ??= [];
+            $seen[$type->getId(false)] = $type;
+            self::$observed[$viewName][$name] = $seen;
         }
+    }
+
+    /**
+     * The distinct types the producers of a view pass for a name, when they disagree in a way no
+     * declaration covers: what the user is left to declare by hand. Null otherwise, an open data set
+     * included (that is no disagreement, just an unknown).
+     *
+     * @return list<string>|null
+     */
+    public static function disagreeingTypes(string $viewName, string $name): ?array
+    {
+        $distinct = self::$observed[$viewName][$name] ?? null;
+
+        if (isset(self::$open[$viewName]) || !\is_array($distinct) || \count($distinct) < 2 || self::merged($distinct) instanceof Union) {
+            return null;
+        }
+
+        $ids = \array_map(strval(...), \array_keys($distinct));
+        \sort($ids);
+
+        return $ids;
     }
 
     /**
@@ -234,7 +261,13 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
-        $observed = self::$observed[$viewName][$name] ?? null;
+        $distinct = self::$observed[$viewName][$name] ?? null;
+
+        if (!\is_array($distinct)) {
+            return null;
+        }
+
+        $observed = \count($distinct) === 1 ? \reset($distinct) : self::merged($distinct);
 
         if (!$observed instanceof Union) {
             return null;
@@ -268,6 +301,102 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return $id;
+    }
+
+    /**
+     * One type for producers that disagree, or null when they disagree too much to share one.
+     *
+     * Merged: a difference in nullability only; one scalar kind (`true` and `false` give `bool`); up
+     * to three classes, `null` not counted. Psalm keeps one class with different generic params apart
+     * (`Collection<int, Post>|Collection<int, Video>`), which holds even where the template parameter
+     * is invariant, so each counts as a class. Never merged: a `mixed` producer, two scalar kinds, an
+     * array that differs by more than nullability, an array or a scalar with an object. Each usually
+     * means one call site passes the wrong thing. Never widened to a common parent either: which one
+     * is ambiguous, and members only a subclass has would turn into UndefinedMethod.
+     *
+     * A merge that is not a plain union of what was passed (`bool` from `true`) must still be proven
+     * to hold at every call site; unproven declines.
+     *
+     * @param array<string, Union> $distinct
+     */
+    private static function merged(array $distinct): ?Union
+    {
+        // Sorted, so the verdict cannot depend on which call site was analysed first.
+        \ksort($distinct);
+        $withoutNull = [];
+
+        foreach ($distinct as $type) {
+            if ($type->hasMixed()) {
+                return null;
+            }
+
+            $atomics = \array_filter($type->getAtomicTypes(), static fn(Atomic $atomic): bool => !$atomic instanceof Atomic\TNull);
+
+            if ($atomics !== []) {
+                $withoutNull[(new Union(\array_values($atomics)))->getId(false)] = true;
+            }
+        }
+
+        $types = \array_values($distinct);
+
+        if ($types === []) {
+            return null;
+        }
+
+        $combined = Type::combineUnionTypeArray($types, null);
+
+        if (\count($withoutNull) <= 1) {
+            return $combined;
+        }
+
+        $atomics = \array_filter($combined->getAtomicTypes(), static fn(Atomic $atomic): bool => !$atomic instanceof Atomic\TNull);
+        $objects = \array_filter($atomics, static fn(Atomic $atomic): bool => $atomic instanceof Atomic\TNamedObject);
+        $first = \reset($atomics);
+
+        $mergeable = \count($atomics) === 1
+            ? $first instanceof Atomic\TNamedObject || $first instanceof Atomic\Scalar
+            : \count($objects) === \count($atomics) && \count($atomics) <= self::MAX_MERGED_ATOMICS;
+
+        return $mergeable && self::containsEvery($combined, $distinct) ? $combined : null;
+    }
+
+    /**
+     * Whether every producer's type is contained by the merged one. An atomic the merge kept verbatim
+     * needs no proof; anything else asks the codebase, the same check call sites are held to.
+     *
+     * @param array<string, Union> $distinct
+     */
+    private static function containsEvery(Union $merged, array $distinct): bool
+    {
+        $kept = [];
+
+        foreach ($merged->getAtomicTypes() as $atomic) {
+            $kept[$atomic->getId()] = true;
+        }
+
+        foreach ($distinct as $type) {
+            foreach ($type->getAtomicTypes() as $atomic) {
+                if (!isset($kept[$atomic->getId()])) {
+                    if (!self::isContained($type, $merged)) {
+                        return false;
+                    }
+
+                    continue 2;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /** Unproven (no project analyzer, an unknown class) counts as not contained. */
+    private static function isContained(Union $type, Union $container): bool
+    {
+        try {
+            return ProjectAnalyzer::getInstance()->getCodebase()->isTypeContainedByType($type, $container);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException|\RuntimeException|\Error) {
+            return false;
+        }
     }
 
     /**
