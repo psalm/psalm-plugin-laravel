@@ -85,9 +85,9 @@ final class ViewCallChain
         return $this->frameworkData + $this->data;
     }
 
-    public static function from(Expr $expr, StatementsSource $source): ?self
+    public static function from(Expr $expr, StatementsSource $source, bool $trimName = false): ?self
     {
-        $chain = self::walk($expr, $source);
+        $chain = self::walk($expr, $source, $trimName);
 
         if (!$chain instanceof self) {
             return null;
@@ -108,16 +108,20 @@ final class ViewCallChain
 
     /**
      * The `key => value expression` pairs THIS call passes itself, never the rest of its chain: the
-     * literal `$data` array of the `view()` helper or a `make()`/`view()` binder, or the key and value
-     * of a `with()` link. Whatever is not written out literally (a variable array, a computed key,
-     * a spread) is skipped.
+     * literal `$data` (and, for the helper and a view factory, `$mergeData`) array of a binder, or the
+     * key and value of a `with()` link. Whatever is not written out literally (a variable array, a
+     * computed key, a spread of anything but an array literal) is skipped.
+     *
+     * Within the arrays the last write of a key wins, the way PHP builds the array, and `$data` wins
+     * `$mergeData` as `Factory::make()` merges them. A non-literal spread or key after an entry keeps
+     * it: it may or may not overwrite, and a taint write must never be dropped on a guess.
      *
      * Callers resolve the chain with {@see self::from()} first: this reads positions only, so it says
-     * nothing about whether the call binds a view at all.
+     * nothing about whether the call binds a view at all. `$binder` is that chain's role.
      *
      * @return list<array{0: string, 1: Expr}>
      */
-    public static function ownEntries(Expr\CallLike $call): array
+    public static function ownEntries(Expr\CallLike $call, ?string $binder): array
     {
         $args = self::args($call);
 
@@ -129,7 +133,12 @@ final class ViewCallChain
             || !$call->name instanceof Identifier
             || $call->name->toLowerString() !== 'with'
         ) {
-            return self::literalEntries(ArgUtil::byNameOrPosition($args, 1, 'data'));
+            // `response()->view($view, $data, $status, $headers)` has no `$mergeData`: position 2 is the status.
+            $mergeData = $call instanceof Expr\FuncCall || $binder === ViewNameSignatures::ROLE_VIEW_FACTORY
+                ? ArgUtil::byNameOrPosition($args, 2, 'mergedata')
+                : null;
+
+            return self::literalEntries([$mergeData, ArgUtil::byNameOrPosition($args, 1, 'data')]);
         }
 
         $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
@@ -139,7 +148,7 @@ final class ViewCallChain
         }
 
         if ($keyArg->value instanceof Expr\Array_) {
-            return self::literalEntries($keyArg);
+            return self::literalEntries([$keyArg]);
         }
 
         $valueArg = ArgUtil::byNameOrPosition($args, 1, 'value');
@@ -148,25 +157,58 @@ final class ViewCallChain
     }
 
     /**
+     * @param list<Arg|null> $arrays in the order PHP merges them: a later array wins a shared key
      * @return list<array{0: string, 1: Expr}>
      *
      * @psalm-capabilities read-props
      */
-    private static function literalEntries(?Arg $arg): array
+    private static function literalEntries(array $arrays): array
     {
-        if (!$arg instanceof Arg || !$arg->value instanceof Expr\Array_) {
-            return [];
+        $latest = [];
+
+        foreach ($arrays as $arg) {
+            if ($arg instanceof Arg && $arg->value instanceof Expr\Array_) {
+                $latest = self::collectLiteralKeys($arg->value, $latest);
+            }
         }
 
         $entries = [];
 
-        foreach ($arg->value->items as $item) {
-            if ($item !== null && $item->key instanceof String_ && !$item->unpack) {
-                $entries[] = [$item->key->value, $item->value];
-            }
+        foreach ($latest as $key => $value) {
+            // A numeric string key reads back as an int.
+            $entries[] = [(string) $key, $value];
         }
 
         return $entries;
+    }
+
+    /**
+     * @param array<array-key, Expr> $latest
+     * @return array<array-key, Expr>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function collectLiteralKeys(Expr\Array_ $array, array $latest): array
+    {
+        foreach ($array->items as $item) {
+            if ($item === null) {
+                continue;
+            }
+
+            if ($item->unpack) {
+                if ($item->value instanceof Expr\Array_) {
+                    $latest = self::collectLiteralKeys($item->value, $latest);
+                }
+
+                continue;
+            }
+
+            if ($item->key instanceof String_) {
+                $latest[$item->key->value] = $item->value;
+            }
+        }
+
+        return $latest;
     }
 
     /**
@@ -179,7 +221,7 @@ final class ViewCallChain
         return $analyzer instanceof FunctionLikeAnalyzer && \strtolower((string) $analyzer->getMethodName()) === 'render';
     }
 
-    private static function walk(Expr $expr, StatementsSource $source): ?self
+    private static function walk(Expr $expr, StatementsSource $source, bool $trimName): ?self
     {
         /** @var list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending */
         $pending = [];
@@ -189,7 +231,7 @@ final class ViewCallChain
         // closer to the receiver.
         while (true) {
             if ($node instanceof Expr\FuncCall) {
-                return self::fromHelperCall($node, $source, $pending);
+                return self::fromHelperCall($node, $source, $pending, $trimName);
             }
 
             if (!$node instanceof Expr\MethodCall
@@ -212,7 +254,7 @@ final class ViewCallChain
             $methodName = $node->name->toLowerString();
 
             if ($node instanceof Expr\StaticCall) {
-                return self::fromBinder(self::roleOfStaticClass($node->class), $methodName, $args, $source, $pending);
+                return self::fromBinder(self::roleOfStaticClass($node->class), $methodName, $args, $source, $pending, $trimName);
             }
 
             // Collected rather than folded in here: whether these carry template data at all depends
@@ -224,16 +266,16 @@ final class ViewCallChain
                 continue;
             }
 
-            return self::fromBinder(self::roleOfReceiver($node->var, $source), $methodName, $args, $source, $pending);
+            return self::fromBinder(self::roleOfReceiver($node->var, $source, $methodName), $methodName, $args, $source, $pending, $trimName);
         }
     }
 
     /**
      * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      */
-    private static function fromHelperCall(Expr\FuncCall $call, StatementsSource $source, array $pending): ?self
+    private static function fromHelperCall(Expr\FuncCall $call, StatementsSource $source, array $pending, bool $trimName): ?self
     {
-        if (!$call->name instanceof Name || $call->name->toLowerString() !== 'view') {
+        if (!self::isLaravelViewHelper($call, $source)) {
             return null;
         }
 
@@ -247,7 +289,38 @@ final class ViewCallChain
         // so anything supplied there that we cannot read leaves the key set open.
         $complete = !ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg;
 
-        return self::build(self::viewArg($args), ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, true, $complete);
+        return self::build(self::viewArg($args), ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, true, $complete, null, $trimName);
+    }
+
+    /**
+     * Whether a `view(...)` call reaches Laravel's global helper the way PHP resolves it: a `use function`
+     * import or a same-named function in the current namespace wins over the global fallback, and
+     * Psalm may not have seen a project function declared in a file this one never requires.
+     */
+    private static function isLaravelViewHelper(Expr\FuncCall $call, StatementsSource $source): bool
+    {
+        $name = $call->name;
+
+        if (!$name instanceof Name || $name->toLowerString() !== 'view') {
+            return false;
+        }
+
+        if ($name->isFullyQualified()) {
+            return true;
+        }
+
+        if (!$name->isUnqualified() || isset($source->getAliases()->functions['view'])) {
+            return false;
+        }
+
+        $namespace = $source->getNamespace();
+
+        if ($namespace === null || $namespace === '') {
+            return true;
+        }
+
+        return $source instanceof StatementsAnalyzer
+            && !$source->getCodebase()->functions->functionExists($source, \strtolower($namespace . '\\view'));
     }
 
     /**
@@ -260,6 +333,7 @@ final class ViewCallChain
         array $args,
         StatementsSource $source,
         array $pending,
+        bool $trimName,
     ): ?self {
         $binds = match ($role) {
             ViewNameSignatures::ROLE_VIEW_FACTORY => $methodName === 'make',
@@ -285,7 +359,7 @@ final class ViewCallChain
             return null;
         }
 
-        return self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role);
+        return self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role, $trimName);
     }
 
     /**
@@ -306,14 +380,16 @@ final class ViewCallChain
     {
         $args = self::args($call);
 
-        if ($args === null
-            || !$call->name instanceof Identifier
-            || self::roleOfReceiver($call->var, $source) !== ViewNameSignatures::ROLE_VIEW_FACTORY
-        ) {
+        if ($args === null || !$call->name instanceof Identifier) {
             return null;
         }
 
         $methodName = $call->name->toLowerString();
+
+        // Resolved only now: the receiver's role depends on which method is called on it.
+        if (self::roleOfReceiver($call->var, $source, $methodName) !== ViewNameSignatures::ROLE_VIEW_FACTORY) {
+            return null;
+        }
 
         [$name, $at] = match ($methodName) {
             'make' => [self::viewArg($args), 0],
@@ -395,6 +471,7 @@ final class ViewCallChain
         bool $carriesData,
         bool $complete,
         ?string $binder = null,
+        bool $trimName = false,
     ): ?self {
         if (!$name instanceof String_) {
             return null;
@@ -403,12 +480,18 @@ final class ViewCallChain
         // `Factory::make()` normalizes `/` to `.` before resolving. A spelling whose literal would
         // look up another file's key than the one Laravel renders declines: surrounding whitespace
         // (the finder trims) and a second `::` (normalize() keeps only the first two segments).
+        // The taint bridge opts in to the trim instead, because it keys writes by the name Laravel
+        // really resolves, which is the trimmed one.
         //
         // A namespaced `pkg::name` needs nothing more: the compile pass registers a hint-root template
         // under exactly that qualified name, and only when the finder resolves the name to it
         // ({@see \Psalm\LaravelPlugin\Blade\BladeBootstrapper}). An unknown hint, a vendor/ hint
         // root, or an uncompiled template has no registry entry, and every consumer declines then.
         $viewName = ViewName::normalize($name->value);
+
+        if ($trimName) {
+            $viewName = \trim($viewName);
+        }
 
         if ($viewName === '' || $viewName !== \trim($viewName) || \substr_count($name->value, '::') > 1) {
             return null;
@@ -601,8 +684,12 @@ final class ViewCallChain
     /**
      * The role of a receiver expression, following its class hierarchy: a `Mailable` at a call site
      * is almost always a userland subclass, and {@see ViewNameSignatures} keys on exact names.
+     *
+     * A subclass counts only while the called method is still the one a Laravel class declares. An
+     * override can bind any view, or none: `parent::make('other', $data)` renders `other`, and a
+     * response factory's `view()` may return an object whose `with()` ignores the data.
      */
-    private static function roleOfReceiver(Expr $receiver, StatementsSource $source): ?string
+    private static function roleOfReceiver(Expr $receiver, StatementsSource $source, string $method): ?string
     {
         $atomic = self::soleAtomic($receiver, $source);
 
@@ -625,9 +712,13 @@ final class ViewCallChain
         foreach ([...\array_keys($storage->parent_classes), ...\array_keys($storage->class_implements)] as $ancestor) {
             $role = ViewNameSignatures::resolveRole($ancestor);
 
-            if ($role !== null) {
-                return $role;
+            if ($role === null) {
+                continue;
             }
+
+            $declaring = $storage->declaring_method_ids[$method] ?? null;
+
+            return $declaring !== null && ViewNameSignatures::resolveRole($declaring->fq_class_name) === $role ? $role : null;
         }
 
         return null;

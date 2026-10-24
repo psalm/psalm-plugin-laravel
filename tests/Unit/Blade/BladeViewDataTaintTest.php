@@ -99,6 +99,17 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'namespaced hint' => ['resources/pkg-views/widget.blade.php', 1];
         yield 'view typed by a class component seed' => ['resources/views/components/banner.blade.php', 2];
         yield 'only the tainted one of two keys' => ['resources/views/both.blade.php', 1];
+        yield 'mergeData by name on a factory' => ['resources/views/merge-named.blade.php', 1];
+        yield 'mergeData positional on the helper' => ['resources/views/merge-helper.blade.php', 1];
+        yield 'mergeData by name on the helper' => ['resources/views/merge-helper-named.blade.php', 1];
+        yield 'mergeData positional on the facade' => ['resources/views/merge-facade.blade.php', 1];
+        yield 'view name padded with whitespace' => ['resources/views/padded.blade.php', 1];
+        yield 'userland factory subclass that overrides nothing' => ['resources/views/subclass-plain.blade.php', 1];
+        yield 'data beats mergeData for a shared key' => ['resources/views/data-over-merge.blade.php', 1];
+        yield 'open spread after the key' => ['resources/views/spread-open.blade.php', 1];
+        yield 'literal spread carrying the tainted value last' => ['resources/views/spread-literal-taint.blade.php', 1];
+        // Accepted over-report: a later `with()` of the same key is not seen by the inner link (docs/contributing/blade.md).
+        yield 'overwritten by a later with() link (over-report)' => ['resources/views/overwritten-chain.blade.php', 1];
     }
 
     #[Test]
@@ -122,6 +133,12 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'mailable' => ['resources/views/mailable.blade.php'];
         yield 'Blade-owned name' => ['resources/views/owned.blade.php'];
         yield 'double-underscore name' => ['resources/views/dunder.blade.php'];
+        yield 'later literal spread key overwrites it' => ['resources/views/overwritten.blade.php'];
+        yield 'data overwrites mergeData' => ['resources/views/merge-overwritten.blade.php'];
+        yield 'unrelated namespaced function named view' => ['resources/views/probe-fn.blade.php'];
+        yield 'imported unrelated function named view' => ['resources/views/probe-imported.blade.php'];
+        yield 'userland factory overriding make()' => ['resources/views/custom-factory.blade.php'];
+        yield 'userland response factory overriding view()' => ['resources/views/custom-response.blade.php'];
         // Known limit: a compiled `@include` passes its data in-template, which is a separate slice (#2032).
         yield 'data of an @include' => ['resources/views/included.blade.php'];
     }

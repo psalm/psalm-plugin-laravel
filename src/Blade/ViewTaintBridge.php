@@ -64,7 +64,8 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
             return null;
         }
 
-        $chain = ViewCallChain::from($call, $source);
+        // Laravel's finder trims the name before it resolves it, so a padded literal still binds its template.
+        $chain = ViewCallChain::from($call, $source, true);
 
         if (!$chain instanceof ViewCallChain
             || (!\in_array($chain->binder, [null, ViewNameSignatures::ROLE_VIEW_FACTORY, ViewNameSignatures::ROLE_RESPONSE_FACTORY], true))
@@ -72,7 +73,7 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
             return null;
         }
 
-        foreach (ViewCallChain::ownEntries($call) as [$key, $value]) {
+        foreach (ViewCallChain::ownEntries($call, $chain->binder) as [$key, $value]) {
             $type = $source->getNodeTypeProvider()->getType($value);
 
             if (!$type instanceof Union || $type->parent_nodes === []) {

@@ -6,6 +6,7 @@ namespace BladeViewDataTaintFixture;
 
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\View as ViewFacade;
 
@@ -56,5 +57,26 @@ final class Negatives
     public function dunderName(Request $request): View
     {
         return view('dunder', ['__q' => $request->input('q')]);
+    }
+
+    /** A later key of the same array literal wins at run time. */
+    public function overwrittenBySpread(Request $request): View
+    {
+        return view('overwritten', ['q' => $request->input('q'), ...['q' => 'fixed']]);
+    }
+
+    public function overwrittenByData(Request $request): View
+    {
+        return view('merge-overwritten', ['q' => 'fixed'], ['q' => $request->input('q')]);
+    }
+
+    public function overridingFactory(OverridingFactory $views, Request $request): View
+    {
+        return $views->make('custom-factory', ['q' => $request->input('q')]);
+    }
+
+    public function overridingResponses(OverridingResponses $responses, Request $request): Response
+    {
+        return $responses->view('custom-response', ['q' => $request->input('q')])->with('r', $request->input('q'));
     }
 }

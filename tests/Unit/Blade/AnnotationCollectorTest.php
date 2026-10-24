@@ -579,6 +579,8 @@ final class AnnotationCollectorTest extends TestCase
 
         $source = $this->createStub(StatementsSource::class);
         $source->method('getNodeTypeProvider')->willReturn($nodeData);
+        // The `view()` helper check reads the file's `use function` imports.
+        $source->method('getAliases')->willReturn(new \Psalm\Aliases());
 
         foreach ($statements as $statement) {
             $callbacks = (new NodeFinder())->find(
