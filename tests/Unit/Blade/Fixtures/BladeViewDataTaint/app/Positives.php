@@ -151,4 +151,55 @@ final class Positives
     {
         return view('dunder', ['__q' => $request->input('q')]);
     }
+
+    /** A data array held in a variable: the keys travel with the array. */
+    public function variableArray(Request $request): View
+    {
+        $data = ['q' => $request->input('q'), 't' => 'fixed'];
+
+        return view('var-array', $data);
+    }
+
+    public function compacted(Request $request): View
+    {
+        $q = (string) $request->input('q');
+        $t = 'fixed';
+
+        return view('compacted', compact('q', 't'));
+    }
+
+    public function withArrayVariable(Request $request): View
+    {
+        $data = ['q' => $request->input('q'), 't' => 'fixed'];
+
+        return view('with-array-var')->with($data);
+    }
+
+    /** `$request->all()` is an untyped array: any key may be tainted. */
+    public function untypedArray(Request $request): View
+    {
+        /** @var array<string, mixed> $all */
+        $all = $request->all();
+
+        return view('untyped-array', $all);
+    }
+
+    public function mergeDataArrayVariable(Request $request): View
+    {
+        $data = ['q' => $request->input('q')];
+
+        return view('merge-array-var', [], $data);
+    }
+
+    /** A `*` key beside a real one: the real one still reaches the template. */
+    public function starKeySibling(Request $request): View
+    {
+        return view('star-key-sibling', ['*' => 'fixed', 'q' => $request->input('q')]);
+    }
+
+    /** The passed array holds request input at the transitive hop: it is the includer that echoes it escaped. */
+    public function scopeFromController(Request $request): View
+    {
+        return view('scope-data-includer', ['q' => $request->input('q')]);
+    }
 }
