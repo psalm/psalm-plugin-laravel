@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792867404770,
+  "lastUpdate": 1792873159271,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16055,6 +16055,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 41.22,
             "range": "± 0.55",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f76bdedf93619032121a59f4b55d458b4e69db27",
+          "message": "Stop `MissingViewData` on view data Mailables, `MailMessage` and Livewire supply (#2042)\n\n* fix(blade): count Mailable, MailMessage and Livewire framework keys as supplied view data #2035\n\nMissingViewData/InvalidViewData reported keys the framework merges in at\nrender time: Mailable public properties and $message, MailMessage's\ntoArray() keys and $message, and a Livewire component's public\nproperties inside render().\n\n- Keys go into ViewCallChain::$frameworkData, so UnusedViewData is\n  untouched.\n- Mailable reads the receiver's class, not the enclosing one; a base\n  class, contract or union receiver leaves the chain incomplete.\n- A key the MailMessage call passes wins over its toArray() entry.\n- Property walk and storage lookup are shared with ComponentRenderData.\n\n* fix(blade): stop typing MailMessage keys and mailable collisions in view data #2035\n\nReview of de694adf found three new InvalidViewData false positives and\ntwo doc inaccuracies.\n\n- MailMessage's toArray() keys are mixed: the vendor docblocks are\n  coarser than the values (array, string for null defaults).\n- Mailable $message is mixed when the call's data is not fully known;\n  markdown() merges that data after the injected Message.\n- A Mailable property the call also passes by name is mixed: an\n  uninitialized typed property leaves the passed value in place.\n- An intersection receiver is declined like a union.\n- Docs: buildViewDataUsing() merges before properties, base MailMessage\n  is checked, unmodeled keys can still report Missing.\n\n* fix(blade): open the Mailable key set on overrides, resolve self/parent, add mail keys #2035\n\nExternal review of 1f914c37.\n\n- A Mailable overriding buildViewData() or additionalMessageData() has\n  an unknowable key set: incomplete chain, every key mixed.\n- `self`/`parent` in a property type resolve against the declaring\n  class, `static` against the rendered one.\n- Supply the keys Mailer::send(), Mailable::additionalMessageData() and\n  MailChannel::additionalMessageData() add (mixed: merge order differs).\n- Docs: uninitialized Livewire properties keep their declared type.\n\n* fix(blade): resolve trait property self/parent and drop passed types on open Mailables #2035\n\nExternal review of daa9e28c.\n\n- A trait's property carries the trait as declaring class: `self` and\n  `parent` resolve against the class in appearing_property_ids, `mixed`\n  when it cannot be resolved.\n- A Mailable overriding buildViewData()/additionalMessageData() may\n  replace a passed value too, so passed keys become mixed framework\n  keys; UnusedViewData still reads only the passed data.\n\n* docs(blade): state what an unknowable framework key set still checks #2035\n\n* fix(blade): keep the view data key set open for abstract Mailable and Livewire bases #2035\n\n* fix(blade): give Livewire keys only to the view render() returns #2035\n\n* fix(blade): type the mail message key by render path #2035\n\n* test(blade): cover look-alike classes and Mailable and Livewire property visibility #2035\n\n* docs(blade): describe abstract bases, Livewire scope and the message key per render path #2035",
+          "timestamp": "2026-10-24T22:15:51+02:00",
+          "tree_id": "ca8713950a7ff6b5ab48ba4271497d3b2f6b05ce",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f76bdedf93619032121a59f4b55d458b4e69db27"
+        },
+        "date": 1792873157322,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.63,
+            "range": "± 0.02",
             "unit": "s"
           },
           {
