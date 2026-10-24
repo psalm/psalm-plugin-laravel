@@ -25,3 +25,4 @@
 <x-toolbar/>
 <x-pill/>
 <x-owned/>
+<x-snapshot/>

@@ -126,9 +126,21 @@ final class ComponentRenderData
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
-            // Every type is expanded already, against the class that declares it.
-            if (!$type->isMixed()) {
-                $guaranteed[$name] = $type;
+            // A property type arrives expanded against its declaring class, so this pass leaves it as is.
+            // It stays for the method variables: Psalm's own expansion does not recurse into everything
+            // (`public-properties-of<self>` keeps a raw `parent` inside its array), and a type seeded with
+            // one makes a call on it throw.
+            $expanded = TypeExpander::expandUnion(
+                $codebase,
+                $type,
+                $storage->name,
+                $storage->name,
+                $storage->parent_class,
+                final: $storage->final,
+            );
+
+            if (!$expanded->isMixed()) {
+                $guaranteed[$name] = $expanded;
             }
         }
 
