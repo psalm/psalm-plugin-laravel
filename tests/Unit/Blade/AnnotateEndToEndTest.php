@@ -57,6 +57,7 @@ final class AnnotateEndToEndTest extends TestCase
         'modal-nested' => "{{ \$text }}\n",
         'modal-open' => "{{ \$text }}\n",
         'modal-rendered' => "{{ \$text }}\n",
+        'modal-invoked' => "{{ \$text }}\n",
     ];
 
     private ?string $controlFile = null;
@@ -188,12 +189,14 @@ final class AnnotateEndToEndTest extends TestCase
     #[Test]
     public function leaves_undeclared_a_view_a_closure_renders_with_unreadable_data(): void
     {
-        // Each view also has a closed call site passing a string, so only the closure's own call
-        // site keeps the declaration out: an open data set, and a chain the walk cannot resolve.
+        // Each view has a closed call site passing a string, so only what surrounds it keeps the
+        // declaration out: an open data set, a chain the walk cannot resolve, and an enclosing chain
+        // that writes into the view the callback returns.
         $this->annotate();
 
         $this->assertSame(self::TEMPLATES['modal-open'], $this->template('modal-open'));
         $this->assertSame(self::TEMPLATES['modal-rendered'], $this->template('modal-rendered'));
+        $this->assertSame(self::TEMPLATES['modal-invoked'], $this->template('modal-invoked'), 'the enclosing chain overwrites the key');
     }
 
     #[Test]

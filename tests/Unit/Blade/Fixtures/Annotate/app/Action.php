@@ -48,6 +48,12 @@ final class Action
         self::make('qr')->modalContent(static fn(): View => view('modal-open', $data));
     }
 
+    /** The declined expression writes into the view the recorded callback returns. */
+    public static function invokedInPlace(): View
+    {
+        return (static fn(): View => view('modal-invoked', ['text' => 'closed']))()->with('text', 42);
+    }
+
     public static function rendered(): void
     {
         view('modal-rendered', ['text' => 'closed']);

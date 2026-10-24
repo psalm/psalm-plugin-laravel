@@ -10,6 +10,7 @@ use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Internal\Provider\NodeDataProvider;
@@ -256,6 +257,30 @@ final class AnnotationCollectorTest extends TestCase
             "view('home', ['title' => 'text']);\nAction::make('qr')->modalContent(fn () => view('home', ['title' => 42])->render());",
             [['title' => Type::getString()], ['title' => $this->literal(42)]],
         );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
+     * The callback's call was recorded, but the declined expression around it receives the view it
+     * returns and may write data into it: invoked in place, through a helper, by a magic `with*`
+     * call, or by an offset write.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function callbackResultWrites(): iterable
+    {
+        yield 'invoked in place, with()' => ["(fn () => view('home', ['title' => 'text']))()->with('title', 42);"];
+        yield 'through a helper, magic with*()' => ["value(fn () => view('home', ['title' => 'text']))->withTitle(42);"];
+        yield 'offset write in a tap callback' => ["tap((fn () => view('home', ['title' => 'text']))(), fn (\$v) => \$v['title'] = 42);"];
+        yield 'dynamic method name' => ["value(fn () => view('home', ['title' => 'text']))->{\$method}('title', 42);"];
+    }
+
+    #[Test]
+    #[DataProvider('callbackResultWrites')]
+    public function marks_a_view_unreadable_when_the_declined_expression_may_write_into_a_callback_result(string $code): void
+    {
+        $this->analyzeStatements($code, [['title' => Type::getString()]]);
 
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
     }

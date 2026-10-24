@@ -70,9 +70,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     private static bool $analyzed = false;
 
     /**
-     * The binding call of every chain already recorded. A callback's statements are analysed, and
-     * recorded, before the statement holding the callback completes, whose scan for nested view names
-     * then meets the same call node again. Weak, so the analysed ASTs are not kept alive.
+     * The calls of every chain already recorded: its binding call and the `with()` links folded into
+     * its data. A callback's statements are analysed, and recorded, before the statement holding the
+     * callback completes, whose scan for nested view names then meets the same call nodes again.
+     * Weak, so the analysed ASTs are not kept alive.
      *
      * @var \WeakMap<Expr, true>|null
      */
@@ -136,7 +137,11 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             self::record($chain->viewName, $chain->supplied(), $chain->complete);
             /** @psalm-var \WeakMap<Expr, true> $recorded a fresh WeakMap infers as WeakMap<object, mixed> */
             $recorded = self::$recorded ?? new \WeakMap();
-            $recorded[self::binderOf($expr)] = true;
+
+            for ($link = $expr; $link instanceof Expr; $link = self::innerLink($link)) {
+                $recorded[$link] = true;
+            }
+
             self::$recorded = $recorded;
 
             return null;
@@ -154,17 +159,23 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
     /**
      * Literal view names of every rendering call nested in an expression the chain declined, minus
-     * the calls a callback's own statement already recorded. Over-marking is the safe direction: the
-     * worst it costs is a name left undeclared where a type was provable.
+     * the calls a callback's own statement already recorded, unless the expression may write into the
+     * view such a callback returns. Over-marking is the safe direction: the worst it costs is a name
+     * left undeclared where a type was provable.
      *
      * @return list<string>
      */
     private static function viewNamesIn(Expr $expr): array
     {
         $names = [];
+        $writes = null;
 
         foreach ((new NodeFinder())->find($expr, self::isViewBinder(...)) as $call) {
-            if (!$call instanceof Node\Expr\CallLike || $call->isFirstClassCallable() || isset(self::$recorded[$call])) {
+            if (!$call instanceof Node\Expr\CallLike || $call->isFirstClassCallable()) {
+                continue;
+            }
+
+            if (isset(self::$recorded[$call]) && !($writes ??= self::mayWriteViewData($expr))) {
                 continue;
             }
 
@@ -179,17 +190,44 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         return $names;
     }
 
-    /** The call a recorded chain binds its view with: the chain minus its trailing `with()` links. */
-    private static function binderOf(Expr $expr): Expr
+    /**
+     * Whether the expression holds anything that can put data into a view object it was handed:
+     * a `with*()` call (`View::__call()` turns `withTitle()` into `with('title')`), `nest()`, the
+     * `ArrayAccess` and `__set()` writes, or a call whose name is not literal. The recorded data of
+     * a callback's view is only final when nothing around the callback can change it; the recorded
+     * chain's own `with()` links are already part of it.
+     */
+    private static function mayWriteViewData(Expr $expr): bool
     {
-        while (($expr instanceof Expr\MethodCall || $expr instanceof Expr\NullsafeMethodCall)
-            && $expr->name instanceof Node\Identifier
-            && \in_array($expr->name->toLowerString(), ['with', 'witherrors'], true)
-        ) {
-            $expr = $expr->var;
-        }
+        return (new NodeFinder())->findFirst($expr, static function (Node $node): bool {
+            if ($node instanceof Expr && isset(self::$recorded[$node])) {
+                return false;
+            }
 
-        return $expr;
+            if ($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall || $node instanceof Expr\StaticCall) {
+                if (!$node->name instanceof Node\Identifier) {
+                    return true;
+                }
+
+                $name = $node->name->toLowerString();
+
+                return \str_starts_with($name, 'with') || \in_array($name, ['nest', 'offsetset', '__set'], true);
+            }
+
+            // `$view['title'] = 42` and `$view->title = 42`, destructuring into either included.
+            return ($node instanceof Expr\Assign || $node instanceof Expr\AssignRef || $node instanceof Expr\AssignOp)
+                && !$node->var instanceof Expr\Variable;
+        }) instanceof Node;
+    }
+
+    /** The next call towards a recorded chain's binding call, or null once the binding call is reached. */
+    private static function innerLink(Expr $link): ?Expr
+    {
+        return ($link instanceof Expr\MethodCall || $link instanceof Expr\NullsafeMethodCall)
+            && $link->name instanceof Node\Identifier
+            && \in_array($link->name->toLowerString(), ['with', 'witherrors'], true)
+            ? $link->var
+            : null;
     }
 
     private static function isViewBinder(Node $node): bool
