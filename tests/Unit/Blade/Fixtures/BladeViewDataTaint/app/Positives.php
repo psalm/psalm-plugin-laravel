@@ -191,6 +191,12 @@ final class Positives
         return view('merge-array-var', [], $data);
     }
 
+    /** A `*` key beside a real one: the real one still reaches the template. */
+    public function starKeySibling(Request $request): View
+    {
+        return view('star-key-sibling', ['*' => 'fixed', 'q' => $request->input('q')]);
+    }
+
     /** The passed array holds request input at the transitive hop: it is the includer that echoes it escaped. */
     public function scopeFromController(Request $request): View
     {

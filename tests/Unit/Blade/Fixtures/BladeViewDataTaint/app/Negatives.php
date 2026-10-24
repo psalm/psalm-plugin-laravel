@@ -71,6 +71,12 @@ final class Negatives
         return $responses->view('custom-response', ['q' => $request->input('q')])->with('r', $request->input('q'));
     }
 
+    /** `extract()` skips a key that is not a variable name, so `*` never reaches the template. */
+    public function starKey(Request $request): View
+    {
+        return view('star-key', ['*' => $request->input('q'), 'q' => 'fixed']);
+    }
+
     public function cleanArrayVariable(): View
     {
         $data = ['q' => 'fixed'];

@@ -128,6 +128,9 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'variable the includer received as view data' => ['resources/views/scope-data-partial.blade.php', 1];
         yield 'anonymous component prop' => ['resources/views/components/card.blade.php', 1];
         yield 'anonymous component: only the tainted prop' => ['resources/views/components/card-sibling.blade.php', 2];
+        yield '`*` key beside a real one' => ['resources/views/star-key-sibling.blade.php', 1];
+        yield '@includeFirst of a namespaced candidate' => ['resources/pkg-views/second.blade.php', 1];
+        yield '@includeFirst past a namespaced candidate of unknown existence' => ['resources/views/inc-first-b.blade.php', 1];
     }
 
     #[Test]
@@ -163,6 +166,13 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'includer that only echoes the value escaped' => ['resources/views/scope-data-includer.blade.php'];
         yield 'look-alike include outside a template' => ['resources/views/lookalike-php.blade.php'];
         yield 'look-alike make() on another receiver in a template' => ['resources/views/lk-partial.blade.php'];
+        yield '@includeWhen(false) data' => ['resources/views/off-when.blade.php'];
+        yield '@includeWhen(false) scope' => ['resources/views/off-when-scope.blade.php'];
+        yield '@includeUnless(true) data' => ['resources/views/off-unless.blade.php'];
+        yield '@includeUnless(true) scope' => ['resources/views/off-unless-scope.blade.php'];
+        yield 'author filter that removes the variable from the scope' => ['resources/views/filtered-scope-partial.blade.php'];
+        yield '`*` view data key' => ['resources/views/star-key.blade.php'];
+        yield '@includeFirst candidate after the first existing one' => ['resources/views/inc-first-never.blade.php'];
     }
 
     #[Test]
