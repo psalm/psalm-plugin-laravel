@@ -69,6 +69,15 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     private static bool $analyzed = false;
 
+    /**
+     * The binding call of every chain already recorded. A callback's statements are analysed, and
+     * recorded, before the statement holding the callback completes, whose scan for nested view names
+     * then meets the same call node again. Weak, so the analysed ASTs are not kept alive.
+     *
+     * @var \WeakMap<Expr, true>|null
+     */
+    private static ?\WeakMap $recorded = null;
+
     public static function init(): void
     {
         self::$enabled = true;
@@ -81,6 +90,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         self::$open = [];
         self::$alwaysSupplied = [];
         self::$analyzed = false;
+        self::$recorded = null;
     }
 
     /**
@@ -124,6 +134,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         if ($chain instanceof ViewCallChain) {
             self::record($chain->viewName, $chain->supplied(), $chain->complete);
+            /** @psalm-var \WeakMap<Expr, true> $recorded a fresh WeakMap infers as WeakMap<object, mixed> */
+            $recorded = self::$recorded ?? new \WeakMap();
+            $recorded[self::binderOf($expr)] = true;
+            self::$recorded = $recorded;
 
             return null;
         }
@@ -139,8 +153,9 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * Literal view names of every rendering call nested in an expression the chain declined. Over-
-     * marking is the safe direction: the worst it costs is a name left undeclared where a type was provable.
+     * Literal view names of every rendering call nested in an expression the chain declined, minus
+     * the calls a callback's own statement already recorded. Over-marking is the safe direction: the
+     * worst it costs is a name left undeclared where a type was provable.
      *
      * @return list<string>
      */
@@ -149,7 +164,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $names = [];
 
         foreach ((new NodeFinder())->find($expr, self::isViewBinder(...)) as $call) {
-            if (!$call instanceof Node\Expr\CallLike || $call->isFirstClassCallable()) {
+            if (!$call instanceof Node\Expr\CallLike || $call->isFirstClassCallable() || isset(self::$recorded[$call])) {
                 continue;
             }
 
@@ -162,6 +177,19 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return $names;
+    }
+
+    /** The call a recorded chain binds its view with: the chain minus its trailing `with()` links. */
+    private static function binderOf(Expr $expr): Expr
+    {
+        while (($expr instanceof Expr\MethodCall || $expr instanceof Expr\NullsafeMethodCall)
+            && $expr->name instanceof Node\Identifier
+            && \in_array($expr->name->toLowerString(), ['with', 'witherrors'], true)
+        ) {
+            $expr = $expr->var;
+        }
+
+        return $expr;
     }
 
     private static function isViewBinder(Node $node): bool

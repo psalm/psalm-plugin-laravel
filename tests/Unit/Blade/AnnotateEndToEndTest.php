@@ -52,6 +52,11 @@ final class AnnotateEndToEndTest extends TestCase
         'panel-kind' => "{{ \$kind }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
+        'modal-arrow' => "{{ \$text }}\n",
+        'modal-closure' => "{{ \$text }}\n",
+        'modal-nested' => "{{ \$text }}\n",
+        'modal-open' => "{{ \$text }}\n",
+        'modal-rendered' => "{{ \$text }}\n",
     ];
 
     private ?string $controlFile = null;
@@ -169,6 +174,29 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     #[Test]
+    public function declares_the_type_a_closure_inside_a_declined_chain_passes(): void
+    {
+        // The callback's own statement records the producer; the enclosing chain is declined, and
+        // its scan for nested view names must not count that same call a second time as unreadable.
+        $this->annotate();
+
+        foreach (['modal-arrow', 'modal-closure', 'modal-nested'] as $name) {
+            $this->assertSame("<?php\n/**\n * @var string \$text\n */\n?>\n{{ \$text }}\n", $this->template($name), $name);
+        }
+    }
+
+    #[Test]
+    public function leaves_undeclared_a_view_a_closure_renders_with_unreadable_data(): void
+    {
+        // Each view also has a closed call site passing a string, so only the closure's own call
+        // site keeps the declaration out: an open data set, and a chain the walk cannot resolve.
+        $this->annotate();
+
+        $this->assertSame(self::TEMPLATES['modal-open'], $this->template('modal-open'));
+        $this->assertSame(self::TEMPLATES['modal-rendered'], $this->template('modal-rendered'));
+    }
+
+    #[Test]
     public function declares_a_collection_without_the_late_static_marker(): void
     {
         // A template has no class scope, so `&static` would bind to nothing. It must also not make
@@ -241,7 +269,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(7, $result['changed']);
+        $this->assertCount(10, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 

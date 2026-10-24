@@ -334,6 +334,8 @@ Each declaration it writes is a raw docblock in the template body, which Psalm r
 
 A rendering shape the plugin could not read is any expression the call-chain walk declines, not just `$view = view(...)`. `view(...)->render()`, a `view(...)` passed as an argument to something else, and a chain carrying a method the plugin does not model all qualify, because the walk starts at the outermost expression and refuses anything it does not fully understand. Every literal view name inside such an expression is marked unreadable for the whole run, so every variable of each template it names is listed as unknown, including at the call sites that did resolve cleanly.
 
+A call inside a closure or arrow function is read on its own, as the statement it is in that function's body. In `Action::make('qr')->modalContent(fn ($record) => view('qr', ['text' => $record->url]))` the outer chain is declined, but the `view()` call is the arrow function's return and resolves like any other call site; the declined chain does not mark that same call unreadable again. A call the walk declines there too (`fn () => view('qr', [...])->render()`) still counts as unreadable.
+
 What it leaves alone:
 
 * a variable the template already declares, as a raw `@var` docblock (`<?php` or `@php`), a type spanning several lines (a multi-line `array{...}` shape) included. Existing declarations are never narrowed or rewritten, so re-running the command over an annotated template is a no-op.
