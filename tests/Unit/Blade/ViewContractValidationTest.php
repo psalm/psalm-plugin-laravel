@@ -469,6 +469,35 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString("passes 'junk'", $unused[0]);
     }
 
+    /**
+     * Another `$this->with(...)`, a `$this->viewData` access or a dynamic `$this->{$m}(...)` call in the
+     * method that renders may supply any name before or after the chain runs: the key set is open, so
+     * the declared `$total` is not provably missing.
+     */
+    #[Test]
+    public function a_mailable_adding_data_outside_its_view_chain_leaves_the_key_set_open(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableSeparateWith.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Guards the test above: a `with()` on another receiver, a chain on another Mailable, the chain's own
+     * `with()` link, a chain in a closure and a method without any `with()` still report the one provably missing name.
+     */
+    #[Test]
+    public function a_mailable_without_a_separate_with_still_reports_the_missing_name(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'MailableNoSeparateWith.php');
+
+        $this->assertSame(
+            \array_fill(0, 9, self::MISSING . ' $total'),
+            $this->variablesOf($reported),
+            \var_export($reported, true),
+        );
+    }
+
     /** `parent` in a property type names the class declaring the property, not the rendered subclass. */
     #[Test]
     public function a_property_typed_parent_resolves_against_its_declaring_class(): void

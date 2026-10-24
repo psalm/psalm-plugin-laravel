@@ -5,14 +5,20 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\View\ViewName;
+use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
+use PhpParser\NodeFinder;
+use Psalm\Codebase;
+use Psalm\Internal\Analyzer\ClosureAnalyzer;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
+use Psalm\Internal\Analyzer\MethodAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
+use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic;
@@ -92,6 +98,10 @@ final class ViewCallChain
 
         if (!$chain instanceof self) {
             return null;
+        }
+
+        if ($chain->complete && $chain->binder === ViewNameSignatures::ROLE_MAILABLE && self::addsDataOutsideChain($expr, $source)) {
+            $chain = new self($chain->viewName, $chain->data, false, $chain->frameworkData, $chain->binder);
         }
 
         $merged = ComponentRenderData::forSource($source);
@@ -239,6 +249,162 @@ final class ViewCallChain
         $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;
 
         return $analyzer instanceof FunctionLikeAnalyzer && \strtolower((string) $analyzer->getMethodName()) === 'render';
+    }
+
+    /**
+     * Whether the method rendering a Mailable chain on `$this` also feeds that Mailable's data some
+     * other way. Such data reaches the template through `Mailable::buildViewData()` whatever the order
+     * of the statements, so the supplied set is open and no declared name is provably absent. The flow
+     * is not modeled: any occurrence anywhere in the method declines, including a closure or an
+     * anonymous class that never runs. Counted as feeding data, on `$this` or on a call chain rooted at
+     * it (`$this->subject('x')->with(...)`):
+     *  - `with()`, and a `with`-prefixed call the class does not declare, which `Mailable::__call()`
+     *    forwards to `with()` (`withTotal(1)`); a call with a dynamic method name;
+     *  - `view()`, `markdown()` or `text()` passing a data argument, which they merge into the same data;
+     *  - any `$this->viewData` access, a read included, or a property fetch with a dynamic name;
+     *  - `$this` used as a value that can escape: assigned, an array item, or an argument.
+     *
+     * Only the links {@see self::walk()} consumed are exempt: the calls from the outermost one down to
+     * and including the binder (`view()` / `markdown()`). A `with()` below the binder is not modeled
+     * and so is scanned like any other.
+     *
+     * An enclosing method that cannot be located in the source (a closure outside a method, an
+     * anonymous class) declines too. Not covered: `with()` or `viewData` writes in another method or
+     * the constructor, and a Mailable built outside `$this`.
+     */
+    private static function addsDataOutsideChain(Expr $expr, StatementsSource $source): bool
+    {
+        // The body below may be a fresh parse or a cache copy of the file, never the analyzed nodes
+        // themselves, so a link is recognized by its source span rather than by identity.
+        $links = [];
+        $binder = $expr;
+
+        while ($binder instanceof Expr\MethodCall || $binder instanceof Expr\NullsafeMethodCall) {
+            $span = self::span($binder);
+
+            if ($span !== null) {
+                // A link without a position stays unmatched and counts as a `with()` elsewhere: a decline.
+                $links[$span] = true;
+            }
+
+            if (!$binder->name instanceof Identifier || !\in_array($binder->name->toLowerString(), ['with', 'witherrors'], true)) {
+                break;
+            }
+
+            $binder = $binder->var;
+        }
+
+        if (!$binder instanceof Expr\MethodCall && !$binder instanceof Expr\NullsafeMethodCall || !self::isRootedAtThis($binder->var)) {
+            return false;
+        }
+
+        $scope = $source;
+
+        // A closure's analyzer sits under the statements analyzer of the code that wrote it.
+        while ($scope instanceof StatementsAnalyzer || $scope instanceof ClosureAnalyzer) {
+            $scope = $scope->getSource();
+        }
+
+        $codebase = $source->getCodebase();
+        $methodId = $scope instanceof MethodAnalyzer ? $scope->getMethodId() : null;
+        $body = $methodId instanceof \Psalm\Internal\MethodIdentifier ? ClassMethodResolver::resolve($codebase, $methodId)['classMethod']->stmts ?? null : null;
+
+        if (!$methodId instanceof \Psalm\Internal\MethodIdentifier || $body === null) {
+            return true;
+        }
+
+        $class = $methodId->fq_class_name;
+
+        return (new NodeFinder())->findFirst(
+            $body,
+            static fn(Node $node): bool => self::feedsMailableData($node, $links, $codebase, $class),
+        ) instanceof Node;
+    }
+
+    /**
+     * @param array<string, true> $links source spans of the chain's own calls
+     */
+    private static function feedsMailableData(Node $node, array $links, Codebase $codebase, string $class): bool
+    {
+        if ($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall) {
+            $span = self::span($node);
+
+            if (!self::isRootedAtThis($node->var) || ($span !== null && isset($links[$span]))) {
+                return false;
+            }
+
+            if (!$node->name instanceof Identifier) {
+                return true;
+            }
+
+            $name = $node->name->toLowerString();
+
+            if (in_array($name, ['view', 'markdown', 'text'], true)) {
+                $args = self::args($node);
+
+                return $args === null || ArgUtil::byNameOrPosition($args, 1, 'data') instanceof Arg;
+            }
+
+            return $name === 'with' || (\str_starts_with($name, 'with') && !self::declaresMethod($codebase, $class, $name));
+        }
+
+        if ($node instanceof Expr\PropertyFetch) {
+            return self::isThis($node->var) && (!$node->name instanceof Identifier || $node->name->name === 'viewData');
+        }
+
+        // `$this` as a value: whoever receives it can call `with()` on it.
+        return match (true) {
+            $node instanceof Expr\Assign, $node instanceof Expr\AssignRef => self::isThis($node->expr),
+            $node instanceof Node\ArrayItem, $node instanceof Arg => self::isThis($node->value),
+            default => false,
+        };
+    }
+
+    /**
+     * Whether the class declares the method itself or inherits it, which keeps `Mailable::__call()`
+     * out of the way. Unknown class storage counts as undeclared.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function declaresMethod(Codebase $codebase, string $class, string $lowerName): bool
+    {
+        try {
+            return isset($codebase->classlike_storage_provider->get(\strtolower($class))->declaring_method_ids[$lowerName]);
+        } catch (\InvalidArgumentException|\Psalm\Exception\UnpopulatedClasslikeException) {
+            return false;
+        }
+    }
+
+    /**
+     * `$this`, or a chain of method calls on it (`$this->subject('x')`).
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isRootedAtThis(Expr $expr): bool
+    {
+        while ($expr instanceof Expr\MethodCall || $expr instanceof Expr\NullsafeMethodCall) {
+            $expr = $expr->var;
+        }
+
+        return self::isThis($expr);
+    }
+
+    /**
+     * @psalm-capabilities read-props
+     */
+    private static function isThis(Expr $expr): bool
+    {
+        return $expr instanceof Expr\Variable && $expr->name === 'this';
+    }
+
+    private static function span(Node $node): ?string
+    {
+        /** @psalm-var mixed $start */
+        $start = $node->getAttribute('startFilePos');
+        /** @psalm-var mixed $end */
+        $end = $node->getAttribute('endFilePos');
+
+        return \is_int($start) && \is_int($end) ? $start . ':' . $end : null;
     }
 
     private static function walk(Expr $expr, StatementsSource $source, bool $trimName): ?self
