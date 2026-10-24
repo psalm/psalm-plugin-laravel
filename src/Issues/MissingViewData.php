@@ -9,7 +9,7 @@ use Psalm\Issue\PluginIssue;
 /**
  * Reported when a Blade template declares a variable its call site never passes.
  */
-final class MissingViewVariable extends PluginIssue
+final class MissingViewData extends PluginIssue
 {
-    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/MissingViewVariable/';
+    public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/MissingViewData/';
 }

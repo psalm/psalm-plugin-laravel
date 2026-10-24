@@ -244,7 +244,7 @@ final class AnnotationWriterTest extends TestCase
     /**
      * One file, two names (a published override is `page` and `pkg::page`): a closed call site that
      * omits the name through EITHER renders the same file without it, so declaring it required would
-     * report MissingViewVariable there.
+     * report MissingViewData there.
      */
     #[Test]
     public function a_name_omitted_through_one_view_name_of_a_file_is_declared_optional(): void

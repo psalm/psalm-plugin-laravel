@@ -20,8 +20,8 @@ use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
-use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
-use Psalm\LaravelPlugin\Issues\MissingViewVariable;
+use Psalm\LaravelPlugin\Issues\InvalidViewData;
+use Psalm\LaravelPlugin\Issues\MissingViewData;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
@@ -34,8 +34,8 @@ use Psalm\Type;
  * Checks a `view()` call site against the contract its template declares: a
  * `@var \App\Models\User $user` docblock or a `@props([...])` entry.
  *
- * Reports a declared variable the call never passes ({@see MissingViewVariable}) and a passed value
- * that does not satisfy the declared type ({@see InvalidViewVariableType}).
+ * Reports a declared variable the call never passes ({@see MissingViewData}) and a passed value
+ * that does not satisfy the declared type ({@see InvalidViewData}).
  *
  * Hooked on statement analysis rather than expression analysis because expressions are visited
  * post-order: the inner `view('greeting')` of a `view('greeting')->with('name', $n)` chain would be
@@ -248,7 +248,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         }
 
         IssueBuffer::accepts(
-            new MissingViewVariable(
+            new MissingViewData(
                 "View '{$chain->viewName}' declares \${$var->name} but the call site does not pass '{$var->name}'",
                 $codeLocation,
             ),
@@ -305,7 +305,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         }
 
         IssueBuffer::accepts(
-            new InvalidViewVariableType(
+            new InvalidViewData(
                 "View '{$chain->viewName}' declares \${$var->name} as {$var->typeString}, but "
                 . $supplied->getId() . ' is passed for it',
                 $codeLocation,

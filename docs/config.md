@@ -297,13 +297,13 @@ No setting of their own: with Blade analysis on, every run checks `view()` call 
 
 ```xml
 <issueHandlers>
-    <PluginIssue name="MissingViewVariable" errorLevel="error" />
-    <PluginIssue name="InvalidViewVariableType" errorLevel="error" />
+    <PluginIssue name="MissingViewData" errorLevel="error" />
+    <PluginIssue name="InvalidViewData" errorLevel="error" />
     <PluginIssue name="UnusedViewData" errorLevel="suppress" />
 </issueHandlers>
 ```
 
-[MissingViewVariable](issues/MissingViewVariable.md) reports a declared variable the call never passes, and [InvalidViewVariableType](issues/InvalidViewVariableType.md) a value that does not satisfy the declared type.
+[MissingViewData](issues/MissingViewData.md) reports a declared variable the call never passes, and [InvalidViewData](issues/InvalidViewData.md) a value that does not satisfy the declared type.
 
 A template declares its variables with `/** @var \App\Models\User $user */` docblocks in a `<?php` or `@php` block (every declared variable is required, `T|null` and `mixed` included; a trailing `= null` makes it optional; a name the template binds itself, such as a `@foreach` alias, or one the framework supplies, such as `$errors`, `$slot` or `$app`, is never a declaration), see [Declaring view variables](blade.md#declaring-view-variables), and `@props([...])` entries. A template that declares nothing is never checked, so these two rules cost you nothing until you annotate a template.
 

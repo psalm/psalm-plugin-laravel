@@ -63,7 +63,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     /**
      * Per view, the names EVERY provably-closed producer passed — the intersection, narrowing with
      * each one. Absent until the first closed producer. A name missing from it is one some call site
-     * legitimately omits, so declaring it would report MissingViewVariable at that very call site.
+     * legitimately omits, so declaring it would report MissingViewData at that very call site.
      *
      * @var array<string, array<string, true>>
      */
@@ -473,7 +473,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
     /**
      * Whether some provably-closed call site renders this view WITHOUT the name — which proves the
-     * template can be rendered without it, so declaring it would manufacture a MissingViewVariable
+     * template can be rendered without it, so declaring it would manufacture a MissingViewData
      * at that call site. False while no call site has proven its key set closed.
      */
     public static function isOptional(string $viewName, string $name): bool

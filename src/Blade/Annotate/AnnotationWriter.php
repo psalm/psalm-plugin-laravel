@@ -185,7 +185,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
     {
         // A body that hides which names it reads (`@props` and `@aware` both compile to `$$name`)
         // gives a read set that is only a lower bound. Annotating part of a contract is worse than
-        // annotating none of it: the missing names become MissingViewVariable noise at call sites.
+        // annotating none of it: the missing names become MissingViewData noise at call sites.
         if ($contract->readsUnknown) {
             return [];
         }
@@ -195,7 +195,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
         // A name the template binds for itself — a `@foreach ($items as $item)` alias, a
         // `@php ($heading = ...)` assignment, a `fn ($item) => ...` parameter — is read by the
         // template but supplied by it too. It stays in the read set (UnusedViewData asks "is this
-        // name used at all") and must never be declared: declaring it reports MissingViewVariable
+        // name used at all") and must never be declared: declaring it reports MissingViewData
         // at every correct call site, which is the check this codemod exists to feed.
         //
         // A name declared by a raw docblock that is not a contract var (a local's type hint) joins
@@ -210,7 +210,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
             }
 
             // A name some closed call site omits is still declared, but as `T|null $x = null`
-            // (see plans()): a plain declaration would report MissingViewVariable at that call site.
+            // (see plans()): a plain declaration would report MissingViewData at that call site.
             $type = AnnotationCollector::typeFor($viewName, $name);
             $plan[$name] = $type === 'mixed' ? null : $type;
         }

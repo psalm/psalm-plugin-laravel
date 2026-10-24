@@ -32,9 +32,9 @@ final class ViewContractValidationTest extends TestCase
 
     private const FIXTURE = __DIR__ . '/Fixtures/ViewContract';
 
-    private const MISSING = 'MissingViewVariable';
+    private const MISSING = 'MissingViewData';
 
-    private const WRONG_TYPE = 'InvalidViewVariableType';
+    private const WRONG_TYPE = 'InvalidViewData';
 
     /**
      * The command a case's `$config` resolves to. Cases naming the same config share one run.
