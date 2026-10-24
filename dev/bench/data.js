@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792848116353,
+  "lastUpdate": 1792853896058,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15845,6 +15845,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.01,
             "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8ce3bd8882a633b31717cb03e8cc98989b42036d",
+          "message": "Rename Blade issues to `MissingViewData`, `InvalidViewData`, `BladeCompileError` and set explicit issue error levels (#2038)\n\n* refactor(blade): rename view-data issues to MissingViewData and InvalidViewData #2037\n\n* feat(issues): set explicit ERROR_LEVEL on Blade and experimental issues #2037\n\n* feat(blade): add fix hints, declaring line and cleaned types to view-data messages #2037\n\n* refactor(blade): rename BladeCompileFailure issue to BladeCompileError #2037\n\nThe internal compile-result value object Blade\\BladeCompileError becomes Blade\\CompileFailureReason so the issue can take the name.",
+          "timestamp": "2026-10-24T16:54:40+02:00",
+          "tree_id": "522ccc87a267d50df6ce4c4283577e545495e3b0",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8ce3bd8882a633b31717cb03e8cc98989b42036d"
+        },
+        "date": 1792853894557,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.81,
+            "range": "± 0.38",
             "unit": "s"
           },
           {
