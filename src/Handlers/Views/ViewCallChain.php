@@ -102,9 +102,11 @@ final class ViewCallChain
             return $chain->withFrameworkData($merged[0], $merged[1] && !self::isInRenderMethod($source));
         }
 
-        // Livewire merges the properties into what `render()` returns and nothing else; a view built
-        // in another method of the component (a placeholder) gets none of them.
-        $livewire = self::isInRenderMethod($source) ? FrameworkViewData::forLivewire($source) : null;
+        // Livewire merges the properties into the view `render()` returns and nothing else: not a
+        // view built in another method (a placeholder), and not a Mailable or MailMessage view built
+        // on the side inside `render()`. Only the global helper and a view factory build a View.
+        $buildsView = $chain->binder === null || $chain->binder === ViewNameSignatures::ROLE_VIEW_FACTORY;
+        $livewire = $buildsView && self::isInRenderMethod($source) ? FrameworkViewData::forLivewire($source) : null;
 
         return $livewire === null ? $chain : $chain->withFrameworkData($livewire[0], $livewire[1]);
     }
@@ -384,8 +386,8 @@ final class ViewCallChain
         $codebase = $source->getCodebase();
 
         $framework = match ($role) {
-            ViewNameSignatures::ROLE_MAILABLE => FrameworkViewData::forMailable($codebase, $receiverClass, $chain->data, $methodName === 'markdown'),
-            ViewNameSignatures::ROLE_MAIL_MESSAGE => FrameworkViewData::forMailMessage($codebase, $receiverClass, $chain->data, $methodName === 'markdown'),
+            ViewNameSignatures::ROLE_MAILABLE => FrameworkViewData::forMailable($codebase, $receiverClass, $chain->data, $methodName === 'markdown', $chain->complete),
+            ViewNameSignatures::ROLE_MAIL_MESSAGE => FrameworkViewData::forMailMessage($codebase, $receiverClass, $chain->data, $methodName === 'markdown', $chain->complete),
             default => null,
         };
 

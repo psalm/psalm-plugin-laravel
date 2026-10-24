@@ -461,6 +461,120 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString('declares $message as string, but this call passes Illuminate\Mail\Message', $reported[0]['message']);
     }
 
+    /**
+     * Livewire merges a component's properties into the view `render()` returns and nothing else, so
+     * a `MailMessage` view built on the side inside `render()` still lacks `$count`, while the
+     * returned view has it.
+     */
+    #[Test]
+    public function livewire_properties_reach_only_the_view_render_returns(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $reported = $this->forFile($issues, 'LivewireForeignView.php');
+        $this->assertCount(1, $reported, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $reported[0]['type']);
+        $this->assertStringContainsString("View 'livewire-placeholder' requires \$count", $reported[0]['message']);
+    }
+
+    /**
+     * Data the plugin cannot read may carry a key the framework would otherwise supply, and on the
+     * paths where the call's data wins that key's type is unknown, so it is `mixed`. A fully known
+     * data array keeps the framework type.
+     */
+    #[Test]
+    public function open_passed_data_makes_the_keys_it_can_overwrite_mixed(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailMessageOpenData.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'MailableOpenData.php'), \var_export($issues, true));
+
+        $known = $this->forFile($issues, 'MailMessageKnownData.php');
+        $this->assertCount(1, $known, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $known[0]['type']);
+        $this->assertStringContainsString('declares $displayableActionUrl as int, but this call passes string', $known[0]['message']);
+    }
+
+    /**
+     * A userland override of an extraction method can return any value for any key, so a property or
+     * `toArray()` type the framework would have supplied is no longer the type the template gets.
+     * `message` on the view path is the exception: the Mailer sets it after those methods ran.
+     */
+    #[Test]
+    public function an_extraction_override_makes_every_framework_key_mixed(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $mailable = $this->forFile($issues, 'MailableOverrideTypes.php');
+        $this->assertCount(1, $mailable, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $mailable[0]['type']);
+        $this->assertStringContainsString('declares $message as string, but this call passes Illuminate\Mail\Message', $mailable[0]['message']);
+
+        $this->assertSame([], $this->forFile($issues, 'MailMessageToArrayTypes.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Psalm names a trait as the declaring class of its property, so `self` in the trait must be
+     * expanded against the class that uses it: expanded to the trait it was never validated.
+     */
+    #[Test]
+    public function a_trait_propertys_self_names_the_class_that_uses_the_trait(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $reported = $this->forFile($issues, 'MailableTraitSelf.php');
+        $messages = \array_column($reported, 'message');
+        \sort($messages);
+
+        $this->assertSame([
+            'View \'mailable-owner\' declares $maybe as int, but this call passes ViewContractFixture\MailableTraitSelf|null.' . self::TYPE_HINT,
+            'View \'mailable-owner\' declares $owner as int, but this call passes ViewContractFixture\MailableTraitSelf.' . self::TYPE_HINT,
+        ], $messages, \var_export($issues, true));
+    }
+
+    /**
+     * `Mailable::buildMarkdownText()` wraps `message` in `TextMessage` for the text pass, so a markdown
+     * Mailable's template receives either object. `MailChannel` and the `view()` path hand it the
+     * `Message` alone.
+     */
+    #[Test]
+    public function a_markdown_mailables_message_is_a_message_or_a_text_message(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $reported = $this->forFile($issues, 'MailableMarkdownMessage.php');
+        $this->assertCount(1, $reported, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes Illuminate\Mail\Message|Illuminate\Mail\TextMessage', $reported[0]['message']);
+
+        $this->assertSame([], $this->forFile($issues, 'MailMessageMarkdownMessage.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Overriding only `additionalMessageData()` opens a Mailable's key set: the key the override adds
+     * is not missing. Separate from the `buildViewData()` case, which would hide this gate.
+     */
+    #[Test]
+    public function overriding_only_additional_message_data_opens_a_mailables_key_set(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableAdditionalData.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Overriding only `data()` opens a `MailMessage`'s key set. Separate from the `toArray()` cases,
+     * which would hide this gate.
+     */
+    #[Test]
+    public function overriding_only_data_opens_a_mail_messages_key_set(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailMessageDataOverride.php'), \var_export($issues, true));
+    }
+
     #[Test]
     public function a_mailable_view_chain_resolves_through_its_userland_subclass(): void
     {
