@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792828973472,
+  "lastUpdate": 1792829884786,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15705,6 +15705,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 41.65,
             "range": "± 1.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "023b029c8ce56e22490414e6671aaba68d80a5be",
+          "message": "Merge disagreeing call-site types in `blade:annotate` (#2022)\n\n* feat(blade): merge disagreeing call-site types in blade:annotate #2021\n\nCall sites that differ only in nullability, in one scalar kind, or across up to three classes now get one merged declaration instead of none. Every other disagreement is listed after the run with the view, the variable and each distinct type.\n\n* fix(blade): keep every literal sharing an id before the annotate merge\n\nCall sites passing 100 and then 1 stored only the last literal under the\nshared id int, so a later int<0, 5> producer merged to a range that\nrejects the 100 call site. Combine same-id producers instead of\nreplacing them.",
+          "timestamp": "2026-10-24T10:15:21+02:00",
+          "tree_id": "576018e7687d164ac39514417492818b7e82f242",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/023b029c8ce56e22490414e6671aaba68d80a5be"
+        },
+        "date": 1792829883179,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.38,
+            "range": "± 0.27",
             "unit": "s"
           },
           {
