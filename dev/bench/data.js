@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792856604931,
+  "lastUpdate": 1792860362920,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15985,6 +15985,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 24.14,
             "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8afe168b196059ca1c9d345e493ee6452943cafa",
+          "message": "Carry taint from `view()` data into Blade templates (#2036)\n\n* test(blade): pin taint from view() data into templates #2031\n\n* feat(blade): carry taint from view() data into templates #2031\n\n* docs(blade): document taint from view() data into templates #2031\n\n* fix(blade): bridge view data only through Laravel's own binders, read mergeData, keep overwrites out of the store (#2031)\n\n- read $mergeData of the view() helper and the view factory, with $data winning a shared key\n- inside one array literal the last literal key wins, including keys of a spread array literal; a non-literal spread keeps the write\n- the view() helper must resolve to the global function, not a namespaced or imported one of the same name\n- a userland subclass of the view or response factory bridges only while the called method is not overridden\n- a padded literal view name is trimmed, as the view finder does\n\n* docs(blade): describe mergeData, binder resolution, and the taint residuals (#2031)\n\n* test(blade): drop generated cache files left in the renamed BladeCompileFailure fixture (#2031)\n\n#2038 renamed the fixture to BladeCompileError; the 4.x merge committed the\nuntracked bootstrap/cache output that the old directory's .gitignore had hidden.\n\n* fix(blade): read view data into every template variable but the engine's own (#2031)\n\nextract($__data, EXTR_SKIP) protects only $__path and $__data, and\nView::gatherData() merges a view's own data after the shared values, so\n['errors' => $input] and ['__q' => $input] reach the template. The sink now\nskips only $__env, $__path and $__data.\n\nDocs: a with() on a view held in a variable and finder-only spellings\n(/search, admin//panel, case) are listed as missed flows.",
+          "timestamp": "2026-10-24T18:42:17+02:00",
+          "tree_id": "83191974b78884b119811821a294cacd499443ea",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8afe168b196059ca1c9d345e493ee6452943cafa"
+        },
+        "date": 1792860361533,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.28,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
