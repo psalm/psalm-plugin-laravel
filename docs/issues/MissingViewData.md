@@ -102,15 +102,15 @@ Three more receivers have framework-supplied keys, which count as supplied. They
 - **Mailable** (`$this->view()` / `->markdown()`, or `$mailable->view()` on a receiver typed as one
   `Mailable` subclass): every public property, static ones included, that the subclass declares
   (promoted, defaulted or assigned), plus `$message`. A receiver typed as `Mailable` itself, a
-  contract, a union or an intersection is silent, as the instance's properties are unknowable. A
+  contract, a union or an intersection has an unknowable key set, so this issue is off for it (passed keys are still type-checked by InvalidViewData, and UnusedViewData still runs). A
   property the call also passes by name, and `$message` when the call passes `message` or its data is
   not fully known, is `mixed`: at runtime the passed value can win. `mailer` and `__laravel_mailable`
-  count too (`mixed`). A Mailable overriding `buildViewData()` or `additionalMessageData()` is silent.
+  count too (`mixed`). A Mailable overriding `buildViewData()` or `additionalMessageData()` has an open key set too: this issue is off, and its passed keys are `mixed`.
 - **MailMessage** (`(new MailMessage)->view()` / `->markdown()`): `level`, `subject`, `greeting`,
-  `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`
+  `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`,
   `$message`, `mailer` and the `__laravel_notification*` keys. A key the call passes wins over its own entry here. The property keys are `mixed`
   (Laravel's own docblocks are coarser than the real values); `displayableActionUrl` is a `string`.
-  A subclass overriding `data()` or `toArray()` is silent.
+  A subclass overriding `data()` or `toArray()` has an open key set: this issue is off, and the passed keys are still type-checked.
 - **Livewire** (`view()` inside `render()` of a `Livewire\Component` subclass): every public,
   non-static property the component declares.
 
