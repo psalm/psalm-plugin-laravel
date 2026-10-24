@@ -480,6 +480,19 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * #2043: `parent` in a class component's property type names the class declaring the property, and a
+     * trait's `self` the class using the trait, not the component the view renders for.
+     */
+    #[Test]
+    public function a_component_properties_self_and_parent_name_their_declaring_class(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'ComponentOwner.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $owner'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString('but this call passes Illuminate\View\Component.', $reported[0]['message']);
+    }
+
+    /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
      * half is asserted together: a protected property, a static one and a view built outside
      * `render()` are still missing.

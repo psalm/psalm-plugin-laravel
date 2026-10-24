@@ -66,6 +66,11 @@ final class ComponentViewTypingTest extends TestCase
             '$m: App\View\Components\Pill',
             '$me: Illuminate\View\InvokableComponentVariable<App\View\Components\Pill>',
         ]];
+        // #2043: `parent` names the class declaring the property, a trait's `self` the class using it.
+        yield 'self and parent in property types' => ['owned.blade.php', [
+            '$owner: Illuminate\View\Component',
+            '$siblings: list<App\View\Components\OwnedBase>',
+        ]];
         yield 'view()->make(): a key render() passes stays mixed' => ['card.blade.php', ['$title: mixed', '$width: int']];
         yield "View::make(); a raw @var name stays the template's" => ['panel.blade.php', ['$heading: string', '$subtitle: mixed']];
         yield 'inherited render() returning a view name' => ['notice.blade.php', ['$message: string']];
