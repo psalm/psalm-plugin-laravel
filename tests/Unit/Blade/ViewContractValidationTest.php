@@ -325,6 +325,101 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
     }
 
+    /**
+     * `Mailable::buildViewData()` merges every public property into the view and `Mailer` adds
+     * `$message`, so a `build()` that passes nothing still supplies them. Only the key no property
+     * names is missing, and a declared property type still guards the value.
+     */
+    #[Test]
+    public function a_mailables_public_properties_and_message_count_as_supplied(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableProps.php'), \var_export($issues, true));
+
+        $missing = $this->forFile($issues, 'MailableMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+        $this->assertStringContainsString('$absent', $missing[0]['message']);
+
+        $wrongType = $this->forFile($issues, 'MailableWrongType.php');
+        $this->assertCount(1, $wrongType, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $wrongType[0]['type']);
+        $this->assertStringContainsString('declares $count as string, but this call passes int', $wrongType[0]['message']);
+    }
+
+    /**
+     * An abstract base, or a class overriding `buildViewData()`, leaves room for keys nothing here
+     * can see. A class the framework merges nothing into still reports the same property name.
+     */
+    #[Test]
+    public function a_mailable_key_set_is_open_when_it_cannot_be_enumerated_and_closed_otherwise(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableBase.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'MailableOverride.php'), \var_export($issues, true));
+
+        $plain = $this->forFile($issues, 'NotAMailable.php');
+        $this->assertCount(2, $plain, \var_export($issues, true));
+        $this->assertStringContainsString('$title', $plain[0]['message'] . $plain[1]['message']);
+    }
+
+    /**
+     * `MailMessage::data()` is `toArray() + viewData`, and `Mailer` adds `$message`. The key a call
+     * passes wins over its `toArray()` namesake, so the int passed for `level` is still checked.
+     */
+    #[Test]
+    public function a_mail_messages_framework_keys_count_as_supplied(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'MailMessageKeys.php');
+
+        $this->assertCount(4, $reported, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertStringContainsString('declares $level as string, but this call passes 5', $reported[0]['message']);
+        $this->assertSame(self::MISSING, $reported[1]['type']);
+        $this->assertStringContainsString('$absent', $reported[1]['message']);
+
+        // The two keys with a known type are still checked against it.
+        $this->assertSame(self::WRONG_TYPE, $reported[2]['type']);
+        $this->assertStringContainsString('declares $displayableActionUrl as int, but this call passes string', $reported[2]['message']);
+        $this->assertSame(self::WRONG_TYPE, $reported[3]['type']);
+        $this->assertStringContainsString('declares $message as string, but this call passes Illuminate\Mail\Message', $reported[3]['message']);
+
+        // A subclass can add keys through toArray().
+        $this->assertSame([], $this->forFile($issues, 'MailMessageSubclass.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Livewire merges a component's public properties into the view `render()` returns, minus the
+     * ones its own base class declares. A `placeholder()` view, an abstract base and a class that is
+     * not a component stay as they were.
+     */
+    #[Test]
+    public function a_livewire_components_public_properties_count_as_supplied_in_render(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $counter = $this->forFile($issues, 'LivewireCounter.php');
+        $this->assertCount(1, $counter, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $counter[0]['type']);
+        $this->assertStringContainsString("View 'livewire-placeholder' requires \$count", $counter[0]['message']);
+
+        $missing = $this->forFile($issues, 'LivewireMissing.php');
+        $this->assertCount(1, $missing, \var_export($issues, true));
+        $this->assertSame(self::MISSING, $missing[0]['type']);
+        $this->assertStringContainsString('$absent', $missing[0]['message']);
+
+        $wrongType = $this->forFile($issues, 'LivewireWrongType.php');
+        $this->assertCount(1, $wrongType, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $wrongType[0]['type']);
+        $this->assertStringContainsString('declares $count as string, but this call passes int', $wrongType[0]['message']);
+
+        $this->assertSame([], $this->forFile($issues, 'LivewireBase.php'), \var_export($issues, true));
+        $this->assertCount(2, $this->forFile($issues, 'NotLivewire.php'), \var_export($issues, true));
+    }
+
     #[Test]
     public function a_mailable_view_chain_resolves_through_its_userland_subclass(): void
     {
