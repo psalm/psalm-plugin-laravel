@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792825549411,
+  "lastUpdate": 1792828973472,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15675,6 +15675,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7bb2eb0bcf45e50edbf92e1a75f436d050bffc31",
+          "message": "Stop marking a view unreadable in `blade:annotate` when its call site sits in a callback inside a declined chain (#2026)\n\n* fix(blade): stop counting a recorded callback call site as unreadable in blade:annotate #2024\n\nA `view()` call inside a closure or arrow function passed to a declined\nchain (`Action::make('qr')->modalContent(fn ($r) => view('x', [...]))`)\nis recorded as a producer by the callback's own statement, then marked\nunreadable again by the enclosing statement's scan for nested view\nnames, which left the view open and unannotated.\n\nRemember the binding call of every recorded chain and skip it in that\nscan. Calls the walk declined inside a callback, and callbacks passing\nan open data set, still leave the view open.\n\n* fix(blade): keep a callback's view open when the enclosing expression writes into it #2024\n\nSkipping a recorded callback call in the declined-expression scan lost\nan unreadable site when that expression receives the returned view and\nwrites data into it: `(fn () => view('home', [...]))()->with('title', 42)`,\n`value(fn () => view(...))->withTitle(42)`, an offset write in `tap()`.\n\nFall back to marking every literal view name when the declined\nexpression holds a `with*()`, `nest()`, `offsetSet()`/`__set()` call, a\ncall with a dynamic name, or an assignment to anything but a plain\nvariable. The recorded chain's own `with()` links are excluded, so\n`fn () => view(...)->with(...)` callbacks still resolve.",
+          "timestamp": "2026-10-24T09:59:08+02:00",
+          "tree_id": "4cddedcb56186ab8ac0e938fe05a416e10eda62c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7bb2eb0bcf45e50edbf92e1a75f436d050bffc31"
+        },
+        "date": 1792828972016,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 41.65,
+            "range": "± 1.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
             "unit": "MB"
           }
         ]
