@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Internal\Provider\NodeDataProvider;
@@ -232,9 +234,63 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
     }
 
+    #[Test]
+    public function answers_the_type_a_callback_inside_a_declined_chain_passes(): void
+    {
+        // The callback's statement records the producer first; the declined chain holding it then
+        // meets the same call, `with()` link included, and must not count it again as unreadable.
+        $this->analyzeStatements(
+            "Action::make('qr')->modalContent(fn () => view('home', ['title' => 'text'])->with(['extra' => 'more']));",
+            [['title' => Type::getString()], ['extra' => Type::getString()]],
+        );
+
+        $this->assertSame('string', AnnotationCollector::typeFor('home', 'title'));
+        $this->assertSame('string', AnnotationCollector::typeFor('home', 'extra'));
+    }
+
+    #[Test]
+    public function marks_a_view_unreadable_when_a_callback_renders_it_through_a_declined_chain(): void
+    {
+        // The callback's own statement is declined too (`render()` is no link the walk knows), so no
+        // producer was recorded for that call and the outer scan still has to count it.
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\nAction::make('qr')->modalContent(fn () => view('home', ['title' => 42])->render());",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
+     * The callback's call was recorded, but the declined expression around it receives the view it
+     * returns and may write data into it: invoked in place, through a helper, by a magic `with*`
+     * call, or by an offset write.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function callbackResultWrites(): iterable
+    {
+        yield 'invoked in place, with()' => ["(fn () => view('home', ['title' => 'text']))()->with('title', 42);"];
+        yield 'through a helper, magic with*()' => ["value(fn () => view('home', ['title' => 'text']))->withTitle(42);"];
+        yield 'offset write in a tap callback' => ["tap((fn () => view('home', ['title' => 'text']))(), fn (\$v) => \$v['title'] = 42);"];
+        yield 'dynamic method name' => ["value(fn () => view('home', ['title' => 'text']))->{\$method}('title', 42);"];
+    }
+
+    #[Test]
+    #[DataProvider('callbackResultWrites')]
+    public function marks_a_view_unreadable_when_the_declined_expression_may_write_into_a_callback_result(string $code): void
+    {
+        $this->analyzeStatements($code, [['title' => Type::getString()]]);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
     /**
      * Runs the statement hook over parsed PHP, with the shape each array literal infers to supplied
      * in source order: no analysis runs here, so nothing else would type the data arguments.
+     *
+     * Callback bodies are fed ahead of the statement holding them, innermost first, which is the
+     * order Psalm analyses them in.
      *
      * @param list<array<string, Type\Union>> $shapes
      */
@@ -255,6 +311,19 @@ final class AnnotationCollectorTest extends TestCase
         $source->method('getNodeTypeProvider')->willReturn($nodeData);
 
         foreach ($statements as $statement) {
+            $callbacks = (new NodeFinder())->find(
+                $statement,
+                static fn(Node $node): bool => $node instanceof Expr\ArrowFunction || $node instanceof Expr\Closure,
+            );
+
+            foreach (\array_reverse($callbacks) as $callback) {
+                \assert($callback instanceof Expr\ArrowFunction || $callback instanceof Expr\Closure);
+
+                foreach ($callback->getStmts() as $inner) {
+                    AnnotationCollector::afterStatementAnalysis($this->statementEvent($inner, $source));
+                }
+            }
+
             AnnotationCollector::afterStatementAnalysis($this->statementEvent($statement, $source));
         }
     }
