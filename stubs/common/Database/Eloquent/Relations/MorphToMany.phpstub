@@ -14,5 +14,36 @@ namespace Illuminate\Database\Eloquent\Relations;
  */
 class MorphToMany extends BelongsToMany
 {
+    /*
+     * The sync family is restated from BelongsToMany: Laravel declares it in the InteractsWithPivotTable
+     * trait, and Psalm resolves a subclass's trait-provided method from the trait, not from the
+     * parent's stub override (vimeo/psalm#12158).
+     */
 
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  bool  $detaching
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function sync($ids, $detaching = true) {}
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function syncWithoutDetaching($ids) {}
+
+    /**
+     * @template TSyncKey of array-key
+     * @template TSyncValue
+     * @param  \Illuminate\Support\Collection<TSyncKey, TSyncValue>|\Illuminate\Database\Eloquent\Model|array|int|string  $ids
+     * @param  array  $values
+     * @param  bool  $detaching
+     * @return array{attached: array, detached: array, updated: array}
+     */
+    public function syncWithPivotValues($ids, array $values, bool $detaching = true) {}
 }
