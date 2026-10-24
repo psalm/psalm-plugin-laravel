@@ -16,6 +16,8 @@ use Psalm\Config;
  */
 final readonly class PluginConfig
 {
+    private const BLADE_ATTRIBUTES = ['value', 'cacheDir'];
+
     /**
      * @param list<string> $configDirectories
      *
@@ -267,6 +269,19 @@ final readonly class PluginConfig
         // A missing child still reads as an empty SimpleXMLElement proxy; isset() is what tells them apart.
         if (!$blade instanceof \SimpleXMLElement || !isset($config->blade)) {
             return false;
+        }
+
+        // Rejected like an unknown `--plugin-option` key, so a typo or a dropped attribute never silently does nothing.
+        // Only the first element is read, but a typo on a repeat must not slip through either.
+        /** @psalm-var \SimpleXMLElement $element */
+        foreach ($config->blade as $element) {
+            foreach ($element->attributes() ?? [] as $name => $_) {
+                if (!\in_array($name, self::BLADE_ATTRIBUTES, true)) {
+                    $supported = \implode(', ', self::BLADE_ATTRIBUTES);
+
+                    throw new \InvalidArgumentException("<blade>: unknown attribute '{$name}'. Supported attributes: {$supported}.");
+                }
+            }
         }
 
         return self::xmlBoolAttr($blade, 'blade', true);
