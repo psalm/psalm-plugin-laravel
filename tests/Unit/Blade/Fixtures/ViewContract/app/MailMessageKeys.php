@@ -25,6 +25,12 @@ final class MailMessageKeys
         return (new MailMessage())->view("mail-message-absent");
     }
 
+    public function markdownMessage(): MailMessage
+    {
+        // The markdown renderer merges the call's data over the Mailer's `$message`.
+        return (new MailMessage())->markdown("message-string", ["message" => "text"]);
+    }
+
     public function mistyped(): MailMessage
     {
         // The framework types these two keys: a string and an `Illuminate\Mail\Message`.

@@ -29,8 +29,10 @@ use Psalm\Type\Union;
  *    itself (reflection `IS_PUBLIC`, so statics too, and the ones a subclass or its traits declare).
  *  - `MailMessage::data()` is `toArray() + viewData`: the call's own data wins over a `toArray()`
  *    key of the same name.
- *  - `Mailer::send()` sets `$data['message']` AFTER merging everything else, for both, so that key
- *    always wins and is always the `Illuminate\Mail\Message`.
+ *  - `Mailer::send()` sets `$data['message']` (the `Illuminate\Mail\Message`) AFTER merging everything
+ *    else, so on the `view()` path that key always wins. The markdown renderers merge the other way,
+ *    `array_merge($data, $viewData)` (`Mailable::buildMarkdownHtml()`, `MailChannel::buildMarkdownHtml()`),
+ *    so on the `markdown()` path a property or passed key named `message` wins.
  *  - Livewire merges a component's public non-static properties into the view its `render()`
  *    returns, minus those its own base class declares.
  *
@@ -60,17 +62,19 @@ final class FrameworkViewData
     ];
 
     /**
+     * @param array<string, Union> $passed   what the call itself hands the template
+     * @param bool                 $markdown the `markdown()` binder rather than `view()`
+     *
      * @return array{0: array<string, Union>, 1: bool}
      */
-    public static function forMailable(Codebase $codebase, string $receiverClass): array
+    public static function forMailable(Codebase $codebase, string $receiverClass, array $passed, bool $markdown): array
     {
         $storage = self::storage($codebase, $receiverClass);
         $properties = $storage instanceof ClassLikeStorage
             ? self::publicProperties($codebase, $storage, self::MAILABLE, true)
             : null;
 
-        // `+` keeps `message` on the left: the Mailer overwrites a property of that name.
-        $keys = self::messageKey() + ($properties ?? []);
+        $keys = self::withMessageKey($properties ?? [], $passed, $markdown);
 
         if (!$storage instanceof ClassLikeStorage || $properties === null) {
             return [$keys, false];
@@ -83,12 +87,13 @@ final class FrameworkViewData
     }
 
     /**
-     * @param array<string, Union> $passed what the call itself hands the template, which wins over a
-     *                                     `toArray()` key of the same name
+     * @param array<string, Union> $passed   what the call itself hands the template, which wins over a
+     *                                       `toArray()` key of the same name
+     * @param bool                 $markdown the `markdown()` binder rather than `view()`
      *
      * @return array{0: array<string, Union>, 1: bool}
      */
-    public static function forMailMessage(Codebase $codebase, string $receiverClass, array $passed): array
+    public static function forMailMessage(Codebase $codebase, string $receiverClass, array $passed, bool $markdown): array
     {
         $keys = [];
 
@@ -97,7 +102,7 @@ final class FrameworkViewData
         }
 
         $keys['displayableActionUrl'] = Type::getString();
-        $keys = \array_diff_key($keys, $passed) + self::messageKey();
+        $keys = self::withMessageKey(\array_diff_key($keys, $passed), $passed, $markdown);
 
         $storage = self::storage($codebase, $receiverClass);
 
@@ -133,6 +138,27 @@ final class FrameworkViewData
         $properties = self::publicProperties($codebase, $storage, self::LIVEWIRE_COMPONENT, false);
 
         return $properties === null ? [[], false] : [$properties, !$storage->abstract];
+    }
+
+    /**
+     * Adds the Mailer's `$message`, on the side of the merge Laravel puts it: last on the `view()` path
+     * (it overwrites a property or passed key), first on the `markdown()` path (anything that names
+     * `message` overwrites it).
+     *
+     * @param array<string, Union> $keys
+     * @param array<string, Union> $passed
+     *
+     * @return array<string, Union>
+     *
+     * @psalm-pure
+     */
+    private static function withMessageKey(array $keys, array $passed, bool $markdown): array
+    {
+        if (!$markdown) {
+            return self::messageKey() + $keys;
+        }
+
+        return isset($passed['message']) ? $keys : $keys + self::messageKey();
     }
 
     /**

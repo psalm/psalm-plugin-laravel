@@ -384,8 +384,8 @@ final class ViewCallChain
         $codebase = $source->getCodebase();
 
         $framework = match ($role) {
-            ViewNameSignatures::ROLE_MAILABLE => FrameworkViewData::forMailable($codebase, $receiverClass),
-            ViewNameSignatures::ROLE_MAIL_MESSAGE => FrameworkViewData::forMailMessage($codebase, $receiverClass, $chain->data),
+            ViewNameSignatures::ROLE_MAILABLE => FrameworkViewData::forMailable($codebase, $receiverClass, $chain->data, $methodName === 'markdown'),
+            ViewNameSignatures::ROLE_MAIL_MESSAGE => FrameworkViewData::forMailMessage($codebase, $receiverClass, $chain->data, $methodName === 'markdown'),
             default => null,
         };
 

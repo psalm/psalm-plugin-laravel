@@ -99,11 +99,11 @@ supplied set is treated as open and this check declines for it.
 
 The same holds for the other receivers Laravel merges data into at render time:
 
-- A `Mailable` subclass: every public property, static ones included, whether promoted, defaulted or assigned in the constructor, plus `$message` (`Mailer::send()` sets it last, so it wins a property of that name). An abstract Mailable base, or a subclass overriding `buildViewData()` or `additionalMessageData()`, is treated as open: a subclass can add properties this class does not declare.
-- A `MailMessage`: the keys of `toArray()` (`level`, `subject`, `greeting`, `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`) plus `$message`. A key the call itself passes wins over its `toArray()` namesake (`data()` is `toArray() + viewData`). A subclass overriding `toArray()` or `data()` is treated as open.
+- A `Mailable` subclass: every public property, static ones included, whether promoted, defaulted or assigned in the constructor, plus `$message`. On `view()` the Mailer sets `$message` last, so it wins a property of that name; on `markdown()` the renderer merges the view data over it, so the property wins. An abstract Mailable base, or a subclass overriding `buildViewData()` or `additionalMessageData()`, is treated as open: a subclass can add properties this class does not declare.
+- A `MailMessage`: the keys of `toArray()` (`level`, `subject`, `greeting`, `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`) plus `$message`. A key the call itself passes wins over its `toArray()` namesake (`data()` is `toArray() + viewData`), and over `$message` on `markdown()` (on `view()` `$message` wins). A subclass overriding `toArray()` or `data()` is treated as open.
 - A Livewire component (only when `livewire/livewire` is installed): the public non-static properties of the class, in its `render()`. A view built in another method (`placeholder()`) gets none of them, and an abstract base is treated as open.
 
-Property types are kept; an untyped or generic one is exempt from [InvalidViewData](InvalidViewData.md). Not modelled, so a key supplied only that way is still reported: `Mailable::buildViewDataUsing()`, a dynamic property, `$this->with()` outside the chain, and names Livewire adds at runtime.
+Property types are kept; an untyped or generic one is exempt from [InvalidViewData](InvalidViewData.md). A typed public property that is never initialized counts as supplied although the runtime skips it (`isInitialized()`), so a missing key behind one stays silent: an accepted false negative. Not modelled, so a key supplied only that way is still reported: `Mailable::buildViewDataUsing()`, a dynamic property, `$this->with()` outside the chain, and names Livewire adds at runtime.
 
 ## Composers and creators
 

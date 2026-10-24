@@ -422,6 +422,45 @@ final class ViewContractValidationTest extends TestCase
         $this->assertCount(3, $this->forFile($issues, 'NotLivewire.php'), \var_export($issues, true));
     }
 
+    /**
+     * Only a PUBLIC property is view data. A static one counts for a Mailable (the reflection behind
+     * `buildViewData()` lists it) and not for a Livewire component.
+     */
+    #[Test]
+    public function only_public_properties_are_framework_data_and_statics_only_for_a_mailable(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $mailable = $this->forFile($issues, 'MailableVisibility.php');
+        $this->assertCount(2, $mailable, \var_export($issues, true));
+        $this->assertSame([self::MISSING, self::MISSING], \array_column($mailable, 'type'));
+        $this->assertStringContainsString('$prot', $mailable[0]['message']);
+        $this->assertStringContainsString('$priv', $mailable[1]['message']);
+
+        $livewire = $this->forFile($issues, 'LivewireVisibility.php');
+        $this->assertCount(3, $livewire, \var_export($issues, true));
+        $this->assertStringContainsString('$prot', $livewire[0]['message']);
+        $this->assertStringContainsString('$priv', $livewire[1]['message']);
+        $this->assertStringContainsString('$stat', $livewire[2]['message']);
+    }
+
+    /**
+     * `Mailer::send()` sets `message` after the data merge, so a `view()` template receives the
+     * `Illuminate\Mail\Message` whatever a property says. The markdown renderers merge the other
+     * way round, so there the property (or the `markdown()` data) wins. A `MailMessage` passing
+     * `message` to `markdown()` is covered by {@see self::a_mail_messages_framework_keys_count_as_supplied()}.
+     */
+    #[Test]
+    public function the_message_key_loses_to_a_property_on_the_markdown_path_only(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $reported = $this->forFile($issues, 'MailableMessageProperty.php');
+        $this->assertCount(1, $reported, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertStringContainsString('declares $message as string, but this call passes Illuminate\Mail\Message', $reported[0]['message']);
+    }
+
     #[Test]
     public function a_mailable_view_chain_resolves_through_its_userland_subclass(): void
     {

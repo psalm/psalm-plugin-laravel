@@ -82,11 +82,11 @@ Experimental. Reported as `info` by default (hidden unless `--show-info=true`, n
 Keys the framework merges into a view count as passed, so declaring them is not a `MissingViewData`:
 
 * **Class component** (`Illuminate\View\Component`): its public properties and methods, in `render()`.
-* **Mailable**: every public property of the subclass, static ones included, plus `$message`. An abstract Mailable base, or one overriding `buildViewData()`, is not checked for missing keys.
-* **`MailMessage`**: `level`, `subject`, `greeting`, `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`, plus `$message`. A key the call passes wins over its namesake.
+* **Mailable**: every public property of the subclass, static ones included, plus `$message` (a property named `message` wins it on `markdown()` only). An abstract Mailable base, or one overriding `buildViewData()`, is not checked for missing keys.
+* **`MailMessage`**: `level`, `subject`, `greeting`, `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`, plus `$message`. A key the call passes wins over its namesake (and over `$message` on `markdown()`).
 * **Livewire component** (needs `livewire/livewire` installed): its public non-static properties, in `render()` only. A `placeholder()` view gets none of them.
 
-A property keeps its declared type, so `InvalidViewData` still checks it; an untyped one is not checked. Residual, still reported: a key added through `Mailable::buildViewDataUsing()`, a property created dynamically, and anything Livewire adds at runtime through a trait. These keys are never "passed" data: `UnusedViewData` ignores them and no taint flows from them.
+A property keeps its declared type, so `InvalidViewData` still checks it; an untyped one is not checked. A typed property never initialized counts as supplied although the runtime skips it, so that one stays silent. Residual, still reported: a key added through `Mailable::buildViewDataUsing()`, a property created dynamically, and anything Livewire adds at runtime through a trait. These keys are never "passed" data: `UnusedViewData` ignores them and no taint flows from them.
 
 ## Taint through view data
 
