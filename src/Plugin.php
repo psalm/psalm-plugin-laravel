@@ -532,6 +532,10 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Collections/CollectionInputTypeResolver.php';
         require_once __DIR__ . '/Handlers/Collections/CollectionMakeHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionMakeHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/EloquentCollectionMapHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\EloquentCollectionMapHandler::class);
+        require_once __DIR__ . '/Handlers/Collections/EloquentCollectionSubclassInheritanceRepair.php';
+        $registration->registerHooksFromClass(Handlers\Collections\EloquentCollectionSubclassInheritanceRepair::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\CollectionPluckHandler::class);
         require_once __DIR__ . '/Handlers/Collections/CollectionGroupByKeyByHandler.php';
