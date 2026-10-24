@@ -71,6 +71,9 @@ final class ComponentViewRegistry
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
+    /** @var array<string, array<string, array<string, string>>> shadow path => variable name => property id => property id */
+    private static array $propertyIds = [];
+
     /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
     private static array $declaredFunctions = [];
 
@@ -94,9 +97,27 @@ final class ComponentViewRegistry
         return self::$seeds[$shadowPath] ?? null;
     }
 
+    /**
+     * The property nodes a class component's own view reads its variables from (taint only; see
+     * {@see ComponentPropertyTaintBridge}).
+     *
+     * @return array<string, list<string>> variable name => property ids
+     */
+    public static function propertyIdsFor(string $shadowPath): array
+    {
+        $byName = [];
+
+        foreach (self::$propertyIds[$shadowPath] ?? [] as $name => $ids) {
+            $byName[$name] = \array_values($ids);
+        }
+
+        return $byName;
+    }
+
     public static function build(Codebase $codebase): void
     {
         self::$seeds = [];
+        self::$propertyIds = [];
         // Not skipped without a single `<x-…>` tag: a class's own view still needs its `@props`
         // defaults undone below, whichever way it is rendered.
         $templates = ViewReferenceRegistry::templates();
@@ -200,6 +221,22 @@ final class ComponentViewRegistry
             }
         }
 
+        // Taint, not typing: every class whose `render()` names the view hands it its public properties,
+        // contested or not, so two classes sharing a view each contribute theirs.
+        foreach ($byTemplate as $templatePath => $claims) {
+            $shadowPath = $shadowPaths[$templatePath] ?? null;
+
+            if ($shadowPath === null) {
+                continue;
+            }
+
+            foreach ($claims as [$storage]) {
+                foreach (ComponentRenderData::exposedPropertyIds($codebase, $storage) as $name => $id) {
+                    self::$propertyIds[$shadowPath][$name][$id] = $id;
+                }
+            }
+        }
+
         foreach ($byTemplate as $templatePath => $claims) {
             $shadowPath = $shadowPaths[$templatePath] ?? null;
 
@@ -231,6 +268,7 @@ final class ComponentViewRegistry
         self::$namedSlots = [];
         self::$renderedByName = [];
         self::$seeds = [];
+        self::$propertyIds = [];
         self::$declaredFunctions = [];
     }
 

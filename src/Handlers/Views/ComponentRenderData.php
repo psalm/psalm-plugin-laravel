@@ -13,6 +13,7 @@ use Psalm\Internal\Type\TypeExpander;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
+use Psalm\Storage\PropertyStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
@@ -191,6 +192,28 @@ final class ComponentRenderData
     }
 
     /**
+     * The property node every flow from or into a public property `data()` exposes goes through:
+     * `Declaring::$name`, for each such name. A subclass's own writes reach it through Psalm's
+     * inherited-property links, so one node per name covers the whole hierarchy.
+     *
+     * Empty when a declaring class could not be resolved: nothing is connected rather than guessed.
+     *
+     * @return array<string, string> variable name => property id
+     *
+     * @psalm-mutation-free
+     */
+    public static function exposedPropertyIds(Codebase $codebase, ClassLikeStorage $storage): array
+    {
+        $ids = [];
+
+        foreach (self::publicPropertyOwners($codebase, $storage) ?? [] as $name => [$declaring]) {
+            $ids[$name] = $declaring->name . '::$' . $name;
+        }
+
+        return $ids;
+    }
+
+    /**
      * @param bool $typedOnly skip a property with no declared type, or one a generic class declares
      *
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
@@ -200,7 +223,36 @@ final class ComponentRenderData
      */
     private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
+        $owners = self::publicPropertyOwners($codebase, $storage);
+
+        if ($owners === null) {
+            return null;
+        }
+
         $properties = [];
+
+        foreach ($owners as $name => [$declaring, $property]) {
+            if ($typedOnly && ($property->type === null || $declaring->template_types !== null)) {
+                continue;
+            }
+
+            $properties[$name] = $property->type ?? Type::getMixed();
+        }
+
+        return $properties;
+    }
+
+    /**
+     * What `extractPublicProperties()` reads: public, non-static, not ignored.
+     *
+     * @return array<string, array{0: ClassLikeStorage, 1: PropertyStorage}>|null null when a declaring
+     *         class could not be resolved
+     *
+     * @psalm-mutation-free
+     */
+    private static function publicPropertyOwners(Codebase $codebase, ClassLikeStorage $storage): ?array
+    {
+        $owners = [];
 
         foreach ($storage->declaring_property_ids as $name => $declaringClass) {
             if (self::ignored($name)) {
@@ -222,14 +274,10 @@ final class ComponentRenderData
                 continue;
             }
 
-            if ($typedOnly && ($property->type === null || $declaring->template_types !== null)) {
-                continue;
-            }
-
-            $properties[$name] = $property->type ?? Type::getMixed();
+            $owners[$name] = [$declaring, $property];
         }
 
-        return $properties;
+        return $owners;
     }
 
     /**
