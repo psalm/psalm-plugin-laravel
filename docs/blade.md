@@ -93,8 +93,9 @@ return view('search', ['q' => $request->input('q')]);
 
 The trace runs from the request input through the controller to the template line, never through the compiled shadow. It is a normal Psalm issue: silence it with `issueHandlers`, `@psalm-suppress` or a baseline.
 
-* **What flows:** a literal-keyed data array of `view()`, `View::make()`, `Factory::make()` or `response()->view()`, and `->with('key', $value)` / `->with([...])` on those, keyed by variable name and by the canonical view name (`admin/panel`, `admin.panel` and a `pkg::name` hint are the same view). Only the keys passed are tainted: `['t' => $input]` does not taint `$q`.
-* **What is skipped:** a dynamic view name, data in a variable, `View::share()`, composers, `Route::view()`, Livewire, mail, and the explicit data of a template's own `@include`. A template fed only that way reports nothing.
+* **What flows:** a literal-keyed data array (or `$mergeData`) of `view()`, `View::make()`, `Factory::make()` or `response()->view()`, and `->with('key', $value)` / `->with([...])` on those, keyed by variable name and by the canonical view name (`admin/panel`, `admin.panel` and a `pkg::name` hint are the same view). Only the keys passed are tainted: `['t' => $input]` does not taint `$q`. Only Laravel's own `view()` helper and factory methods count: a same-named function of yours, or a factory subclass that overrides `make()`/`view()`, is not followed.
+* **What is skipped:** a dynamic view name, data in a variable, `View::share()`, composers, `Route::view()`, Livewire, mail, and the explicit data of a template's own `@include`. A template fed only that way reports nothing, and so does one that introduces a variable without naming it (`compact('q')`, `extract()`).
+* **What over-reports:** a key a later `->with()` overwrites with a safe value (`view('x', ['q' => $input])->with('q', 'safe')`) still reports, because taint over-approximates and never hides a real flow. Silence it at the call.
 
 [Behaviour reference](contributing/blade.md#taint-through-view-data).
 
