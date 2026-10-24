@@ -1,3 +1,4 @@
 <?php /** @var int $count */ ?>
 <?php /** @var string $absent */ ?>
-<p>{{ $count }} {{ $absent }}</p>
+<?php /** @var string $id */ ?>
+<p>{{ $count }} {{ $absent }} {{ $id }}</p>

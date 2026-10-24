@@ -407,9 +407,11 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString("View 'livewire-placeholder' requires \$count", $counter[0]['message']);
 
         $missing = $this->forFile($issues, 'LivewireMissing.php');
-        $this->assertCount(1, $missing, \var_export($issues, true));
-        $this->assertSame(self::MISSING, $missing[0]['type']);
+        // `$id` is declared by Livewire's own base class, which hands it to no view.
+        $this->assertCount(2, $missing, \var_export($issues, true));
+        $this->assertSame([self::MISSING, self::MISSING], \array_column($missing, 'type'));
         $this->assertStringContainsString('$absent', $missing[0]['message']);
+        $this->assertStringContainsString('$id', $missing[1]['message']);
 
         $wrongType = $this->forFile($issues, 'LivewireWrongType.php');
         $this->assertCount(1, $wrongType, \var_export($issues, true));
@@ -417,7 +419,7 @@ final class ViewContractValidationTest extends TestCase
         $this->assertStringContainsString('declares $count as string, but this call passes int', $wrongType[0]['message']);
 
         $this->assertSame([], $this->forFile($issues, 'LivewireBase.php'), \var_export($issues, true));
-        $this->assertCount(2, $this->forFile($issues, 'NotLivewire.php'), \var_export($issues, true));
+        $this->assertCount(3, $this->forFile($issues, 'NotLivewire.php'), \var_export($issues, true));
     }
 
     #[Test]

@@ -97,6 +97,14 @@ though the `render()` passes only `['component' => $this]`. Property types are k
 declarations. A component with its own `data()` override can add names nothing can enumerate, so its
 supplied set is treated as open and this check declines for it.
 
+The same holds for the other receivers Laravel merges data into at render time:
+
+- A `Mailable` subclass: every public property, static ones included, whether promoted, defaulted or assigned in the constructor, plus `$message` (`Mailer::send()` sets it last, so it wins a property of that name). An abstract Mailable base, or a subclass overriding `buildViewData()` or `additionalMessageData()`, is treated as open: a subclass can add properties this class does not declare.
+- A `MailMessage`: the keys of `toArray()` (`level`, `subject`, `greeting`, `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`) plus `$message`. A key the call itself passes wins over its `toArray()` namesake (`data()` is `toArray() + viewData`). A subclass overriding `toArray()` or `data()` is treated as open.
+- A Livewire component (only when `livewire/livewire` is installed): the public non-static properties of the class, in its `render()`. A view built in another method (`placeholder()`) gets none of them, and an abstract base is treated as open.
+
+Property types are kept; an untyped or generic one is exempt from [InvalidViewData](InvalidViewData.md). Not modelled, so a key supplied only that way is still reported: `Mailable::buildViewDataUsing()`, a dynamic property, `$this->with()` outside the chain, and names Livewire adds at runtime.
+
 ## Composers and creators
 
 A composer or creator registered for the view (exact name or a wildcard such as `admin.*`) can

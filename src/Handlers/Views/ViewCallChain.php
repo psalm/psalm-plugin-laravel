@@ -45,7 +45,8 @@ use Psalm\Type\Union;
  *
  * The ARGUMENTS are not the whole data set, though: a chain inside an `Illuminate\View\Component`
  * subclass also receives whatever `Component::data()` merges in, which {@see ComponentRenderData}
- * resolves from the analyzed class and which lands in `$frameworkData` rather than `$data`.
+ * resolves from the analyzed class, and a Mailable, a `MailMessage` or a Livewire component receives
+ * the keys {@see FrameworkViewData} resolves. All of them land in `$frameworkData` rather than `$data`.
  *
  * @internal
  */
@@ -95,15 +96,28 @@ final class ViewCallChain
 
         $merged = ComponentRenderData::forSource($source);
 
-        if ($merged === null) {
-            return $chain;
+        if ($merged !== null) {
+            // A component's public `render()` can be called, and its result chained, from anywhere
+            // (`$component->render()->with([...])`): the data added there is not in this chain.
+            return $chain->withFrameworkData($merged[0], $merged[1] && !self::isInRenderMethod($source));
         }
 
-        // A component's public `render()` can be called, and its result chained, from anywhere
-        // (`$component->render()->with([...])`): the data added there is not in this chain.
-        $complete = $chain->complete && $merged[1] && !self::isInRenderMethod($source);
+        // Livewire merges the properties into what `render()` returns and nothing else; a view built
+        // in another method of the component (a placeholder) gets none of them.
+        $livewire = self::isInRenderMethod($source) ? FrameworkViewData::forLivewire($source) : null;
 
-        return new self($chain->viewName, $chain->data, $complete, $merged[0], $chain->binder);
+        return $livewire === null ? $chain : $chain->withFrameworkData($livewire[0], $livewire[1]);
+    }
+
+    /**
+     * @param array<string, Union> $frameworkData
+     * @param bool                 $closed        the framework keys are the whole of what it adds
+     *
+     * @psalm-mutation-free
+     */
+    private function withFrameworkData(array $frameworkData, bool $closed): self
+    {
+        return new self($this->viewName, $this->data, $this->complete && $closed, $frameworkData + $this->frameworkData, $this->binder);
     }
 
     /**
@@ -254,7 +268,7 @@ final class ViewCallChain
             $methodName = $node->name->toLowerString();
 
             if ($node instanceof Expr\StaticCall) {
-                return self::fromBinder(self::roleOfStaticClass($node->class), $methodName, $args, $source, $pending, $trimName);
+                return self::fromBinder(self::roleOfStaticClass($node->class), null, $methodName, $args, $source, $pending, $trimName);
             }
 
             // Collected rather than folded in here: whether these carry template data at all depends
@@ -266,7 +280,7 @@ final class ViewCallChain
                 continue;
             }
 
-            return self::fromBinder(self::roleOfReceiver($node->var, $source, $methodName), $methodName, $args, $source, $pending, $trimName);
+            return self::fromBinder(self::roleOfReceiver($node->var, $source, $methodName), $node->var, $methodName, $args, $source, $pending, $trimName);
         }
     }
 
@@ -329,6 +343,7 @@ final class ViewCallChain
      */
     private static function fromBinder(
         ?string $role,
+        ?Expr $receiver,
         string $methodName,
         array $args,
         StatementsSource $source,
@@ -359,7 +374,22 @@ final class ViewCallChain
             return null;
         }
 
-        return self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role, $trimName);
+        $chain = self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role, $trimName);
+        $receiverClass = $receiver instanceof Expr ? self::receiverClass($receiver, $source) : null;
+
+        if (!$chain instanceof self || $receiverClass === null) {
+            return $chain;
+        }
+
+        $codebase = $source->getCodebase();
+
+        $framework = match ($role) {
+            ViewNameSignatures::ROLE_MAILABLE => FrameworkViewData::forMailable($codebase, $receiverClass),
+            ViewNameSignatures::ROLE_MAIL_MESSAGE => FrameworkViewData::forMailMessage($codebase, $receiverClass, $chain->data),
+            default => null,
+        };
+
+        return $framework === null ? $chain : $chain->withFrameworkData($framework[0], $framework[1]);
     }
 
     /**
@@ -679,6 +709,16 @@ final class ViewCallChain
         $atomics = $type->getAtomicTypes();
 
         return \count($atomics) === 1 ? \reset($atomics) : null;
+    }
+
+    /**
+     * The one class a receiver is typed as, for reading what that class contributes to the view.
+     */
+    private static function receiverClass(Expr $receiver, StatementsSource $source): ?string
+    {
+        $atomic = self::soleAtomic($receiver, $source);
+
+        return $atomic instanceof TNamedObject ? $atomic->value : null;
     }
 
     /**
