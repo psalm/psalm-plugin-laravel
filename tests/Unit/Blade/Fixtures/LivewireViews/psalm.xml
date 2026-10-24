@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+>
+    <projectFiles>
+        <directory name="app" />
+    </projectFiles>
+    <extraFiles>
+        <!-- Livewire is not installed: a stand-in of its base classes, scanned but not analyzed. -->
+        <directory name="livewire" />
+    </extraFiles>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <blade cacheDir=".cache/blade-shadows" />
+        </pluginClass>
+    </plugins>
+    <issueHandlers>
+        <!-- Psalm 7 suggests purity tags on the type-only fixture classes; they are not what these tests pin. -->
+        <MissingPureAnnotation errorLevel="info" />
+        <MissingImmutableAnnotation errorLevel="info" />
+    </issueHandlers>
+</psalm>
