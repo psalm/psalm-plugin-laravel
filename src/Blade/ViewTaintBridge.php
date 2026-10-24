@@ -46,6 +46,14 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
     /** `with` and the binders' own names: nothing else can start a bridged call. */
     private const CALL_NAMES = ['view' => true, 'make' => true, 'with' => true];
 
+    /**
+     * Names view data never reaches the template under: `extract($__data, EXTR_SKIP)` keeps the engine's
+     * own `$__path` and `$__data`, and `$__env` is the factory every compiled directive calls. Every other
+     * name (`$errors`, `$slot`, `__q`) takes view data at run time, which `View::gatherData()` merges after
+     * the shared values; a name the compiled code assigns before reading it loses the read node there.
+     */
+    private const NEVER_VIEW_DATA = ['__env' => true, '__path' => true, '__data' => true];
+
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
     {
@@ -117,8 +125,7 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
         foreach ($context->vars_in_scope as $variable => $type) {
             $name = \substr($variable, 1);
 
-            // Blade supplies these itself (`$errors`, `$slot`, ...), and a `__` name is compiler plumbing.
-            if (\str_starts_with($name, '__') || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])) {
+            if (isset(self::NEVER_VIEW_DATA[$name])) {
                 continue;
             }
 

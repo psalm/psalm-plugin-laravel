@@ -49,16 +49,6 @@ final class Negatives
         return (new Mailable())->view('mailable', ['q' => $request->input('q')]);
     }
 
-    public function bladeOwnedName(Request $request): View
-    {
-        return view('owned', ['errors' => $request->input('q')]);
-    }
-
-    public function dunderName(Request $request): View
-    {
-        return view('dunder', ['__q' => $request->input('q')]);
-    }
-
     /** A later key of the same array literal wins at run time. */
     public function overwrittenBySpread(Request $request): View
     {

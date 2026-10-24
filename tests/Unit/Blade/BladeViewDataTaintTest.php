@@ -110,6 +110,8 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'literal spread carrying the tainted value last' => ['resources/views/spread-literal-taint.blade.php', 1];
         // Accepted over-report: a later `with()` of the same key is not seen by the inner link (docs/contributing/blade.md).
         yield 'overwritten by a later with() link (over-report)' => ['resources/views/overwritten-chain.blade.php', 1];
+        yield 'name Blade also shares' => ['resources/views/owned.blade.php', 1];
+        yield 'double-underscore name' => ['resources/views/dunder.blade.php', 1];
     }
 
     #[Test]
@@ -131,8 +133,6 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'dynamic view name' => ['resources/views/dynamic.blade.php'];
         yield 'View::share' => ['resources/views/shared.blade.php'];
         yield 'mailable' => ['resources/views/mailable.blade.php'];
-        yield 'Blade-owned name' => ['resources/views/owned.blade.php'];
-        yield 'double-underscore name' => ['resources/views/dunder.blade.php'];
         yield 'later literal spread key overwrites it' => ['resources/views/overwritten.blade.php'];
         yield 'data overwrites mergeData' => ['resources/views/merge-overwritten.blade.php'];
         yield 'unrelated namespaced function named view' => ['resources/views/probe-fn.blade.php'];

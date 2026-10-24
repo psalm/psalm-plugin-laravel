@@ -139,4 +139,16 @@ final class Positives
     {
         return view('overwritten-chain', ['q' => $request->input('q')])->with('q', 'fixed');
     }
+
+    /** View data beats a shared value: `View::gatherData()` merges the view's own data last. */
+    public function bladeOwnedName(Request $request): View
+    {
+        return view('owned', ['errors' => $request->input('q')]);
+    }
+
+    /** `extract($__data, EXTR_SKIP)` protects only `$__path` and `$__data`, so `__q` reaches the template. */
+    public function dunderName(Request $request): View
+    {
+        return view('dunder', ['__q' => $request->input('q')]);
+    }
 }
