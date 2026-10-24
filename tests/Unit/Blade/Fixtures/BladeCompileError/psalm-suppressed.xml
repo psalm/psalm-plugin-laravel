@@ -13,7 +13,7 @@
         </pluginClass>
     </plugins>
     <issueHandlers>
-        <PluginIssue name="BladeCompileFailure">
+        <PluginIssue name="BladeCompileError">
             <errorLevel type="suppress">
                 <file name="resources/views/broken.blade.php" />
             </errorLevel>

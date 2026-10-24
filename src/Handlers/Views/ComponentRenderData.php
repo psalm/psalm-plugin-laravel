@@ -22,7 +22,7 @@ use Psalm\Type\Union;
  * What `Illuminate\View\Component::data()` merges into the view a component's `render()` returns,
  * on top of whatever that `render()` passed itself.
  *
- * Without this, every class component is a {@see \Psalm\LaravelPlugin\Issues\MissingViewVariable}
+ * Without this, every class component is a {@see \Psalm\LaravelPlugin\Issues\MissingViewData}
  * false positive: `render()` typically passes `['component' => $this]` (or nothing at all) while
  * the template reads the component's public properties, which Laravel merges in at render time
  * (`Concerns\CompilesComponents` emits `startComponent($component->resolveView(), $component->data())`,

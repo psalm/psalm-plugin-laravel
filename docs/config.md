@@ -297,13 +297,13 @@ No setting of their own: with Blade analysis on, every run checks `view()` call 
 
 ```xml
 <issueHandlers>
-    <PluginIssue name="MissingViewVariable" errorLevel="error" />
-    <PluginIssue name="InvalidViewVariableType" errorLevel="error" />
+    <PluginIssue name="MissingViewData" errorLevel="error" />
+    <PluginIssue name="InvalidViewData" errorLevel="error" />
     <PluginIssue name="UnusedViewData" errorLevel="suppress" />
 </issueHandlers>
 ```
 
-[MissingViewVariable](issues/MissingViewVariable.md) reports a declared variable the call never passes, and [InvalidViewVariableType](issues/InvalidViewVariableType.md) a value that does not satisfy the declared type.
+[MissingViewData](issues/MissingViewData.md) reports a declared variable the call never passes, and [InvalidViewData](issues/InvalidViewData.md) a value that does not satisfy the declared type.
 
 A template declares its variables with `/** @var \App\Models\User $user */` docblocks in a `<?php` or `@php` block (every declared variable is required, `T|null` and `mixed` included; a trailing `= null` makes it optional; a name the template binds itself, such as a `@foreach` alias, or one the framework supplies, such as `$errors`, `$slot` or `$app`, is never a declaration), see [Declaring view variables](blade.md#declaring-view-variables), and `@props([...])` entries. A template that declares nothing is never checked, so these two rules cost you nothing until you annotate a template.
 
@@ -331,7 +331,7 @@ For some but not all of the family back, first set `reportMixedIssues="true"`, t
 
 ### Degradation
 
-By default Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if a view directory cannot be read and no template was found elsewhere, if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. With [`failOnInternalError`](#failoninternalerror) enabled, that disable fails the run instead. Templates that fail to compile are skipped and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md) issues. Other skipped templates are summarized in a single warning; run with `--debug` for the individual causes.
+By default Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if a view directory cannot be read and no template was found elsewhere, if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. With [`failOnInternalError`](#failoninternalerror) enabled, that disable fails the run instead. Templates that fail to compile are skipped and reported as [`BladeCompileError`](issues/BladeCompileError.md) issues. Other skipped templates are summarized in a single warning; run with `--debug` for the individual causes.
 
 Psalm's `--no-progress` installs a progress implementation that discards warnings, and Psalm also picks it by itself when an AI agent runs it outside CI, so the disable warning is written to STDERR directly in that mode. Other Blade warnings stay invisible under that flag.
 
