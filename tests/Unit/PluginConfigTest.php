@@ -780,9 +780,9 @@ final class PluginConfigTest extends TestCase
     public function blade_rejects_an_unknown_attribute(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("<blade>: unknown attribute 'cachDir'. Supported attributes: value, cacheDir.");
+        $this->expectExceptionMessage("<blade>: unknown attribute 'cacheDirectory'. Supported attributes: value, cacheDir.");
 
-        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade cachDir="x" /></pluginClass>'));
+        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade cacheDirectory="x" /></pluginClass>'));
     }
 
     #[Test]
