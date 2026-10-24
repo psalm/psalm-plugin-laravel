@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792874659784,
+  "lastUpdate": 1792877521744,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16125,6 +16125,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 30.49,
             "range": "± 0.43",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9dc86206593eebd9ae03d0c5963517c38921fc03",
+          "message": "Carry taint through non-literal view data, `@include` scope and anonymous components (#2046)\n\n* test(blade): pin taint through array view data, include scope and anonymous components #2032\n\n* fix(blade): carry taint through non-literal view data, include scope and anonymous components #2032\n\n* test(blade): give the @includeIsolated negative a tainted scope so it can fail #2032\n\n* docs(blade): document the include over-report and the unbridged @each and @component #2032\n\n* test(blade): pin disabled includes, the filtered scope, a star key and namespaced @includeFirst #2032\n\n* fix(blade): write taint only for live includes, the compiled scope and real variable names #2032\n\n* docs(blade): document the merge-data over-report and the unbridged attribute bag and @aware #2032",
+          "timestamp": "2026-10-24T23:28:24+02:00",
+          "tree_id": "1741073ebfcdc368b7f5d54aef7060ec39578120",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9dc86206593eebd9ae03d0c5963517c38921fc03"
+        },
+        "date": 1792877519920,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 41.14,
+            "range": "± 0.65",
             "unit": "s"
           },
           {
