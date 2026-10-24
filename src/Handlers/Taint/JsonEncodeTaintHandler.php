@@ -32,10 +32,11 @@ use Psalm\Type\Union;
  * - The removal lands on the stub's own argument-to-return edge, which is per call only while Psalm
  *   specializes `json_encode()` per call site. A project stub re-declaring it without specialization
  *   shares that edge between all calls, so the handler declines there.
- * - `ReturnAnalyzer` applies the removal it gets for a returned expression to EVERY return path of the
- *   enclosing function. The handler therefore answers only while the call's type is still unset (the
- *   `FunctionCallReturnTypeFetcher` dispatch that writes the edge). If Psalm reorders that, findings
- *   return; nothing is over-stripped.
+ * - The handler answers only while the call's type is still unset (the `FunctionCallReturnTypeFetcher`
+ *   dispatch that writes the edge), not on the later return/argument dispatches of the same node. Psalm
+ *   before 7.0.0-rc9 applied a returned expression's removal to every return path of the enclosing
+ *   function (vimeo/psalm#12470); since then it stays on that return's own edges. The gate is kept as a
+ *   guard: if Psalm reorders dispatches, findings return and nothing is over-stripped.
  */
 final class JsonEncodeTaintHandler implements RemoveTaintsInterface
 {
