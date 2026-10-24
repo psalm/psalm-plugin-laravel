@@ -82,11 +82,16 @@ Experimental. Reported as `info` by default (hidden unless `--show-info=true`, n
 Keys the framework merges into a view count as passed, so declaring them is not a `MissingViewData`:
 
 * **Class component** (`Illuminate\View\Component`): its public properties and methods, in `render()`.
-* **Mailable**: every public property of the subclass, static ones included, plus `$message` (a property named `message` wins it on `markdown()` only). An abstract Mailable base, or one overriding `buildViewData()`, is not checked for missing keys.
-* **`MailMessage`**: `level`, `subject`, `greeting`, `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`, plus `$message`. A key the call passes wins over its namesake (and over `$message` on `markdown()`).
-* **Livewire component** (needs `livewire/livewire` installed): its public non-static properties, in `render()` only. A `placeholder()` view gets none of them.
+* **Mailable**: every public property of the subclass, static ones included, plus `$message` (a property named `message` wins it on `markdown()` only; there the template gets `Message` or `TextMessage`, since the text pass wraps it). An abstract Mailable base, or one overriding `buildViewData()` or `additionalMessageData()`, is not checked for missing keys, and its keys are not type-checked.
+* **`MailMessage`**: `level`, `subject`, `greeting`, `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`, plus `$message`. A key the call passes wins over its namesake (and over `$message` on `markdown()`). A subclass overriding `toArray()` or `data()` is not checked for missing keys, and its keys are not type-checked.
+* **Livewire component** (needs `livewire/livewire` installed): its public non-static properties, in the view `render()` returns only. A `placeholder()` view, or a mail view built on the side in `render()`, gets none of them.
 
-A property keeps its declared type, so `InvalidViewData` still checks it; an untyped one is not checked. A typed property never initialized counts as supplied although the runtime skips it, so that one stays silent. Residual, still reported: a key added through `Mailable::buildViewDataUsing()`, a property created dynamically, and anything Livewire adds at runtime through a trait. These keys are never "passed" data: `UnusedViewData` ignores them and no taint flows from them.
+A property keeps its declared type (`self` in a trait is the class using it), so `InvalidViewData` still checks it; an untyped one is not checked. A key the call's own data can replace (`displayableActionUrl`, and `$message` on `markdown()`) is `mixed` when that data is not fully readable (an `array` parameter, say). A typed property never initialized counts as supplied although the runtime skips it, so that one stays silent. Residual, still reported: a key added through `Mailable::buildViewDataUsing()`, a property created dynamically, and anything Livewire adds at runtime through a trait. These keys are never "passed" data: `UnusedViewData` ignores them and no taint flows from them.
+
+Accepted imprecision:
+
+* A `MailMessage::render()` preview renders its markdown with `data()` directly, so `$message` is absent there; the call is the same `markdown()` binder as the channel path, which supplies it, so the preview shape is not reported.
+* A concrete userland parent Mailable is treated as closed, so a template its `build()` renders may miss a property only a child adds, and that is reported (a false positive that predates this support).
 
 ## Taint through view data
 
