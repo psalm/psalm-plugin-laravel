@@ -105,10 +105,41 @@ final class Renderer
         return view('locals', ['rows' => $this->items()])->render();
     }
 
+    /** A count difference infers the unbounded `int<min, max>`. */
+    public function statics(): View
+    {
+        return view('statics', ['stats' => ['total' => \count($this->items()) - \count($this->items())]]);
+    }
+
+    public function outerGiven(): View
+    {
+        return view('outer', ['showCount' => true]);
+    }
+
+    public function outerOmitted(): View
+    {
+        return view('outer', []);
+    }
+
+    public function inner(): View
+    {
+        return view('inner', ['showCount' => true]);
+    }
+
+    public function counter(): View
+    {
+        return view('counter', ['showCount' => $this->flag()]);
+    }
+
     /** @return list<string> */
     private function items(): array
     {
         return ['a', 'b'];
+    }
+
+    private function flag(): bool
+    {
+        return \random_int(0, 1) === 1;
     }
 
     private function title(): string

@@ -371,6 +371,133 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
+    public function records_an_isolated_include_site_as_a_producer_of_the_included_view(): void
+    {
+        $this->analyzeStatements("echo \$__env->make('inner', ['title' => 'text'])->render();", [['title' => Type::getString()]]);
+
+        $this->assertSame('string', AnnotationCollector::typeFor('inner', 'title'));
+    }
+
+    #[Test]
+    public function declines_when_an_include_site_disagrees_with_a_view_call_site(): void
+    {
+        $this->analyzeStatements(
+            "view('inner', ['title' => 'text']);\necho \$__env->make('inner', ['title' => \$n])->render();",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('inner', 'title'));
+    }
+
+    #[Test]
+    public function marks_a_view_unreadable_when_an_include_passes_the_including_scope_or_unreadable_data(): void
+    {
+        $scope = "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])";
+
+        foreach (
+            [
+                "echo \$__env->make('inner', {$scope})->render();",
+                "echo \$__env->make('inner', ['title' => 1], {$scope})->render();",
+                "echo \$__env->make('inner', \$data)->render();",
+                "echo \$__env->renderWhen(\$on, 'inner', {$scope});",
+                "echo \$__env->first(['missing', 'inner'], {$scope})->render();",
+                "echo \$__env->renderEach('inner', \$items, 'item');",
+            ] as $include
+        ) {
+            AnnotationCollector::reset();
+            $this->analyzeStatements(
+                "view('inner', ['title' => 'text']);\n{$include}",
+                [['title' => Type::getString()], [], [], []],
+            );
+
+            $this->assertNull(AnnotationCollector::typeFor('inner', 'title'), $include);
+        }
+    }
+
+    #[Test]
+    public function marks_the_empty_view_of_an_each_unreadable_but_not_a_raw_one(): void
+    {
+        // `renderEach()` renders the empty view with no data at all.
+        $this->analyzeStatements(
+            "view('empty', ['title' => 'text']);\nview('raw|empty', ['title' => 'text']);\n"
+            . "echo \$__env->renderEach('row', \$items, 'item', 'empty');\necho \$__env->renderEach('row', \$items, 'item', 'raw|empty');",
+            [['title' => Type::getString()], ['title' => Type::getString()]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('empty', 'title'));
+        $this->assertSame('string', AnnotationCollector::typeFor('raw|empty', 'title'), 'a raw| string is text, not a view');
+    }
+
+    #[Test]
+    public function marks_a_component_target_unreadable(): void
+    {
+        foreach (
+            [
+                "\$__env->startComponent('inner', ['title' => 42]);",
+                "\$__env->startComponentFirst(['missing', 'inner'], ['title' => 42]);",
+                "\$component = Illuminate\\View\\AnonymousComponent::resolve(['view' => 'inner', 'data' => ['title' => 42]]"
+                    . " + (isset(\$attributes) ? \$attributes->all() : []));",
+            ] as $component
+        ) {
+            AnnotationCollector::reset();
+            $this->analyzeStatements("view('inner', ['title' => 'text']);\n{$component}", [['title' => Type::getString()]]);
+
+            $this->assertNull(AnnotationCollector::typeFor('inner', 'title'), $component);
+        }
+    }
+
+    #[Test]
+    public function still_reads_a_rendering_call_nested_in_a_recorded_producer(): void
+    {
+        foreach (
+            [
+                "echo \$__env->make('inner', ['title' => view('inner', ['title' => 42])->render()])->render();",
+                "view('inner', ['title' => view('inner', ['title' => 42])->render()]);",
+            ] as $nested
+        ) {
+            AnnotationCollector::reset();
+            $this->analyzeStatements($nested, [['title' => Type::getString()], ['title' => $this->literal(42)]]);
+
+            $this->assertNull(AnnotationCollector::typeFor('inner', 'title'), $nested);
+        }
+    }
+
+    #[Test]
+    public function an_include_lookalike_rendering_with_a_callback_is_not_recorded_as_closed(): void
+    {
+        $this->analyzeStatements(
+            "echo \$__env->make('inner', ['title' => 'text'])->render(static fn (\$v) => \$v->with('title', 42)->render());",
+            [['title' => Type::getString()]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('inner', 'title'));
+    }
+
+    #[Test]
+    public function a_slash_and_a_dot_view_name_are_one_view(): void
+    {
+        $this->analyzeStatements("echo \$__env->make('cards.inner', ['title' => 'text'])->render();", [['title' => Type::getString()]]);
+
+        $this->assertSame('string', AnnotationCollector::typeFor('cards/inner', 'title'));
+
+        $this->analyzeStatements("echo \$__env->make('cards/inner', ['title' => \$n])->render();", [['title' => $this->literal(42)]]);
+
+        $this->assertNull(AnnotationCollector::typeFor('cards.inner', 'title'));
+        $this->assertNull(AnnotationCollector::typeFor('cards/inner', 'title'));
+    }
+
+    #[Test]
+    public function a_raw_prefixed_name_is_an_ordinary_view_outside_the_each_empty_argument(): void
+    {
+        $this->analyzeStatements(
+            "echo \$__env->make('raw|inner', ['title' => 'text'])->render();\necho view('raw|inner', ['title' => 42])->render();",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('raw|inner', 'title'));
+    }
+
+    #[Test]
     public function answers_the_type_a_callback_inside_a_declined_chain_passes(): void
     {
         // The callback's statement records the producer first; the declined chain holding it then
@@ -440,7 +567,14 @@ final class AnnotationCollectorTest extends TestCase
         $nodeData = new NodeDataProvider();
 
         foreach ((new NodeFinder())->findInstanceOf($statements, Expr\Array_::class) as $index => $literal) {
-            $nodeData->setType($literal, new Type\Union([Type\Atomic\TKeyedArray::make($shapes[$index])]));
+            $nodeData->setType($literal, new Type\Union([Type\Atomic\TKeyedArray::make($shapes[$index] ?? ['x' => Type::getString()])]));
+        }
+
+        // What every compiled template's prelude types `$__env` as.
+        foreach ((new NodeFinder())->findInstanceOf($statements, Expr\Variable::class) as $variable) {
+            if ($variable->name === '__env') {
+                $nodeData->setType($variable, new Type\Union([new Type\Atomic\TNamedObject(\Illuminate\View\Factory::class)]));
+            }
         }
 
         $source = $this->createStub(StatementsSource::class);
@@ -503,6 +637,39 @@ final class AnnotationCollectorTest extends TestCase
     private function literal(int $value): Type\Union
     {
         return new Type\Union([new Type\Atomic\TLiteralInt($value)]);
+    }
+
+    #[Test]
+    public function prints_an_unbounded_int_range_as_int_at_any_depth(): void
+    {
+        $int = new Type\Union([new Type\Atomic\TIntRange(null, null)]);
+        $passed = new Type\Union([Type\Atomic\TKeyedArray::make([
+            'box' => new Type\Union([new Type\Atomic\TGenericObject('App\\Box', [$int])]),
+            'counts' => new Type\Union([new Type\Atomic\TArray([Type::getArrayKey(), $int])]),
+            'total' => $int,
+            'positive' => new Type\Union([new Type\Atomic\TIntRange(1, null)]),
+        ])]);
+
+        // typeFor() also parses the id back, which needs a booted Psalm; the printed form is what matters.
+        $normalize = new \ReflectionMethod(AnnotationCollector::class, 'withoutUnboundedIntRange');
+        $printed = $normalize->invoke(null, $passed);
+        $this->assertInstanceOf(Type\Union::class, $printed);
+
+        $this->assertSame('array{box: App\\Box<int>, counts: array<array-key, int>, positive: int<1, max>, total: int}', $printed->getId(false));
+        $this->assertSame(
+            'array{box: App\\Box<int<min, max>>, counts: array<array-key, int<min, max>>, positive: int<1, max>, total: int<min, max>}',
+            $passed->getId(false),
+            'the inferred type itself is left untouched',
+        );
+    }
+
+    #[Test]
+    public function an_unbounded_int_range_agrees_with_int(): void
+    {
+        AnnotationCollector::record('home', ['total' => new Type\Union([new Type\Atomic\TIntRange(null, null)])], true);
+        AnnotationCollector::record('home', ['total' => new Type\Union([new Type\Atomic\TInt()])], true);
+
+        $this->assertSame('int', AnnotationCollector::typeFor('home', 'total'));
     }
 
     #[Test]
