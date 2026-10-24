@@ -1,1 +1,1 @@
-@php echo e(old('##BEGIN-COMPONENT-CLASS##')); @endphp
+@php echo e(\Fx\Source::opt('##BEGIN-COMPONENT-CLASS##')); @endphp

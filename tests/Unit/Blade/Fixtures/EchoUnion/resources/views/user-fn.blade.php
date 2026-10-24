@@ -1,1 +1,1 @@
-{{ \Fx\Source::take(old('k')) }}
+{{ \Fx\Source::take(\Fx\Source::opt('k')) }}
