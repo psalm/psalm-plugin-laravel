@@ -244,6 +244,27 @@ final class AnnotationWriterTest extends TestCase
         $this->assertStringContainsString('@var string|null $title = null', (string) \file_get_contents($path));
     }
 
+    /**
+     * One name's only producer omits the variable, the other's passes it: the omitting name still
+     * plans the variable (untyped), so the file gets no declaration at all.
+     */
+    #[Test]
+    public function a_name_every_producer_of_one_view_name_omits_is_not_declared(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        ViewReferenceRegistry::registerTemplate('pkg::page', 0, $path);
+        ContractRegistry::register('pkg::page', 0, new ViewDataContract([], false, ['title'], false));
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', [], true);
+        AnnotationCollector::record('pkg::page', ['title' => Type::getString()], true);
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame($before, \md5_file($path));
+        $this->assertSame([$path => ['title']], $this->publishedResult()['unknown'] ?? null);
+    }
+
     #[Test]
     public function refuses_to_write_when_the_control_file_is_no_longer_valid(): void
     {
