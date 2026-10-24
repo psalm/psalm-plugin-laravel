@@ -45,7 +45,8 @@ use Psalm\Type\Union;
  * class is neither `Livewire\Component` nor `Livewire\Volt\Component`. `generateBladeView()` then calls
  * `->with($properties)` on the view `render()` returned, so a property wins over a passed key.
  *
- * A subclass can add public properties no static read of the receiver's declared type sees; that,
+ * An abstract Mailable or Livewire component leaves the set open: a concrete subclass can add public
+ * properties its base does not declare. A concrete receiver that is itself subclassed,
  * `Mailable::buildViewDataUsing()` and `new Content(with: ...)` are accepted imprecisions.
  *
  * @internal
@@ -120,7 +121,8 @@ final class FrameworkViewData
             $keys[$name] = Type::getMixed();
         }
 
-        return [$keys, !$open];
+        // An abstract receiver stands for subclasses whose own public properties are unseen here.
+        return [$keys, !$open && !$storage->abstract];
     }
 
     /**
@@ -197,7 +199,8 @@ final class FrameworkViewData
             }
         }
 
-        return [$keys, true];
+        // Same for an abstract component: a concrete subclass can declare more public properties.
+        return [$keys, !$storage->abstract];
     }
 
     /**

@@ -480,6 +480,19 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A subclass of an abstract Mailable or Livewire component can add public properties the base
+     * does not declare, so a variable no property supplies is not provably absent.
+     */
+    #[Test]
+    public function an_abstract_base_leaves_the_key_set_open(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableBase.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'LivewireBase.php'), \var_export($issues, true));
+    }
+
+    /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
      * half is asserted together: a protected property, a static one and a view built outside
      * `render()` are still missing.
