@@ -261,6 +261,31 @@ final class AnnotateCommandTest extends TestCase
     }
 
     #[Test]
+    public function lists_the_names_an_unreadable_call_site_hides_with_that_site(): void
+    {
+        $output = new BufferedOutput();
+
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => [],
+            'failures' => [],
+            'diff' => '',
+            'unknown' => [],
+            'unreadable' => [
+                'a.blade.php' => ['site' => 'app/Http/Home.php:12', 'names' => ['rows', 'title']],
+                'b.blade.php' => ['site' => '', 'names' => ['flag']],
+            ],
+        ], $output));
+
+        $display = $output->fetch();
+        $this->assertStringContainsString('a call site could not be read', $display);
+        $this->assertStringContainsString('a.blade.php (rows, title), at app/Http/Home.php:12', $display);
+        $this->assertMatchesRegularExpression('/b\.blade\.php \(flag\)$/m', $display);
+        $this->assertStringNotContainsString('type unknown', $display);
+        $this->assertStringNotContainsString('Every template already declares', $display);
+    }
+
+    #[Test]
     public function lists_one_line_per_name_its_call_sites_disagree_on_in_either_mode(): void
     {
         foreach ([true, false] as $dryRun) {

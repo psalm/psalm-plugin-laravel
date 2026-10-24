@@ -305,6 +305,22 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
+    public function keeps_the_smallest_unreadable_site_whatever_the_analysis_order(): void
+    {
+        $this->assertNull(AnnotationCollector::unreadableSite('home'));
+
+        AnnotationCollector::markUnreadable('home');
+        $this->assertSame('', AnnotationCollector::unreadableSite('home'));
+
+        AnnotationCollector::markUnreadable('home', '/app/B.php:3');
+        AnnotationCollector::record('home', [], false, '/app/A.php:10');
+        AnnotationCollector::markUnreadable('home', '/app/A.php:9');
+        AnnotationCollector::markUnreadable('home');
+
+        $this->assertSame('/app/A.php:9', AnnotationCollector::unreadableSite('home'));
+    }
+
+    #[Test]
     public function reports_a_name_a_provably_closed_call_site_leaves_out(): void
     {
         // Declaring it would report MissingViewData at that very call site, which passes a
