@@ -58,6 +58,7 @@ final class AnnotateEndToEndTest extends TestCase
         'collections' => "{{ \$missing->count() }} {{ count(\$byRole) }} {{ \$kind }}\n",
         'panel' => "{{ \$family->count() }} {{ \$handler instanceof \\Closure }}\n",
         'panel-kind' => "{{ \$kind }}\n",
+        'merged' => "{{ json_encode([\$author, \$media, \$trio, \$flag, \$posts, \$any, \$key]) }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
         'modal-arrow' => "{{ \$text }}\n",
@@ -141,7 +142,65 @@ final class AnnotateEndToEndTest extends TestCase
         $result = $this->annotate();
 
         $this->assertSame(self::TEMPLATES['conflict'], $this->template('conflict'));
-        $this->assertSame(['flag'], $this->unknownFor($result, 'conflict'));
+        $this->assertNull($this->unknownFor($result, 'conflict'), 'both call sites type it, so it is no unknown');
+        $this->assertSame(['conflict' => ['flag' => ['AnnotateFixture\\Post', 'string']]], \array_intersect_key((array) ($result['disagreed'] ?? []), ['conflict' => true]));
+    }
+
+    #[Test]
+    public function merges_the_call_sites_that_differ_only_in_ways_one_declaration_covers(): void
+    {
+        // Nullability, sibling classes up to three, `true`/`false`, and one class with different generic
+        // params merge; a fourth class and two scalar kinds are listed.
+        $result = $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var \\AnnotateFixture\\Post|null \$author\n"
+            . " * @var bool \$flag\n"
+            . " * @var \\AnnotateFixture\\Post|\\AnnotateFixture\\Video \$media\n"
+            . " * @var \\Illuminate\\Support\\Collection<int, \\AnnotateFixture\\Post>|\\Illuminate\\Support\\Collection<int, \\AnnotateFixture\\Video> \$posts\n"
+            . " * @var \\AnnotateFixture\\Panel|\\AnnotateFixture\\Post|\\AnnotateFixture\\Video \$trio\n */\n?>\n" . self::TEMPLATES['merged'],
+            $this->template('merged'),
+        );
+        $this->assertSame(
+            [
+                'any' => ['AnnotateFixture\\Merger', 'AnnotateFixture\\Panel', 'AnnotateFixture\\Post', 'AnnotateFixture\\Video'],
+                'key' => ['int', 'string'],
+            ],
+            ((array) ($result['disagreed'] ?? []))['merged'] ?? null,
+        );
+        $this->assertNull($this->unknownFor($result, 'merged'));
+    }
+
+    #[Test]
+    public function a_merged_declaration_holds_at_every_call_site_that_produced_it(): void
+    {
+        $this->annotate();
+        $this->assertStringContainsString('@var bool $flag', $this->template('merged'), 'the merge must have been written');
+
+        $this->assertSame([], $this->viewIssuesAtMerger());
+
+        // The control: the same run does report a declaration the producers contradict, so the
+        // empty list above is not a check that never ran.
+        $path = self::VIEWS . '/merged.blade.php';
+        \file_put_contents($path, \str_replace('@var bool $flag', '@var int $flag', $this->template('merged')));
+
+        $this->assertNotSame([], $this->viewIssuesAtMerger());
+    }
+
+    /** @return list<mixed> InvalidViewVariableType and MissingViewVariable reported at the merge fixture's call sites */
+    private function viewIssuesAtMerger(): array
+    {
+        $this->runPsalm(null);
+
+        $report = \json_decode($this->psalmOutput, true);
+        $this->assertIsArray($report, 'the ordinary run must report JSON');
+
+        return \array_values(\array_filter(
+            $report,
+            static fn(mixed $issue): bool => \is_array($issue)
+                && \in_array($issue['type'] ?? null, ['InvalidViewVariableType', 'MissingViewVariable'], true)
+                && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php'),
+        ));
     }
 
     #[Test]
@@ -312,7 +371,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(11, $result['changed']);
+        $this->assertCount(12, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
