@@ -327,9 +327,11 @@ final class ViewCallChain
 
         $viewName = $name->value;
 
-        // A namespaced name resolves through package-registered roots the compile pass does not
-        // own, so its contract is never in the registry and guessing would be wrong.
-        if ($viewName === '' || \str_contains($viewName, '::')) {
+        // A namespaced `pkg::name` passes through verbatim: the compile pass registers a hint-root
+        // template under exactly that qualified name ({@see \Psalm\LaravelPlugin\Blade\ViewName}).
+        // An unknown hint, a vendor/ hint root, or an uncompiled template has no registry entry,
+        // and every consumer declines on a missing one.
+        if ($viewName === '') {
             return null;
         }
 

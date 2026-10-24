@@ -39,6 +39,11 @@ final class AnnotateEndToEndTest extends TestCase
 
     private const VIEWS = self::FIXTURE . '/resources/views';
 
+    /** A `loadViewsFrom()` hint root outside vendor/, registered as `pkg` by the fixture's bootstrap. */
+    private const PKG_VIEWS = self::FIXTURE . '/resources/pkg-views';
+
+    private const PKG_WIDGET = "<p>{{ \$title }}</p>\n";
+
     private const TEMPLATES = [
         'home' => "<h1>{{ \$title }}</h1>\n<p>{{ \$post->slug }}</p>\n",
         'declared' => "<?php /** @var string \$title */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
@@ -66,6 +71,8 @@ final class AnnotateEndToEndTest extends TestCase
         foreach (self::TEMPLATES as $name => $contents) {
             \file_put_contents(self::VIEWS . "/{$name}.blade.php", $contents);
         }
+
+        \file_put_contents(self::PKG_VIEWS . '/widget.blade.php', self::PKG_WIDGET);
     }
 
     protected function tearDown(): void
@@ -86,6 +93,17 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertSame(
             "<?php\n/**\n * @var \\AnnotateFixture\\Post \$post\n * @var string \$title\n */\n?>\n" . self::TEMPLATES['home'],
             $this->template('home'),
+        );
+    }
+
+    #[Test]
+    public function declares_a_namespaced_view_from_its_qualified_call_sites(): void
+    {
+        $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var string \$title\n */\n?>\n" . self::PKG_WIDGET,
+            (string) \file_get_contents(self::PKG_VIEWS . '/widget.blade.php'),
         );
     }
 
@@ -241,7 +259,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(7, $result['changed']);
+        $this->assertCount(8, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
@@ -330,7 +348,7 @@ final class AnnotateEndToEndTest extends TestCase
 
     private function clean(): void
     {
-        foreach (\glob(self::VIEWS . '/*.blade.php') ?: [] as $template) {
+        foreach ([...\glob(self::VIEWS . '/*.blade.php') ?: [], ...\glob(self::PKG_VIEWS . '/*.blade.php') ?: []] as $template) {
             \unlink($template);
         }
 

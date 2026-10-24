@@ -14,6 +14,11 @@ final class Renderer
         return view('home', ['title' => $this->title(), 'post' => $this->post()]);
     }
 
+    public function packageWidget(): View
+    {
+        return view('pkg::widget', ['title' => $this->title()]);
+    }
+
     public function declared(): View
     {
         return view('declared', ['title' => $this->title(), 'extra' => $this->title()]);
