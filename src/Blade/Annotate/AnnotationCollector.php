@@ -225,7 +225,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
             $type = self::withoutLateStatic($type);
             $seen ??= [];
-            $seen[$type->getId(false)] = $type;
+            $key = $type->getId(false);
+            // Literals sharing an id (`1`, `100`) are combined, not replaced: the merge's containment
+            // check must see every value a call site passed.
+            $seen[$key] = isset($seen[$key]) ? Type::combineUnionTypes($seen[$key], $type) : $type;
             self::$observed[$viewName][$name] = $seen;
         }
     }

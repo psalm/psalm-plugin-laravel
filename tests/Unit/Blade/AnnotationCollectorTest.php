@@ -186,6 +186,22 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
+    public function keeps_every_literal_that_shares_an_id_for_the_containment_check(): void
+    {
+        // `100` and `1` share the id `int`. Keeping only the last would let a later `int<0, 5>`
+        // merge to a range that rejects the `100` call site.
+        AnnotationCollector::record('home', ['count' => $this->literal(100)], true);
+        AnnotationCollector::record('home', ['count' => $this->literal(1)], true);
+
+        $observed = (new \ReflectionProperty(AnnotationCollector::class, 'observed'))->getValue();
+        $this->assertIsArray($observed['home']['count']);
+        $kept = \array_keys($observed['home']['count']['int']->getAtomicTypes());
+        \sort($kept);
+
+        $this->assertSame(['int(1)', 'int(100)'], $kept);
+    }
+
+    #[Test]
     public function declines_for_every_name_once_one_producer_of_the_view_was_unreadable(): void
     {
         AnnotationCollector::record('home', ['title' => Type::getString()], true);
