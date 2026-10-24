@@ -22,6 +22,7 @@ use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic;
+use Psalm\Type\MutableTypeVisitor;
 use Psalm\Type\TypeNode;
 use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
