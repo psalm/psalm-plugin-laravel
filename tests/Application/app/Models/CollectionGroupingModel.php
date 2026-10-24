@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int                       $foreign_id
  * @property bool                      $active
  * @property CollectionGroupingIntEnum $kind
+ * @property CollectionGroupingStringEnum $label
  * @property int|null                  $nullable_id
  */
 final class CollectionGroupingModel extends Model {}

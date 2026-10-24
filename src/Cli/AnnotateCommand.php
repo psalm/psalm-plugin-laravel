@@ -192,7 +192,7 @@ final class AnnotateCommand extends Command
         // The shape is this plugin's own, written back by AnnotateRequest::publish() in the child.
         // The is_array() guard below is the real check: a child that died mid-run leaves the
         // request JSON the command itself wrote, which carries no `changed` key.
-        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, unknown?: array<string, list<string>>, error?: string}|null $result */
+        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, unknown?: array<string, list<string>>, disagreed?: array<string, array<string, list<string>>>, error?: string}|null $result */
         $result = \is_string($raw) ? \json_decode($raw, true) : null;
 
         $error = \is_array($result) ? $result['error'] ?? null : null;
@@ -253,6 +253,20 @@ final class AnnotateCommand extends Command
             $io->newLine();
         }
 
+        $disagreed = $result['disagreed'] ?? [];
+
+        if ($disagreed !== []) {
+            $io->writeln('  Undeclared, call sites disagree (declare them by hand):');
+
+            foreach ($disagreed as $view => $names) {
+                foreach ($names as $name => $types) {
+                    $io->writeln(OutputFormatter::escape(\sprintf('  %s $%s: %s', $view, $name, \implode(' vs ', $types))));
+                }
+            }
+
+            $io->newLine();
+        }
+
         // Ahead of both success branches, so a dry run fails too: its diff is then not what a write
         // would produce, and a caller gating on the exit code would ship the difference unnoticed.
         if ($failures !== []) {
@@ -269,9 +283,11 @@ final class AnnotateCommand extends Command
         }
 
         if ($changed === []) {
-            $io->success($unknown === []
-                ? 'Every template already declares the variables it reads.'
-                : \sprintf('Nothing to annotate: %d template(s) read only names no call site types.', \count($unknown)));
+            $io->success(match (true) {
+                $unknown === [] && $disagreed === [] => 'Every template already declares the variables it reads.',
+                $disagreed === [] => \sprintf('Nothing to annotate: %d template(s) read only names no call site types.', \count($unknown)),
+                default => 'Nothing to annotate: every undeclared name is listed above.',
+            });
 
             return Command::SUCCESS;
         }

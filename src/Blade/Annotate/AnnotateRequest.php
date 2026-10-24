@@ -58,8 +58,11 @@ final class AnnotateRequest
      * @param array<string, string>       $failures template path => why it was left alone
      * @param array<string, list<string>> $unknown  template path => names read but left undeclared,
      *                                              since no call site types them
+     * @param array<string, array<string, list<string>>> $disagreed view name => names left undeclared
+     *                                                            because its call sites disagree => the
+     *                                                            distinct types they pass
      */
-    public function publish(array $changed, array $failures, string $diff, array $unknown = []): void
+    public function publish(array $changed, array $failures, string $diff, array $unknown = [], array $disagreed = []): void
     {
         $this->write([
             'dryRun' => $this->dryRun,
@@ -67,6 +70,7 @@ final class AnnotateRequest
             'failures' => $failures,
             'diff' => $diff,
             'unknown' => $unknown,
+            'disagreed' => $disagreed,
         ]);
     }
 

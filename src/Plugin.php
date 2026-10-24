@@ -39,6 +39,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
         require_once __DIR__ . '/Issues/BladeCompileFailure.php';
+        require_once __DIR__ . '/Issues/MissingViewVariable.php';
+        require_once __DIR__ . '/Issues/InvalidViewVariableType.php';
+        require_once __DIR__ . '/Issues/UnusedViewData.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
         // Third gated laravel/ai call site, alongside the stubs and the handler.
@@ -90,7 +93,7 @@ final class Plugin implements PluginEntryPointInterface
             // (finder fallback) and the always-on view() narrowing both need it.
             $viewFactory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
 
-            if ($pluginConfig->findMissingViews || $pluginConfig->bladeValidateViewData) {
+            if ($pluginConfig->findMissingViews || $pluginConfig->bladeEnabled) {
                 $this->initMissingViewHandler(ApplicationProvider::getApp(), $output, $viewFactory, $pluginConfig->findMissingViews);
             }
 
@@ -827,18 +830,15 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports
-        // data keys the template never reads (#1478). Needs the compile pass to have populated
-        // ContractRegistry, hence the activation half of the gate; the two flags are independent
-        // opt-ins for the checks themselves, sharing one walk of the statement.
-        if ($bladeActive && ($pluginConfig->bladeValidateViewData || $pluginConfig->bladeReportUnusedViewData)) {
+        // data keys the template never reads (#1478); needs ContractRegistry populated. No flag of
+        // its own: ExperimentalIssuePolicy sets the severity of its issues (#1985). Not for a run
+        // where only the annotate codemod switched Blade on: that run skips initMissingViewHandler(),
+        // which `@includeFirst` candidates resolve through.
+        if ($bladeActive && $pluginConfig->bladeEnabled) {
             require_once __DIR__ . '/Blade/ComposerKeyResolver.php';
             require_once __DIR__ . '/Blade/ReadSetResolver.php';
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
-            Handlers\Views\ViewContractHandler::init(
-                $pluginConfig->bladeValidateViewData,
-                $pluginConfig->bladeReportUnusedViewData,
-            );
             $registration->registerHooksFromClass(Handlers\Views\ViewContractHandler::class);
         }
 
@@ -933,7 +933,7 @@ final class Plugin implements PluginEntryPointInterface
      * Uses the app's FileViewFinder which reflects config('view.paths') plus
      * any paths added by service providers during bootstrap.
      *
-     * Also runs without findMissingViews ($report false) for Blade's validateViewData, which needs
+     * Also runs without findMissingViews ($report false) for Blade's view-data checks, which need
      * to know which `@includeFirst` candidate exists; a finder it cannot read then just leaves that
      * unknown, so only the MissingView diagnostic warns.
      */
@@ -1013,9 +1013,8 @@ final class Plugin implements PluginEntryPointInterface
      * and the booted `BladeCompiler`'s own registration surface (see
      * `Blade\CompilerEnvironment::describe()`).
      *
-     * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod driving this run, which needs
-     *                                                the read sets the UnusedViewData pass collects whether
-     *                                                or not that rule is on, and is told why Blade disabled itself
+     * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod driving this run, told why
+     *                                                Blade disabled itself
      *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
      *              published nothing, so no Blade handler may register
@@ -1031,8 +1030,8 @@ final class Plugin implements PluginEntryPointInterface
             $registrar,
             $output,
             $pluginConfig->bladeCacheDir,
-            $pluginConfig->bladeReportUnusedViewData || $annotate instanceof Blade\Annotate\AnnotateRequest,
-            $pluginConfig->failOnInternalError,
+            collectDataIncludes: true,
+            failOnInternalError: $pluginConfig->failOnInternalError,
         );
 
         if (!$bootstrapper->boot()) {

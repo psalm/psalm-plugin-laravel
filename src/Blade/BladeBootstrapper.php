@@ -38,7 +38,7 @@ final class BladeBootstrapper
         private readonly ShadowRegistrar $registrar,
         private readonly Progress $output,
         private readonly string $shadowDir,
-        /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
+        /** UnusedViewData's read sets: two extra AST walks per template. The plugin always collects them. */
         private readonly bool $collectDataIncludes = false,
         /** The caller escalates a disable, so the warning is left to that one report. */
         private readonly bool $failOnInternalError = false,
@@ -51,15 +51,6 @@ final class BladeBootstrapper
 
     /** Kept for name-ownership checks against namespaces that lost a root to the vendor filter. */
     private ?FileViewFinder $finder = null;
-
-    /**
-     * Namespaces with a hint root dropped by the vendor filter: root order no longer mirrors
-     * Laravel's resolution there (the dropped root still wins), so each survivor is verified
-     * against the finder. @see templateOwnsName()
-     *
-     * @var array<string, true>
-     */
-    private array $vendorShadowedNamespaces = [];
 
     /**
      * Buffered, not written to the registries directly: a degraded run must leave them empty
@@ -635,8 +626,6 @@ final class BladeBootstrapper
                 $hint = PathCaseCanonicalizer::canonicalize($hint);
 
                 if ($vendorDir !== null && $this->isUnderVendorDirectory($hint, $vendorDir)) {
-                    $this->vendorShadowedNamespaces[$namespace] = true;
-
                     continue;
                 }
 
@@ -650,20 +639,24 @@ final class BladeBootstrapper
     }
 
     /**
-     * Whether Laravel would actually resolve `$viewName` to `$templatePath`. Only checked for a
-     * namespace that lost a hint root to the vendor filter: the dropped root can still own the
-     * name there. A finder failure keeps the claim (fail open).
+     * Whether Laravel would actually resolve the namespaced `$viewName` to `$templatePath`. Hint
+     * root order alone does not say: a vendor root dropped by the filter, or an earlier root's
+     * non-Blade file (`widget.php`), can win the name. A name the finder cannot resolve is not
+     * owned; any other finder failure keeps the claim (fail open).
+     *
+     * Default-root names are not asked: root order decides between Blade files there, and a
+     * non-Blade file shadowing a later root's template is a known residual.
      */
     private function templateOwnsName(string $viewName, string $templatePath): bool
     {
-        $namespace = \strstr($viewName, '::', true);
-
-        if ($namespace === false || !isset($this->vendorShadowedNamespaces[$namespace]) || !$this->finder instanceof FileViewFinder) {
+        if (!\str_contains($viewName, '::') || !$this->finder instanceof FileViewFinder) {
             return true;
         }
 
         try {
             $winner = \realpath($this->finder->find($viewName));
+        } catch (\InvalidArgumentException) {
+            return false;
         } catch (\Throwable) {
             return true;
         }

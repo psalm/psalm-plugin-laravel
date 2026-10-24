@@ -14,6 +14,31 @@ final class Renderer
         return view('home', ['title' => $this->title(), 'post' => $this->post()]);
     }
 
+    public function packageWidget(): View
+    {
+        return view('pkg::widget', ['title' => $this->title()]);
+    }
+
+    public function packageSpelled(): View
+    {
+        return view('pkg::spelled', ['title' => $this->title()]);
+    }
+
+    public function packageSpelledTail(): View
+    {
+        return view('pkg::spelled::tail', ['title' => 1]);
+    }
+
+    public function packagePadded(): View
+    {
+        return view('pkg::padded', ['title' => $this->title()]);
+    }
+
+    public function packagePaddedSpaces(): View
+    {
+        return view(' pkg::padded ', ['title' => 1]);
+    }
+
     public function declared(): View
     {
         return view('declared', ['title' => $this->title(), 'extra' => $this->title()]);

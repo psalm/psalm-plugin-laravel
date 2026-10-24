@@ -12,6 +12,4 @@ use Psalm\Issue\PluginIssue;
 final class MissingViewVariable extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/MissingViewVariable/';
-
-    // No ERROR_LEVEL override: controlled by the plugin setting blade validateViewData
 }

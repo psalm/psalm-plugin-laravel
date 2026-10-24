@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Internal\Provider\NodeDataProvider;
@@ -57,12 +59,148 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
+    public function merges_producers_that_differ_only_by_nullability(): void
+    {
+        $this->assertSame('App\User|null', $this->merge($this->objects('App\User'), Type::getNull()));
+        $this->assertSame('App\User|null', $this->merge($this->objects('App\User'), $this->objects('App\User', 'null')));
+        $this->assertSame('int|null', $this->merge(Type::getInt(), $this->objects('null')));
+    }
+
+    #[Test]
+    public function merges_sibling_classes_into_their_union(): void
+    {
+        $this->assertSame('App\Post|App\Video|null', $this->merge($this->objects('App\Post'), $this->objects('App\Video', 'null')));
+    }
+
+    #[Test]
+    public function merges_up_to_three_classes_and_declines_a_fourth(): void
+    {
+        [$a, $b, $c, $d] = [$this->objects('App\A'), $this->objects('App\B'), $this->objects('App\C'), $this->objects('App\D')];
+
+        $this->assertSame('App\A|App\B|App\C', $this->merge($a, $b, $c));
+        $this->assertNull($this->merge($a, $b, $c, $d));
+        $this->assertSame('App\A|App\B|App\C|null', $this->merge($a, $b, $this->objects('App\C', 'null')), '`null` is not counted');
+    }
+
+    #[Test]
+    public function reaches_the_same_verdict_in_any_producer_order(): void
+    {
+        $types = [$this->objects('App\A'), $this->objects('App\B', 'null'), $this->objects('App\C'), $this->objects('App\D')];
+
+        foreach ([[0, 1, 2], [2, 0, 1], [1, 2, 0]] as $order) {
+            $this->assertSame('App\A|App\B|App\C|null', $this->merge(...\array_map(static fn(int $i): Type\Union => $types[$i], $order)));
+        }
+
+        foreach ([[0, 1, 2, 3], [3, 0, 2, 1], [1, 3, 0, 2]] as $index => $order) {
+            foreach ($order as $position) {
+                AnnotationCollector::record("home{$index}", ['item' => $types[$position]], true);
+            }
+
+            $this->assertSame(['App\A', 'App\B|null', 'App\C', 'App\D'], AnnotationCollector::disagreeingTypes("home{$index}", 'item'));
+        }
+    }
+
+    #[Test]
+    public function never_merges_with_a_mixed_producer(): void
+    {
+        AnnotationCollector::record('home', ['item' => $this->objects('App\Post')], true);
+        AnnotationCollector::record('home', ['item' => Type::getMixed()], true);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'item'));
+        $this->assertSame(['App\Post', 'mixed'], AnnotationCollector::disagreeingTypes('home', 'item'));
+    }
+
+    #[Test]
+    public function never_merges_two_scalar_kinds(): void
+    {
+        AnnotationCollector::record('home', ['key' => Type::getInt()], true);
+        AnnotationCollector::record('home', ['key' => Type::getString()], true);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'key'));
+        $this->assertSame(['int', 'string'], AnnotationCollector::disagreeingTypes('home', 'key'));
+    }
+
+    #[Test]
+    public function never_merges_an_array_with_an_object(): void
+    {
+        $this->assertNull($this->merge(Type::getList(Type::getString()), $this->objects('App\Post')));
+    }
+
+    #[Test]
+    public function never_merges_a_scalar_with_an_object(): void
+    {
+        $this->assertNull($this->merge(Type::getString(), $this->objects('App\Post')));
+    }
+
+    #[Test]
+    public function does_not_list_producers_it_merged_as_disagreeing(): void
+    {
+        // The declaration a merge writes is a union, whose id needs a live Psalm to round-trip, so
+        // the written form is pinned end to end (AnnotateEndToEndTest).
+        AnnotationCollector::record('home', ['user' => $this->objects('App\User')], true);
+        AnnotationCollector::record('home', ['user' => $this->objects('App\User', 'null')], true);
+
+        $this->assertNull(AnnotationCollector::disagreeingTypes('home', 'user'));
+    }
+
+    #[Test]
+    public function merges_one_class_with_different_generic_params_as_a_union_of_each(): void
+    {
+        // Psalm keeps them apart rather than writing `Collection<int, Post|Video>`, which an invariant
+        // TValue would reject at both call sites. Each counts against the cap.
+        $collection = fn(string $class): Type\Union => new Type\Union([
+            new Type\Atomic\TGenericObject('Illuminate\Support\Collection', [Type::getInt(), $this->objects($class)]),
+        ]);
+
+        $this->assertSame(
+            'Illuminate\Support\Collection<int, App\Post>|Illuminate\Support\Collection<int, App\Video>',
+            $this->merge($collection('App\Post'), $collection('App\Video')),
+        );
+        $this->assertNull($this->merge($collection('App\A'), $collection('App\B'), $collection('App\C'), $collection('App\D')));
+    }
+
+    #[Test]
+    public function declines_a_merge_beyond_a_plain_union_it_cannot_prove_holds(): void
+    {
+        // `bool` contains `true`, but saying so takes a codebase, and a unit test has none.
+        $this->assertNull($this->merge(new Type\Union([new Type\Atomic\TTrue()]), new Type\Union([new Type\Atomic\TFalse()])));
+    }
+
+    #[Test]
+    public function lists_no_disagreement_for_agreeing_producers_or_an_open_view(): void
+    {
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        AnnotationCollector::record('open', ['key' => Type::getInt()], true);
+        AnnotationCollector::record('open', ['key' => Type::getString()], false);
+
+        $this->assertNull(AnnotationCollector::disagreeingTypes('home', 'title'));
+        $this->assertNull(AnnotationCollector::disagreeingTypes('open', 'key'), 'an open data set is not a disagreement');
+    }
+
+    #[Test]
     public function collapses_literal_precision_so_two_literals_of_a_type_still_agree(): void
     {
         AnnotationCollector::record('home', ['count' => $this->literal(1)], true);
         AnnotationCollector::record('home', ['count' => $this->literal(2)], true);
 
         $this->assertSame('int', AnnotationCollector::typeFor('home', 'count'));
+    }
+
+    #[Test]
+    public function keeps_every_literal_that_shares_an_id_for_the_containment_check(): void
+    {
+        // `100` and `1` share the id `int`. Keeping only the last would let a later `int<0, 5>`
+        // merge to a range that rejects the `100` call site.
+        AnnotationCollector::record('home', ['count' => $this->literal(100)], true);
+        AnnotationCollector::record('home', ['count' => $this->literal(1)], true);
+
+        $observed = (new \ReflectionProperty(AnnotationCollector::class, 'observed'))->getValue();
+        $this->assertIsArray($observed['home']['count']);
+        $kept = \array_keys($observed['home']['count']['int']->getAtomicTypes());
+        \sort($kept);
+
+        $this->assertSame(['int(1)', 'int(100)'], $kept);
     }
 
     #[Test]
@@ -359,9 +497,63 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertNull(AnnotationCollector::typeFor('raw|inner', 'title'));
     }
 
+    #[Test]
+    public function answers_the_type_a_callback_inside_a_declined_chain_passes(): void
+    {
+        // The callback's statement records the producer first; the declined chain holding it then
+        // meets the same call, `with()` link included, and must not count it again as unreadable.
+        $this->analyzeStatements(
+            "Action::make('qr')->modalContent(fn () => view('home', ['title' => 'text'])->with(['extra' => 'more']));",
+            [['title' => Type::getString()], ['extra' => Type::getString()]],
+        );
+
+        $this->assertSame('string', AnnotationCollector::typeFor('home', 'title'));
+        $this->assertSame('string', AnnotationCollector::typeFor('home', 'extra'));
+    }
+
+    #[Test]
+    public function marks_a_view_unreadable_when_a_callback_renders_it_through_a_declined_chain(): void
+    {
+        // The callback's own statement is declined too (`render()` is no link the walk knows), so no
+        // producer was recorded for that call and the outer scan still has to count it.
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\nAction::make('qr')->modalContent(fn () => view('home', ['title' => 42])->render());",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
+     * The callback's call was recorded, but the declined expression around it receives the view it
+     * returns and may write data into it: invoked in place, through a helper, by a magic `with*`
+     * call, or by an offset write.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function callbackResultWrites(): iterable
+    {
+        yield 'invoked in place, with()' => ["(fn () => view('home', ['title' => 'text']))()->with('title', 42);"];
+        yield 'through a helper, magic with*()' => ["value(fn () => view('home', ['title' => 'text']))->withTitle(42);"];
+        yield 'offset write in a tap callback' => ["tap((fn () => view('home', ['title' => 'text']))(), fn (\$v) => \$v['title'] = 42);"];
+        yield 'dynamic method name' => ["value(fn () => view('home', ['title' => 'text']))->{\$method}('title', 42);"];
+    }
+
+    #[Test]
+    #[DataProvider('callbackResultWrites')]
+    public function marks_a_view_unreadable_when_the_declined_expression_may_write_into_a_callback_result(string $code): void
+    {
+        $this->analyzeStatements($code, [['title' => Type::getString()]]);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
     /**
      * Runs the statement hook over parsed PHP, with the shape each array literal infers to supplied
      * in source order: no analysis runs here, so nothing else would type the data arguments.
+     *
+     * Callback bodies are fed ahead of the statement holding them, innermost first, which is the
+     * order Psalm analyses them in.
      *
      * @param list<array<string, Type\Union>> $shapes
      */
@@ -389,6 +581,19 @@ final class AnnotationCollectorTest extends TestCase
         $source->method('getNodeTypeProvider')->willReturn($nodeData);
 
         foreach ($statements as $statement) {
+            $callbacks = (new NodeFinder())->find(
+                $statement,
+                static fn(Node $node): bool => $node instanceof Expr\ArrowFunction || $node instanceof Expr\Closure,
+            );
+
+            foreach (\array_reverse($callbacks) as $callback) {
+                \assert($callback instanceof Expr\ArrowFunction || $callback instanceof Expr\Closure);
+
+                foreach ($callback->getStmts() as $inner) {
+                    AnnotationCollector::afterStatementAnalysis($this->statementEvent($inner, $source));
+                }
+            }
+
             AnnotationCollector::afterStatementAnalysis($this->statementEvent($statement, $source));
         }
     }
@@ -403,6 +608,29 @@ final class AnnotationCollectorTest extends TestCase
         $class->getProperty('statements_source')->setValue($event, $source);
 
         return $event;
+    }
+
+    /** What the producers merge to, by id, or null when they do not merge. */
+    private function merge(Type\Union ...$types): ?string
+    {
+        $distinct = [];
+
+        foreach ($types as $type) {
+            $distinct[$type->getId(false)] = $type;
+        }
+
+        $merged = (new \ReflectionMethod(AnnotationCollector::class, 'merged'))->invoke(null, $distinct);
+
+        return $merged instanceof Type\Union ? $merged->getId(false) : null;
+    }
+
+    /** A union of named classes, `null` standing for the null type. */
+    private function objects(string ...$classes): Type\Union
+    {
+        return new Type\Union(\array_map(
+            static fn(string $class): Type\Atomic => $class === 'null' ? new Type\Atomic\TNull() : new Type\Atomic\TNamedObject($class),
+            $classes,
+        ));
     }
 
     /** Built directly: Type::getInt($value) reaches for a Config singleton no unit test boots. */

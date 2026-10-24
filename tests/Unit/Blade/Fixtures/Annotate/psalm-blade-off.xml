@@ -9,7 +9,7 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <blade validateViewData="true" reportUnusedViewData="true" cacheDir=".cache/blade-shadows" />
+            <blade value="false" cacheDir=".cache/blade-shadows" />
         </pluginClass>
     </plugins>
 </psalm>

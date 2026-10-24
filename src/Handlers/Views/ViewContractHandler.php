@@ -43,8 +43,8 @@ use Psalm\Type;
  * missing. A statement is visited once, and {@see ViewCallChain} walks it outermost-first, so the
  * whole chain is in hand before anything is reported.
  *
- * Also reports, under its own independent flag, a data key the template never reads
- * ({@see UnusedViewData}) — the same walk and the same resolved chain, asked from the other side.
+ * Also reports a data key the template never reads ({@see UnusedViewData}): the same walk and the
+ * same resolved chain, asked from the other side.
  *
  * Inside a template, the `$__env->make()` call an `@include` compiles to is checked as the
  * `Factory::make()` call site it is, and so are the `renderWhen()`, `renderUnless()` and `first()`
@@ -59,26 +59,14 @@ use Psalm\Type;
  */
 final class ViewContractHandler implements AfterCodebasePopulatedInterface, AfterStatementAnalysisInterface
 {
-    private static bool $validateViewData = false;
-
-    private static bool $reportUnusedViewData = false;
-
     /** @var array<string, Type\Union|null> declared type string => parsed union, null when unparseable */
     private static array $declaredTypes = [];
 
     /** @var array<string, array<string, true>|null> view name => include-chain read set, null when unprovable */
     private static array $readSets = [];
 
-    public static function init(bool $validateViewData, bool $reportUnusedViewData): void
-    {
-        self::$validateViewData = $validateViewData;
-        self::$reportUnusedViewData = $reportUnusedViewData;
-    }
-
     public static function reset(): void
     {
-        self::$validateViewData = false;
-        self::$reportUnusedViewData = false;
         self::$declaredTypes = [];
         self::$readSets = [];
     }
@@ -87,20 +75,14 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
-        if (self::$validateViewData) {
-            ComposerKeyResolver::resolve($event->getCodebase());
-        }
+        ComposerKeyResolver::resolve($event->getCodebase());
     }
 
     #[\Override]
     public static function afterStatementAnalysis(AfterStatementAnalysisEvent $event): ?bool
     {
-        if (!self::$validateViewData && !self::$reportUnusedViewData) {
-            return null;
-        }
-
         $stmt = $event->getStmt();
-        $include = self::$validateViewData && $stmt instanceof Stmt\Echo_ ? self::compiledInclude($stmt) : null;
+        $include = $stmt instanceof Stmt\Echo_ ? self::compiledInclude($stmt) : null;
 
         // The two statement shapes a rendering expression is the whole of, plus a compiled include.
         // An expression nested deeper (an argument, an array element) is left alone on purpose: the
@@ -180,7 +162,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         // can be judged from the call site. A view whose composer cannot be read is exempt as a whole.
         $composed = ContractRegistry::composedKeys($chain->viewName);
 
-        if (self::$validateViewData && $composed !== null) {
+        if ($composed !== null) {
             $supplied = $chain->supplied();
 
             foreach ($contract->vars as $name => $var) {
@@ -201,7 +183,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         }
 
         // UnusedViewData judges `view()` call sites only.
-        if (self::$reportUnusedViewData && !$include) {
+        if (!$include) {
             self::reportUnusedData($chain, $contract, $codeLocation, $suppressedIssues);
         }
     }

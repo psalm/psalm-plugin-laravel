@@ -42,23 +42,32 @@ In a template, the keys a literal data array passes to `@include`, `@includeIf`,
 1. Pass a value of the declared type, or cast it at the call site.
 2. Widen the template's declaration if the template really does handle both (`@var string|int $name`).
 
-## Configuration
+## Reporting level
 
-This check is disabled by default, and needs Blade analysis enabled. Enable it in your `psalm.xml`:
+Runs whenever [Blade analysis](../blade.md) is on. Without an explicit issue handler, it is reported as `info` by default: hidden unless Psalm runs with `--show-info=true`, never failing the run, and left out of a baseline. Promote that default to an error in `psalm.xml`:
 
 ```xml
-<plugins>
-    <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <blade validateViewData="true" />
-    </pluginClass>
-</plugins>
+<pluginClass class="Psalm\LaravelPlugin\Plugin">
+    <blade />
+    <experimental value="true" />
+</pluginClass>
 ```
+
+Or promote this issue alone:
+
+```xml
+<issueHandlers>
+    <PluginIssue name="InvalidViewVariableType" errorLevel="error" />
+</issueHandlers>
+```
+
+Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy, regardless of `<experimental>`.
 
 ## Limitations
 
 The check declines rather than guess. It is silent when:
 
-- The view name is not a string literal, or is namespaced (`pkg::view`).
+- The view name is not a string literal, or names a template that is not analyzed: a namespace hint (`pkg::view`) under your vendor directory, or an unknown namespace.
 - The declared type is `mixed`, which is every `@props([...])` entry (a literal default types the template body, never what a caller may pass).
 - The passed value is `mixed`, which satisfies any declaration.
 - The passed value is of a class that does not exist, which Psalm already reports where it is named.

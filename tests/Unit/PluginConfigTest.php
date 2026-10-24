@@ -706,8 +706,6 @@ final class PluginConfigTest extends TestCase
             'findOctaneIncompatibleBinding=true',
             'findPromptInjection=false',
             'blade=true',
-            'blade.validateViewData=true',
-            'blade.reportUnusedViewData=true',
             'blade.reportMixedIssues=true',
             'experimental=true',
             'failOnInternalError=true',
@@ -725,8 +723,6 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->findOctaneIncompatibleBinding);
         $this->assertFalse($config->findPromptInjection);
         $this->assertTrue($config->bladeEnabled);
-        $this->assertTrue($config->bladeValidateViewData);
-        $this->assertTrue($config->bladeReportUnusedViewData);
         $this->assertTrue($config->bladeReportMixedIssues);
         $this->assertTrue($config->experimental);
         $this->assertTrue($config->failOnInternalError);
@@ -774,19 +770,19 @@ final class PluginConfigTest extends TestCase
         $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'), PluginOverrides::parse('blade=false'))->bladeEnabled);
 
         $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade value="false" validateViewData="true" cacheDir="from-xml" /></pluginClass>'),
+            new \SimpleXMLElement('<pluginClass><blade value="false" reportMixedIssues="true" cacheDir="from-xml" /></pluginClass>'),
             PluginOverrides::parse('blade=true'),
         );
 
         $this->assertTrue($config->bladeEnabled);
-        $this->assertTrue($config->bladeValidateViewData);
+        $this->assertTrue($config->bladeReportMixedIssues);
         $this->assertSame('from-xml', $config->bladeCacheDir);
     }
 
     #[Test]
     public function blade_sub_settings_never_enable_blade(): void
     {
-        $subSettings = PluginOverrides::parse('blade.validateViewData=true blade.reportUnusedViewData=true blade.reportMixedIssues=true');
+        $subSettings = PluginOverrides::parse('blade.reportMixedIssues=true');
 
         $this->assertFalse(PluginConfig::fromXml(null, $subSettings)->bladeEnabled);
         $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'), $subSettings)->bladeEnabled);

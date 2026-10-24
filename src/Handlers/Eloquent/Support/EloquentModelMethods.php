@@ -85,7 +85,7 @@ final class EloquentModelMethods
      * inheriting class's entry.
      *
      * A private `#[Scope]` is never a usable scope on any supported Laravel (12-13): 13.8+ rejects it in
-     * Model::isScopeMethodWithAttribute (`! isPrivate() && ...`), and on 12.4-13.7 callNamedScope
+     * Model::isScopeMethodWithAttribute (`! isPrivate() && ...`), and on 12.27-13.7 callNamedScope
      * dispatches from the base Model's `$this`, where a subclass's private method is unreachable, so it
      * routes back through __call and recurses. Either way it cannot dispatch, so report it as "not a
      * scope" rather than treating it as a real (dead) one.

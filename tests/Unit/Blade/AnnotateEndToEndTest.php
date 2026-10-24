@@ -39,6 +39,14 @@ final class AnnotateEndToEndTest extends TestCase
 
     private const VIEWS = self::FIXTURE . '/resources/views';
 
+    /** A `loadViewsFrom()` hint root outside vendor/, registered as `pkg` by the fixture's bootstrap. */
+    private const PKG_VIEWS = self::FIXTURE . '/resources/pkg-views';
+
+    private const PKG_WIDGET = "<p>{{ \$title }}</p>\n";
+
+    /** Rendered under a spelling Laravel normalizes (`pkg::spelled::tail`, `' pkg::padded '`) too. */
+    private const PKG_RESPELLED = ['spelled', 'padded'];
+
     private const TEMPLATES = [
         'home' => "<h1>{{ \$title }}</h1>\n<p>{{ \$post->slug }}</p>\n",
         'declared' => "<?php /** @var string \$title */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
@@ -50,6 +58,7 @@ final class AnnotateEndToEndTest extends TestCase
         'collections' => "{{ \$missing->count() }} {{ count(\$byRole) }} {{ \$kind }}\n",
         'panel' => "{{ \$family->count() }} {{ \$handler instanceof \\Closure }}\n",
         'panel-kind' => "{{ \$kind }}\n",
+        'merged' => "{{ json_encode([\$author, \$media, \$trio, \$flag, \$posts, \$any, \$key]) }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
         'statics' => "<p>{{ \$stats['total'] }}</p>\n",
@@ -57,6 +66,12 @@ final class AnnotateEndToEndTest extends TestCase
             . "@includeIsolated('inner', ['showCount' => \$showCount])\n@includeIsolated('counter', ['showCount' => \$showCount])\n",
         'inner' => "<p>{{ \$showCount ? 'yes' : 'no' }}</p>\n",
         'counter' => "<p>{{ \$showCount ? 'yes' : 'no' }}</p>\n",
+        'modal-arrow' => "{{ \$text }}\n",
+        'modal-closure' => "{{ \$text }}\n",
+        'modal-nested' => "{{ \$text }}\n",
+        'modal-open' => "{{ \$text }}\n",
+        'modal-rendered' => "{{ \$text }}\n",
+        'modal-invoked' => "{{ \$text }}\n",
     ];
 
     private ?string $controlFile = null;
@@ -70,6 +85,12 @@ final class AnnotateEndToEndTest extends TestCase
 
         foreach (self::TEMPLATES as $name => $contents) {
             \file_put_contents(self::VIEWS . "/{$name}.blade.php", $contents);
+        }
+
+        \file_put_contents(self::PKG_VIEWS . '/widget.blade.php', self::PKG_WIDGET);
+
+        foreach (self::PKG_RESPELLED as $name) {
+            \file_put_contents(self::PKG_VIEWS . "/{$name}.blade.php", self::PKG_WIDGET);
         }
     }
 
@@ -95,12 +116,96 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     #[Test]
+    public function declares_a_namespaced_view_from_its_qualified_call_sites(): void
+    {
+        $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var string \$title\n */\n?>\n" . self::PKG_WIDGET,
+            (string) \file_get_contents(self::PKG_VIEWS . '/widget.blade.php'),
+        );
+    }
+
+    /**
+     * `view('pkg::spelled::tail')` renders `pkg::spelled` (`ViewName::normalize()` keeps two segments)
+     * and `view(' pkg::padded ')` renders `pkg::padded` (the finder trims), passing another type there.
+     */
+    #[Test]
+    public function a_respelled_producer_blocks_the_template_it_really_renders(): void
+    {
+        $result = $this->annotate();
+
+        foreach (self::PKG_RESPELLED as $name) {
+            $this->assertSame(self::PKG_WIDGET, (string) \file_get_contents(self::PKG_VIEWS . "/{$name}.blade.php"), $name);
+            $this->assertSame(['title'], $this->unknownFor($result, $name), $name);
+        }
+    }
+
+    #[Test]
     public function lists_rather_than_declares_a_name_two_call_sites_disagree_on(): void
     {
         $result = $this->annotate();
 
         $this->assertSame(self::TEMPLATES['conflict'], $this->template('conflict'));
-        $this->assertSame(['flag'], $this->unknownFor($result, 'conflict'));
+        $this->assertNull($this->unknownFor($result, 'conflict'), 'both call sites type it, so it is no unknown');
+        $this->assertSame(['conflict' => ['flag' => ['AnnotateFixture\\Post', 'string']]], \array_intersect_key((array) ($result['disagreed'] ?? []), ['conflict' => true]));
+    }
+
+    #[Test]
+    public function merges_the_call_sites_that_differ_only_in_ways_one_declaration_covers(): void
+    {
+        // Nullability, sibling classes up to three, `true`/`false`, and one class with different generic
+        // params merge; a fourth class and two scalar kinds are listed.
+        $result = $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var \\AnnotateFixture\\Post|null \$author\n"
+            . " * @var bool \$flag\n"
+            . " * @var \\AnnotateFixture\\Post|\\AnnotateFixture\\Video \$media\n"
+            . " * @var \\Illuminate\\Support\\Collection<int, \\AnnotateFixture\\Post>|\\Illuminate\\Support\\Collection<int, \\AnnotateFixture\\Video> \$posts\n"
+            . " * @var \\AnnotateFixture\\Panel|\\AnnotateFixture\\Post|\\AnnotateFixture\\Video \$trio\n */\n?>\n" . self::TEMPLATES['merged'],
+            $this->template('merged'),
+        );
+        $this->assertSame(
+            [
+                'any' => ['AnnotateFixture\\Merger', 'AnnotateFixture\\Panel', 'AnnotateFixture\\Post', 'AnnotateFixture\\Video'],
+                'key' => ['int', 'string'],
+            ],
+            ((array) ($result['disagreed'] ?? []))['merged'] ?? null,
+        );
+        $this->assertNull($this->unknownFor($result, 'merged'));
+    }
+
+    #[Test]
+    public function a_merged_declaration_holds_at_every_call_site_that_produced_it(): void
+    {
+        $this->annotate();
+        $this->assertStringContainsString('@var bool $flag', $this->template('merged'), 'the merge must have been written');
+
+        $this->assertSame([], $this->viewIssuesAtMerger());
+
+        // The control: the same run does report a declaration the producers contradict, so the
+        // empty list above is not a check that never ran.
+        $path = self::VIEWS . '/merged.blade.php';
+        \file_put_contents($path, \str_replace('@var bool $flag', '@var int $flag', $this->template('merged')));
+
+        $this->assertNotSame([], $this->viewIssuesAtMerger());
+    }
+
+    /** @return list<mixed> InvalidViewVariableType and MissingViewVariable reported at the merge fixture's call sites */
+    private function viewIssuesAtMerger(): array
+    {
+        $this->runPsalm(null);
+
+        $report = \json_decode($this->psalmOutput, true);
+        $this->assertIsArray($report, 'the ordinary run must report JSON');
+
+        return \array_values(\array_filter(
+            $report,
+            static fn(mixed $issue): bool => \is_array($issue)
+                && \in_array($issue['type'] ?? null, ['InvalidViewVariableType', 'MissingViewVariable'], true)
+                && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php'),
+        ));
     }
 
     #[Test]
@@ -125,12 +230,12 @@ final class AnnotateEndToEndTest extends TestCase
     #[Test]
     public function an_include_site_counts_as_a_producer_of_the_included_view(): void
     {
-        // The include passes `bool` (the flow type after `??= false`), the controller `true`: they
-        // disagree, so declaring the controller's type would be a type error at the include.
+        // The include passes `bool` (the flow type after `??= false`), the controller `true`: declaring
+        // the controller's type alone would be a type error at the include; `bool` covers both.
         $result = $this->annotate();
 
-        $this->assertSame(self::TEMPLATES['inner'], $this->template('inner'));
-        $this->assertSame(['showCount'], $this->unknownFor($result, 'inner'));
+        $this->assertSame("<?php\n/**\n * @var bool \$showCount\n */\n?>\n" . self::TEMPLATES['inner'], $this->template('inner'));
+        $this->assertNull($this->unknownFor($result, 'inner'));
 
         // Where the controller passes `bool` too, the two agree: the include's type is the one
         // after the reassignment, not the including template's declared `true|null`.
@@ -194,6 +299,31 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertSame(self::TEMPLATES['locals'], $this->template('locals'));
         $this->assertSame(['rows'], $this->unknownFor($result, 'locals'));
         $this->assertStringNotContainsString('locals.blade.php', (string) ($result['diff'] ?? ''));
+    }
+
+    #[Test]
+    public function declares_the_type_a_closure_inside_a_declined_chain_passes(): void
+    {
+        // The callback's own statement records the producer; the enclosing chain is declined, and
+        // its scan for nested view names must not count that same call a second time as unreadable.
+        $this->annotate();
+
+        foreach (['modal-arrow', 'modal-closure', 'modal-nested'] as $name) {
+            $this->assertSame("<?php\n/**\n * @var string \$text\n */\n?>\n{{ \$text }}\n", $this->template($name), $name);
+        }
+    }
+
+    #[Test]
+    public function leaves_undeclared_a_view_a_closure_renders_with_unreadable_data(): void
+    {
+        // Each view has a closed call site passing a string, so only what surrounds it keeps the
+        // declaration out: an open data set, a chain the walk cannot resolve, and an enclosing chain
+        // that writes into the view the callback returns.
+        $this->annotate();
+
+        $this->assertSame(self::TEMPLATES['modal-open'], $this->template('modal-open'));
+        $this->assertSame(self::TEMPLATES['modal-rendered'], $this->template('modal-rendered'));
+        $this->assertSame(self::TEMPLATES['modal-invoked'], $this->template('modal-invoked'), 'the enclosing chain overwrites the key');
     }
 
     #[Test]
@@ -269,7 +399,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(9, $result['changed']);
+        $this->assertCount(15, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
@@ -282,6 +412,38 @@ final class AnnotateEndToEndTest extends TestCase
         foreach (self::TEMPLATES as $name => $contents) {
             $this->assertSame($contents, $this->template($name));
         }
+    }
+
+    /**
+     * The view-data checks follow the project's own Blade setting. The codemod switches Blade on for a
+     * project that has it off, but that run must not start reporting view data: it lacks the view
+     * finder an `@includeFirst` candidate is resolved through. `noteOmitted()` passes an unread key.
+     */
+    #[Test]
+    public function a_run_with_blade_on_only_for_the_codemod_reports_no_view_data(): void
+    {
+        $this->assertSame(['UnusedViewData'], $this->viewDataIssues('psalm.xml'));
+        $this->assertSame([], $this->viewDataIssues('psalm-blade-off.xml'));
+    }
+
+    /** @return list<string> the view-data issue types a dry annotate run under `$config` reports */
+    private function viewDataIssues(string $config): array
+    {
+        $output = $this->annotateOutput(dryRun: true, config: $config);
+        $decoded = \json_decode($output, true);
+        $this->assertIsArray($decoded, $output);
+
+        $types = [];
+
+        foreach ($decoded as $issue) {
+            $this->assertIsArray($issue);
+
+            if (\in_array($issue['type'], ['MissingViewVariable', 'InvalidViewVariableType', 'UnusedViewData'], true)) {
+                $types[] = (string) $issue['type'];
+            }
+        }
+
+        return $types;
     }
 
     #[Test]
@@ -299,6 +461,18 @@ final class AnnotateEndToEndTest extends TestCase
     /** @return array<string, mixed> the control file's result */
     private function annotate(bool $dryRun = false): array
     {
+        $this->annotateOutput($dryRun);
+
+        $this->assertIsString($this->controlFile);
+        $decoded = \json_decode((string) \file_get_contents($this->controlFile), true);
+        $this->assertIsArray($decoded, 'the annotate pass never reported back');
+
+        return $decoded;
+    }
+
+    /** @return string the JSON report of the annotate run */
+    private function annotateOutput(bool $dryRun = false, string $config = 'psalm.xml'): string
+    {
         $controlFile = \tempnam(\sys_get_temp_dir(), 'psalm-laravel-annotate-e2e');
         $this->assertIsString($controlFile);
         $this->controlFile = $controlFile;
@@ -308,12 +482,7 @@ final class AnnotateEndToEndTest extends TestCase
             'dryRun' => $dryRun,
         ]));
 
-        $this->runPsalm($controlFile);
-
-        $decoded = \json_decode((string) \file_get_contents($controlFile), true);
-        $this->assertIsArray($decoded, 'the annotate pass never reported back');
-
-        return $decoded;
+        return $this->runPsalm($controlFile, $config);
     }
 
     /**
@@ -334,13 +503,14 @@ final class AnnotateEndToEndTest extends TestCase
         return null;
     }
 
-    private function runPsalm(?string $controlFile): void
+    /** @return string the JSON report, info issues included */
+    private function runPsalm(?string $controlFile, string $config = 'psalm.xml'): string
     {
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=2', '--no-progress', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', $config, '--no-cache', '--threads=2', '--no-progress', '--output-format=json', '--show-info=true'],
             self::FIXTURE,
             $controlFile === null ? null : [AnnotateRequest::ENV_VAR => $controlFile],
         );
@@ -349,6 +519,8 @@ final class AnnotateEndToEndTest extends TestCase
         $process->run();
 
         $this->psalmOutput = $process->getOutput();
+
+        return $this->psalmOutput;
     }
 
     private function template(string $name): string
@@ -358,7 +530,7 @@ final class AnnotateEndToEndTest extends TestCase
 
     private function clean(): void
     {
-        foreach (\glob(self::VIEWS . '/*.blade.php') ?: [] as $template) {
+        foreach ([...\glob(self::VIEWS . '/*.blade.php') ?: [], ...\glob(self::PKG_VIEWS . '/*.blade.php') ?: []] as $template) {
             \unlink($template);
         }
 
