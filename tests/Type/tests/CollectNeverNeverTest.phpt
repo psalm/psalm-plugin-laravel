@@ -55,7 +55,6 @@ final class CollectNeverNeverTests
      */
     public function merge_on_never_never_is_assignable(): Collection
     {
-        /** @var Collection<int, string> $items */
         $items = new Collection(['a', 'b']);
 
         return collect()->merge($items);
@@ -67,7 +66,6 @@ final class CollectNeverNeverTests
      */
     public function merge_widens_both_key_and_value_types(): Collection
     {
-        /** @var Collection<int, string> $strings */
         $strings = new Collection(['a', 'b']);
 
         /** @var Collection<string, int> $ints */

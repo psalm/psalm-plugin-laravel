@@ -32,12 +32,12 @@ final class CollectionWhereCallbackTest
 {
     /**
      * Predicate body is `$value > 2`, not the bare param. Handler refuses to narrow;
-     * Psalm's default static return preserves the literal key/value unions.
+     * Psalm's default static return preserves the generalized key/value types.
      */
     public function whereWithGreaterThanCallback(): void
     {
         $_result = (new Collection([1, 2, 3, 4, 5, 6]))->where(fn (int $value): bool => $value > 2);
-        /** @psalm-check-type-exact $_result = Collection<int<0, 5>, 1|2|3|4|5|6>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, int>&static */
     }
 
     /**

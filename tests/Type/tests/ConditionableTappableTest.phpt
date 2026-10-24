@@ -147,7 +147,6 @@ function test_query_builder_when_return_type(QueryBuilder $builder): void
 /** when() on Collection must preserve the collection type, not return mixed. */
 function test_collection_when_fluent_chain(): void
 {
-    /** @var Collection<int, string> $collection */
     $collection = new Collection(['a', 'b', 'c']);
     $_result = $collection->when(false, null, null);
     /** @psalm-check-type-exact $_result = Collection<int, string>&static */

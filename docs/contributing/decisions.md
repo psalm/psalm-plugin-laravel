@@ -629,6 +629,29 @@ Known limitation: a date type inferred BEFORE an unproven link survives it. In `
 - Disclosed gap: producer internals like `Factory::viewInstance()` are protected, so a producer subclass inheriting the mapped method but overriding the construction still narrows to the stock concrete. Accepted (matches the Cache manager precedent). A substitute implementation yields a false negative (a stock-only method resolves though the substitute lacks it), plus a false positive (a substitute-only method flagged undefined) when the stock concrete is not Macroable. The View concrete's `__call` masks the false positive; a non-Macroable producer such as PasswordBroker would exhibit it. Standard apps return the stock concrete, and a call site that hits the gap can suppress locally.
 - Excluded: driver-variant surfaces (Auth guards, Hash, Queue, Broadcast, Redis, Filesystem) where the concrete depends on runtime config.
 
+## Collection Typing
+
+### Collection literal generalization (#1766)
+
+**Decision:** `CollectionInputTypeResolver` widens the literals an array argument binds at construction (`collect()`, `Collection::make()`, `LazyCollection::make()`). Values: literal `int`/`string`/`float`/`true`/`false` become `int`/`string`/`float`/`bool`, but only when EVERY atomic of the value union is such a literal (an enum case or any other atomic disqualifies it); an enum case always becomes its enum, its companion scalar literal stays literal. A callable-string literal (`'strlen'`, `'A::b'`, a function declared in the analyzed code) counts as non-widenable, since `string` is not callable. Class-string literals, shaped rows (`[['id' => 1]]`) and every other atomic are kept as is. Keys: only `int<a, b>` ranges become `int`. Declines (stub binding stays) for `[]`, an unpacked first argument, a named first argument that is not the input parameter (`Sub::make(tag: ..., items: ...)`), and when nothing was widened.
+
+**Why:**
+- The stub binds `[$a, $b]` verbatim as `Collection<int<0, 1>, Item>` and `[1]` as `Collection<0, 1>`; the invariant templates then reject correct code (`@return Collection<int, Item>`, `->prepend(2)`, `->diff([1])`). PHPStan generalizes the templates at construction; this matches it.
+- Literal KEYS stay: `GenericTypeComparator` skips the invariant reverse check when the input param holds a literal, so `Collection<0, A>` and `Collection<'x', A>` already satisfy `Collection<int|string, A>`. Probed: widening them adds errors at bare `Collection` and `Collection<array-key, mixed>` params; only range keys were strict.
+
+**Rejected / dead ends (probed):**
+- Widening literal class-strings (to `string` or `class-string<Foo>`): `new $class(1)` over `collect([Foo::class])` gains `UnsafeInstantiation`, `Collection<int, class-string<I>>` targets are newly rejected and `app($class)` loses the container literal. The literal keeps Psalm's invariant leniency, so it stays.
+- Widening scalar literals next to another atomic (objects, enum cases, class-strings, callable strings): Psalm's leniency applies to the whole param once one literal is present, so `collect(['a' => $child, 'b' => 1])` passed to `Collection<'a'|'b', ParentClass|int>` passes on base and failed after widening. Hence the "every atomic is a widenable literal" gate; enum cases are strict, so they widen on their own.
+- Widening shaped-row values: `collect([['id' => 1]])` passed to `Collection<int, array<string, int>>` is accepted on base (the nested literal keeps Psalm's invariant leniency) and rejected after widening, so rows stay untouched.
+- A `new Collection([...])` handler (`AfterExpressionAnalysis` overriding the `New_` type): Psalm 7 already types the constructor with placeholder templates that accept every probed target, so the handler removed no false positives. It added errors (`new Collection([$child, $child])` passed to `Collection<int, ParentClass>` is accepted on base, rejected with it) and dropped the node's data-flow parent nodes.
+- Unpacked first argument (`collect(...$args)`): both providers decline, since the element type is not the array being unpacked.
+
+**Accepted cost:**
+- A collection built only from literals, passed to an explicit `Collection<int, mixed>` / `Collection<array-key, mixed>` param, now meets the invariant check like any non-literal collection (literal values were lenient before).
+- An all-literal collection checked against any declared value type other than the general type itself (`mixed`, `int|string`, `scalar`, `positive-int`, `non-empty-string`) now meets the invariant check like any non-literal collection.
+- A literal string value loses non-falsiness once widened to `string`, so truthiness checks on elements (`$a = $c[$k] ?? null; if ($a && ...)`) can report `RiskyTruthyFalsyComparison`.
+- `collect(['x', 'y'])[$c->count() - 1]` is no longer flagged as an out-of-range key, because the `int<0, 1>` key range is gone.
+
 ## Third-Party Package Support
 
 ### Plugin covers Laravel framework only, not third-party packages
