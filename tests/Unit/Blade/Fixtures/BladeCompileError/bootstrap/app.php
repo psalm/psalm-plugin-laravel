@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use BladeCompileFailureFixture\Providers\ThrowingDirectiveProvider;
+use BladeCompileErrorFixture\Providers\ThrowingDirectiveProvider;
 use Illuminate\Foundation\Application;
 
 // Required directly: the fixture has no composer autoload mapping, but the provider's boot() runs

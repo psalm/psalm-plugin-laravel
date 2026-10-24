@@ -9,7 +9,14 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <blade cacheDir=".cache/blade-shadows" reportMixedIssues="true" />
+            <blade cacheDir=".cache/blade-shadows" />
         </pluginClass>
     </plugins>
+    <issueHandlers>
+        <PluginIssue name="BladeCompileError">
+            <errorLevel type="suppress">
+                <file name="resources/views/broken.blade.php" />
+            </errorLevel>
+        </PluginIssue>
+    </issueHandlers>
 </psalm>

@@ -35,6 +35,11 @@ final class ViewReferenceRegistry
         self::$namesByTemplate = null;
     }
 
+    /** The file Laravel renders for this view name, null when no discovered template claimed it. */
+    public static function templatePathFor(string $viewName): ?string
+    {
+        return self::$templates[$viewName][1] ?? null;
+    }
 
     /**
      * Every view name a discovered template claimed, and the file it claimed it with.

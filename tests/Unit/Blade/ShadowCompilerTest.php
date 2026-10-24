@@ -12,7 +12,7 @@ use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Blade\BladeCompileError;
+use Psalm\LaravelPlugin\Blade\CompileFailureReason;
 use Psalm\LaravelPlugin\Blade\MarkerPrePass;
 use Psalm\LaravelPlugin\Blade\ShadowCompiler;
 use Psalm\LaravelPlugin\Blade\ShadowResult;
@@ -48,7 +48,7 @@ final class ShadowCompilerTest extends TestCase
     }
 
     /** Psalm runs with E_ALL; PHPUnit's runtime reports less, which would let PHP errors pass. */
-    private function compileReportingAll(ShadowCompiler $compiler, string $source): ShadowResult|BladeCompileError
+    private function compileReportingAll(ShadowCompiler $compiler, string $source): ShadowResult|CompileFailureReason
     {
         $previous = \error_reporting(\E_ALL);
 
@@ -350,7 +350,7 @@ final class ShadowCompilerTest extends TestCase
         // component tags need — this IS the compile-error case, not a bug.
         $result = $this->compiler->compile('view.blade.php', "<x-alert/>\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertSame('view.blade.php', $result->templatePath);
         $this->assertSame('Target [Illuminate\\Contracts\\View\\Factory] is not instantiable.', $result->message);
     }
@@ -363,7 +363,7 @@ final class ShadowCompilerTest extends TestCase
         // literal text instead — a SILENT no-op, not this compile error.
         $result = $this->compiler->compile('view.blade.php', "<x-alert\n    type=\"error\"\n/>\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertSame('Target [Illuminate\\Contracts\\View\\Factory] is not instantiable.', $result->message);
     }
 
@@ -377,7 +377,7 @@ final class ShadowCompilerTest extends TestCase
 
         $result = (new ShadowCompiler($blade))->compile('view.blade.php', "@explode\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertSame('the explode directive needs a request', $result->message);
     }
 
@@ -386,7 +386,7 @@ final class ShadowCompilerTest extends TestCase
     {
         $result = $this->compileReportingAll($this->compiler, "<p>\n  Wrap it in a @component block.\n</p>\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertSame('@component needs arguments; write @@component to print it as text', $result->message);
     }
 
@@ -404,7 +404,7 @@ final class ShadowCompilerTest extends TestCase
                 \ini_set('zend.exception_ignore_args', (string) $previous);
             }
 
-            $this->assertInstanceOf(BladeCompileError::class, $result);
+            $this->assertInstanceOf(CompileFailureReason::class, $result);
             $this->assertSame('@js needs arguments; write @@js to print it as text', $result->message, "exception_ignore_args={$ignoreArgs}");
         }
     }
@@ -422,7 +422,7 @@ final class ShadowCompilerTest extends TestCase
         foreach (['analytics', 'section'] as $directive) {
             $result = $this->compileReportingAll(new ShadowCompiler($blade), "Track it with @{$directive} today\n");
 
-            $this->assertInstanceOf(BladeCompileError::class, $result);
+            $this->assertInstanceOf(CompileFailureReason::class, $result);
             $this->assertSame(
                 "@{$directive}: mb_strtolower(): Passing null to parameter #1 (\$string) of type string is deprecated",
                 $result->message,
@@ -436,7 +436,7 @@ final class ShadowCompilerTest extends TestCase
         // compileParent() has no parameter: its null is the section stack, empty before any @section.
         $result = $this->compileReportingAll($this->compiler, "Ask your @parent first\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertStringStartsWith('@parent: ', $result->message);
         $this->assertStringNotContainsString('needs arguments', $result->message);
     }
@@ -462,9 +462,9 @@ final class ShadowCompilerTest extends TestCase
         $deprecation = $this->compileReportingAll($compiler, "@probe\n");
         $typeError = $this->compileReportingAll($compiler, "@strictProbe\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $deprecation);
+        $this->assertInstanceOf(CompileFailureReason::class, $deprecation);
         $this->assertSame('@probe: mb_strtolower(): Passing null to parameter #1 ($string) of type string is deprecated', $deprecation->message);
-        $this->assertInstanceOf(BladeCompileError::class, $typeError);
+        $this->assertInstanceOf(CompileFailureReason::class, $typeError);
         $this->assertSame('trim(): Argument #1 ($string) must be of type string, null given', $typeError->message);
     }
 
@@ -484,7 +484,7 @@ final class ShadowCompilerTest extends TestCase
 
         $result = $this->compileReportingAll($compiler, "@include('header')\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertSame('@include: mb_strtolower(): Passing null to parameter #1 ($string) of type string is deprecated', $result->message);
     }
 
@@ -520,7 +520,7 @@ final class ShadowCompilerTest extends TestCase
 
         $result = $this->compileReportingAll(new ShadowCompiler($blade), "@warn(\$user)\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertSame('@warn: cannot compile $user', $result->message);
     }
 
@@ -538,7 +538,7 @@ final class ShadowCompilerTest extends TestCase
             \restore_error_handler();
         }
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertSame($sentinel, $current);
     }
 

@@ -18,7 +18,6 @@ use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MissingPureAnnotation;
 use Psalm\Issue\MixedIssue;
-use Psalm\Issue\MixedMethodCall;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\ParseError;
@@ -78,35 +77,24 @@ final class ShadowIssueRelocator
     ];
 
     /**
-     * The compiled save/restore statements whose assignment `MixedAssignment` reports (#1872):
-     * `statement` is what must be absent from the template, `target` where Psalm positions the
-     * issue. The `$__*Original*` saves are not here: AssignmentAnalyzer skips a target whose var id
-     * starts with `$_`. The `$__sessionPrevious[] =` push has no var id, so it IS reported.
-     */
-    private const SAVE_RESTORE_PATTERNS = [
-        // CompilesComponents::compileEndComponentClass(); the hash is newComponentHash()'s xxh128
-        '/(?<statement>(?<target>\$(?<name>attributes|component)) = \$__\k<name>Original[0-9a-f]{32};)/',
-        // CompilesErrors::compileEnderror()
-        '/(?<statement>if \(isset\(\$__messageOriginal\)\) \{ (?<target>\$message) = \$__messageOriginal; \})/',
-        // CompilesSessions/CompilesContexts: the push in compileSession(), the pop in compileEndsession()
-        '/(?<statement>if \(isset\(\$value\)\) \{ (?<target>\$__(?:session|context)Previous)\[\] = \$value; \})/',
-        '/(?<statement>if \(isset\(\$__(?<kind>session|context)Previous\) && !empty\(\$__\k<kind>Previous\)\) \{ (?<target>\$value) = array_pop\(\$__\k<kind>Previous\); \})/',
-    ];
-
-    /**
-     * @param ShadowTarget                    $target      the shadow the issue was found in
-     * @param \Closure(string): ?ShadowTarget $resolve     any OTHER shadow a taint journey passes
-     *                                                     through; a journey crosses files, so one
-     *                                                     target is not enough
-     * @param bool                            $reportMixed `<blade reportMixedIssues="true" />`; false
-     *                                                      drops the whole `MixedIssue` family instead
-     *                                                      of relocating it (#1495)
+     * @param ShadowTarget                    $target  the shadow the issue was found in
+     * @param \Closure(string): ?ShadowTarget $resolve any OTHER shadow a taint journey passes
+     *                                                 through; a journey crosses files, so one
+     *                                                 target is not enough
      *
      * @return CodeIssue|false|null the issue to re-emit on the template, `false` to drop it, `null`
      *                              to decline and leave Psalm's own handling of the original alone
      */
-    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve, bool $reportMixed): CodeIssue|false|null
+    public static function relocate(CodeIssue $issue, ShadowTarget $target, \Closure $resolve): CodeIssue|false|null
     {
+        // A template variable the prelude cannot resolve is typed `mixed`, so `MixedIssue` findings
+        // inside a shadow are overwhelmingly this artifact rather than a real template bug. The
+        // whole family is dropped, on mapped template lines and on the prelude's own unmapped lines
+        // alike (#1495, #1986).
+        if ($issue instanceof MixedIssue) {
+            return false;
+        }
+
         // A compiled directive (Livewire tags in particular) injects untyped closures the template
         // author cannot reach, and they dominate this family inside a shadow. Dropped
         // unconditionally rather than snippet-gated like the arity check below, and the trade-off
@@ -246,11 +234,9 @@ final class ShadowIssueRelocator
         // it (ArrayFetchAnalyzer.php), but `BeforeAddIssue` fires before that suppression is checked,
         // so the re-emit reported what plain PHP never does (#1909). The virtual call takes the
         // subject's position, which is followed by `[`; a real call is positioned on its method name,
-        // followed by `(`. The wording check keeps a static call, whose location spans the whole
-        // call, out of this gate.
+        // followed by `(`.
         if (
-            ($issue instanceof PossiblyInvalidMethodCall
-                || ($issue instanceof MixedMethodCall && \str_starts_with($issue->message, 'Cannot determine the type of ')))
+            $issue instanceof PossiblyInvalidMethodCall
             && self::selectionFollowedBy($issue->code_location, '[')
         ) {
             return false;
@@ -303,7 +289,7 @@ final class ShadowIssueRelocator
         // names one of the same three ambient variables. `PossiblyNullReference` on a subsequent
         // `$attributes->` read is a separate, NOT-gated consequence of the inferred-branch
         // reconciliation above (Psalm keeps the reconciled null in the never-taken arm and re-unions
-        // it at the guard's `endif`) and stays visible; see docs/blade.md known limitations.
+        // it at the guard's `endif`) and stays visible; see docs/contributing/blade.md known limits.
         //
         // These five classes render the checked name in one of TWO positions, never anywhere else
         // (`Reconciler::triggerIssueForImpossible()` and `AssertionReconciler`/
@@ -443,35 +429,10 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        // A template variable the prelude cannot resolve is typed `mixed`, so `MixedIssue` findings
-        // inside a shadow are overwhelmingly this artifact rather than a real template bug; suppressed
-        // by default, both on a mapped template line and on the prelude's own unmapped lines below.
-        if ($issue instanceof MixedIssue && !$reportMixed) {
-            return false;
-        }
-
-        // The restores Laravel compiles around a `<x-...>` tag, `@error` and `@session`/`@context`,
-        // and the stack push of the last two, assign a value that is `mixed` on every mention: the
-        // prelude's fallback type for a saved `$__*Original*` name, or a session value. That is
-        // `MixedAssignment` on code the author never wrote, 91% of `Mixed*` in one real app (#1872).
-        if ($issue instanceof MixedIssue && self::isGeneratedSaveRestore($issue, $target)) {
-            return false;
-        }
-
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
         $message = self::remapMessage($issue, $target) . self::namedSlotHint($issue, $target);
 
         if ($templateLine < 1) {
-            // The prelude and any line the marker pass could not map have no template position. A
-            // `MixedIssue` there is an artifact of the prelude typing every unresolved template
-            // variable as `mixed`, so it is dropped rather than parked on line 1 regardless of
-            // $reportMixed: opting back in is about seeing the family on real template lines, not
-            // about the prelude's own noise. Anything else is worth showing even without an exact
-            // line.
-            if ($issue instanceof MixedIssue) {
-                return false;
-            }
-
             // `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
             // against a `VirtualMethodCall` Psalm synthesizes internally to model the magic call
             // (`AtomicPropertyFetchAnalyzer::propertyFetchCanBeAnalyzed()`), and that virtual node
@@ -920,35 +881,6 @@ final class ShadowIssueRelocator
         }
 
         return !TemplateSnippetMatcher::occursInWithRawTextRewrites($receiver[0] . $call, $target->templateSource, $target->markerPrefix());
-    }
-
-    /**
-     * Whether an issue sits on the assignment target of one of {@see self::SAVE_RESTORE_PATTERNS}
-     * whose statement is absent from the template, so an author who writes one keeps the finding.
-     * Absent both raw and with Blade comments stripped, see
-     * {@see TemplateSnippetMatcher::occursInRawOrStripped()}.
-     *
-     * @psalm-mutation-free
-     */
-    private static function isGeneratedSaveRestore(CodeIssue $issue, ShadowTarget $target): bool
-    {
-        $selection = ShadowSelection::of($issue->code_location);
-
-        if (!$selection instanceof ShadowSelection) {
-            return false;
-        }
-
-        foreach (self::SAVE_RESTORE_PATTERNS as $pattern) {
-            \preg_match_all($pattern, $selection->snippet, $matches, \PREG_SET_ORDER | \PREG_OFFSET_CAPTURE);
-
-            foreach ($matches as $match) {
-                if ($match['target'][1] === $selection->start) {
-                    return !TemplateSnippetMatcher::occursInRawOrStripped($match['statement'][0], $target->templateSource, $target->markerPrefix());
-                }
-            }
-        }
-
-        return false;
     }
 
     /**

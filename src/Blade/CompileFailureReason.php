@@ -10,7 +10,7 @@ namespace Psalm\LaravelPlugin\Blade;
  *
  * @psalm-immutable
  */
-final readonly class BladeCompileError
+final readonly class CompileFailureReason
 {
     /**
      * @psalm-mutation-free

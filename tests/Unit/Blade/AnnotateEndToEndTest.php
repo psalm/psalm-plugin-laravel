@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -61,6 +62,11 @@ final class AnnotateEndToEndTest extends TestCase
         'merged' => "{{ json_encode([\$author, \$media, \$trio, \$flag, \$posts, \$any, \$key]) }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
+        'statics' => "<p>{{ \$stats['total'] }}</p>\n",
+        'outer' => "<?php\n/** @var true|null \$showCount = null */\n\$showCount ??= false;\n?>\n"
+            . "@includeIsolated('inner', ['showCount' => \$showCount])\n@includeIsolated('counter', ['showCount' => \$showCount])\n",
+        'inner' => "<p>{{ \$showCount ? 'yes' : 'no' }}</p>\n",
+        'counter' => "<p>{{ \$showCount ? 'yes' : 'no' }}</p>\n",
         'modal-arrow' => "{{ \$text }}\n",
         'modal-closure' => "{{ \$text }}\n",
         'modal-nested' => "{{ \$text }}\n",
@@ -187,7 +193,7 @@ final class AnnotateEndToEndTest extends TestCase
         $this->assertNotSame([], $this->viewIssuesAtMerger());
     }
 
-    /** @return list<mixed> InvalidViewVariableType and MissingViewVariable reported at the merge fixture's call sites */
+    /** @return list<mixed> InvalidViewData and MissingViewData reported at the merge fixture's call sites */
     private function viewIssuesAtMerger(): array
     {
         $this->runPsalm(null);
@@ -198,7 +204,7 @@ final class AnnotateEndToEndTest extends TestCase
         return \array_values(\array_filter(
             $report,
             static fn(mixed $issue): bool => \is_array($issue)
-                && \in_array($issue['type'] ?? null, ['InvalidViewVariableType', 'MissingViewVariable'], true)
+                && \in_array($issue['type'] ?? null, ['InvalidViewData', 'MissingViewData'], true)
                 && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php'),
         ));
     }
@@ -212,6 +218,34 @@ final class AnnotateEndToEndTest extends TestCase
             "<?php /**\n * @var string \$title\n * @var string \$extra\n */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
             $this->template('declared'),
         );
+    }
+
+    #[Test]
+    public function prints_an_unbounded_int_range_as_int(): void
+    {
+        $this->annotate();
+
+        $this->assertSame("<?php\n/**\n * @var array{total: int} \$stats\n */\n?>\n" . self::TEMPLATES['statics'], $this->template('statics'));
+    }
+
+    #[Test]
+    public function an_include_site_counts_as_a_producer_of_the_included_view(): void
+    {
+        // Below Laravel 12.47 `@includeIsolated` is no directive: the fixture's include stays text.
+        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+            $this->markTestSkipped('@includeIsolated needs Laravel 12.47+');
+        }
+
+        // The include passes `bool` (the flow type after `??= false`), the controller `true`: declaring
+        // the controller's type alone would be a type error at the include; `bool` covers both.
+        $result = $this->annotate();
+
+        $this->assertSame("<?php\n/**\n * @var bool \$showCount\n */\n?>\n" . self::TEMPLATES['inner'], $this->template('inner'));
+        $this->assertNull($this->unknownFor($result, 'inner'));
+
+        // Where the controller passes `bool` too, the two agree: the include's type is the one
+        // after the reassignment, not the including template's declared `true|null`.
+        $this->assertSame("<?php\n/**\n * @var bool \$showCount\n */\n?>\n" . self::TEMPLATES['counter'], $this->template('counter'));
     }
 
     #[Test]
@@ -250,7 +284,7 @@ final class AnnotateEndToEndTest extends TestCase
     #[Test]
     public function never_declares_a_loop_alias_the_template_binds_itself(): void
     {
-        // A declared `$item` makes every correct call site report MissingViewVariable: the alias is
+        // A declared `$item` makes every correct call site report MissingViewData: the alias is
         // the template's own, not something the caller is expected to pass.
         $this->annotate();
 
@@ -264,7 +298,7 @@ final class AnnotateEndToEndTest extends TestCase
     public function never_declares_a_name_the_template_binds_for_itself(): void
     {
         // `@php($heading = ...)` and a closure parameter are template locals, not inputs: declaring
-        // either reports MissingViewVariable at every correct call site. The only call site is one the
+        // either reports MissingViewData at every correct call site. The only call site is one the
         // plugin cannot read, so `$rows` is listed, not declared `mixed`.
         $result = $this->annotate(dryRun: true);
 
@@ -371,7 +405,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(12, $result['changed']);
+        $this->assertCount(15, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
@@ -410,7 +444,7 @@ final class AnnotateEndToEndTest extends TestCase
         foreach ($decoded as $issue) {
             $this->assertIsArray($issue);
 
-            if (\in_array($issue['type'], ['MissingViewVariable', 'InvalidViewVariableType', 'UnusedViewData'], true)) {
+            if (\in_array($issue['type'], ['MissingViewData', 'InvalidViewData', 'UnusedViewData'], true)) {
                 $types[] = (string) $issue['type'];
             }
         }

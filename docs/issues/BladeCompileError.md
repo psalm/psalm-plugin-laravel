@@ -1,12 +1,12 @@
 ---
-title: BladeCompileFailure
+title: BladeCompileError
 parent: Custom Issues
 nav_order: 13
 ---
 
-# BladeCompileFailure
+# BladeCompileError
 
-Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on. The template is skipped, and the message reads `Template not analysed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
+Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on. The template is skipped, and the message reads `Template not analyzed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
 
 ## Why it matters
 
@@ -20,7 +20,7 @@ A template that does not compile is skipped, and every finding it would have pro
 ```
 
 ```text
-ERROR: BladeCompileFailure - resources/views/help.blade.php:1:1 - Template not analysed: @component needs arguments; write @@component to print it as text
+ERROR: BladeCompileError - resources/views/help.blade.php:1:1 - Template not analyzed: @component needs arguments; write @@component to print it as text
 ```
 
 ## Common causes
@@ -39,7 +39,7 @@ Fix the template, or make the failing directive or component resolvable in the b
 
 ```xml
 <issueHandlers>
-    <PluginIssue name="BladeCompileFailure">
+    <PluginIssue name="BladeCompileError">
         <errorLevel type="suppress">
             <file name="resources/views/dashboard.blade.php" />
         </errorLevel>
@@ -51,5 +51,5 @@ A `{{-- @psalm-suppress --}}` comment in the template cannot silence it: that co
 
 ## Limitations
 
-* Not reported when Blade analysis turned itself off for the run (see [Degradation](../blade.md#degradation)). The run-level warning covers every template instead.
+* Not reported when Blade analysis turned itself off for the run (see [Degradation](../contributing/blade.md#degradation)). The run-level warning covers every template instead.
 * A template that cannot be read, or whose compiled shadow cannot be written, is not a compile failure. It stays in the run-level warning.

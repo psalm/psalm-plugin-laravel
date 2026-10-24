@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace BladeCompileFailureFixture\Providers;
+namespace BladeCompileErrorFixture\Providers;
 
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;

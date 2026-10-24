@@ -6,8 +6,8 @@ namespace Psalm\LaravelPlugin\Internal;
 
 use Psalm\Config;
 use Psalm\Issue\PluginIssue;
-use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
-use Psalm\LaravelPlugin\Issues\MissingViewVariable;
+use Psalm\LaravelPlugin\Issues\InvalidViewData;
+use Psalm\LaravelPlugin\Issues\MissingViewData;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
@@ -25,8 +25,8 @@ final class ExperimentalIssuePolicy
     private const ISSUES = [
         UnknownModelAttribute::class,
         UndefinedModelRelation::class,
-        MissingViewVariable::class,
-        InvalidViewVariableType::class,
+        MissingViewData::class,
+        InvalidViewData::class,
         UnusedViewData::class,
     ];
 

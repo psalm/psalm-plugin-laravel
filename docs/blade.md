@@ -5,19 +5,11 @@ nav_order: 8
 
 # Blade Template Analysis
 
-Opt-in static analysis of `*.blade.php` templates. Enable it, and Psalm reports type issues and security findings at the exact template file and line, not just in your PHP.
+With `<blade />`, every `*.blade.php` template is analyzed as if it were a PHP file at its own path. The same `errorLevel`, `<issueHandlers>` (including `<directory name="resources/views"/>` scoping), `{{-- @psalm-suppress X --}}` comments and baseline apply to it. Findings are reported at the template's own file and line.
 
-## What is analyzed
-
-* Every `*.blade.php` file under the booted application's view paths (`config('view.paths')`), plus every namespace hint a service provider registered with `loadViewsFrom()` (`view('pkg::widget')`) — outside your Composer vendor directory.
-* Each template is compiled through the application's own Blade compiler into a standalone PHP file (a "shadow"), and the shadow is what Psalm actually scans. The template itself is never handed to Psalm as PHP.
-* Each template is analyzed on its own. `@include`, `@extends`, and component tags are not followed into the files they reference.
-* Issues found in the shadow are relocated onto the `.blade.php` path and the matching template line before they are reported. Nothing in the output points at the compiled shadow.
-* If discovery finds zero templates while Blade analysis is enabled, the plugin emits one warning — invisible under `--no-progress`, since Psalm's own `VoidProgress` drops every warning in that mode.
+A template variable you have not declared is `mixed`. Psalm's `Mixed*` issues are never reported in templates. Other findings behave as in PHP, so a few derived from undeclared variables can appear: at `errorLevel` 1 to 3, for example `RiskyTruthyFalsyComparison` on `$x ?? false`; at level 4, rarely, an `UndefinedMagicMethod` after a `mixed` argument was coerced. Declare the variable (see [Declaring view variables](#declaring-view-variables)), or scope an `<issueHandlers>` entry to `resources/views`.
 
 ## Enabling it
-
-Add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
 
 ```xml
 <plugins>
@@ -27,265 +19,33 @@ Add a `<blade>` element as a child of `<pluginClass>` in your `psalm.xml`:
 </plugins>
 ```
 
-**default**: disabled. The element's presence turns analysis on, and every setting below goes on the same element. Omit it, or write `<blade value="false" />`, to turn analysis off.
+* Off by default. `<blade value="false" />` or no element turns it off.
+* `vendor/bin/psalm-laravel analyze --blade` / `--no-blade` switches it for one run (command line wins over `psalm.xml`).
+* `cacheDir` sets where compiled templates are cached: `<blade cacheDir="build/blade-shadows" />`. The default sits in Psalm's cache directory, outside your project. A directory inside the project must be gitignored and kept out of `<projectFiles>`.
+* Templates are found under `config('view.paths')` and every `loadViewsFrom()` namespace outside `vendor/`.
+* If Blade cannot run (no Blade compiler bound, unwritable cache), it turns itself off with one warning. [`failOnInternalError`](config.md#failoninternalerror) makes that fail the run.
 
-### `cacheDir`
+## Onboarding
 
-Compiled shadows and their manifest are written to a cache directory:
+1. Enable `<blade />` and run Psalm.
+2. Run `vendor/bin/psalm-laravel blade:annotate` (`--dry-run` to preview the diff). It writes `@var` declarations from the types your `view()` calls and `@include` directives pass. Disagreeing call sites are merged when one type covers them (`?User`, `bool`, `Post|Video`); the pairs it could not merge are printed for you to declare by hand. Templates using `@props` or `@aware` are skipped.
+3. Triage the new findings: fix, suppress, or [baseline](#suppressing-and-baselining) them.
 
-```xml
-<blade cacheDir="build/blade-shadows" />
-```
+## What is checked
 
-**default**: a subdirectory inside the [plugin's cache directory](config.md#cache-directory), which itself lives inside Psalm's own cache directory, outside your project tree. Nothing needs to be gitignored with the default.
+Without any `@var`:
 
-If you set `cacheDir` to a path inside your project, gitignore it and keep it out of `<projectFiles>`. A shadow that Psalm treats as one of your own project files gets analyzed twice, at the wrong location, and can make taint flows starting inside it disappear.
+* Broken references after a refactor: classes, constants, enum cases, static calls.
+* Calls to typed helpers and facades (`route()`, `auth()`, `Str::`, ...).
+* Class components and `@props` defaults.
+* Plugin rules inside templates, when enabled: [`UnregisteredRouteName`](issues/UnregisteredRouteName.md) ([`findUnregisteredRouteNames`](config.md#findunregisteredroutenames)), [`MissingView`](issues/MissingView.md) on `@include` ([`findMissingViews`](config.md#findmissingviews)), [`MissingTranslation`](issues/MissingTranslation.md) ([`findMissingTranslations`](config.md#findmissingtranslations)).
+* Taint from sources inside the template: `{!! request('q') !!}` reports `TaintedHtml`; `{{ }}` and `@json()` are escaped and not flagged. See [Security](security.md).
 
-A cached shadow is invalidated (recompiled) when either its template's own source changes, or the application's Blade compiler environment changes: a custom directive (`Blade::directive()`), an `@if` condition (`Blade::if()`), an extension, a precompiler, a string-preparation callback, an echo handler or format, the JSON-encoding options `@json` uses, a component alias or namespace (`Blade::component()`, `Blade::anonymousComponentPath()`), `Blade::withoutComponentTags()`, or a compiler subclass swap. Editing one of these invalidates every cached shadow once, even though no template file changed. Installing a different plugin version or commit (including a `composer update` of `4.x-dev`) does the same.
-
-When an input cannot be fingerprinted, the cache is skipped for that run and every template is recompiled: slower (about a second on a few hundred templates), but analysis results are unaffected, so there is no warning. Run with `--debug` to list every input responsible with its declaring file, e.g. `directive 'x' (closure bound to App\Services\Foo) in app/Providers/AppServiceProvider.php`. Typical causes: a callback bound to an object other than a service provider (an invokable object, `[$service, 'method']`, a closure created inside a service class), an internal function such as `'strtoupper'`, a captured object (`use ($service)`), or a `BladeCompiler` subclass. To restore caching for a callback, register a `static fn` / `static function`, or a static method (`[Foo::class, 'bar']`). Inputs declared under `vendor/` (Livewire's directives and precompilers, for example) are not yours to change.
-
-What is NOT invalidated, because it is runtime state read from inside a directive's or condition's own body rather than from the compiler's registration surface: `config()`, a global, a class static property, or the instance state of a service provider (a plain `Blade::directive()` / `Blade::if()` closure registered in a provider is bound to it, and stays cacheable) that a directive callback reads while compiling. Changing the value these read does not change anything this cache fingerprints, so delete `cacheDir` by hand after a change like that. The same is true of component metadata Laravel resolves live during compilation rather than storing on the compiler: `ComponentTagCompiler` reflects a class component's CONSTRUCTOR PARAMETERS to decide whether an attribute becomes a constructor argument or stays an HTML attribute, and it resolves `<x-foo>` against the live view `Factory` DURING compilation, not at render time. Adding a constructor parameter to an existing component class, or adding a new anonymous-component template file, changes what an unrelated, already-compiled component tag COMPILES TO the next time its parent is recompiled, even though the parent template's own source and the compiler environment above are both unchanged. Its shadow stays fresh and keeps the old compiled bytes. None of these gaps are closed by this cache.
-
-## Per-run toggle
-
-Switch Blade analysis for one run without editing `psalm.xml`:
-
-```bash
-vendor/bin/psalm-laravel analyze --blade       # on, even without <blade /> in psalm.xml
-vendor/bin/psalm-laravel analyze --no-blade    # off, even with <blade /> in psalm.xml
-```
-
-* `--blade` / `--no-blade` are shorthands for `--plugin-option=blade=true|false`. Precedence: command line > `psalm.xml` > default (off). On the command line the last flag wins, whichever spelling.
-* Only the on/off decision is overridden by `blade=…`. The other `<blade>` settings come from the XML, or from their own keys such as `blade.reportMixedIssues=true`, which never switch Blade on by themselves. [`cacheDir`](#cachedir) is XML-only.
-* `--no-reference-cache` keeps dead-code findings correct across a toggle; `analyze` adds it for you. See [Per-run overrides](config.md#per-run-overrides) and [Result cache](config.md#result-cache).
-
-## Suppressing issues
-
-Two suppression paths work exactly as they do for ordinary PHP files:
-
-* An inline comment directly above the line, inside the template:
-
-  ```blade
-  {{-- @psalm-suppress UndefinedPropertyFetch --}}
-  <p>{{ $user->nmae }}</p>
-  ```
-
-* An `<issueHandlers>` entry scoped to the view directory:
-
-  ```xml
-  <issueHandlers>
-      <UndefinedPropertyFetch>
-          <errorLevel type="suppress">
-              <directory name="resources/views" />
-          </errorLevel>
-      </UndefinedPropertyFetch>
-  </issueHandlers>
-  ```
-
-Template findings work with `errorLevel`, `<issueHandlers>`, `@psalm-suppress` and a baseline (`--set-baseline`, `--use-baseline`) like findings in PHP files. Two baseline differences:
-
-* **An entry matches the trimmed text of the whole template line, not the flagged expression.** Moving the line or changing its leading or trailing whitespace keeps the entry. Any other change to that text, even a CSS class, reports the finding again.
-* **A baseline holds one Blade mode.** A run with Blade off (`--no-blade`) against a baseline written with Blade on reports the template's baseline entries as `UnusedBaselineEntry` (one per file and issue type, while `findUnusedBaselineEntry` is on, its default).
-
-## Tuning template findings
-
-Re-emitted template issues pass through Psalm's normal suppression with the `.blade.php` path, so the standard per-path `<issueHandlers>` config applies to a template line exactly as it does to a PHP file. Downgrade a whole issue type over `resources/views` the same way as for any other directory:
-
-```xml
-<issueHandlers>
-    <RiskyTruthyFalsyComparison>
-        <errorLevel type="info">
-            <directory name="resources/views" />
-        </errorLevel>
-    </RiskyTruthyFalsyComparison>
-</issueHandlers>
-```
-
-Note that Psalm prints `info` level findings only when `--show-info=true` is passed, so with default output the example above hides the findings entirely.
-
-The mechanism is confirmed by `tests/Unit/Blade/BladeIssueRemapTest.php`, method `an_issue_handler_suppression_on_the_view_directory_silences_the_template` (the same config path, asserted for `type="suppress"`).
-
-**Do not reach for `<ignoreFiles>` to quieten templates.** Re-emission runs through `Config::reportIssueInFile()`, so a template directory listed there reports **zero** findings and prints no warning saying so. The templates are still discovered, compiled, and analyzed; only the result is dropped, which costs the full analysis time and looks identical to a clean run. Use the `<issueHandlers>` form above to downgrade or suppress a specific issue type, and `errorLevel` to widen that to a whole directory.
-
-* **`RiskyTruthyFalsyComparison` stays reporting by default.** The rule fires just as often in the same project's plain PHP, so a template-only downgrade would make one rule behave two ways in the same codebase. On the reference corpus, about 68% of the template hits were harmless optional-field guards, but the remainder included real zero-value bugs, such as a rating of `0` rendering as "not rated". The default stays honest, and the config above is the knob for a project that wants it quieter.
-* **`PossiblyFalseArgument` on a `json_encode()` result passed to an author-written call (for example `{{ e(json_encode($x)) }}`) is deliberate signal, not noise.** The false arm is a silent encode failure, so the fix is `JSON_THROW_ON_ERROR`, not suppression. Note that `@json($x)` shares the silent failure rather than fixing it, and when the compiler itself wraps the value (`{{ json_encode($x) }}` compiles to `echo e(json_encode($x))`), the finding is already dropped as unactionable in echo position.
-
-## Ambient variables
-
-These template variables are typed automatically, in every compiled view, without any annotation:
-
-| Variable  | Type                                                                                                                                    |
-|-----------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `$__env`  | `Illuminate\View\Factory`                                                                                                              |
-| `$errors` | `Illuminate\Support\ViewErrorBag`                                                                                                       |
-| `$loop`   | `object{index: int, iteration: int, remaining: int\|null, count: int\|null, first: bool, last: bool\|null, odd: bool, even: bool, depth: int, parent: (stdClass&object{...same fields..., parent: object\|null})\|null}`: `$loop->parent` is the enclosing loop with the same fields, `null` in an outermost loop |
-
-Two more are typed, but only inside a template the plugin recognises as a **component view**: one that itself writes `@props(...)`, `@aware(...)`, or mentions `$attributes` or `$slot`. A `<x-*>` tag's *caller* never writes any of those, so the check is exact for that side; a component view the plugin does not recognise this way (none of the four markers present) falls back to `mixed` for both names, silently, same as any other undeclared variable.
-
-Only markers Blade actually compiles count. One inside a `{{-- --}}` comment or an `@verbatim` body, or written as an escaped `@@props`/`@@aware`, is ignored: Blade emits it as text or drops it, so it produces no `$attributes` initialisation and is no evidence the template is a component at all.
-
-| Variable      | Declared as                              | Why                                                                                                                                          |
-|---------------|-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| `$attributes` | `?Illuminate\View\ComponentAttributeBag` when the template writes `@props(...)`, otherwise non-nullable when it writes `@aware(...)` or mentions `$attributes` without `@props` | `@props` compiles to `$attributes ??= new ComponentAttributeBag;` — only that branch can genuinely see the bag as absent. `@aware` assigns nothing, and `Component::data()` / `AnonymousComponent::data()` always supply the key otherwise, so both are typed non-nullable. Put `@props` first in the template: reading `$attributes->` before it sees the nullable type. In a [class component's own view](#class-component-views) that is typed from its class, `$attributes` is non-nullable from the first line, `@props` or not: `Component::data()` always sets it on that path. A component view that itself renders a nested `<x-...>` tag gets a further re-assert of the SAME non-null type right after that tag's compiled save/restore bookkeeping (#1543): both blocks reconcile `$attributes` to a spuriously nullable type otherwise, regardless of which of the three forms declared the view a component. |
-| `$slot`       | `Illuminate\View\ComponentSlot`, whenever the template writes `@props(...)`/`@aware(...)` or mentions `$slot`            | Both render paths — a `<x-*>` tag and the classic `@component('view', [...])` directive — hand the rendered view the same `ComponentSlot` (`ManagesComponents::componentData()`), so no union or path-specific typing is needed, and a template recognised by a directive gets it whether or not it names `$slot` itself. A bare `$attributes` mention does not pull `$slot` in: it is a guess over a name the template merely happens to use, too weak to declare a second name it never writes. |
-
-`$component` is not view data: Laravel never passes it (`ManagesComponents::componentData()` merges only the slot and the component's own data). It exists as a local in the compiled output of a template that writes a `<x-...>` tag, whose save/restore around each tag reads it (`if (isset($component)) { $__componentOriginal<hash> = $component; }`, then restored after the render). When the template's own source has no `$component` token, the prelude declares it `Illuminate\View\Component|null`, nullable because a page renders outside any component, and gives each saved original the same type (#1873). `$attributes` gets `Illuminate\View\ComponentAttributeBag|null` the same way when the source has no `$attributes` token and the template is no `@props`/`@aware` view. The source is read as Blade rewrites it, so a token split by a `{{-- --}}` comment counts. Any `$component` token keeps today's typing: `mixed`, or no declaration at all when its first mention is a root-level assignment (see [Known limits](#known-limits)). A component view recognised only by its `$slot` mention gets the nullable `$attributes` too, sound but looser than runtime, where the bag is always set. (A class component with a public `component()` method is the exception, through [its own view's typing](#class-component-views).)
-
-Every other variable a template uses without a type the plugin can prove gets `mixed`, silently. No `UndefinedGlobalVariable` is raised for it, and no error tells you the variable went untyped by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so a typo in a variable name will not be caught this way.
-
-A raw `@var T $name` docblock in a `<?php` or `@php` block types the template body as Psalm reads it: `<?php /** @var \App\Models\User $user */ ?>` followed by `{{ $user->missing() }}` reports `UndefinedMagicMethod`/`UndefinedMethod` as it would in PHP, and a docblock naming a class that does not exist reports `UndefinedDocblockClass` on its own line. It overrides the `mixed` above from that point on. A docblock for one of the names above (`$errors`, `$attributes`, ...) types it like any native annotation would, but is never a contract: Blade supplies those names (see [Declaring view variables](#declaring-view-variables)).
-
-A `@props([...])` entry whose default is a literal is typed from it, widened: a string is `string`, an integer `int` (a leading `-` included), a float `float`, `true`/`false` `bool`, and any `[...]` or `array(...)` expression `array`. `@props(['size' => 'lg', 'count' => 0])` makes `{{ $count->value }}` report `InvalidPropertyFetch`. Never the literal type: a caller can pass any string for `$size`, so a `match ($size)` arm other than `'lg'` is not dead code. That also makes it a claim about the default only: a caller passing another type is not checked against it, and a template guarding against one (`@if (is_array($size))`) reports `DocblockTypeContradiction`. A bare name, `null`, and every other default (a constant, a call, a variable, a concatenation) stay `mixed`, as does a name that is no assignable variable (`'max-width'`) or one Blade types itself (`$slot`, `$errors`). So does every prop a template's `@aware` also lists, whichever comes first (`@aware` overwrites the default with the parent's value), and every prop of a [class component's own view](#class-component-views): the class hands its data in before the default applies. Nothing is inferred in a template with an unreadable `@props` or `@aware` list (`@props($defaults)`, or a `{{-- --}}` inside the list), which may set any name first. A raw `<?php /** @var T $name */ ?>` of the same name overrides the inferred type from that point on.
-
-A local the template creates itself is the exception: a name whose first mention is a plain `$x = ...` statement at the template's top level (in `@php` or raw PHP, not inside `@if`, a loop, `@once`, a `<x-...>` slot or any other block) that does not read `$x` is left undeclared, so Psalm types it from the assignment alone. A `@var mixed` declared ahead of it would make Psalm forget that a flag like `$has = $x !== null` guards `$x` once it reaches the next `@if`. An assignment inside a block may not run, and the view value it would have replaced (a `@props` default, a variable an including template passes down) is then the one read after it, so that name keeps its `mixed` declaration.
-
-## Class component views
-
-The view a class component's `render()` returns is typed from the component class, when the component is rendered as `<x-…>` somewhere in the project:
-
-```php
-final class Alert extends Component
-{
-    public function __construct(public string $title) {}
-
-    public function isActive(): bool { return true; }
-
-    public function render(): View
-    {
-        return view('components.alert');
-    }
-}
-```
-
-With `<x-alert title="Hi" />` in any template, `components/alert.blade.php` gets:
-
-| Variable          | Type                                                                                                     |
-|-------------------|----------------------------------------------------------------------------------------------------------|
-| public property   | its declared type (`$title: string`)                                                                     |
-| public method     | `Illuminate\View\InvokableComponentVariable<TValue>` with no parameters, `TValue` being its return type (`$isActive: InvokableComponentVariable<bool>`), otherwise a `Closure` of its signature (`$format: Closure(string): string`). A generic method or class, or a method with neither parameters nor a return type, is `mixed` (not checked) |
-| `$attributes`     | `Illuminate\View\ComponentAttributeBag`                                                                  |
-| `$componentName`  | `string` (`Component::$componentName`'s declared type)                                                   |
-
-To declare such a method in the template, write `@var \Illuminate\View\InvokableComponentVariable<bool> $isActive`: it passes the [view data checks](config.md#view-data-checks), and `$isActive()` is typed `bool`. A `\Closure(): bool` declaration reports `InvalidViewVariableType`, because the value is not a `Closure`. The bare class name still passes, but leaves the call `mixed`.
-
-The method closure is what `Closure::fromCallable()` returns at runtime: parameter and return types as Psalm reads them (docblock first), optional and variadic parameters kept, `self` and `parent` resolved against the class the method appears in (for a trait method, the class using the trait), `static` resolved to the component class, and the method's own purity kept. The same type is what [InvalidViewVariableType](issues/InvalidViewVariableType.md) compares against a template's `@var \Closure(...)` declaration on the `render()` path, so a declaration matching the method passes and a mismatched one is reported.
-
-These are exactly the keys `Component::data()` merges into the view on that path, with its precedence: a method wins a name a property also has. The view must be named literally, by a `render()` whose whole body is one `return` of `view('name', …)`, `view()->make('name', …)`, `View::make('name', …)`, `$this->view('name', …)`, or `'name'`; an inherited `render()` counts.
-
-A typed key is typed as present, so a defensive guard on it (`{{ $title ?? '' }}`, `@isset($title)`) now reports `RedundantCondition` / `TypeDoesNotContainNull` when the declared type is not nullable. Drop the guard: component data is always present.
-
-Left `mixed`, as before:
-
-* **The whole view**, when two component classes render it (whether through two `render()` methods or one inherited by both), another component's `render()` outside the shape above names it too, no compiled `<x-…>` or `@component(Foo::class)` renders the class, or `data()` is not knowable: the class overrides `data()`, an extraction method (`extractPublicProperties()`, `extractPublicMethods()`, `createVariableFromMethod()`, `ignoredMethods()`, `shouldIgnore()`), or redeclares `$except` (an `$except` assigned at runtime, say in the constructor, is not seen: its names are still typed). It also stays `mixed` when any template renders the view by name (`@include`, `@includeIf`/`When`/`Unless`/`First`, `@each`, `@extends`, `@component('name')`), which hands it none of the `data()` keys. The data arguments must be literal arrays passed positionally: `compact(…)`, a variable, named arguments, or a `->with()` after the call decline too. An unqualified `view()` that a function of the component's own namespace shadows, and a `$this->view()` the class overrides, do not count as the shapes above.
-* **One key**, when `render()`'s own data array passes it too (which value wins depends on how the view was rendered), any template passes a named slot of that name (`<x-slot:title>` overrides it), Blade sets it itself (`$slot`, `$errors`, `$loop`, `$__env`), the template declares it itself (a raw `@var` docblock, which wins), or the property has no declared type or belongs to a generic class.
-
-## What gets reported
-
-One `psalm` run reports both kinds, for templates exactly as for PHP (Psalm 7 runs taint analysis by default).
-
-* **Type analysis**: the same issue types Psalm reports anywhere else, at the template's file and line — except Psalm's `MixedIssue` family (`MixedArgument`, `MixedAssignment`, and the rest), which is suppressed by default because an undeclared template variable typing as `mixed` produces it constantly. Opt back in with [`reportMixedIssues`](config.md#reportmixedissues).
-* **Taint analysis**: `TaintedHtml` on unescaped `{!! !!}` output that traces back to request input, with the whole trace shown against template lines, never against the compiled shadow. Escaped `{{ }}` output of the same tainted value is not flagged. `@json($value)` is not flagged either: its default flags are all four HEX flags: `JSON_HEX_TAG` with `JSON_HEX_AMP` clears `TaintedHtml`, `JSON_HEX_APOS`, `JSON_HEX_QUOT` and `JSON_HEX_AMP` clear `TaintedTextWithQuotes`. Your own flags keep each finding whose flags are missing: `@json($value, JSON_HEX_TAG | JSON_HEX_AMP)` still reports `TaintedTextWithQuotes`, and flags without `JSON_HEX_TAG` or `JSON_HEX_AMP` report `TaintedHtml`. Keep the directive's arguments comma free: Blade splits them on every comma. Known gap: the encoder's own `"` delimiters close a double-quoted attribute, so `<div data-x="@json($value)">` is an unreported breakout. It renders visibly broken for every string, array or object value, but an int, bool or null encodes bare and renders fine. Use a single-quoted attribute, a `<script>` block, or `@js($value)` (a complete JavaScript expression, never wrapped in quotes) there. See [Security](security.md#what-it-detects).
-
-```blade
-{{ request()->input('q') }}   {{-- escaped: not flagged --}}
-{!! request()->input('q') !!} {{-- unescaped: TaintedHtml --}}
-@json(request()->input('q'))  {{-- default HEX flags: not flagged --}}
-```
-
-* **Positions inside a message name the template.** The `first seen on line 7` of `Possibly undefined variable $x`, the trailing `on line 7` of a `ParseError`, and the `file:line:column` of a reference's definition in a `ReferenceReusedFromConfusingScope` all count the template, not the compiled shadow. A `first seen` reference into compiler-generated code has no template line, so that clause is omitted.
-* **A `??`, `??=` or `isset()` guard on a required view variable reports as redundant.** Mark optional ones with `= null`, see [Declaring view variables](#declaring-view-variables). In a component view, the finding on a named slot declared `\Illuminate\View\ComponentSlot` ends with a hint naming the optional declaration (`\Illuminate\View\ComponentSlot|null $footer = null`). A view counts as a component view when it uses `@props` or `@aware`, mentions `$slot` or `$attributes`, or is a class component's view.
-* **`e()` accepts `\Stringable` by design.** Laravel's `e()` has no type declaration on its `$value` parameter; `htmlspecialchars()` coerces it to string at runtime regardless of caller strictness, so passing a `\Stringable` is safe everywhere, not only at echo positions. A `bool` is accepted for the same reason (`{{ $open }}` renders `'1'` or `''`). `{{ $stringable }}` and an explicit `e($stringable)` call anywhere, including inside `@php`, no longer report `ImplicitToStringCast`. Other `ImplicitToStringCast` sites are unchanged: a `\Stringable` passed to a plain function such as `strlen()`, or used in a concatenation under `strict_binary_operands`, still reports.
-* **`e()` accepts the `\Illuminate\Contracts\View\View` contract (#1776).** `view()`, `Component::render()` and `->with()` are typed as the contract, which extends only `Renderable`, so `{{ $view }}` (compiled to `e($view)`) used to report `InvalidArgument`. The only framework implementation, `\Illuminate\View\View`, is `Htmlable`, so `e()` takes its `toHtml()` branch at runtime. Taint handling of `e()` is unchanged.
-* **Helper functions and constants the booted application defines are resolvable from a template.** A package-style monorepo typically `include`s its helper file from a service provider's `register()`, so no project file ever `require`s it — and Psalm resolves a bare `foo()` only through the calling file's own transitive requires. A compiled template requires nothing, so every such helper used to report `UndefinedFunction … consider enabling the allFunctionsGlobal config option`, and `define()`d constants in the same files reported `UndefinedConstant`. The plugin now captures which files the boot declared global functions in and makes exactly those visible to templates, with their real signatures: passing the wrong number of arguments still reports. A function nothing defines still reports too, and the capture never reaches into the Composer install root, where the plugin's own stubs are the better source. Ordinary PHP files are unchanged — Psalm's `allFunctionsGlobal` remains the (project-wide, and therefore blunt) escape hatch for those.
-* **`old()` returns `mixed` for a key.** Flashed input holds whatever reached the session: JSON scalars from `$request->input()`, any value passed to `withInput(array)`, and a `Model` default's attribute. Laravel's own `string|array|null` is narrower than that, and `$default` accepts any value. Since the `Mixed*` family is suppressed in templates by default, `{{ old('qty', 0) }}` and `{{ old('k') }}` report nothing; with [`reportMixedIssues`](config.md#reportmixedissues) on, an echo of `old()` reports `MixedArgument`.
-
-### Taint through view data
-
-A value a controller passes to `view()` carries its taint into the template, so `{!! $q !!}` reports `TaintedHtml` on the template line, with or without a `{{-- @var string $q --}}` declaration:
-
-```php
-return view('search', ['q' => $request->input('q')]);
-```
-
-```blade
-{!! $q !!} {{-- TaintedHtml; {{ $q }} is escaped and not flagged --}}
-```
-
-The finding's trace runs from the request input through the controller to the template line, never through the compiled shadow. It is a normal Psalm issue: silence it with `issueHandlers`, `@psalm-suppress` or a baseline.
-
-What flows: a literal-keyed data array of `view()`, `View::make()`, `Factory::make()` or `response()->view()`, and `->with('key', $value)` / `->with([...])` on those, keyed by variable name and by the canonical view name (`admin/panel` and `admin.panel`, and a `pkg::name` hint, are the same view). Each call contributes only its own arguments, so `response(view('x', [...]))` works. Only the keys passed are tainted: `['t' => $input]` does not taint `$q`.
-
-What is skipped, so a variable fed only that way reports nothing: a dynamic view name, data in a variable, `View::share()`, composers, `Route::view()`, Livewire, mail, and the explicit data of a template's own `@include`. Names Blade owns (`$errors`, `$slot`, `$attributes`, ...) and `__`-prefixed names never take view data.
-
-### Compiler-generated code
-
-A registered Blade precompiler (Livewire's component tags are the common case, `<livewire:x />`) can rewrite a template into PHP the author never wrote and has no position in the source to annotate. Several issue families are dropped at shadow emission rather than relocated to the template:
-
-* `MissingClosureParamType` and `MissingClosureReturnType`, unconditionally. Precompiler-injected closures dominate this family inside a shadow, and an author has no way to annotate one. This is a deliberate trade-off, not a free win: a closure written by hand inside `@php` or a raw PHP block can carry native parameter types and a docblock, so its missing-type warning is silenced along with the generated noise. Accepted because it is a signature warning on code nothing outside the template ever calls.
-* `MissingPureAnnotation` on a closure, unconditionally, with the same trade-off (#1908). Livewire's `@livewire` and `<livewire:...>` compile to a `$__split` closure that draws it on every tag.
-* `InvalidMethodCall` on a string literal receiver (#1908), only when the call, receiver included, does not occur in the raw template source. `@entangle('tab')` compiles to `'tab'->value()` and `'tab'->hasModifier('live')`, text the template never holds, while an author's own `{{ 'x'->value() }}` keeps reporting.
-* `TooManyArguments`, only when the **call expression** the issue points at does not occur anywhere in the raw template source. Blade rewrites the lines it compiles (`{{ $x->f(1) }}` becomes an `echo e(...)` statement), so the comparison is the call itself, cut out of the compiled line at the issue's own position, rather than the compiled line. An author's over-arity call therefore survives inside `{{ }}`, `{!! !!}`, `@php` and a raw PHP block alike, because Blade wraps around a call expression rather than rewriting its interior. The one thing Blade does change inside a call is `{{-- --}}`: comments are removed before anything else compiles, so they are removed from the template side of the comparison too.
-* `UnusedVariable`, unconditionally, under `findUnusedVariablesAndParams`/`--find-unused-code`. A `<x-...>` tag compiles to a `$__componentOriginal*`/`$__attributesOriginal*` save-and-restore pair around the render, and `@foreach`/`@forelse` reassign `$loop = $__env->getLastLoop();` at the end of the loop; none of that bookkeeping is ever read back, so it reports `UnusedVariable` on every template that uses either construct. `UnusedForeachValue` is not part of this drop: it fires on the author-named foreach variable, not compiler bookkeeping, and is real signal. Trade-off: an author's own dead store inside `@php` and an unused foreach *key* also report as `UnusedVariable` and are silenced along with the compiler noise.
-* `UnevaluatedCode`, but only the message Psalm uses for code following `return`/`throw`/`continue`: a `@switch` arm's `@break` leaves Psalm treating the following `@case`/`@default` line as unreachable, and that specific message is dropped. `UnevaluatedCode` is not one shape, though — the same class also reports `'gettype cannot return this value'` for a `gettype()` comparison Psalm can prove impossible, which is a genuine author bug and is never gated by `findUnusedVariablesAndParams`, so it is matched on message rather than dropped as a whole class and keeps reporting. The message identifies the Psalm code path that emitted it, not who wrote the unreachable code: an author's own unreachable statement after a `return`/`throw`/`continue` inside `@php` or raw PHP in the template gets the identical message and is silenced along with the compiler's `@break` shape. The relocator sees only the issue's message and location, not the AST, so it cannot tell the two apart; the loss is accepted as a documented limitation rather than chased with snippet heuristics.
-* `InvalidScope`'s `Use of $this in non-class context` and `NonStaticSelfCall`'s `Cannot use self`/`static outside class context` (whichever casing the author wrote) (#1559). Unlike the rest of this section, this is not compiler-rewritten code: `$this`, `self::`, and `static::` are exactly what the template author typed, but a Blade shadow is classless global scope — a plain page or component template alike — so Psalm's own out-of-class checks trip on every mention, conventions some component libraries rely on inside their own template markup. Dropped unconditionally. The `self`/`static` match is case-insensitive but anchored to those two keywords only, never a bare wildcard: Psalm's own keyword check is case-insensitive too, but its `parent` handling is case-SENSITIVE, so `PARENT::x()`/`Parent::x()` outside a class falls through to this identical message shape (`Cannot use PARENT outside class context`) rather than `ParentNotFound` — the `parent::` family is out of scope here (near-zero corpus prevalence) and must not be caught by a looser pattern.
-
-  Not dropped, all three genuine author mistakes: `Invalid reference to $this in a static context` and `Method X::y is not static, but is called using self::`, reported only when a `@php class ... @endphp` block compiles a real class into the shadow; and `Invalid reference to $this in a non-class context` (VariableFetchAnalyzer.php's sibling message for a bare `$this` fetch), which looks like the same classless-shadow shape but is not one — a non-static closure written inside a STATIC method of a compiled class has no `$this` in its own scope either, because ClosureAnalyzer.php only threads `$this` into a closure's scope when neither the enclosing method nor the closure itself is static, so that closure's own `$this->` read genuinely trips this message even though it sits lexically inside a class. A residual gap is accepted rather than chased: a named function or closure declared directly in a classless template, whose body itself calls `$this->m()`, still emits the FLOODING `Use of $this in non-class context` message and is still dropped, because the relocator has only the message and location to go on, never scope information.
-
-  With [`reportMixedIssues`](config.md#reportmixedissues) turned on, a `Mixed*` finding can still surface on the same line a dropped scope issue came from, since the receiver of a dropped call stays typed `mixed`.
-* `RedundantCondition`, `RedundantConditionGivenDocblockType`, `DocblockTypeContradiction`, `TypeDoesNotContainNull`, and `TypeDoesNotContainType`, when the message names `$attributes`, `$component`, `$errors`, or `$slot`. A `<x-...>` tag's compiled bookkeeping (`isset()`, `??=`, `instanceof`) checks exactly what those names' ambient typing now declares as guaranteed, most visibly when a `<x-...>` tag renders another `<x-...>` tag nested inside it. `@props(...)` REPLACES the prelude's docblock type with an inferred one, so a nested tag inside a `@props` component view reports the inferred-branch pair (`TypeDoesNotContainNull`/`TypeDoesNotContainType`) rather than the docblock-branch trio, and both are dropped. Gated on the message rather than the class, so an author's own redundant condition against their own docblock (`@if (is_string($range))` under a `<?php /** @var string $range */ ?>` docblock, or `@if (isset($range))` under an `@php` one) keeps reporting even though it shares a class with the dropped shape.
-
-  `$attributes` and `$slot` also require a component view (see [Ambient variables](#ambient-variables)) for this message gate, so a local variable an author happens to name `$attributes`/`$slot` in a plain, non-component template is untouched; a plain caller's compiled `$attributes` check is covered by the `isset($attributes) && ...` item below. `$component` drops with no such requirement (#1532): the prelude types it, if at all, only from the tag bookkeeping, nullable, so its narrowing comes entirely from a PRECEDING `<x-...>` tag's own compiled `resolve()` call rather than from anything the prelude declares, and that shape fires just as much inside a plain page with a nested `<x-...>` tag as inside a component view.
-
-  `$errors` also drops with no component-view requirement (#1546): `ShareErrorsFromSession` runs in the `web` middleware group, not in `render()` itself, so the prelude declares it in every shadow regardless of whether the view is a component. Unlike `$component`, though, `$errors`'s ambient type comes ONLY from the prelude's own `@var` docblock, never from inference, so its match is narrowed to the docblock-branch wording alone (`Docblock-defined type ... for $errors is ...` / `Cannot resolve types for $errors - docblock-defined type ...`). An author who reassigns `$errors` before guarding it (`@php $errors = 42; @endphp @if (is_string($errors))`) replaces that docblock type with an inferred one, which renders the OTHER, un-prefixed wording (`Type 42 for $errors is never string`) and survives — the widened match that dropped it unconditionally in an earlier version of this gate was a bug (#1546 review).
-
-  The trade-off this gate does NOT avoid: it cannot tell compiler-generated bookkeeping apart from an author's OWN `@if (isset($attributes))`/`instanceof`/`@php $component = ...`/`@if (isset($errors))` check written against their OWN docblock inside their own template; that guard is silenced too, with no trace, because it names one of the same ambient variables and keeps the docblock provenance the drop for `$errors` requires.
-
-  Dropping the guard's own issue does not undo what it leaves behind: the impossible negative arm still merges a reconciled `null` into `$attributes`'s type at the guard's `endif`, which used to surface downstream as a false `PossiblyNullReference` on the next `$attributes->` read. `$attributes` is now re-asserted non-null right after both compiled `endif`s that can leave it in that state — the nested tag's own inner strip and the enclosing tag's restore — so the message gate above no longer needs to cover `PossiblyNullReference` too. See the known-limits entry below for the one window this does not close.
-
-* The guard family above on the `isset($attributes) && $attributes instanceof Illuminate\View\ComponentAttributeBag` a `<x-...>` tag compiles twice (the `resolve()` data merge and the ignored-parameter strip), in any template (#1873). A plain caller's prelude types `$attributes` from the tag bookkeeping (see [Ambient variables](#ambient-variables)), which makes the `instanceof` redundant after the `isset()`. Dropped only in a shadow whose prelude typed `$attributes` that way, when the issue selects exactly that expression, and when the expression does not occur in the template source as Blade rewrites it (comments and component-class markers removed), so an author's own `@if (isset($attributes) && ...)` keeps reporting. Residual: a template whose inert text (an `@verbatim` body, plain markup) contains the expression keeps the finding on every compiled copy in that file.
-* The guard family above (`RedundantCondition`, `TypeDoesNotContainType`, and the rest) on the `isset($value)` that `@session`/`@context` compile to save an outer `$value` (`if (isset($value)) { $__sessionPrevious[] = $value; }`, #1724). With a `$value` of the author's in scope (a foreach value, `@php $value = null; @endphp`), Psalm judged that compiler-written guard against it. Dropped only when the issue sits on that exact `isset($value)` and the save statement does not occur in the template source, so an author's own `@if (isset($value))` keeps reporting. Residual: a template that writes the save statement itself keeps the finding on every compiled save in that file.
-
-* `Mixed*` under [`reportMixedIssues`](config.md#reportmixedissues), on the target of the save/restore assignments Laravel compiles around a `<x-...>` tag (`$attributes = $__attributesOriginal<hash>;`, `$component = $__componentOriginal<hash>;`), `@error` (`$message = $__messageOriginal;`) and `@session`/`@context` (the `$__sessionPrevious[] = $value` push and the `array_pop()` restore), #1872. The value is `mixed` on every mention (the prelude's fallback for the saved name, or a session value), so each tag reported `MixedAssignment`, most of the family in a real app. Matched on the compiled statement, with the hash as `xxh128` hex, and only when that statement occurs in the template source neither raw nor with Blade comments stripped (`'{{--'` and `'--}}'` string literals around an author's statement would otherwise hide it), so an author's own `@php $attributes = $x; @endphp` keeps reporting. Not dropped: the directive's own `$value = session()->get(...)` and the `$errors->getBag($__errorArgs[1] ?? 'default')` argument of a single argument `@error`. Residuals: a template that writes one of these statements itself keeps the finding on the identical compiled statements in that file, and the same statement emitted by a registered precompiler is silenced too, as with the other text presence gates.
-
-* `InvalidArrayOffset`, when the message names `$__errorArgs` as the accessed variable AND the offset is the literal `1` (#1566). A single-argument `@error('field')` compiles to `$__errorArgs = ['field']; $__bag = $errors->getBag($__errorArgs[1] ?? 'default');`, and Psalm proves offset `1` absent from that literal one-element list on every mention — bookkeeping the author never wrote and cannot act on. The match is exact-name on `$__errorArgs`, not a wide `__`-prefix family: `@error` is the only Blade bookkeeping that indexes a possibly-absent offset this way, and a wider match would also swallow an author's own `$__foo[9]` typo. It is also pinned to offset `1` specifically, not any offset on `$__errorArgs`: a keyed argument (`@error(1 => 'field')`) compiles to `$__errorArgs = [1 => 'field']`, which has no key `0`, and the compiled `$__bag->has($__errorArgs[0])` read then reports this same class with the offset-`0` wording — a genuine malformed-input bug (runtime `Undefined array key 0`) that keeps reporting. An author's own out-of-bounds read (`@php $arr = ['only']; echo $arr[1]; @endphp`) names `$arr` in the message and keeps reporting too. Two residuals: an author who writes `$__errorArgs[1]` themselves inside `@php` is silenced along with the compiler shape (the same name-exact trade every gate in this section makes), and the spread form `@error(...$args)` compiles to a list Psalm cannot size, so it reports `PossiblyUndefinedArrayOffset` instead — a different class this gate deliberately leaves untouched.
-* `PossiblyInvalidMethodCall` and `PossiblyUndefinedMethod` on the synthetic iterator call of a `@foreach`/`@forelse` over a union subject (`Collection<int, X>|list<X>`, #1810). Psalm types such a loop through a `getIterator()`/`current()`/`key()` call on the compiled `$__currentLoopData` and suppresses both classes around it, which the remap cannot carry. Matched by position: the synthetic call sits on the `$__currentLoopData` variable, while a real `$__currentLoopData->count()` sits on the method name and still reports. A raw PHP `foreach` over the same union inside `@php` is not covered.
-* `PossiblyInvalidMethodCall`, and under `reportMixedIssues` `MixedMethodCall` ("Cannot determine the type of ..."), on the subject of an array access such as `{{ isset($x['k']) ? $x['k']['n'] : '' }}` where `$x` or `$x['k']` may be an `ArrayAccess` (#1909). Psalm analyzes a virtual `offsetGet()`/`offsetExists()`/`offsetSet()` call there and suppresses both classes around it, which the remap cannot carry. Matched by position: the virtual call sits on the subject, immediately followed by `[`, while a real `$obj->items()['k']` sits on the method name (followed by `(`) and still reports, as does a static call. Residual: whitespace or a line break between the subject and `[` (`$x ['k']`) is not matched.
-* `PossiblyNullPropertyFetch` on `$loop->parent` and `$loop->parent->parent` (#1696). `$loop->parent` stays `|null` in the ambient loop type because an outermost loop has no parent, but the prelude cannot see lexical nesting, so every nested `{{ $loop->parent->iteration }}` reported. Matched on the message naming the `$loop->parent` chain, so a nullable `->parent` on any other variable still reports. Trade-off: three real null reads are silenced too: `$loop->parent->x` in an outermost loop, the same read outside any loop (where the prelude declares `$loop` ambiently), and a `$loop` the author declares in their own docblock with a nullable `parent`.
-* `PossiblyInvalidArgument` and `PossiblyFalseArgument`, only on **argument 1 of an `e()` or `echo` call the compiler synthesized**. `{{ $x }}` compiles to `echo e($x)` and `{!! $x !!}` to a bare `echo $x`, so a value whose type is only partly echoable (`string|array|null`, or `string|false` from `parse_url()`) reports against a callee the author never wrote, and their only fix is a cast on every optional field. Told apart the same way as the arity gate: the enclosing call is cut out of the compiled line — backwards from the argument this time, since that is what the issue points at — and kept only if it occurs in the raw template. That is the whole discriminator, because `@php echo e(old('k')); @endphp` and `{{ old('k') }}` compile to byte-identical lines.
-
-  `InvalidArgument` is not included: a definite `array` in an echo position is a guaranteed `htmlspecialchars()` fatal, not a possibility, and keeps reporting. Neither is any other argument position — an author's own `e($x, $flag)` or `@php echo $a, $b; @endphp` reports as argument 2 and is untouched.
-
-  A missing call only says something about the callee when the **argument** itself survived compilation unchanged, so that is checked first and a rewritten argument keeps its issue. Blade does rewrite raw text inside an author's own expression: `@@foo` is unescaped to `@foo` before echos are compiled, the `##BEGIN-COMPONENT-CLASS##` markers are stripped from the finished output after `@php` blocks are restored into it, and a registered precompiler (Livewire) may rewrite anything at all. Without that check, `{{ e(old('@@foo')) }}` reaching the analyzer as `echo e(e(old('@foo')))` would let the author's own inner `e()` be read as the compiler's and its issue dropped. The cost is noise on the mirror-image shape: when Blade rewrote the argument of a genuinely generated echo (`{{ old('@@foo') }}`), the callee can no longer be proven and the issue is kept.
-
-  Two further shapes the gate does not cover, both leaving the finding visible rather than losing it: a custom `Blade::setEchoFormat('myEsc(%s)')` changes the callee name, and a registered `Blade::stringable()` handler wraps the value in `$__bladeCompiler->applyEchoHandler(...)` so the reported callee is that method. As with the arity gate, a template that contains an author-written `e(`/`echo` of the same expression **anywhere** in the file keeps its issues everywhere in that file.
-* Argument issues on the calls **`@aware`'s compiled loop** makes (#1695). `@aware([...])` compiles to a `foreach` over its literal array whose body calls `$__env->getConsumableComponentData($__key, $__value)` for a string key and the list form `$__env->getConsumableComponentData($__value)` for an int key. Psalm does not correlate that `is_string($__key)` ternary with the key it narrowed, so the `@aware` line reports in two shapes. A keyed non-string default (`null`, `false`, `0`, `[]`, an enum) reaches the list-form arm and reports an argument 1 issue (`NullArgument`, `InvalidArgument`, `PossiblyNullArgument`), or `ImplicitToStringCast` for a `Stringable` default, plus the `InvalidCast` Psalm adds for an array, object, or enum default. An all-int-key list (`@aware(['color'])`) narrows `$__key` to `never` in the keyed arm and reports `NoValue`. Both are dropped only when the issue points exactly at that `$__value`/`$__key` argument and the generated call text up to it (`$__env->getConsumableComponentData($__value`, or `$__env->getConsumableComponentData($__key` for the keyed arm) does not occur in the raw template, so an author's own call with the same arguments inside `@php` keeps reporting.
-
-  The discriminator is text, and it is per template, not per line. Writing that call text **anywhere** in a template (`@php`, raw PHP, or even plain markup; a `{{-- --}}` comment does not count) switches the matching arm's gate off for the whole file, and from then on every generated `@aware` line in that template reports the artifact again, next to the author's own call. Each arm is switched off only by its own text: `$__key` call text leaves the list-form gate on, and `$__value` call text leaves the keyed gate on.
-
-The arity gate applies to `TooManyArguments` alone. A compiled `@include` or `@extends` chain also expands into calls (`$__env->make()`), and gating the whole family on the same rule would silently hide a real `MissingView`. The echo-position gate above reuses the same "does this piece of the shadow occur in the template?" mechanism but is anchored on two specific callees at one argument position, so it cannot reach any other call. Anything either gate cannot read, or cannot recognise as the call shape it expects, keeps its issue: the failure direction is extra noise rather than a lost finding.
-
-A `match` follows Psalm's behavior on plain PHP (#1801). Inside an arm (its conditions and body) `RedundantCondition` and `RedundantConditionGivenDocblockType` are dropped, as Psalm drops them there; the `match` subject and a `match` used as an operand (`if (match (...) {...})`) still report them. Accepted residual: for a `match` without a default arm Psalm analyzes the arm conditions a second time outside that suppression and can report there, a template does not.
-
-## Threads
-
-Nothing in the pipeline needs a single process, and that is checked rather than assumed: a test compares a forked run against a single-process run of the same fixture, cold and warm cache, and requires identical issue lists. Shadows are compiled, and the registries the issue remap reads are filled, while Psalm initialises its plugins, which happens before either the scanner or the analyzer forks; every worker therefore inherits a complete copy, and nothing writes to the shadow cache once analysis starts. A template issue found in a worker is re-emitted there against the `.blade.php` path and travels home in the worker pool's result payload like any other issue. A taint finding is emitted later still, in the parent process, after the workers' flow graphs have been merged, so its journey is rewritten where the registries live.
-
-`psalm-laravel blade:annotate` is the one exception, and keeps the analysis of the Psalm run it drives in one process (see [Annotating templates](#annotating-templates)); your `--threads` still sizes its scan. That restriction is about the producer types the command collects, not about the scan.
-## Degradation
-
-By default Blade analysis never fails a run. If the compiler or view finder cannot be resolved from the booted application, a view directory cannot be read and no template was found elsewhere, the cache directory cannot be written, or a Psalm internal the plugin depends on has changed shape, the feature turns itself off for that run and prints one warning naming the cause. Psalm's `--no-progress` installs a progress implementation that discards warnings (Psalm also picks it by itself when an AI agent runs it outside CI), so in that mode this warning is written to STDERR directly. With [`failOnInternalError`](config.md#failoninternalerror) enabled, the disable fails the run instead, so a disable cannot pass CI silently. Finding no templates at all is not a disable.
-
-`vendor/bin/psalm-laravel diagnose` prints whether your Psalm config enables Blade and where its shadows go: `Blade: off` or `Blade: on (cache <dir>)`. It reads the config only, without compiling any template, so a disable shows up in the run's warning above, not there.
-
-Degradation is all-or-nothing: the template facts the compile pass collects (contracts, data-include sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [view data checks](config.md#view-data-checks) stay silent for that run.
-
-A template that fails to compile (see [Known limits](#known-limits)), or whose declarations crash the plugin's own parser, is skipped rather than aborting the run, and reported as a [`BladeCompileFailure`](issues/BladeCompileFailure.md) error on its line 1 (`Template not analysed: <cause>`). Being an issue, it survives `--no-progress`, fails the run, enters baselines, and reaches `<issueHandlers>`. This holds even when no template compiled. Other skipped templates (one that cannot be read, or whose shadow cannot be written) are summarized in one warning instead: up to three paths are named directly, and `--debug` lists every individual cause.
-
+With a `@var` declaration: type checks on the view data itself, as in PHP (with `@var \App\Models\User $user`, `{{ $user->missing() }}` reports `UndefinedMagicMethod`).
 
 ## Declaring view variables
 
-A template states the variables its `view()` call sites must pass with `@var` docblocks in a `<?php` or `@php` block. Psalm reads the same docblock as the type of the variable inside the template, and IDEs and static analyzers understand it:
+Declare variables in a `<?php` or `@php` docblock at the top of the template. Psalm types the template body from it, and the [view data checks](#view-data-checks) compare call sites against it:
 
 ```blade
 <?php
@@ -296,106 +56,76 @@ A template states the variables its `view()` call sites must pass with `@var` do
 ?>
 ```
 
-`@props([...])` entries declare too. The line is read as PHPDoc reads it: the type is the first bracket-balanced token (`array{id: int}`, `Collection<int, User>`, also when it spans several lines), the name is the `$identifier` right after it, and anything after is a description, so a `$` inside the description binds nothing. A raw `@var` counts only as a tag at the start of a line in a `/** */` docblock that is a statement of the template's own scope, anywhere in a `<?php` or `@php` block: the docblock of a property, method, function or closure, one inside a function body, and one inside an expression declare nothing.
+* Every declared variable is required, `T|null` and `mixed` included.
+* `= null` after the name makes it optional. Write the type as `T|null`; `@var string $x = null` reports `InvalidDocblock`.
+* `@props(['size' => 'lg'])` declares too, and a literal default types the body (`string` here).
+* Write class names fully qualified with a leading backslash, or the call-site type check is skipped.
+* `$errors`, `$slot`, `$attributes`, `$loop` and `$__env` are typed by the plugin; never declare them.
 
-A call site is checked against these declarations ([MissingViewVariable](issues/MissingViewVariable.md), [InvalidViewVariableType](issues/InvalidViewVariableType.md)). A namespaced name (`view('pkg::widget')`, `@include('pkg::widget')`, a mailable's `view('pkg::mail')`) is checked against the template Laravel's view finder resolves it to, as long as that template is [analyzed](#what-is-analyzed); a namespace hint under your vendor directory, an unknown namespace, and a name the finder resolves to a non-Blade file are not checked. A `/` in a name counts as `.`, as it does for Laravel. Not checked either: a `markdown('mail::…')` (Laravel swaps the `mail` namespace for its markdown components when rendering it), and a name with surrounding spaces or a second `::`. `blade:annotate` reads call sites the same way. Like every [view data check](config.md#view-data-checks), they are `info` by default and `error` under [`<experimental value="true" />`](config.md#experimental):
+## View data checks
 
-* **Every declared variable is required**, including `T|null` and `mixed`: a nullable type means "pass `null` explicitly".
-* **`= null` right after the name makes it optional**: `@var string|null $title = null`. A call site may then omit the key, and a layout or partial that is rendered with and without a variable typically needs it. Write the type as `T|null`: Psalm reads the docblock as written, so `@var string $x = null` types the body `string`; it is reported as `InvalidDocblock` at the declaration. Text after the `= null` is still description. Tools that do not know the marker (bladestan) read the declaration without it and require the key; PhpStorm keeps the type.
+Experimental. Reported as `info` by default (hidden unless `--show-info=true`, never fail a run, not baselined), as `error` with [`<experimental value="true" />`](config.md#experimental) or a `<PluginIssue>` handler:
 
-A named slot is optional by nature: when the caller omits `<x-slot:footer>`, `$footer` is undefined in the component view. Declare it `@var \Illuminate\View\ComponentSlot|null $footer = null` and guard it with `isset($footer)`. `$slot` itself is always passed.
+* [`MissingViewData`](issues/MissingViewData.md): a call site does not pass a required variable.
+* [`InvalidViewData`](issues/InvalidViewData.md): a passed value does not satisfy the declared type.
+* [`UnusedViewData`](issues/UnusedViewData.md): a call site passes a key the template never reads or declares. An app that overrides the `@include` directive gets false positives; suppress this issue there.
 
-Some names are never contracts, because no call site passes them: a name the template binds itself (a `@foreach` alias, an assignment target, a closure parameter, a `catch` variable), the names Blade supplies (`$errors`, `$slot`, `$attributes`, `$loop`, `$component`, `$__env`), data the framework shares into every view (`$app` and whatever a provider `share()`d before the plugin booted the application), and a `@var` in a plain `/* */` or `//` comment, which Psalm does not read. They still count as declared for [UnusedViewData](issues/UnusedViewData.md). The missing-variable check also declines for a call site inside an `Illuminate\View\Component` subclass's `render()` (its result can be chained by the caller), and for an unreadable `@props` or an open data set. A class name is compared against the call site's value only when it is written with a leading backslash (`\App\Models\User`), or is a PHP internal class (`Closure`): a short or otherwise qualified name (`Thing`, `Models\User`) resolves through the template's own `use` imports, so that variable is checked for presence only. For a view with a composer or creator registered at boot (wildcards included), the keys it passes through literal `$view->with()` calls are checked for neither presence nor type, since it may overwrite them (a composer at render time, a creator inside `view()` before any chained `->with()`); every other key is checked as usual. A composer the plugin cannot read (a closure, a non-literal key, `$view` used beyond `with()`, and the other shapes listed under [MissingViewVariable](issues/MissingViewVariable.md#composers-and-creators)) turns both checks off for the whole view. Wildcard listeners registered straight on the dispatcher, as debugging and monitoring packages such as Ray, Telescope or Debugbar register them, are ignored; a variable such a listener adds is not seen, so declare it `= null` or suppress the issue. `blade:annotate` writes class names with a leading backslash.
-
-### Included templates
-
-An include directive with a literal data array is checked like a `view()` call site, on the directive's line:
-
-* `@include`, `@includeIf`, `@extends('layout', [...])`, `@includeWhen($condition, 'view', [...])` and `@includeUnless($condition, 'view', [...])` type-check the keys their array passes. A key the array omits is never reported: the included template also inherits the including template's scope, so the key can still arrive.
-* `@includeFirst(['override', 'view'], [...])` and `@extendsFirst` do the same against the first candidate that exists on disk, which is the one Laravel renders. The check is off when any candidate is not a plain string literal (a key, a variable, surrounding spaces), when a namespaced one comes before it, and when no candidate is found. A missing key is never reported for these, even without the including scope.
-* `@includeIsolated('view', [...])` forwards no scope, so it is also checked for missing declared variables. `@includeIsolated('view')` passes no data at all, so every required variable is missing. The directive first ships in Laravel 12.47; earlier versions leave it uncompiled, so nothing is checked there.
-* `@each` and `@component` are not checked, nor is data passed in a variable (`@include('view', $data)`) or a view name that is not a string literal.
-
-[UnusedViewData](issues/UnusedViewData.md) does not judge includes.
-
-## Unused view data
-
-The plugin reports a data key a `view()` call site passes that the rendered template neither reads nor declares ([UnusedViewData](issues/UnusedViewData.md)). What each template reads (from its compiled output) and what it declares are taken together, then closed over its `@include` / `@extends` chain, since those directives inherit the including template's whole scope; `@includeIsolated` and `@each` do not, so they never launder a key into it. Both declaration forms count ([Declaring view variables](#declaring-view-variables)): `@props`, and a raw `@var T $name` docblock.
-
-The check declines for a call site instead of guessing, and the gate that matters most in practice is that a template whose compiled body hides which names it reads is never checked. `@props` and `@aware` both compile to `$$name` writes, which means component templates are outside this release's reach. The issue page lists the rest.
-
-## Annotating templates
-
-`psalm-laravel blade:annotate` writes the `@var` declarations a template is missing, as native PHP docblock lines, taking each type from the `view()` call sites that render it:
-
-```bash
-vendor/bin/psalm-laravel blade:annotate            # write them, and print what changed as a coloured unified diff
-vendor/bin/psalm-laravel blade:annotate --dry-run  # print the coloured unified diff only, write nothing
-vendor/bin/psalm-laravel blade:annotate --no-diffs # list the changed templates instead of printing the diff
+```xml
+<issueHandlers>
+    <PluginIssue name="MissingViewData" errorLevel="error" />
+    <PluginIssue name="UnusedViewData" errorLevel="suppress" />
+</issueHandlers>
 ```
 
-`--no-diffs` combines with `--dry-run` (the list, still writing nothing). It is not called `--diff`: that is Psalm's own diff-mode flag, and flags the command does not own are forwarded to Psalm.
+[`BladeCompileError`](issues/BladeCompileError.md) is not experimental: a template that fails to compile is skipped and reported as an error.
 
-It runs Psalm as a child process, because the producer types only exist during an analysis; flags you pass (`-c psalm.xml`) are forwarded to it, `--threads` included: scanning uses your thread count, while analysis stays in one process, since plugin state collected in a forked worker never reaches the process that does the writing. It refuses to run against a subset of the project (`-f`, or a bare path), because agreement between call sites is a claim about all of them: a call site in a file the run skipped cannot disagree. A run that somehow ends up forked anyway refuses to write and says so, rather than leaving every variable untyped. Blade analysis is switched on for the run whether or not your config enables it; if it disables itself, the command fails and names the reason.
+## Taint through view data
 
-Psalm's own issue report is not printed: on a real project it runs to hundreds of findings that would bury the result. What you see is the annotated list (or the diff) plus the names left unknown. Progress on stderr stays live, and if the pass never runs, the captured Psalm output is printed so you can see why.
+A value a controller passes to `view()` carries its taint into the template, so `{!! $q !!}` reports `TaintedHtml` on the template line, with or without a `@var` declaration:
 
-The command is the only way in. An ordinary `vendor/bin/psalm` run never writes to a template, whatever the configuration says, and the control file the command passes to its child carries a marker, so a `PSALM_LARAVEL_BLADE_ANNOTATE` left behind in a shell or a CI environment cannot arm the codemod or damage the file it names.
+```php
+return view('search', ['q' => $request->input('q')]);
+```
 
-The run skips taint analysis even when your config enables it: the command reports annotations, never Psalm's findings, so building the taint graph would only cost time and memory.
+```blade
+{!! $q !!} {{-- TaintedHtml; {{ $q }} is escaped and not flagged --}}
+```
 
-What it declares, per variable the template reads: the type itself when at least one call site was resolved, every resolved call site agreed on it, and none of them left the view's data set open (a spread, a dynamic key, a `$mergeData`) or was a rendering shape the plugin could not read at all (`$view = view(...)`). Literal precision is dropped, so two call sites passing `'draft'` and `'published'` declare `string` rather than fighting over which literal wins. Call sites that disagree are merged when one declaration covers them all: a difference in nullability only (`?User`), one scalar kind (`true` and `false` give `bool`), or up to three classes (`Post|Video`, and `Collection<int, Post>|Collection<int, Video>` for one class with different generic params), never widened to a common parent. A `mixed` call site, two scalar kinds (`int` and `string`), or an array beside anything else is not merged; each such variable is listed under "Undeclared, call sites disagree" as one line with the view, the variable and every distinct type passed, dry run included.
+The trace runs from the request input through the controller to the template line, never through the compiled shadow. It is a normal Psalm issue: silence it with `issueHandlers`, `@psalm-suppress` or a baseline.
 
-Every other variable is left undeclared and listed per template under "Undeclared, type unknown", so the command doubles as a list of the names left to declare by hand. That covers a type that is `mixed`, and a type that would not mean the same thing once written (one that carries a generic's template parameter, or whose printed form would close the docblock early because it contains `*/`). A `mixed` declaration would add no type, yet make the variable required at every call site ([MissingViewVariable](issues/MissingViewVariable.md)). A template with nothing but such names gets no docblock at all.
+* **What flows:** a literal-keyed data array of `view()`, `View::make()`, `Factory::make()` or `response()->view()`, and `->with('key', $value)` / `->with([...])` on those, keyed by variable name and by the canonical view name (`admin/panel`, `admin.panel` and a `pkg::name` hint are the same view). Only the keys passed are tainted: `['t' => $input]` does not taint `$q`.
+* **What is skipped:** a dynamic view name, data in a variable, `View::share()`, composers, `Route::view()`, Livewire, mail, and the explicit data of a template's own `@include`. A template fed only that way reports nothing.
 
-Each declaration it writes is a raw docblock in the template body, which Psalm reads itself, so it types the body from the next run on (see [Ambient variables](#ambient-variables)).
+[Behaviour reference](contributing/blade.md#taint-through-view-data).
 
-A rendering shape the plugin could not read is any expression the call-chain walk declines, not just `$view = view(...)`. `view(...)->render()`, a `view(...)` passed as an argument to something else, and a chain carrying a method the plugin does not model all qualify, because the walk starts at the outermost expression and refuses anything it does not fully understand. Every literal view name inside such an expression is marked unreadable for the whole run, so every variable of each template it names is listed as unknown, including at the call sites that did resolve cleanly.
+## Suppressing and baselining
 
-A call inside a closure or arrow function is read on its own, as the statement it is in that function's body. In `Action::make('qr')->modalContent(fn ($record) => view('qr', ['text' => $record->url]))` the outer chain is declined, but the `view()` call is the arrow function's return and resolves like any other call site; the declined chain does not mark that same call unreadable again. A call the walk declines there too (`fn () => view('qr', [...])->render()`) still counts as unreadable, and so does every call in a declined expression that could write data into the view a callback returns: a `with...()` call (magic ones such as `withTitle()` included), `nest()`, an offset or property assignment, or a method whose name is not a literal. `(fn () => view('qr', [...]))()->with('text', 42)` is one. A callback whose view is stored or returned and changed by a later statement is not seen, the same as a method returning `view(...)` to a caller that chains `->with()` onto it.
+```blade
+{{-- @psalm-suppress UndefinedPropertyFetch --}}
+<p>{{ $user->nmae }}</p>
+```
 
-What it leaves alone:
+```xml
+<issueHandlers>
+    <RiskyTruthyFalsyComparison>
+        <errorLevel type="suppress">
+            <directory name="resources/views" />
+        </errorLevel>
+    </RiskyTruthyFalsyComparison>
+</issueHandlers>
+```
 
-* a variable the template already declares, as a raw `@var` docblock (`<?php` or `@php`), a type spanning several lines (a multi-line `array{...}` shape) included. Existing declarations are never narrowed or rewritten, so re-running the command over an annotated template is a no-op.
-* a variable the template binds itself: a `@foreach ($items as $item)` alias is the template's own, not something the call site passes, so `$items` is declared and `$item` is not. List destructuring (`as [$id, $name]`) binds both names the same way, and so do an assignment (`@php ($heading = 'Hello')`), a closure or arrow-function parameter (`fn ($item) => ...`), a `catch` variable, and a `static`/`global` declaration. A `use ($x)` clause is not one of them: it reads the enclosing `$x`.
-* nothing it declares becomes required for a call site that provably omits it: a variable some closed call site renders the template without is declared `T|null $x = null` (see [Declaring view variables](#declaring-view-variables)), with no second `|null` when the type already has one.
-* a template whose compiled body hides which names it reads. `@props` and `@aware` compile to `$$name`, so component templates are skipped whole rather than annotated in part.
-
-Everything outside the inserted lines comes out byte for byte identical, including the file's line endings and any BOM. Where the lines go, in order of preference:
-
-1. the first doc comment of the `<?php` block the file opens with (at the block's top level, not nested in braces, and not the docblock of a function, class or closure), appended before its closing `*/` and indented and line-ended like it, so the template keeps a single docblock (Psalm attaches only the last of two docblocks before one statement);
-2. a new `<?php /** ... */ ?>` block directly after that leading block, so a `declare(strict_types=1);` stays the first statement. A leading block that never closes gets a plain docblock after its open tag instead;
-3. a new `<?php /** ... */ ?>` block at the very top of the file, after any BOM.
-
-A one-line header docblock (`<?php /** Header. */ ?>`) is opened out: the lines land before its `*/`, which moves to a line of its own, so the diff modifies that one line. The `?>` of a new block swallows the line break after it, so the rendered output does not change.
-
-Array shapes are written as inferred, so a single call site passing `['a', 'b']` declares `list{string, string}` and a later call site passing three elements reports a type error on correct code. Widen such a declaration by hand, or delete it and re-run once both call sites exist.
-
-Annotating changes what the other checks see, which is the point: the declarations it writes are what the [view data checks](config.md#view-data-checks) check call sites against, what [UnusedViewData](issues/UnusedViewData.md) counts as wanted, and the types the template body is analyzed with. Expect new findings on the next run, including [MissingViewVariable](issues/MissingViewVariable.md) at a call site the annotator could not prove closed (a spread, a dynamic key) that omits a variable the template reads conditionally (`{{ $flag ?? false }}`); add `= null` to the declaration, drop it, or make the call site pass it.
+* Do not list templates in `<ignoreFiles>`: they are still analyzed, and every finding is silently dropped.
+* `--set-baseline` / `--use-baseline` work as for PHP. A template entry matches the trimmed text of the whole flagged line, so editing anything on that line (even a CSS class) reports the finding again.
+* A baseline holds one Blade mode: a `--no-blade` run reports the template entries as `UnusedBaselineEntry`.
 
 ## Known limits
 
-* **A nested parameter hides a same-named contract.** A template that declares `$title` and also has `fn (string $title) => …` (or a closure parameter, `catch`, `static` or `global` of that name) anywhere treats `$title` as its own local and declares no contract for it: the template-wide set of bound names does not tell scopes apart, so the check misses a missing key (never reports a false one).
-* **A layout's declarations are not checked at its children's call sites.** A variable declared in a layout reached through `@extends` is required by the layout, but only the rendered template's own contract is checked against a `view()` call site.
-* **No cross-template following for analysis.** Each template is compiled and analyzed as if it stood alone; `@include`, `@extends`, and component recursion are resolved only for the reference and read-set graphs the two opt-in rules above use, never to type a template's body.
-* **Component tags can fail to compile.** A component tag (`<x-...>`) needs the full application container to resolve, which the standalone compile pass does not always provide. A template that fails this way is skipped and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md); other templates are unaffected.
-* **Undeclared variables are silently `mixed`.** There is no way, yet, to catch a typo'd variable name this way, and the `Mixed*` issues that fallback produces are suppressed by default (see [`reportMixedIssues`](config.md#reportmixedissues)), so they cannot be used to spot one either unless you opt back in.
-* **View data named `component` is shadowed after a `<x-...>` tag.** Blade uses `$component` for the tag's component (documented for [scoped slots](https://laravel.com/docs/13.x/blade#scoped-slots); inside a slot it is typed as the tag's class). Psalm cannot follow Blade's save and restore around the tag, so your own `$component` is typed `YourClass|AnonymousComponent` after it. Pass the value under another name.
-* **A dynamic read of `$component` or `$attributes` sees the bookkeeping type.** `compact('component')`, `$$name`, or `get_defined_vars()` in a plain caller reads the name without a `$component`/`$attributes` token, so the prelude still declares it `Component|null`/`ComponentAttributeBag|null` (#1873). A direct `$component` read in the same template keeps it `mixed`.
-* **No HTML context awareness.** The plugin does not distinguish an attribute position from a script position from ordinary markup; taint detection is about escaped versus unescaped output, not where in the HTML that output lands.
-* **Dynamic view names are not resolved.** `view($name)` with a non-literal `$name` is not connected back to a template file.
-* **Taint from view data reaches only literal, directly named data.** `view('x', ['q' => $input])`, `->with('q', $input)`, `->with(['q' => $input])`, `View::make()`, `Factory::make()` and `response()->view()` carry taint into the named template's variables (see [Taint through view data](#taint-through-view-data)). A data array held in a variable, `compact()`, `View::share()`, composers, `Route::view()`, Livewire, mail views, and the data of an `@include` inside a template are not connected: a template fed only by those reports no `TaintedHtml` for it.
-* **A non-Blade file in an earlier view root is not seen.** With two `config('view.paths')` roots, a `widget.php` in the first one is what Laravel renders for `view('widget')`, while the check uses the second root's `widget.blade.php`. Namespaced names are resolved through the finder and are not affected.
-* **A multi-line construct can report on the line that opened it.** Each template line carries a marker comment into the compiled shadow, and the reported line is the nearest marker at or above the issue. Statements inside `@php` and raw `<?php` blocks carry their own marker and report on their own line. Three shapes cannot: a construct whose interior is quoted text (a heredoc, a nowdoc, a multi-line string) or a block comment, since a marker placed there would become part of that text rather than a marker; a `{{ }}`/`{!! !!}` echo, a `@directive(...)` argument list, or a `@switch`/first `@case` span written across lines, since Blade rewrites those and a marker inside one stops it matching; and a multi-line component tag, covered below. Each reports on the line its construct opened on, so the drift is bounded by the construct's own height.
-* **A multi-line `<x-...>` tag reports on its opening line.** `ComponentTagCompiler` emits a fixed five-line shape for any tag and joins every attribute onto one of them, so no attribute's own source line survives compilation and there is nothing to map back to. A marker cannot be injected between two attributes either: the compiler matches an attribute list as a strict alternation, and one extra comment leaves the whole tag uncompiled as literal text. The same holds for a precompiler that owns a tag prefix (`<livewire:...>`, `<flux:...>`, `<native:...>`), so any multi-line tag whose lowercase name carries a `prefix:` reports on its opening line too. Residual: a multi-line XML-namespaced HTML tag (`<v:roundrect ...>` in an email template) is treated the same way, and a finding inside its attributes reports on its opening line.
-* **A malformed component tag reports a genuine `ParseError`, located at the tag.** An empty bound attribute (`:value=""`) compiles to a dangling `,` or `]` in the component's data array, and a closing tag with no matching opener (a stray `</x-alert>` over a self-closed `<x-alert />`) compiles to an orphan `@endif`. Both are real bugs Laravel's own compiler would hit at render time, not remap artifacts. The dangling array element reports on the tag's opening line, and the orphan closer reports on the stray closing tag's own line; neither shape has a per-attribute line to report on, for the same reason a multi-line tag does not: no marker survives inside a component tag's compiled output. An orphan closer's error can also surface at a later directive instead, when its stray `@endif` epilogue consumes an enclosing conditional (the parser only trips where the imbalance becomes unparseable).
-* **A `ParseError` in a template's compiled shadow is reported on a cold cache only.** A warm run reports nothing for it until the cache is rebuilt, exactly as plain Psalm does for any PHP file with a syntax error ([vimeo/psalm#12319](https://github.com/vimeo/psalm/issues/12319)). Run with `--no-cache` (or clear Psalm's cache) to see it again.
-* **A non-string `@aware` list item is not reported.** `@aware([null])`, `@aware([$n])` with a nullable `$n`, and a bare `null` next to a keyed pair are silenced along with the compiled `@aware` loop's own argument issues (see [Compiler-generated code](#compiler-generated-code)), because the two cannot be told apart. Each is a bug at runtime (a null key).
-* **A component view that writes a `<x-...>` tag BEFORE its own `@props`/`@aware`/`$attributes` marker, and reads `$attributes->` between the two, can get a non-null assertion it has not earned (#1543).** A nested tag's compiled bookkeeping re-asserts `$attributes` as non-null right after its own save/restore `endif`s (see [Ambient variables](#ambient-variables)), unconditionally — it cannot tell whether a read that follows comes before or after the marker that makes `$attributes` genuinely non-null (`@props`'s own `??=` guard, in particular). Verified narrow: a read placed after the marker, the normal case, is unaffected either way, and a read after the tag or inside its own body is correctly typed regardless of which of `@props`, `@aware`, or a bare mention declared the view a component. The one case this re-assert skips outright is a template that itself assigns to (or `unset()`s) `$attributes` anywhere in its own source: the assertion cannot prove Laravel's `isset($attributes)`-gated save/restore ran again after that write, so the re-assert is withheld for the whole template and the original nullable/mixed typing (and its pre-#1543 false positives) applies instead.
-* **Class component view typing is a lower bound on detection and an assumption about the render path.** Only a compiled `<x-…>` tag or `@component(Foo::class)` proves a class is rendered as a component; `<x-dynamic-component>`, `Blade::renderComponent()`, and tags inside package views under `vendor/` are not seen, so their views stay `mixed`. Once one tag is seen, the view is typed as the tag renders it: a controller (or a manual `$component->render()`) rendering the SAME view gets none of the `data()` keys at runtime, and the template is still typed as if it did. A template that renders it by name (`@include` and friends) is seen and declines; PHP call sites are not, because they are only known during analysis. A named slot whose name is an expression (`<x-slot :name="$x">`) is not seen either.
-* **Taint does not flow from a component's properties into its view.** The seeded types carry no data-flow node, so a property holding request input reaches `{!! $title !!}` without `TaintedHtml`. Keys passed through `render()`'s own data array are not typed at all yet.
-* **A `false` sentinel `@props` default types the body `bool`.** `'icon' => false` with string callers makes `{{ strtoupper($icon) }}` under `@if ($icon)` report `InvalidScalarArgument`. Declare the real type with a raw `<?php /** @var string|false $icon */ ?>`.
-* **A `[]` `@props` default types the body `array`.** With `Collection` callers, an `@if ($items instanceof Collection)` guard reports `DocblockTypeContradiction`. Declare the real type the same way.
-* **`Mixed*` suppression can orphan a template's own `@psalm-suppress`.** A `{{-- @psalm-suppress MixedArgument --}}` comment in a template is carried into the compiled shadow, but with `reportMixedIssues` at its default (off) the issue it would have silenced is already dropped before that comment is ever checked against it. Under `--find-unused-psalm-suppress` this reports `UnusedPsalmSuppress` on the template line. Either drop the now-redundant comment, or run with `reportMixedIssues="true"` when checking for unused suppressions.
-* **Compiler-generated code suppression has the same `UnusedPsalmSuppress` caveat.** A `{{-- @psalm-suppress MissingClosureParamType --}}`, `{{-- @psalm-suppress MissingPureAnnotation --}}`, `{{-- @psalm-suppress InvalidMethodCall --}}`, `{{-- @psalm-suppress TooManyArguments --}}`, `{{-- @psalm-suppress UnusedVariable --}}`, `{{-- @psalm-suppress UnevaluatedCode --}}`, `{{-- @psalm-suppress RedundantCondition --}}`, `{{-- @psalm-suppress RedundantConditionGivenDocblockType --}}`, `{{-- @psalm-suppress DocblockTypeContradiction --}}`, `{{-- @psalm-suppress TypeDoesNotContainNull --}}`, `{{-- @psalm-suppress TypeDoesNotContainType --}}`, `{{-- @psalm-suppress InvalidScope --}}`, `{{-- @psalm-suppress NonStaticSelfCall --}}`, or `{{-- @psalm-suppress InvalidArrayOffset --}}` comment aimed at a precompiler-generated construct is redundant once that construct is dropped at shadow emission (see [Compiler-generated code](#compiler-generated-code)), and reports `UnusedPsalmSuppress` under `--find-unused-psalm-suppress` for the same reason. There is no flag to opt back in: unlike `reportMixedIssues`, this suppression is unconditional.
-* **Some vendor directives still report on their compiled code.** Inertia's `@inertia`/`@inertiaHead` (`PossiblyUndefinedGlobalVariable` and `RiskyTruthyFalsyComparison` on `$__inertiaSsrResponse`, an always-falsy `config()` operand) and Filament's `@endcapture` (`PossiblyFalseArgument` on `ob_get_clean()`). Each is a handful of findings per app; suppress them per template or in `<issueHandlers>`.
+* **Each template is analyzed alone.** `@include`, `@extends` and components are not followed for typing, and a layout's declarations are not checked at its children's call sites.
+* **Undeclared variables are silently `mixed`**, so a typo'd variable name is not caught. A `Mixed*` issue from a declared value (`@var array $data`, then `{{ $data['x']->foo() }}`) is hidden too.
+* **Taint from view data reaches only literal, directly named data.** A data array held in a variable, `compact()`, `View::share()`, composers, `Route::view()`, Livewire, mail views and the data of an `@include` are not connected ([details](#taint-through-view-data)). The HTML context (attribute, script, markup) is not considered.
+* **Component tags can fail to compile** when the standalone compile pass cannot resolve them. The template is skipped with a `BladeCompileError`.
+* **Multi-line constructs report on their opening line**: a multi-line `{{ }}`, directive argument list, `<x-...>` tag or heredoc.
+* **Dynamic view names** (`view($name)`) are not connected to a template.
+
+Behaviour reference (cache invalidation, compiler-generated code, ambient variables, class components, the full limits list): [contributing/blade.md](contributing/blade.md).
