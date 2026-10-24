@@ -134,7 +134,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
     private static function plans(): array
     {
         $plans = [];
-        $required = [];
+        $optional = [];
         $disagreeing = [];
         $disagreed = [];
 
@@ -151,9 +151,10 @@ final class AnnotationWriter implements AfterAnalysisInterface
                 $plans[$templatePath][$name] = !\array_key_exists($name, $plans[$templatePath] ?? [])
                     || $plans[$templatePath][$name] === $type ? $type : null;
 
-                // Optional only when every name this file is rendered under agrees.
-                if (!AnnotationCollector::isOptional((string) $viewName, $name)) {
-                    $required[$templatePath][$name] = true;
+                // Optional once a closed call site omits it under ANY of the file's names: that call
+                // renders this same file without it.
+                if (AnnotationCollector::isOptional((string) $viewName, $name)) {
+                    $optional[$templatePath][$name] = true;
                 }
 
                 $types = $type === null ? AnnotationCollector::disagreeingTypes((string) $viewName, $name) : null;
@@ -168,15 +169,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $result = [];
 
         foreach ($plans as $templatePath => $vars) {
-            $optional = [];
-
-            foreach (\array_keys($vars) as $name) {
-                if (!isset($required[$templatePath][$name])) {
-                    $optional[$name] = true;
-                }
-            }
-
-            $result[$templatePath] = [$vars, $optional, $disagreeing[$templatePath] ?? []];
+            $result[$templatePath] = [$vars, $optional[$templatePath] ?? [], $disagreeing[$templatePath] ?? []];
         }
 
         return [$result, $disagreed];

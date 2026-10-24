@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use Illuminate\View\ViewName;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
@@ -210,8 +211,15 @@ final class ViewCallChain
         // `SimpleMessage::with($line)`, which is what a MailMessage chain's `with()` reaches, appends
         // an intro/outro line to the notification body and never touches the template's data.
         $carriesData = $role !== ViewNameSignatures::ROLE_MAIL_MESSAGE;
+        $view = self::viewArg($args);
 
-        return self::build(self::viewArg($args), ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete);
+        // `Markdown::render()`/`renderText()` swap the `mail` namespace for the markdown component
+        // paths before rendering, so the boot-time `mail` hint the registry knows never renders here.
+        if ($methodName === 'markdown' && $view instanceof String_ && \str_starts_with($view->value, 'mail::')) {
+            return null;
+        }
+
+        return self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete);
     }
 
     /**
@@ -325,11 +333,17 @@ final class ViewCallChain
             return null;
         }
 
-        $viewName = $name->value;
+        // `Factory::make()` normalizes `/` to `.` before resolving. A spelling whose literal would
+        // look up another file's key than the one Laravel renders declines: surrounding whitespace
+        // (the finder trims) and a second `::` (normalize() keeps only the first two segments).
+        //
+        // A namespaced `pkg::name` needs nothing more: the compile pass registers a hint-root template
+        // under exactly that qualified name, and only when the finder resolves the name to it
+        // ({@see \Psalm\LaravelPlugin\Blade\BladeBootstrapper}). An unknown hint, a vendor/ hint
+        // root, or an uncompiled template has no registry entry, and every consumer declines then.
+        $viewName = ViewName::normalize($name->value);
 
-        // A namespaced name resolves through package-registered roots the compile pass does not
-        // own, so its contract is never in the registry and guessing would be wrong.
-        if ($viewName === '' || \str_contains($viewName, '::')) {
+        if ($viewName === '' || $viewName !== \trim($viewName) || \substr_count($name->value, '::') > 1) {
             return null;
         }
 

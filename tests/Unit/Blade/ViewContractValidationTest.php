@@ -751,6 +751,66 @@ final class ViewContractValidationTest extends TestCase
         return $issues;
     }
 
+    /**
+     * A `loadViewsFrom()` hint outside vendor/ is compiled under its qualified `pkg::name`, so every
+     * binder that names it is checked like a default-root view.
+     */
+    #[Test]
+    public function a_namespaced_view_is_checked_through_every_binder(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        // In method order: helper, facade, response, mailMessage; correct() is silent.
+        $this->assertSame(
+            [self::WRONG_TYPE . ' $title', self::MISSING . ' $count', self::WRONG_TYPE . ' $count', self::WRONG_TYPE . ' $title'],
+            \array_map(
+                static fn(array $issue): string => $issue['type'] . ' ' . (\preg_match('/declares (\\$\w+)/', $issue['message'], $m) === 1 ? $m[1] : ''),
+                $this->forFile($issues, 'NamespacedViews.php'),
+            ),
+            \var_export($issues, true),
+        );
+        $this->assertSame([self::WRONG_TYPE], \array_column($this->forFile($issues, 'NamespacedMailable.php'), 'type'), \var_export($issues, true));
+
+        $included = $this->templateContractIssues('namespaced-include.blade.php');
+        $this->assertSame([self::WRONG_TYPE], \array_column($included, 'type'), \var_export($included, true));
+        $this->assertStringContainsString("View 'pkg::widget' declares \$title as string", (string) $included[0]['message']);
+    }
+
+    /**
+     * `Markdown::render()`/`renderText()` swap the `mail` namespace for the markdown component paths,
+     * so a `markdown('mail::…')` never renders the boot-time `mail` hint; a plain render does.
+     */
+    #[Test]
+    public function a_markdown_name_in_the_mail_namespace_is_not_checked(): void
+    {
+        $issues = $this->forFile($this->contractIssues('psalm.xml'), 'MailNamespaceMarkdown.php');
+
+        $this->assertSame([self::MISSING], \array_column($issues, 'type'), \var_export($issues, true));
+    }
+
+    /** `ViewName::normalize()` turns `/` into `.` before the finder runs. */
+    #[Test]
+    public function a_slashed_view_name_is_checked_under_its_dotted_name(): void
+    {
+        $issues = $this->forFile($this->contractIssues('psalm.xml'), 'ViewNameSpellings.php');
+
+        $this->assertSame([self::WRONG_TYPE], \array_column($issues, 'type'), \var_export($issues, true));
+        $this->assertStringContainsString("View 'inc.card' declares \$title", $issues[0]['message']);
+    }
+
+    /** An unknown hint and a vendor/ hint never reach the registry, so their call sites stay silent. */
+    #[Test]
+    public function an_unknown_or_vendor_namespace_is_never_checked(): void
+    {
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm-unused-data.xml')) as $issue) {
+            $this->assertFalse(
+                \in_array($issue['type'], [self::MISSING, self::WRONG_TYPE, 'UnusedViewData'], true)
+                    && (\str_contains((string) $issue['message'], "'nope::") || \str_contains((string) $issue['message'], "'notifications::")),
+                \var_export($issue, true),
+            );
+        }
+    }
+
     #[Test]
     public function the_check_is_off_unless_the_config_flag_opts_in(): void
     {
