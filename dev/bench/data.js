@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792796593693,
+  "lastUpdate": 1792825549411,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15635,6 +15635,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.48,
             "range": "± 0.77",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b458b6b52f7a947b9a8d85f4fc9ae8c9b7be6db",
+          "message": "Check namespaced views (`pkg::view`) in view-data checks and `blade:annotate` (#2025)\n\n* fix(blade): resolve namespaced view names for view-data checks #2023\n\nViewCallChain declined every `pkg::name`, although the compile pass\nregisters a hint-root template outside vendor/ under exactly that\nqualified name. Pass the name through and let the registry lookup\ndecline: an unknown hint, a vendor/ hint root, or an uncompiled\ntemplate has no entry.\n\nCovers view(), View::make(), response()->view(), @include, Mailable\nmarkdown() and MailMessage::view(), plus blade:annotate producers.\n\n* fix(blade): check namespaced views only against the template Laravel renders #2023\n\n- Ask the booted view finder for every namespaced name before a template\n  claims it: an earlier hint root's non-Blade file, or a root added by\n  prependNamespace()/replaceNamespace(), can win the name.\n- Decline markdown('mail::...'): Markdown swaps the mail namespace for\n  its component paths at render time.\n- blade:annotate: a name omitted through any view name of a file makes\n  the declaration optional for that file.\n- Normalize `/` to `.` like Factory::make(), and decline names with\n  surrounding whitespace or a second `::`; the annotate collector marks\n  a declined producer under the name Laravel renders.\n\n* test(blade): pin that an alias whose producers all omit a name blocks its declaration #2023",
+          "timestamp": "2026-10-24T09:02:12+02:00",
+          "tree_id": "9674f3f0d27cdf2a5a35bac50e226ee68da930b3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9b458b6b52f7a947b9a8d85f4fc9ae8c9b7be6db"
+        },
+        "date": 1792825547712,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.35,
+            "range": "± 0.45",
             "unit": "s"
           },
           {
