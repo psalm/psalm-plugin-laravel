@@ -97,6 +97,21 @@ though the `render()` passes only `['component' => $this]`. Property types are k
 declarations. A component with its own `data()` override can add names nothing can enumerate, so its
 supplied set is treated as open and this check declines for it.
 
+Three more receivers have framework-supplied keys, which count as supplied (and are checked by
+[InvalidViewData](InvalidViewData.md) against the declared property type; an untyped property is
+`mixed` and exempt). They are never "passed", so [UnusedViewData](UnusedViewData.md) ignores them:
+
+- **Mailable** (`$this->view()` / `->markdown()`, or `$mailable->view()` on a receiver typed as one
+  `Mailable` subclass): every public property, static ones included, that the subclass declares
+  (promoted, defaulted or assigned), plus `$message`. A receiver typed as `Mailable` itself, a
+  contract or a union is silent, as the instance's properties are unknowable.
+- **MailMessage** (`(new MailMessage)->view()` / `->markdown()`): `level`, `subject`, `greeting`,
+  `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`
+  and `$message`. A key the call passes wins over its own entry here. A subclass overriding `data()`
+  or `toArray()` is silent.
+- **Livewire** (`view()` inside `render()` of a `Livewire\Component` subclass): every public,
+  non-static property the component declares.
+
 ## Composers and creators
 
 A composer or creator registered for the view (exact name or a wildcard such as `admin.*`) can

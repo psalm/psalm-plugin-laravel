@@ -223,6 +223,16 @@ An include directive with a literal data array is checked like a `view()` call s
 
 Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` facade forms, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls chained on top of them. The whole chain is read at once, so `view('profile')->with('name', $n)` is checked against the data the chain supplies in total, not against the empty data of its inner call.
 
+Beyond the call's own arguments, three receivers supply keys at render time. They land in `ViewCallChain::$frameworkData` (supplied, never passed, so [UnusedViewData](../issues/UnusedViewData.md) cannot see them) and `FrameworkViewData` derives them from Psalm storage alone, so no class is loaded and Livewire need not be installed:
+
+* **Mailable**: `Mailable::buildViewData()` merges every initialized public property whose declaring class is not `Mailable` itself (statics included, as `ReflectionClass::getProperties(IS_PUBLIC)` returns them), and a property overrides a `with()` key. The class read is the RECEIVER's type (`$order->view(...)` from outside included); `$this` is the enclosing class. `Mailer::send()` adds `$message`.
+* **MailMessage**: `MailMessage::data()` is `array_merge(toArray(), viewData)`, so the eight `SimpleMessage` keys, `displayableActionUrl` and `$message` count, and a key the call passes wins (the opposite of `supplied()`, so the call's keys are left out of the framework set). A passed set that is not fully known drops the `toArray()` keys.
+* **Livewire**: ancestry only (`livewire\component` in `parent_classes`), inside a method named `render()`. Rule, from livewire/livewire `src/Drawer/BaseUtils.php` (`getPublicPropertiesDefinedOnSubclass()`) and `HandleComponents::getView()`: public, non-static properties not declared by `Livewire\Component` / `Livewire\Volt\Component`, applied with `->with()` after `render()` returned. Stays complete: Livewire calls `render()` itself.
+
+Types are the declared property types (expanded against the class); an untyped property, a generic declaring class, and `$message` when the call or a property also supplies `message` (`view()` and `markdown()` order the two differently) are `mixed`, which `InvalidViewData` skips. An unresolvable declaring class, a base `Mailable` / contract / union receiver, and a `MailMessage` subclass overriding `data()` or `toArray()` make the chain incomplete, so nothing is reported missing.
+
+Accepted imprecisions, all in the silent direction: a subclass can add public properties a static read of the receiver's declared type does not see; an uninitialized typed property counts as supplied; `Mailable::buildViewDataUsing()` (a global callback merged last) is not read; `new Content(view:, with:)` and `$this->with()` in a separate statement are not recognized call sites; Livewire `#[Computed]` properties are not modeled.
+
 Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call. A template that declares nothing is never checked.
 
 ## Unused view data

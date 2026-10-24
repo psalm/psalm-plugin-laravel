@@ -70,6 +70,8 @@ Experimental. Reported as `info` by default (hidden unless `--show-info=true`, n
 * [`InvalidViewData`](issues/InvalidViewData.md): a passed value does not satisfy the declared type.
 * [`UnusedViewData`](issues/UnusedViewData.md): a call site passes a key the template never reads or declares. An app that overrides the `@include` directive gets false positives; suppress this issue there.
 
+Keys the framework adds at render time count as supplied, and `UnusedViewData` never reports them: a Mailable's public properties (statics included) and `$message`, a `MailMessage`'s `level`, `subject`, `greeting`, `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl` and `$message`, and a Livewire component's public non-static properties inside `render()`. Types come from the declared property types; an untyped property is not type-checked. A property a subclass adds beyond the receiver's declared type, `Mailable::buildViewDataUsing()` and Livewire `#[Computed]` are not modeled, so a template reading them can still report `MissingViewData` (Mailable and `MailMessage` receivers typed as the base class, a contract or a union are not checked at all). Details: [`MissingViewData`](issues/MissingViewData.md#limitations).
+
 ```xml
 <issueHandlers>
     <PluginIssue name="MissingViewData" errorLevel="error" />
