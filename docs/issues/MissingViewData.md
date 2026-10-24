@@ -104,10 +104,11 @@ Three more receivers have framework-supplied keys, which count as supplied. They
   (promoted, defaulted or assigned), plus `$message`. A receiver typed as `Mailable` itself, a
   contract, a union or an intersection is silent, as the instance's properties are unknowable. A
   property the call also passes by name, and `$message` when the call passes `message` or its data is
-  not fully known, is `mixed`: at runtime the passed value can win.
+  not fully known, is `mixed`: at runtime the passed value can win. `mailer` and `__laravel_mailable`
+  count too (`mixed`). A Mailable overriding `buildViewData()` or `additionalMessageData()` is silent.
 - **MailMessage** (`(new MailMessage)->view()` / `->markdown()`): `level`, `subject`, `greeting`,
   `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`
-  and `$message`. A key the call passes wins over its own entry here. The property keys are `mixed`
+  `$message`, `mailer` and the `__laravel_notification*` keys. A key the call passes wins over its own entry here. The property keys are `mixed`
   (Laravel's own docblocks are coarser than the real values); `displayableActionUrl` is a `string`.
   A subclass overriding `data()` or `toArray()` is silent.
 - **Livewire** (`view()` inside `render()` of a `Livewire\Component` subclass): every public,

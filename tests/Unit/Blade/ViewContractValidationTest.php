@@ -444,6 +444,25 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'MailableFallback.php'), \var_export($issues, true));
     }
 
+    /** A userland `buildViewData()` can add, drop or change any key: nothing is typed, nothing is missing. */
+    #[Test]
+    public function a_mailable_overriding_build_view_data_leaves_the_key_set_open(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableOverride.php'), \var_export($issues, true));
+    }
+
+    /** `parent` in a property type names the class declaring the property, not the rendered subclass. */
+    #[Test]
+    public function a_property_typed_parent_resolves_against_its_declaring_class(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'ChildMail.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $owner'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString('but this call passes Illuminate\Mail\Mailable.', $reported[0]['message']);
+    }
+
     /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
      * half is asserted together: a protected property, a static one and a view built outside

@@ -29,6 +29,7 @@ use Psalm\Type\Union;
  * (`ReflectionClass::getProperties(IS_PUBLIC)`), so a property overrides a `with()` key. An
  * uninitialized typed property still counts as supplied (a superset only ever silences a report),
  * but is typed `mixed` when the call passes the same name, as Laravel then keeps the passed value.
+ * A subclass overriding `buildViewData()` or `additionalMessageData()` makes the set unknowable.
  *
  * MailMessage: `MailMessage::data()` is `array_merge(toArray(), viewData)`, so a key the call passes
  * wins over the `toArray()` one. The `toArray()` keys are `mixed`: the vendor property docblocks are
@@ -65,6 +66,12 @@ final class FrameworkViewData
     /** `SimpleMessage::toArray()`, minus `displayableActionUrl` which is not a property. */
     private const MESSAGE_KEYS = ['level', 'subject', 'greeting', 'salutation', 'introLines', 'outroLines', 'actionText', 'actionUrl'];
 
+    /** Added by `Mailer::send()` and `Mailable::additionalMessageData()`; where they merge differs per path. */
+    private const MAILABLE_EXTRA = ['mailer', '__laravel_mailable'];
+
+    /** Added by `Mailer::send()` and `MailChannel::additionalMessageData()`. */
+    private const MAIL_MESSAGE_EXTRA = ['mailer', '__laravel_notification_id', '__laravel_notification', '__laravel_notification_queued'];
+
     /**
      * @param array<string, Union> $passed         the data the call itself supplies
      * @param bool                 $passedComplete whether `$passed` is every key the call supplies
@@ -87,19 +94,26 @@ final class FrameworkViewData
             return [[], false];
         }
 
+        // A userland override can add, drop or change any key, so nothing is typed and nothing is missing.
+        $open = self::overrides($storage, 'buildviewdata', self::MAILABLE)
+            || self::overrides($storage, 'additionalmessagedata', self::MAILABLE);
         $keys = [];
 
         foreach ($properties as $name => [$declaring, $property]) {
             if (\strtolower($declaring->name) !== self::MAILABLE) {
                 // An uninitialized typed property is skipped at runtime and leaves a passed value of
                 // the same name in place.
-                $keys[$name] = isset($passed[$name]) ? Type::getMixed() : self::typeOf($codebase, $storage, $declaring, $property);
+                $keys[$name] = $open || isset($passed[$name]) ? Type::getMixed() : self::typeOf($codebase, $storage, $declaring, $property);
             }
         }
 
-        $keys['message'] = self::messageType(!$passedComplete || isset($keys['message']) || isset($passed['message']));
+        $keys['message'] = self::messageType($open || !$passedComplete || isset($keys['message']) || isset($passed['message']));
 
-        return [$keys, true];
+        foreach (self::MAILABLE_EXTRA as $name) {
+            $keys[$name] = Type::getMixed();
+        }
+
+        return [$keys, !$open];
     }
 
     /**
@@ -134,6 +148,10 @@ final class FrameworkViewData
         }
 
         $keys['message'] = self::messageType(!$passedComplete || isset($passed['message']));
+
+        foreach (self::MAIL_MESSAGE_EXTRA as $name) {
+            $keys[$name] = Type::getMixed();
+        }
 
         return [$keys, true];
     }
@@ -204,12 +222,13 @@ final class FrameworkViewData
             return Type::getMixed();
         }
 
+        // `self` and `parent` name the class that declares the property; `static` is the rendered one.
         return TypeExpander::expandUnion(
             $codebase,
             $property->type,
+            $declaring->name,
             $storage->name,
-            $storage->name,
-            $storage->parent_class,
+            $declaring->parent_class,
             final: true,
         );
     }
