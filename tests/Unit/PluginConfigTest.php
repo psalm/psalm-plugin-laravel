@@ -776,6 +776,55 @@ final class PluginConfigTest extends TestCase
         $this->assertSame('from-xml', $config->bladeCacheDir);
     }
 
+    #[Test]
+    public function blade_rejects_an_unknown_attribute(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("<blade>: unknown attribute 'cachDir'. Supported attributes: value, cacheDir.");
+
+        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade cachDir="x" /></pluginClass>'));
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function removedBladeAttributes(): iterable
+    {
+        yield 'validateViewData' => ['validateViewData', '<experimental value="true" />'];
+        yield 'reportUnusedViewData' => ['reportUnusedViewData', 'issueHandlers'];
+        yield 'reportMixedIssues' => ['reportMixedIssues', 'findings from undeclared variables are always dropped'];
+    }
+
+    #[Test]
+    #[DataProvider('removedBladeAttributes')]
+    public function blade_names_the_replacement_of_a_removed_attribute(string $attribute, string $hint): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches(
+            '/' . \preg_quote("<blade>: unknown attribute '{$attribute}'. Supported attributes: value, cacheDir.", '/') . '.*' . \preg_quote($hint, '/') . '/',
+        );
+
+        PluginConfig::fromXml(new \SimpleXMLElement("<pluginClass><blade {$attribute}=\"true\" /></pluginClass>"));
+    }
+
+    #[Test]
+    public function blade_attributes_are_validated_even_when_the_override_wins(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        PluginConfig::fromXml(
+            new \SimpleXMLElement('<pluginClass><blade typo="1" /></pluginClass>'),
+            PluginOverrides::parse('blade=true'),
+        );
+    }
+
+    #[Test]
+    public function blade_accepts_value_and_cache_dir(): void
+    {
+        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade value="true" cacheDir="build/x" /></pluginClass>'));
+
+        $this->assertTrue($config->bladeEnabled);
+        $this->assertSame('build/x', $config->bladeCacheDir);
+    }
+
     /** @return iterable<string, array{string}> */
     public static function malformedXml(): iterable
     {

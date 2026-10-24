@@ -16,6 +16,15 @@ use Psalm\Config;
  */
 final readonly class PluginConfig
 {
+    private const BLADE_ATTRIBUTES = ['value', 'cacheDir'];
+
+    /** Attributes dropped before 4.18.0, mapped to what replaces them. */
+    private const REMOVED_BLADE_ATTRIBUTES = [
+        'validateViewData' => 'the view-data rules are experimental issues, so enable them with <experimental value="true" /> or set their level in issueHandlers.',
+        'reportUnusedViewData' => 'the view-data rules are experimental issues, so enable them with <experimental value="true" /> or set their level in issueHandlers.',
+        'reportMixedIssues' => 'findings from undeclared variables are always dropped.',
+    ];
+
     /**
      * @param list<string> $configDirectories
      *
@@ -269,7 +278,29 @@ final readonly class PluginConfig
             return false;
         }
 
+        self::assertKnownBladeAttributes($blade);
+
         return self::xmlBoolAttr($blade, 'blade', true);
+    }
+
+    /**
+     * An unknown attribute is rejected like an unknown `--plugin-option` key (same wording), so a typo or
+     * an attribute dropped in an earlier release never silently does nothing. Removed ones name their replacement.
+     */
+    private static function assertKnownBladeAttributes(\SimpleXMLElement $blade): void
+    {
+        foreach ($blade->attributes() ?? [] as $key => $_) {
+            $name = (string) $key;
+
+            if (\in_array($name, self::BLADE_ATTRIBUTES, true)) {
+                continue;
+            }
+
+            $supported = \implode(', ', self::BLADE_ATTRIBUTES);
+            $hint = isset(self::REMOVED_BLADE_ATTRIBUTES[$name]) ? ' It was removed: ' . self::REMOVED_BLADE_ATTRIBUTES[$name] : '';
+
+            throw new \InvalidArgumentException("<blade>: unknown attribute '{$name}'. Supported attributes: {$supported}.{$hint}");
+        }
     }
 
     /**
