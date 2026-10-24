@@ -26,9 +26,7 @@ use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
 use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MissingPureAnnotation;
-use Psalm\Issue\MixedArgument;
 use Psalm\Issue\MixedAssignment;
-use Psalm\Issue\MixedMethodCall;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\NullArgument;
@@ -78,9 +76,6 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     private const AWARE_NO_VALUE = 'All possible types for this argument were invalidated - This may be dead code';
 
-    /** `CompilesComponents::newComponentHash()` output: xxh128, 32 lowercase hex characters. */
-    private const COMPONENT_HASH = '5194778a3a7b899dcee5619d0610f5cf';
-
     /** @param array<int, int> $lineMap */
     private function entry(array $lineMap): ShadowEntry
     {
@@ -96,7 +91,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     private function relocate(
         CodeIssue $issue,
         ShadowEntry $entry,
-        bool $reportMixed = false,
         bool $isComponentView = false,
         string $templateSource = self::TEMPLATE_SOURCE,
         bool $attributesFromTag = false,
@@ -105,7 +99,7 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
-        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null, $reportMixed);
+        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null);
     }
 
     #[Test]
@@ -146,44 +140,18 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function it_drops_an_unmapped_mixed_issue(): void
     {
         // Prelude lines map to 0: the prelude types every unresolved template variable as mixed,
-        // so a Mixed* issue there says nothing about the template. Run with the flag ON so this
-        // keeps pinning the unmapped-line path specifically, not the new default-off behavior.
+        // so a Mixed* issue there says nothing about the template.
         $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(2));
 
-        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0]), reportMixed: true));
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
     }
 
     #[Test]
-    public function a_mapped_mixed_issue_is_dropped_by_default(): void
+    public function a_mapped_mixed_issue_is_dropped(): void
     {
         $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    #[Test]
-    public function a_mapped_mixed_issue_is_rebuilt_when_reportmixed_is_on(): void
-    {
-        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
-
-        $this->assertInstanceOf(MixedAssignment::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    #[Test]
-    public function a_mapped_non_mixed_issue_is_unaffected_by_the_flag(): void
-    {
-        $issue = new UndefinedVariable('Cannot find referenced variable $x', $this->shadowLocation(9));
-
-        $off = $this->relocate($issue, $this->entry([9 => 3]));
-        $on = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
-
-        $this->assertInstanceOf(CodeIssue::class, $off);
-        $this->assertInstanceOf(CodeIssue::class, $on);
-        $this->assertSame(3, $off->code_location->getLineNumber());
-        $this->assertSame(3, $on->code_location->getLineNumber());
     }
 
     #[Test]
@@ -875,96 +843,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
-     * #1872: the restores of a `<x-...>` tag, `@error`, `@session`/`@context`, and the stack push of
-     * the latter two, as Laravel compiles them. `MixedAssignment` sits on the assignment target.
-     * {@see BladeIssueRemapTest} pins the same gate end to end on real compiled shadows.
-     */
-    #[Test]
-    #[DataProvider('compiledSaveRestoreIssues')]
-    public function a_mixed_issue_on_a_compiled_save_or_restore_is_dropped(CodeIssue $issue): void
-    {
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
-    }
-
-    /** @return iterable<string, array{CodeIssue}> */
-    public static function compiledSaveRestoreIssues(): iterable
-    {
-        foreach (['attributes', 'component'] as $name) {
-            yield "\${$name} restore" => [self::mixedAssignment(
-                "<?php \${$name} = \$__{$name}Original" . self::COMPONENT_HASH . '; ?>',
-                "<?php \${$name}",
-                \strlen("\${$name}"),
-                $name,
-            )];
-        }
-
-        yield '$message restore' => [self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message')];
-
-        foreach (['session', 'context'] as $kind) {
-            yield "@{$kind} push" => [self::mixedAssignment(
-                "if (isset(\$value)) { \$__{$kind}Previous[] = \$value; }",
-                "{ \$__{$kind}Previous[]",
-                \strlen("\$__{$kind}Previous[]"),
-            )];
-            yield "@{$kind} restore" => [self::mixedAssignment(
-                "if (isset(\$__{$kind}Previous) && !empty(\$__{$kind}Previous)) { \$value = array_pop(\$__{$kind}Previous); }",
-                '{ $value',
-                6,
-                'value',
-            )];
-        }
-    }
-
-    /**
-     * Negatives: each case differs from a dropped one above in exactly ONE gate condition, so the
-     * case goes red if that condition is removed.
-     */
-    #[Test]
-    #[DataProvider('authorSaveRestoreLookAlikes')]
-    public function a_save_or_restore_look_alike_keeps_reporting(CodeIssue $issue, string $templateSource = self::TEMPLATE_SOURCE): void
-    {
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true, templateSource: $templateSource);
-
-        $this->assertInstanceOf($issue::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /** @return iterable<string, array{0: CodeIssue, 1?: string}> */
-    public static function authorSaveRestoreLookAlikes(): iterable
-    {
-        $restore = '<?php $attributes = $__attributesOriginal' . self::COMPONENT_HASH . '; ?>';
-
-        yield 'author value' => [self::mixedAssignment('<?php $attributes = $something; ?>', '<?php $attributes', 11, 'attributes')];
-        yield 'hash shorter than xxh128' => [self::mixedAssignment('<?php $attributes = $__attributesOriginalabc123; ?>', '<?php $attributes', 11, 'attributes')];
-        yield 'original of the other name' => [self::mixedAssignment('<?php $attributes = $__componentOriginal' . self::COMPONENT_HASH . '; ?>', '<?php $attributes', 11, 'attributes')];
-        yield 'not the assignment target' => [new MixedArgument(
-            'Argument 1 of array_pop cannot be mixed, expecting array<array-key, mixed>',
-            self::selectionLocation('array_pop($__sessionPrevious', 18, 'if (isset($__sessionPrevious) && !empty($__sessionPrevious)) { $value = array_pop($__sessionPrevious); }'),
-            'array_pop',
-        )];
-        yield 'statement written in the template' => [
-            self::mixedAssignment($restore, '<?php $attributes', 11, 'attributes'),
-            "<div>\n@php \$attributes = \$__attributesOriginal" . self::COMPONENT_HASH . "; @endphp\n</div>\n",
-        ];
-        // String literals that only look like a Blade comment: stripping `{{-- ... --}}` from the
-        // template would remove the author's statement between them.
-        yield 'statement written between comment look-alikes' => [
-            self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message'),
-            "<div>\n@php \$open = '{{--'; if (isset(\$__messageOriginal)) { \$message = \$__messageOriginal; } \$close = '--}}'; @endphp\n</div>\n",
-        ];
-        yield 'issue class outside the Mixed family' => [new UndefinedVariable('Cannot find referenced variable $attributes', self::selectionLocation('<?php $attributes', 11, $restore))];
-    }
-
-    /** `MixedAssignment` on the $width bytes of $snippet that end where $anchor ends. */
-    private static function mixedAssignment(string $snippet, string $anchor, int $width, ?string $name = null): MixedAssignment
-    {
-        return new MixedAssignment(
-            $name === null ? 'Unable to determine the type of this assignment' : "Unable to determine the type that \${$name} is being assigned to",
-            self::selectionLocation($anchor, $width, $snippet),
-        );
-    }
-
-    /**
      * A shadow-line-9 location whose snippet is readable without a booted ProjectAnalyzer, selecting
      * the $width bytes that end where $anchor ends. Offset 1000 keeps file and snippet offsets apart.
      */
@@ -1207,7 +1085,7 @@ final class ShadowIssueRelocatorTest extends TestCase
     #[DataProvider('virtualOffsetCalls')]
     public function a_method_call_issue_on_the_subject_of_an_array_access_is_dropped(CodeIssue $issue): void
     {
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
     }
 
     /** @return iterable<string, array{CodeIssue}> */
@@ -1217,8 +1095,6 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         // The subject of the outer access (`$x['k']`) and of the inner one (`$x`).
         yield 'PossiblyInvalidMethodCall' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, mixed> variable $x', self::selectionLocation("\$x['k']", 7, $line))];
-        yield 'MixedMethodCall naming the variable' => [new MixedMethodCall('Cannot determine the type of $x when calling method offsetGet', self::selectionLocation('$x', 2, $line))];
-        yield 'MixedMethodCall without a variable' => [new MixedMethodCall('Cannot determine the type of the object on the left hand side of this expression', self::selectionLocation("\$x['k']", 7, $line))];
     }
 
     /** Negatives: each differs from the dropped case in ONE gate condition. */
@@ -1226,20 +1102,16 @@ final class ShadowIssueRelocatorTest extends TestCase
     #[DataProvider('callsNotBeforeABracket')]
     public function a_method_call_issue_not_on_the_subject_of_an_array_access_keeps_reporting(CodeIssue $issue): void
     {
-        $this->assertInstanceOf(CodeIssue::class, $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
+        $this->assertInstanceOf(CodeIssue::class, $this->relocate($issue, $this->entry([9 => 3])));
     }
 
     /** @return iterable<string, array{CodeIssue}> */
     public static function callsNotBeforeABracket(): iterable
     {
         $real = "<?php echo e(\$obj->items()['k']); ?>";
-        $static = "<?php echo e(\$cls::make()['k']); ?>";
 
         // A real call is positioned on its method name, followed by `(`.
         yield 'PossiblyInvalidMethodCall on a real call' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, string> variable $obj', self::selectionLocation('$obj->items', 5, $real))];
-        yield 'MixedMethodCall on a real call' => [new MixedMethodCall('Cannot determine the type of $obj when calling method items', self::selectionLocation('$obj->items', 5, $real))];
-        // A static call's location covers the whole call, so `[` follows it too: only the message tells it apart.
-        yield 'MixedMethodCall on a static call' => [new MixedMethodCall('Cannot call method on an unknown class', self::selectionLocation('$cls::make()', 12, $static))];
         // The selection ends the snippet: nothing follows.
         yield 'no text after the selection' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, mixed> variable $x', self::selectionLocation('$x', 2, '$x'))];
         // Whitespace before the `[` is not skipped.

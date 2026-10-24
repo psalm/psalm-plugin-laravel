@@ -36,7 +36,6 @@ final readonly class PluginOverrides
         'findOctaneIncompatibleBinding' => self::BOOL,
         'findPromptInjection' => self::BOOL,
         'blade' => self::BOOL,
-        'blade.reportMixedIssues' => self::BOOL,
         'experimental' => self::BOOL,
         'failOnInternalError' => self::BOOL,
     ];
