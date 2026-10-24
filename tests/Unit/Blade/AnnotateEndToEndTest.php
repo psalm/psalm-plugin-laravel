@@ -73,6 +73,9 @@ final class AnnotateEndToEndTest extends TestCase
         'modal-open' => "{{ \$text }}\n",
         'modal-rendered' => "{{ \$text }}\n",
         'modal-invoked' => "{{ \$text }}\n",
+        'arrays' => "{{ count(\$labels) }} {{ count(\$params) }}\n",
+        'scoped-host' => "<p>host</p>\n@include('scoped')\n",
+        'scoped' => "{{ \$text }}\n",
     ];
 
     private ?string $controlFile = null;
@@ -136,9 +139,13 @@ final class AnnotateEndToEndTest extends TestCase
     {
         $result = $this->annotate();
 
-        foreach (self::PKG_RESPELLED as $name) {
+        foreach (['spelled' => 29, 'padded' => 39] as $name => $line) {
             $this->assertSame(self::PKG_WIDGET, (string) \file_get_contents(self::PKG_VIEWS . "/{$name}.blade.php"), $name);
-            $this->assertSame(['title'], $this->unknownFor($result, $name), $name);
+            $this->assertSame(
+                ['site' => self::FIXTURE . "/app/Renderer.php:{$line}", 'names' => ['title']],
+                $this->unreadableFor($result, $name),
+                $name,
+            );
         }
     }
 
@@ -175,6 +182,20 @@ final class AnnotateEndToEndTest extends TestCase
             ((array) ($result['disagreed'] ?? []))['merged'] ?? null,
         );
         $this->assertNull($this->unknownFor($result, 'merged'));
+    }
+
+    #[Test]
+    public function merges_arrays_into_the_one_call_site_type_that_covers_them_all(): void
+    {
+        // `[]` and a fixed list sit inside `list<string>`; two shapes only a new shape with an
+        // optional key covers are listed.
+        $result = $this->annotate();
+
+        $this->assertSame("<?php\n/**\n * @var list<string> \$labels\n */\n?>\n" . self::TEMPLATES['arrays'], $this->template('arrays'));
+        $this->assertSame(
+            ['params' => ['array{a: string, b: string}', 'array{a: string}']],
+            ((array) ($result['disagreed'] ?? []))['arrays'] ?? null,
+        );
     }
 
     #[Test]
@@ -303,7 +324,7 @@ final class AnnotateEndToEndTest extends TestCase
         $result = $this->annotate(dryRun: true);
 
         $this->assertSame(self::TEMPLATES['locals'], $this->template('locals'));
-        $this->assertSame(['rows'], $this->unknownFor($result, 'locals'));
+        $this->assertSame(['site' => self::FIXTURE . '/app/Renderer.php:105', 'names' => ['rows']], $this->unreadableFor($result, 'locals'));
         $this->assertStringNotContainsString('locals.blade.php', (string) ($result['diff'] ?? ''));
     }
 
@@ -325,11 +346,25 @@ final class AnnotateEndToEndTest extends TestCase
         // Each view has a closed call site passing a string, so only what surrounds it keeps the
         // declaration out: an open data set, a chain the walk cannot resolve, and an enclosing chain
         // that writes into the view the callback returns.
-        $this->annotate();
+        $result = $this->annotate();
 
         $this->assertSame(self::TEMPLATES['modal-open'], $this->template('modal-open'));
         $this->assertSame(self::TEMPLATES['modal-rendered'], $this->template('modal-rendered'));
         $this->assertSame(self::TEMPLATES['modal-invoked'], $this->template('modal-invoked'), 'the enclosing chain overwrites the key');
+
+        // Listed with the call site that left the view open, not as "no call site types them".
+        $this->assertSame(['site' => self::FIXTURE . '/app/Action.php:48', 'names' => ['text']], $this->unreadableFor($result, 'modal-open'));
+        $this->assertSame(['site' => self::FIXTURE . '/app/Action.php:60', 'names' => ['text']], $this->unreadableFor($result, 'modal-rendered'));
+        $this->assertNull($this->unknownFor($result, 'modal-open'));
+    }
+
+    #[Test]
+    public function points_an_include_that_passes_its_scope_at_the_template_line(): void
+    {
+        $result = $this->annotate(dryRun: true);
+
+        // The site is the including template's own line, never the compiled shadow's cache path.
+        $this->assertSame(['site' => self::VIEWS . '/scoped-host.blade.php:2', 'names' => ['text']], $this->unreadableFor($result, 'scoped'));
     }
 
     #[Test]
@@ -405,7 +440,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(15, $result['changed']);
+        $this->assertCount(16, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
@@ -503,6 +538,24 @@ final class AnnotateEndToEndTest extends TestCase
         foreach ($result['unknown'] as $path => $names) {
             if (\str_ends_with((string) $path, "/{$name}.blade.php")) {
                 return $names;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $result
+     *
+     * @return mixed the unreadable-site entry for one template
+     */
+    private function unreadableFor(array $result, string $name): mixed
+    {
+        $this->assertIsArray($result['unreadable'] ?? null);
+
+        foreach ($result['unreadable'] as $path => $entry) {
+            if (\str_ends_with((string) $path, "/{$name}.blade.php")) {
+                return $entry;
             }
         }
 
