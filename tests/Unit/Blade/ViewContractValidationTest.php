@@ -545,6 +545,31 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A look-alike class with the same public property and `render()` is not a framework subclass,
+     * so the framework merges nothing into its view and every variable stays missing.
+     */
+    #[Test]
+    public function a_class_that_merely_looks_like_a_mailable_or_component_supplies_nothing(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([self::MISSING . ' $absent', self::MISSING . ' $title'], $this->variablesOf($this->forFile($issues, 'NotAMailable.php')), \var_export($issues, true));
+        $this->assertSame([self::MISSING . ' $absent', self::MISSING . ' $count'], $this->variablesOf($this->forFile($issues, 'NotLivewire.php')), \var_export($issues, true));
+    }
+
+    /**
+     * Only a public property reaches a Mailable's view, and `ReflectionClass::getProperties()` lists
+     * a public static one too.
+     */
+    #[Test]
+    public function only_public_mailable_properties_are_supplied_and_statics_count(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'MailableVisibility.php');
+
+        $this->assertSame([self::MISSING . ' $priv', self::MISSING . ' $prot'], $this->variablesOf($reported), \var_export($reported, true));
+    }
+
+    /**
      * Livewire merges a component's properties into the view `render()` returns and nothing else, so
      * a `MailMessage` view built on the side inside `render()` still lacks `$count` while the
      * returned view has it.
@@ -561,8 +586,8 @@ final class ViewContractValidationTest extends TestCase
 
     /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
-     * half is asserted together: a protected property, a static one and a view built outside
-     * `render()` are still missing.
+     * half is asserted together: a protected property, a private one, a static one and a view built
+     * outside `render()` are still missing.
      */
     #[Test]
     public function a_livewire_components_public_properties_count_as_supplied_in_render(): void
@@ -570,7 +595,7 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->contractIssues('psalm.xml');
 
         $this->assertSame(
-            [self::MISSING . ' $count', self::MISSING . ' $instances', self::MISSING . ' $secret'],
+            [self::MISSING . ' $count', self::MISSING . ' $hidden', self::MISSING . ' $instances', self::MISSING . ' $secret'],
             $this->variablesOf($this->forFile($issues, 'LivewireCounter.php')),
             \var_export($issues, true),
         );

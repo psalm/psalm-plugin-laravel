@@ -3,4 +3,5 @@
 <?php /** @var string $untyped */ ?>
 <?php /** @var string $secret */ ?>
 <?php /** @var int $instances */ ?>
-<p>{{ $count }} {{ $label }} {{ $untyped }} {{ $secret }} {{ $instances }}</p>
+<?php /** @var string $hidden */ ?>
+<p>{{ $count }} {{ $label }} {{ $untyped }} {{ $secret }} {{ $instances }} {{ $hidden }}</p>
