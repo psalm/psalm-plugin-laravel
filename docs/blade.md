@@ -79,6 +79,26 @@ Experimental. Reported as `info` by default (hidden unless `--show-info=true`, n
 
 [`BladeCompileError`](issues/BladeCompileError.md) is not experimental: a template that fails to compile is skipped and reported as an error.
 
+## Taint through view data
+
+A value a controller passes to `view()` carries its taint into the template, so `{!! $q !!}` reports `TaintedHtml` on the template line, with or without a `@var` declaration:
+
+```php
+return view('search', ['q' => $request->input('q')]);
+```
+
+```blade
+{!! $q !!} {{-- TaintedHtml; {{ $q }} is escaped and not flagged --}}
+```
+
+The trace runs from the request input through the controller to the template line, never through the compiled shadow. It is a normal Psalm issue: silence it with `issueHandlers`, `@psalm-suppress` or a baseline.
+
+* **What flows:** a literal-keyed data array (or `$mergeData`) of `view()`, `View::make()`, `Factory::make()` or `response()->view()`, and `->with('key', $value)` / `->with([...])` on those, keyed by variable name and by the canonical view name (`admin/panel`, `admin.panel` and a `pkg::name` hint are the same view). Only the keys passed are tainted: `['t' => $input]` does not taint `$q`. Only Laravel's own `view()` helper and factory methods count: a same-named function of yours, or a factory subclass that overrides `make()`/`view()`, is not followed.
+* **What is skipped:** a dynamic view name, data in a variable, a `->with()` on a view held in a variable (`$v->with('q', $input)`), `View::share()`, composers, `Route::view()`, Livewire, mail, and the explicit data of a template's own `@include`. A template fed only that way reports nothing, and so does one that introduces a variable without naming it (`compact('q')`, `extract()`), or a call whose view name Laravel's finder resolves but the plugin does not normalise (`/search`, `admin//panel`).
+* **What over-reports:** a key a later `->with()` overwrites with a safe value (`view('x', ['q' => $input])->with('q', 'safe')`) still reports, because taint over-approximates and never hides a real flow. Silence it at the call.
+
+[Behaviour reference](contributing/blade.md#taint-through-view-data).
+
 ## Suppressing and baselining
 
 ```blade
@@ -104,7 +124,7 @@ Experimental. Reported as `info` by default (hidden unless `--show-info=true`, n
 
 * **Each template is analyzed alone.** `@include`, `@extends` and components are not followed for typing, and a layout's declarations are not checked at its children's call sites.
 * **Undeclared variables are silently `mixed`**, so a typo'd variable name is not caught. A `Mixed*` issue from a declared value (`@var array $data`, then `{{ $data['x']->foo() }}`) is hidden too.
-* **Taint is tracked only from sources inside the template.** Data a controller passes to `view()` carries no taint into it, and the HTML context (attribute, script, markup) is not considered.
+* **Taint from view data reaches only literal, directly named data.** A data array held in a variable, `compact()`, `View::share()`, composers, `Route::view()`, Livewire, mail views and the data of an `@include` are not connected ([details](#taint-through-view-data)). The HTML context (attribute, script, markup) is not considered.
 * **Component tags can fail to compile** when the standalone compile pass cannot resolve them. The template is skipped with a `BladeCompileError`.
 * **Multi-line constructs report on their opening line**: a multi-line `{{ }}`, directive argument list, `<x-...>` tag or heredoc.
 * **Dynamic view names** (`view($name)`) are not connected to a template.

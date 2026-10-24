@@ -826,6 +826,15 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
             require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
             $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
+            // Carries taint from the data `view()` calls pass into the template that receives it (#2031).
+            // Registered AFTER ComponentViewSeedHandler on purpose: both act on the prelude sentinel, and
+            // the seed replaces a variable's whole type, which would drop the taint nodes attached here.
+            // Not for an annotate-only run, which analyses nothing for findings.
+            if (!$annotate instanceof Blade\Annotate\AnnotateRequest) {
+                require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
+                require_once __DIR__ . '/Blade/ViewTaintBridge.php';
+                $registration->registerHooksFromClass(Blade\ViewTaintBridge::class);
+            }
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports
