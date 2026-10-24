@@ -101,8 +101,8 @@ final class ComponentRenderData
 
     /**
      * The keys `Component::data()` hands the view of a class rendered as `<x-…>`, typed by what
-     * every render of the class guarantees: declared property types expanded against the class,
-     * and a method's runtime wrapper. A property with no declared type, or one declared by a
+     * every render of the class guarantees: declared property types (`self`/`parent` resolved against
+     * the class declaring the property), and a method's runtime wrapper. A property with no declared type, or one declared by a
      * generic class, is left out rather than guessed.
      *
      * @return array<string, Union>|null null when the key set is not knowable: a userland
@@ -126,18 +126,9 @@ final class ComponentRenderData
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
-            // A method variable is already expanded with `static` collapsed, so this pass leaves it as is.
-            $expanded = TypeExpander::expandUnion(
-                $codebase,
-                $type,
-                $storage->name,
-                $storage->name,
-                $storage->parent_class,
-                final: $storage->final,
-            );
-
-            if (!$expanded->isMixed()) {
-                $guaranteed[$name] = $expanded;
+            // Every type is expanded already, against the class that declares it.
+            if (!$type->isMixed()) {
+                $guaranteed[$name] = $type;
             }
         }
 
@@ -194,8 +185,6 @@ final class ComponentRenderData
      *
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
      *         makes the exposed set unknowable rather than empty
-     *
-     * @psalm-capabilities read-props
      */
     private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
@@ -212,7 +201,10 @@ final class ComponentRenderData
                 continue;
             }
 
-            $properties[$name] = $property->type ?? Type::getMixed();
+            // `static` collapses to the class for the view's own seed and for `forSource()`; the
+            // `<x-…>` side keeps a non-final class's late-static marker, as its types always did.
+            $properties[$name] = ViewClassProperties::typeOf($codebase, $storage, $name, $declaring, $property, final: !$typedOnly || $storage->final)
+                ?? Type::getMixed();
         }
 
         return $properties;
