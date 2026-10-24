@@ -6,14 +6,12 @@ namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\View\InvokableComponentVariable;
 use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
-use Psalm\Storage\PropertyStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
@@ -92,7 +90,7 @@ final class ComponentRenderData
         }
 
         $codebase = $source->getCodebase();
-        $storage = self::storage($codebase, $fqClassName);
+        $storage = ViewClassProperties::storage($codebase, $fqClassName);
 
         if (!$storage instanceof ClassLikeStorage || !isset($storage->parent_classes[self::COMPONENT])) {
             return null;
@@ -214,8 +212,8 @@ final class ComponentRenderData
         $except = self::literalExcept($codebase, $storage);
         $ids = [];
 
-        foreach (self::publicPropertyOwners($codebase, $storage) ?? [] as $name => [$declaring]) {
-            if (isset($except[$name]) || self::publicMethodNamed($codebase, $storage, $name)) {
+        foreach (ViewClassProperties::publicOf($codebase, $storage, self::ignored(...)) ?? [] as $name => [$declaring, $property]) {
+            if ($property->is_static === true || isset($except[$name]) || self::publicMethodNamed($codebase, $storage, $name)) {
                 continue;
             }
 
@@ -235,7 +233,7 @@ final class ComponentRenderData
      */
     private static function literalExcept(Codebase $codebase, ClassLikeStorage $storage): array
     {
-        $declaring = self::storage($codebase, $storage->declaring_property_ids['except'] ?? self::COMPONENT);
+        $declaring = ViewClassProperties::storage($codebase, $storage->declaring_property_ids['except'] ?? self::COMPONENT);
         $property = $declaring?->properties['except'] ?? null;
 
         if (!$declaring instanceof ClassLikeStorage || \strtolower($declaring->name) === self::COMPONENT || $property === null || $property->type !== null) {
@@ -272,7 +270,7 @@ final class ComponentRenderData
     {
         $methodId = $storage->declaring_method_ids[\strtolower($name)] ?? null;
         $method = $methodId instanceof MethodIdentifier
-            ? self::storage($codebase, $methodId->fq_class_name)?->methods[\strtolower($name)] ?? null
+            ? ViewClassProperties::storage($codebase, $methodId->fq_class_name)?->methods[\strtolower($name)] ?? null
             : null;
 
         return $method instanceof MethodStorage
@@ -297,7 +295,7 @@ final class ComponentRenderData
         $class = $storage->name;
 
         foreach (\array_keys($storage->parent_classes) as $parent) {
-            $parentStorage = self::storage($codebase, $parent);
+            $parentStorage = ViewClassProperties::storage($codebase, $parent);
 
             if ($parentStorage instanceof ClassLikeStorage && isset($parentStorage->used_traits[$trait])) {
                 $class = $parentStorage->name;
@@ -313,20 +311,20 @@ final class ComponentRenderData
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
      *         makes the exposed set unknowable rather than empty
      *
-     * @psalm-mutation-free
+     * @psalm-capabilities read-props
      */
     private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
-        $owners = self::publicPropertyOwners($codebase, $storage);
+        $declared = ViewClassProperties::publicOf($codebase, $storage, self::ignored(...));
 
-        if ($owners === null) {
+        if ($declared === null) {
             return null;
         }
 
         $properties = [];
 
-        foreach ($owners as $name => [$declaring, $property]) {
-            if ($typedOnly && ($property->type === null || $declaring->template_types !== null)) {
+        foreach ($declared as $name => [$declaring, $property]) {
+            if ($property->is_static === true || ($typedOnly && ($property->type === null || $declaring->template_types !== null))) {
                 continue;
             }
 
@@ -334,44 +332,6 @@ final class ComponentRenderData
         }
 
         return $properties;
-    }
-
-    /**
-     * What `extractPublicProperties()` reads: public, non-static, not ignored.
-     *
-     * @return array<string, array{0: ClassLikeStorage, 1: PropertyStorage}>|null null when a declaring
-     *         class could not be resolved
-     *
-     * @psalm-mutation-free
-     */
-    private static function publicPropertyOwners(Codebase $codebase, ClassLikeStorage $storage): ?array
-    {
-        $owners = [];
-
-        foreach ($storage->declaring_property_ids as $name => $declaringClass) {
-            if (self::ignored($name)) {
-                continue;
-            }
-
-            $declaring = self::storage($codebase, $declaringClass);
-
-            if (!$declaring instanceof ClassLikeStorage) {
-                return null;
-            }
-
-            $property = $declaring->properties[$name] ?? null;
-
-            if ($property === null
-                || $property->is_static === true
-                || $property->visibility !== ClassLikeAnalyzer::VISIBILITY_PUBLIC
-            ) {
-                continue;
-            }
-
-            $owners[$name] = [$declaring, $property];
-        }
-
-        return $owners;
     }
 
     /**
@@ -391,7 +351,7 @@ final class ComponentRenderData
                 continue;
             }
 
-            $declaring = self::storage($codebase, $methodId->fq_class_name);
+            $declaring = ViewClassProperties::storage($codebase, $methodId->fq_class_name);
 
             if (!$declaring instanceof ClassLikeStorage) {
                 return null;
@@ -496,7 +456,7 @@ final class ComponentRenderData
         // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
         // only `static` is the rendered component.
         $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
-        $appearing = $appearingId === null ? null : self::storage($codebase, $appearingId->fq_class_name);
+        $appearing = $appearingId === null ? null : ViewClassProperties::storage($codebase, $appearingId->fq_class_name);
 
         if (!$appearing instanceof ClassLikeStorage) {
             return null;
@@ -520,17 +480,5 @@ final class ComponentRenderData
     private static function ignored(string $name): bool
     {
         return \str_starts_with($name, '__') || \in_array(\strtolower($name), self::IGNORED, true);
-    }
-
-    /**
-     * @psalm-mutation-free
-     */
-    private static function storage(Codebase $codebase, string $fqClassName): ?ClassLikeStorage
-    {
-        try {
-            return $codebase->classlike_storage_provider->get(\strtolower($fqClassName));
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return null;
-        }
     }
 }
