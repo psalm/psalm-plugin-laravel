@@ -13,4 +13,7 @@ use Psalm\Issue\PluginIssue;
 final class InvalidViewData extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/InvalidViewData/';
+
+    // Level 6 like Psalm's InvalidArgument.
+    public const ERROR_LEVEL = 6;
 }

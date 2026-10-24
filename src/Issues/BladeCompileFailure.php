@@ -13,4 +13,7 @@ use Psalm\Issue\PluginIssue;
 final class BladeCompileFailure extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/BladeCompileFailure/';
+
+    // Explicit -1 like Psalm's ParseError: the template is not analyzed at all, so it is an error at every level.
+    public const ERROR_LEVEL = -1;
 }
