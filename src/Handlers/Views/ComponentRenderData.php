@@ -17,6 +17,8 @@ use Psalm\Storage\PropertyStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Union;
 
 /**
@@ -192,25 +194,117 @@ final class ComponentRenderData
     }
 
     /**
-     * The property node every flow from or into a public property `data()` exposes goes through:
-     * `Declaring::$name`, for each such name. A subclass's own writes reach it through Psalm's
-     * inherited-property links, so one node per name covers the whole hierarchy.
+     * The property nodes a taint flow into `data()`'s variables can come from: `Class::$name`, per name
+     * that really reaches the view. Narrower than the typing side's superset, because here a name in the
+     * set only ever REPORTS:
+     *
+     *  - a name in a literal `$except` default is dropped (a non-literal one keeps every name);
+     *  - a public method of the same name wins the variable (`array_merge($properties, $methods)`);
+     *  - the class is the one Psalm writes the property node for: the declaring class, or for a trait
+     *    property the (farthest) class using the trait, never the trait itself or an unrelated user of it.
      *
      * Empty when a declaring class could not be resolved: nothing is connected rather than guessed.
      *
      * @return array<string, string> variable name => property id
      *
-     * @psalm-mutation-free
+     * @psalm-capabilities read-props
      */
     public static function exposedPropertyIds(Codebase $codebase, ClassLikeStorage $storage): array
     {
+        $except = self::literalExcept($codebase, $storage);
         $ids = [];
 
         foreach (self::publicPropertyOwners($codebase, $storage) ?? [] as $name => [$declaring]) {
-            $ids[$name] = $declaring->name . '::$' . $name;
+            if (isset($except[$name]) || self::publicMethodNamed($codebase, $storage, $name)) {
+                continue;
+            }
+
+            $ids[$name] = self::nodeClass($codebase, $storage, $declaring) . '::$' . $name;
         }
 
         return $ids;
+    }
+
+    /**
+     * The names of an `$except` default that is a literal list of strings; none when the default is
+     * anything else (a docblock type, a constant, no default), which keeps every name.
+     *
+     * @return array<string, true>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function literalExcept(Codebase $codebase, ClassLikeStorage $storage): array
+    {
+        $declaring = self::storage($codebase, $storage->declaring_property_ids['except'] ?? self::COMPONENT);
+        $property = $declaring?->properties['except'] ?? null;
+
+        if (!$declaring instanceof ClassLikeStorage || \strtolower($declaring->name) === self::COMPONENT || $property === null || $property->type !== null) {
+            return [];
+        }
+
+        $atomic = $property->suggested_type?->isSingle() === true ? $property->suggested_type->getSingleAtomic() : null;
+
+        if (!$atomic instanceof TKeyedArray) {
+            return [];
+        }
+
+        $names = [];
+
+        foreach ($atomic->properties as $value) {
+            $literal = $value->isSingle() ? $value->getSingleAtomic() : null;
+
+            if (!$literal instanceof TLiteralString) {
+                return [];
+            }
+
+            $names[$literal->value] = true;
+        }
+
+        return $names;
+    }
+
+    /**
+     * A public, non-ignored method called exactly `$name` (the variable it becomes).
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function publicMethodNamed(Codebase $codebase, ClassLikeStorage $storage, string $name): bool
+    {
+        $methodId = $storage->declaring_method_ids[\strtolower($name)] ?? null;
+        $method = $methodId instanceof MethodIdentifier
+            ? self::storage($codebase, $methodId->fq_class_name)?->methods[\strtolower($name)] ?? null
+            : null;
+
+        return $method instanceof MethodStorage
+            && !self::ignored($name)
+            && $method->visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC
+            && ($method->cased_name ?? \strtolower($name)) === $name;
+    }
+
+    /**
+     * The class whose property node Psalm writes for `$this->name = ...`: the declaring class, or for a
+     * trait the farthest class of the hierarchy that uses it.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function nodeClass(Codebase $codebase, ClassLikeStorage $storage, ClassLikeStorage $declaring): string
+    {
+        if (!$declaring->is_trait) {
+            return $declaring->name;
+        }
+
+        $trait = \strtolower($declaring->name);
+        $class = $storage->name;
+
+        foreach (\array_keys($storage->parent_classes) as $parent) {
+            $parentStorage = self::storage($codebase, $parent);
+
+            if ($parentStorage instanceof ClassLikeStorage && isset($parentStorage->used_traits[$trait])) {
+                $class = $parentStorage->name;
+            }
+        }
+
+        return $class;
     }
 
     /**
