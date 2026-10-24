@@ -1,0 +1,2 @@
+@props(['label' => 'plain'])
+{!! $label !!}

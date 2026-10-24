@@ -34,15 +34,17 @@ final class BladeViewDataTaintTest extends TestCase
     ];
 
     /**
-     * Taint issues only, keyed by file name.
+     * The taint issues of one file: every `Tainted*` type, or just the one named. An unescaped echo
+     * reports `TaintedHtml` and `TaintedTextWithQuotes` together, so a count needs a type.
      *
      * @return list<array<string, mixed>>
      */
-    private function taintIssuesIn(string $file): array
+    private function taintIssuesIn(string $file, ?string $type = null): array
     {
         return \array_values(\array_filter(
             $this->fixtureIssues(self::FIXTURE, self::ARGUMENTS),
-            static fn(array $issue): bool => \str_starts_with((string) $issue['type'], 'Tainted') && $issue['file_name'] === $file,
+            static fn(array $issue): bool => $issue['file_name'] === $file
+                && ($type === null ? \str_starts_with((string) $issue['type'], 'Tainted') : $issue['type'] === $type),
         ));
     }
 
@@ -95,6 +97,7 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'view() nested in response()' => ['resources/views/nested.blade.php', 1];
         yield 'slash spelling of a dotted name' => ['resources/views/admin/panel.blade.php', 1];
         yield 'namespaced hint' => ['resources/pkg-views/widget.blade.php', 1];
+        yield 'view typed by a class component seed' => ['resources/views/components/banner.blade.php', 2];
         yield 'only the tainted one of two keys' => ['resources/views/both.blade.php', 1];
     }
 
@@ -102,10 +105,9 @@ final class BladeViewDataTaintTest extends TestCase
     #[DataProvider('reachingTemplates')]
     public function a_value_passed_to_view_is_tainted_on_the_template_line(string $template, int $line): void
     {
-        $issues = $this->taintIssuesIn($template);
+        $issues = $this->taintIssuesIn($template, 'TaintedHtml');
 
         $this->assertCount(1, $issues, $this->raw());
-        $this->assertSame('TaintedHtml', $issues[0]['type'], $this->raw());
         $this->assertSame($line, $issues[0]['line_from'], $this->raw());
     }
 
@@ -120,6 +122,8 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'mailable' => ['resources/views/mailable.blade.php'];
         yield 'Blade-owned name' => ['resources/views/owned.blade.php'];
         yield 'double-underscore name' => ['resources/views/dunder.blade.php'];
+        // Known limit: a compiled `@include` passes its data in-template, which is a separate slice (#2032).
+        yield 'data of an @include' => ['resources/views/included.blade.php'];
     }
 
     #[Test]
@@ -132,7 +136,7 @@ final class BladeViewDataTaintTest extends TestCase
     #[Test]
     public function the_journey_names_the_template_and_the_controller_but_never_the_shadow(): void
     {
-        $issues = $this->taintIssuesIn('resources/views/search.blade.php');
+        $issues = $this->taintIssuesIn('resources/views/search.blade.php', 'TaintedHtml');
         $this->assertCount(1, $issues, $this->raw());
 
         $trace = $issues[0]['taint_trace'] ?? null;

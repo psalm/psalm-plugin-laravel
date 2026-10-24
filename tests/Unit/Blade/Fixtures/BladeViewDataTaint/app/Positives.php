@@ -67,6 +67,12 @@ final class Positives
         return view('pkg::widget', ['q' => $request->input('q')]);
     }
 
+    /** The view is a class component's own, so its `@props` variable is seeded after the prelude. */
+    public function seededView(Request $request): View
+    {
+        return view('components.banner', ['label' => $request->input('q')]);
+    }
+
     /** Each link writes only its own argument: `a` is tainted, `b` is a literal. */
     public function twoLinks(Request $request): View
     {

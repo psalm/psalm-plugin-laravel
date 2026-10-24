@@ -13,4 +13,8 @@
             <blade cacheDir=".cache/blade-shadows-cached" />
         </pluginClass>
     </plugins>
+    <issueHandlers>
+        <!-- Illuminate\View\Component declares uninitialised properties; the fixture's Banner is not what this pins. -->
+        <MissingConstructor errorLevel="suppress" />
+    </issueHandlers>
 </psalm>

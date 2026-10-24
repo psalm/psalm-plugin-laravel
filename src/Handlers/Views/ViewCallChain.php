@@ -58,6 +58,8 @@ final class ViewCallChain
      *                                            but were never PASSED — {@see ComponentRenderData}
      * @param bool                 $complete      every contribution was proven, so a name absent
      *                                            from both sets is provably not supplied
+     * @param string|null          $binder        the {@see ViewNameSignatures} role of the receiver
+     *                                            that bound the view name; null for the `view()` helper
      *
      * @psalm-mutation-free
      */
@@ -66,6 +68,7 @@ final class ViewCallChain
         public readonly array $data,
         public readonly bool $complete,
         public readonly array $frameworkData = [],
+        public readonly ?string $binder = null,
     ) {}
 
     /**
@@ -100,7 +103,70 @@ final class ViewCallChain
         // (`$component->render()->with([...])`): the data added there is not in this chain.
         $complete = $chain->complete && $merged[1] && !self::isInRenderMethod($source);
 
-        return new self($chain->viewName, $chain->data, $complete, $merged[0]);
+        return new self($chain->viewName, $chain->data, $complete, $merged[0], $chain->binder);
+    }
+
+    /**
+     * The `key => value expression` pairs THIS call passes itself, never the rest of its chain: the
+     * literal `$data` array of the `view()` helper or a `make()`/`view()` binder, or the key and value
+     * of a `with()` link. Whatever is not written out literally (a variable array, a computed key,
+     * a spread) is skipped.
+     *
+     * Callers resolve the chain with {@see self::from()} first: this reads positions only, so it says
+     * nothing about whether the call binds a view at all.
+     *
+     * @return list<array{0: string, 1: Expr}>
+     */
+    public static function ownEntries(Expr\CallLike $call): array
+    {
+        $args = self::args($call);
+
+        if ($args === null) {
+            return [];
+        }
+
+        if (!$call instanceof Expr\MethodCall && !$call instanceof Expr\NullsafeMethodCall && !$call instanceof Expr\StaticCall
+            || !$call->name instanceof Identifier
+            || $call->name->toLowerString() !== 'with'
+        ) {
+            return self::literalEntries(ArgUtil::byNameOrPosition($args, 1, 'data'));
+        }
+
+        $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
+
+        if (!$keyArg instanceof Arg) {
+            return [];
+        }
+
+        if ($keyArg->value instanceof Expr\Array_) {
+            return self::literalEntries($keyArg);
+        }
+
+        $valueArg = ArgUtil::byNameOrPosition($args, 1, 'value');
+
+        return $keyArg->value instanceof String_ && $valueArg instanceof Arg ? [[$keyArg->value->value, $valueArg->value]] : [];
+    }
+
+    /**
+     * @return list<array{0: string, 1: Expr}>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function literalEntries(?Arg $arg): array
+    {
+        if (!$arg instanceof Arg || !$arg->value instanceof Expr\Array_) {
+            return [];
+        }
+
+        $entries = [];
+
+        foreach ($arg->value->items as $item) {
+            if ($item !== null && $item->key instanceof String_ && !$item->unpack) {
+                $entries[] = [$item->key->value, $item->value];
+            }
+        }
+
+        return $entries;
     }
 
     /**
@@ -219,7 +285,7 @@ final class ViewCallChain
             return null;
         }
 
-        return self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete);
+        return self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role);
     }
 
     /**
@@ -328,6 +394,7 @@ final class ViewCallChain
         array $pending,
         bool $carriesData,
         bool $complete,
+        ?string $binder = null,
     ): ?self {
         if (!$name instanceof String_) {
             return null;
@@ -360,7 +427,7 @@ final class ViewCallChain
             self::mergeArrayArg($dataArg, $source, $data, $complete);
         }
 
-        return new self($viewName, $data, $complete);
+        return new self($viewName, $data, $complete, [], $binder);
     }
 
     /**
