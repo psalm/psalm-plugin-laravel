@@ -5,14 +5,19 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\View\ViewName;
+use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
+use PhpParser\NodeFinder;
+use Psalm\Internal\Analyzer\ClosureAnalyzer;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
+use Psalm\Internal\Analyzer\MethodAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
+use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic;
@@ -92,6 +97,10 @@ final class ViewCallChain
 
         if (!$chain instanceof self) {
             return null;
+        }
+
+        if ($chain->complete && $chain->binder === ViewNameSignatures::ROLE_MAILABLE && self::addsDataOutsideChain($expr, $source)) {
+            $chain = new self($chain->viewName, $chain->data, false, $chain->frameworkData, $chain->binder);
         }
 
         $merged = ComponentRenderData::forSource($source);
@@ -239,6 +248,70 @@ final class ViewCallChain
         $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;
 
         return $analyzer instanceof FunctionLikeAnalyzer && \strtolower((string) $analyzer->getMethodName()) === 'render';
+    }
+
+    /**
+     * Whether the method rendering a Mailable chain on `$this` also feeds that Mailable's data some
+     * other way: another `$this->with(...)` (before, after or inside a closure), a `$this->viewData`
+     * access, or a `$this` call whose method name is dynamic. The chain's own `with()` links are read
+     * as part of the chain and do not count. Such data reaches the template through
+     * `Mailable::buildViewData()` whatever the order of the statements, so the supplied set is open and
+     * no declared name is provably absent. The flow is not modeled: any occurrence anywhere in the
+     * method declines, including a closure or an anonymous class that never runs.
+     *
+     * An enclosing method that cannot be located in the source (a trait method, a closure outside a
+     * method) declines too. Not covered: `with()` or `viewData` writes in another method or the
+     * constructor, and a Mailable built outside `$this`.
+     */
+    private static function addsDataOutsideChain(Expr $expr, StatementsSource $source): bool
+    {
+        $links = [];
+        $receiver = $expr;
+
+        while ($receiver instanceof Expr\MethodCall || $receiver instanceof Expr\NullsafeMethodCall) {
+            $links[] = $receiver;
+            $receiver = $receiver->var;
+        }
+
+        if (!self::isThis($receiver)) {
+            return false;
+        }
+
+        $scope = $source;
+
+        // A closure's analyzer sits under the statements analyzer of the code that wrote it.
+        while ($scope instanceof StatementsAnalyzer || $scope instanceof ClosureAnalyzer) {
+            $scope = $scope->getSource();
+        }
+
+        $body = $scope instanceof MethodAnalyzer
+            ? ClassMethodResolver::resolve($source->getCodebase(), $scope->getMethodId())['classMethod']->stmts ?? null
+            : null;
+
+        if ($body === null) {
+            return true;
+        }
+
+        return (new NodeFinder())->findFirst($body, static function (Node $node) use ($links): bool {
+            if ($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall) {
+                return self::isThis($node->var)
+                    && (!$node->name instanceof Identifier || $node->name->toLowerString() === 'with')
+                    && !\in_array($node, $links, true);
+            }
+
+            return $node instanceof Expr\PropertyFetch
+                && self::isThis($node->var)
+                && $node->name instanceof Identifier
+                && $node->name->name === 'viewData';
+        }) instanceof Node;
+    }
+
+    /**
+     * @psalm-capabilities read-props
+     */
+    private static function isThis(Expr $expr): bool
+    {
+        return $expr instanceof Expr\Variable && $expr->name === 'this';
     }
 
     private static function walk(Expr $expr, StatementsSource $source, bool $trimName): ?self
