@@ -107,6 +107,10 @@ Three more receivers have framework-supplied keys, which count as supplied. They
   A property the call also passes by name is `mixed`: at runtime the passed value can win. `mailer`
   and `__laravel_mailable` count too (`mixed`). A Mailable overriding `buildViewData()` or
   `additionalMessageData()` has an open key set too: this issue is off, and its passed keys are `mixed`.
+  So does a method that, besides the `$this->view()` chain, holds another `$this->with(...)`
+  (before or after the chain), a `$this->viewData` access, or a `$this` call with a dynamic method name: the
+  data added there is not modeled, so the check declines for that method. A `with()` in another method or the constructor is not seen,
+  so a name supplied only there is still reported; supply it in the chain, or suppress the issue on that call.
 - **MailMessage** (`(new MailMessage)->view()` / `->markdown()`): `level`, `subject`, `greeting`,
   `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`,
   `$message`, `mailer` and the `__laravel_notification*` keys. A key the call passes wins over its own entry here. The property keys are `mixed`
