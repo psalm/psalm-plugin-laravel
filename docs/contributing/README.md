@@ -106,6 +106,16 @@ Psalm keeps no global function table for ordinary project code: `Functions::func
 - Sink: the prelude's sentinel `Nop`, found the same way as `ComponentViewSeedHandler` does. For each variable in scope except `$__env`, `$__path` and `$__data` (`ViewTaintBridge::NEVER_VIEW_DATA`: view data beats shared values and `extract(..., EXTR_SKIP)` protects only the last two, so `$errors` or `$__q` do take view data), a read node `$q (view data of {view})` is attached to the variable's type, once per name the template owns (`ViewReferenceRegistry::namesFor()`; a published override owns two).
 - Order matters: the bridge is registered AFTER `ComponentViewSeedHandler`, whose seed replaces a variable's whole type and would otherwise drop the attached node. `BladeViewDataTaintTest` pins it with a class component's `@props` view.
 
+#### Carrying taint from a class component's properties into its view
+
+`Blade\ComponentPropertyTaintBridge` (`AfterExpressionAnalysis` + `AfterStatementAnalysis`) is registered from `registerHandlers()` right after `ViewTaintBridge`, under the same Blade gate and not for an annotate-only run. Registration order matters here too: it runs on the same prelude sentinel as `ComponentViewSeedHandler`, whose seed replaces a variable's whole type and would drop the attached node.
+
+- Source: `Foo::resolve($data)` (what `<x-foo>` compiles to) and `$container->make(Foo::class, $data)` (receiver proven a `Container` by `ClassLineage::isA()`), positional and unspread, in shadows and PHP code alike. The class must be a `Component` subclass. Each literal key of the data array (the left operand of the compiled `+ $attributes`) that `ComponentRenderData::exposedPropertyIds()` lists is connected from its value to `Codebase::getTaintPropertyNode('Declaring::$key')`.
+- Sink: for the variables the template reads (`vars_in_scope` at the sentinel), `ComponentViewRegistry::propertyIdsFor($shadowPath)` lists the property nodes of every class whose `render()` the registry maps to the shadow's view (`$byTemplate`, contested or not), built once at `AfterCodebasePopulated` before workers fork. A read node `$name (component property)` gets a path from each property node and is attached to the variable's type.
+- `new Foo($input)` needs no source write: Psalm connects constructor parameters to the property node itself. The spike that decided this, and the `Foo::resolve()`/`make()` array that Psalm does not connect, is pinned by `BladeComponentTaintTest`.
+
+[Behaviour reference](blade.md#taint-through-class-component-properties).
+
 #### Remapping a shadow issue onto its template
 
 Neither registration makes a finding visible by itself: an issue Psalm raises in a shadow is located in a file that is deliberately unreportable, so it dies in the reportability gate. `Blade\BladeIssueRemapHandler` (`BeforeAddIssueInterface`, registered from `registerHandlers()` only when the compile step activated) is the only channel from shadow analysis to user-visible output.
