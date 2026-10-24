@@ -13,8 +13,10 @@ use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
+use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Union;
 
 /**
@@ -206,10 +208,19 @@ final class ComponentRenderData
             return null;
         }
 
+        // `forSource()` keeps an excluded name as supplied (a superset), but must not type it: Laravel then
+        // leaves the value the call passes in place. `guaranteedFor()` already declines on a userland `$except`.
+        $excepted = $typedOnly ? [] : self::exceptedNames($codebase, $storage);
         $properties = [];
 
         foreach ($declared as $name => [$declaring, $property]) {
             if ($property->is_static === true || ($typedOnly && ($property->type === null || $declaring->template_types !== null))) {
+                continue;
+            }
+
+            if ($excepted === null || \in_array($name, $excepted, true)) {
+                $properties[$name] = Type::getMixed();
+
                 continue;
             }
 
@@ -220,6 +231,48 @@ final class ComponentRenderData
         }
 
         return $properties;
+    }
+
+    /**
+     * The names a userland `$except` default lists, `[]` when the class does not redeclare it, and null when
+     * the list is not readable from storage: Psalm keeps a default only for an untyped property, as
+     * `list{'a', 'b'}`, so a `@var`-typed or computed default is unknown.
+     *
+     * @return list<string>|null
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function exceptedNames(Codebase $codebase, ClassLikeStorage $storage): ?array
+    {
+        $declaringClass = $storage->declaring_property_ids['except'] ?? self::COMPONENT;
+
+        if (\strtolower($declaringClass) === self::COMPONENT) {
+            return [];
+        }
+
+        $declaring = ViewClassProperties::storage($codebase, $declaringClass);
+        $default = $declaring?->properties['except']->suggested_type ?? null;
+        $atomic = $default?->isSingle() === true ? $default->getSingleAtomic() : null;
+
+        if ($atomic instanceof TArray && $atomic->isEmptyArray()) {
+            return [];
+        }
+
+        if (!$atomic instanceof TKeyedArray || $atomic->fallback_params !== null) {
+            return null;
+        }
+
+        $names = [];
+
+        foreach ($atomic->properties as $item) {
+            if (!$item->isSingleStringLiteral()) {
+                return null;
+            }
+
+            $names[] = $item->getSingleStringLiteral()->value;
+        }
+
+        return $names;
     }
 
     /**

@@ -493,6 +493,21 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * `forSource()` ignores a userland `$except` for presence (a superset), but a property it names keeps
+     * the value the call passes: the class's own type for it must not replace that value. A property not
+     * named still reports, and a list Psalm cannot read (a `@var`-typed default) drops every property type.
+     */
+    #[Test]
+    public function an_excepted_property_keeps_the_value_the_call_passes(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $excepted = $this->forFile($issues, 'ComponentExcepted.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $count'], $this->variablesOf($excepted), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'ComponentExceptedOpaque.php'), \var_export($issues, true));
+    }
+
+    /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
      * half is asserted together: a protected property, a static one and a view built outside
      * `render()` are still missing.

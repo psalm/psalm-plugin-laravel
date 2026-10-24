@@ -107,6 +107,8 @@ The method closure is what `Closure::fromCallable()` returns at runtime: paramet
 
 These are exactly the keys `Component::data()` merges into the view on that path, with its precedence: a method wins a name a property also has. The view must be named literally, by a `render()` whose whole body is one `return` of `view('name', …)`, `view()->make('name', …)`, `View::make('name', …)`, `$this->view('name', …)`, or `'name'`; an inherited `render()` counts.
 
+On that path a userland `$except` only silences: the names it lists stay supplied but are `mixed`, because Laravel then keeps the value the call passes under that key. A default Psalm cannot read (a `@var`-typed or computed list) makes every property `mixed`.
+
 A typed key is typed as present, so a defensive guard on it (`{{ $title ?? '' }}`, `@isset($title)`) now reports `RedundantCondition` / `TypeDoesNotContainNull` when the declared type is not nullable. Drop the guard: component data is always present.
 
 Left `mixed`, as before:
