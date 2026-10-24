@@ -53,6 +53,7 @@ final class TappableTapHandler implements MethodReturnTypeProviderInterface
         return [Tappable::class];
     }
 
+    /** @psalm-capabilities read-props */
     #[\Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
@@ -111,6 +112,7 @@ final class TappableTapHandler implements MethodReturnTypeProviderInterface
      *  - `null`  → the type is undeterminable or nullable (→ union both branches).
      *
      * @param list<Arg> $args
+     * @psalm-capabilities read-props
      */
     private static function callbackIsNull(StatementsAnalyzer $source, array $args): ?bool
     {
