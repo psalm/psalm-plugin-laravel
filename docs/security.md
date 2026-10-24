@@ -13,6 +13,7 @@ nav_order: 6
 | Shell Injection | A03:2021 | `Process::run()`, `Process::command()`                        |
 | XSS             | A03:2021 | `Response::make()` with unescaped content                     |
 | XSS (Blade templates) | A03:2021 | `{!! $userInput !!}`                                    |
+| XSS (Blade view data) | A03:2021 | `view('x', ['q' => $request->input('q')])` or `->with('q', $input)` fed into `{!! $q !!}` (`view()`, `View::make()`, `Factory::make()`, `response()->view()`; literal data only) |
 | Header Injection | A03:2021 | `Response::make()`, `response()`, and `new Response()` with user-controlled header values; mail sender/recipient addresses (`Mailable` `from()`, `to()`, `cc()`, `bcc()`, `replyTo()`; `MailMessage` `from()`, `cc()`, `bcc()`, `replyTo()`) |
 | SSRF            | A10:2021 | `Http::get()`, `Http::post()` with user-controlled URLs       |
 | File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |

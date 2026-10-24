@@ -95,6 +95,15 @@ Psalm keeps no global function table for ordinary project code: `Functions::func
 - Types only: a seeded `Union` has no `parent_nodes`, so no taint flows from a property.
 - A seeded shadow counts as a component view for `ShadowTarget::$isComponentView` (`BladeIssueRemapHandler::resolveTarget()`), so the relocator's `attributes|slot` guard drop also covers a nested tag's compiled `isset($attributes)` / `instanceof` bookkeeping in a view that never names `$attributes`. `AttributesRestoreReassert` keeps its source-only gate: it runs at compile time, before the registry exists, and such a view has no `$attributes` read for it to protect.
 
+#### Carrying taint from `view()` data into a template
+
+`Blade\ViewTaintBridge` (`AfterExpressionAnalysis` + `AfterStatementAnalysis`, registered from `registerHandlers()` on the `$bladeActive` gate and never for an annotate run; #2031, [user docs](../blade.md#taint-through-view-data)) is the one file that owns the store naming and every `Codebase` taint call (`getTaintNode`, `addTaintStoreWrite`, `addTaintStoreRead`), so Psalm 7's keyed taint stores (vimeo/psalm#12312) stay behind one seam. Shadow text, variable types, contracts and the shadow cache key do not change.
+
+- Store layout: one store per canonical view name, `Illuminate\View\View::$data@{view}`, keyed by variable name with an exact name. Store nodes carry no location, so a write recorded in a controller's worker and a read recorded in a shadow's worker are the same node once the parent merges the worker graphs; no state crosses a process boundary.
+- Source: `afterExpressionAnalysis`, gated cheapest first: call name in `view`/`make`/`with`, then `tracksTaintFlow()`, then not a shadow, then `ViewCallChain::from()` resolving the receiver role (`view()` helper, view factory, response factory; mail roles decline). `ViewCallChain::ownEntries()` returns only the literal entries THIS call passes, so every link of a chain writes its own arguments and a nested `response(view(...))` needs no statement-level walk. It runs independently of `validateViewData`/`reportUnusedViewData`.
+- Sink: the prelude's sentinel `Nop`, found the same way as `ComponentViewSeedHandler` does. For each variable in scope that is not in `PreludeBuilder::BLADE_OWNED_NAMES` and not `__*`, a read node `$q (view data of {view})` is attached to the variable's type, once per name the template owns (`ViewReferenceRegistry::namesFor()`; a published override owns two).
+- Order matters: the bridge is registered AFTER `ComponentViewSeedHandler`, whose seed replaces a variable's whole type and would otherwise drop the attached node. `BladeViewDataTaintTest` pins it with a class component's `@props` view.
+
 #### Remapping a shadow issue onto its template
 
 Neither registration makes a finding visible by itself: an issue Psalm raises in a shadow is located in a file that is deliberately unreportable, so it dies in the reportability gate. `Blade\BladeIssueRemapHandler` (`BeforeAddIssueInterface`, registered from `registerHandlers()` only when the compile step activated) is the only channel from shadow analysis to user-visible output.
