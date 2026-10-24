@@ -67,7 +67,7 @@ Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy, 
 
 The check declines rather than guess. It is silent when:
 
-- The view name is not a string literal, or is namespaced (`pkg::view`).
+- The view name is not a string literal, or names a template that is not analyzed: a namespace hint (`pkg::view`) under your vendor directory, or an unknown namespace.
 - The declared type is `mixed`, which is every `@props([...])` entry (a literal default types the template body, never what a caller may pass).
 - The passed value is `mixed`, which satisfies any declaration.
 - The passed value is of a class that does not exist, which Psalm already reports where it is named.

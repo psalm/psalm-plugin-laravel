@@ -207,6 +207,24 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
+    public function lists_a_name_its_call_sites_disagree_on_with_each_type_they_pass(): void
+    {
+        // "type unknown" would be wrong here: every call site types it, just not the same way.
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>{{ \$body }}\n", ['title', 'body']);
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString(), 'body' => Type::getMixed()], true);
+        AnnotationCollector::record('page', ['title' => Type::getInt(), 'body' => Type::getMixed()], true);
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame($before, \md5_file($path));
+        $result = $this->publishedResult();
+        $this->assertSame([$path => ['body']], $result['unknown'] ?? null);
+        $this->assertSame(['page' => ['title' => ['int', 'string']]], $result['disagreed'] ?? null);
+    }
+
+    #[Test]
     public function lists_a_name_two_view_names_of_one_file_type_differently(): void
     {
         $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
@@ -215,6 +233,48 @@ final class AnnotationWriterTest extends TestCase
         AnnotationCollector::markAnalyzed();
         AnnotationCollector::record('page', ['title' => Type::getString()], true);
         AnnotationCollector::record('vendor::page', ['title' => Type::getInt()], true);
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame($before, \md5_file($path));
+        $this->assertSame([$path => ['title']], $this->publishedResult()['unknown'] ?? null);
+    }
+
+    /**
+     * One file, two names (a published override is `page` and `pkg::page`): a closed call site that
+     * omits the name through EITHER renders the same file without it, so declaring it required would
+     * report MissingViewVariable there.
+     */
+    #[Test]
+    public function a_name_omitted_through_one_view_name_of_a_file_is_declared_optional(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        ViewReferenceRegistry::registerTemplate('pkg::page', 0, $path);
+        ContractRegistry::register('pkg::page', 0, new ViewDataContract([], false, ['title'], false));
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString()], true);
+        AnnotationCollector::record('page', [], true);
+        AnnotationCollector::record('pkg::page', ['title' => Type::getString()], true);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertStringContainsString('@var string|null $title = null', (string) \file_get_contents($path));
+    }
+
+    /**
+     * One name's only producer omits the variable, the other's passes it: the omitting name still
+     * plans the variable (untyped), so the file gets no declaration at all.
+     */
+    #[Test]
+    public function a_name_every_producer_of_one_view_name_omits_is_not_declared(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        ViewReferenceRegistry::registerTemplate('pkg::page', 0, $path);
+        ContractRegistry::register('pkg::page', 0, new ViewDataContract([], false, ['title'], false));
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', [], true);
+        AnnotationCollector::record('pkg::page', ['title' => Type::getString()], true);
         $before = \md5_file($path);
 
         AnnotationWriter::run($this->request());
@@ -281,9 +341,9 @@ final class AnnotationWriterTest extends TestCase
     #[Test]
     public function the_dry_run_diff_for_an_opened_out_docblock_line_matches_the_actual_byte_change(): void
     {
-        // A one-line header docblock is opened out: the declaration lands before its `*/`, which
-        // moves to a line of its own. That modifies an existing line, so a hand-rolled "pure
-        // insertion" hunk header would lie about it.
+        // A one-line header docblock is opened out: its text and the declaration each get a line,
+        // and the `*/` moves to a line of its own. That modifies an existing line, so a hand-rolled
+        // "pure insertion" hunk header would lie about it.
         $path = $this->template("<?php /** Header. */ ?>\n<p>{{ \$title }}</p>\n");
         $before = (string) \file_get_contents($path);
 

@@ -1,8 +1,3 @@
---SKIPIF--
-<?php
-require getcwd() . '/vendor/autoload.php';
-// Psalm rc8 leaks json_encode()'s html removal into later sibling returns (vimeo/psalm#12470).
-\Tests\Psalm\LaravelPlugin\Type\PsalmVersion::skipOnRange('7.0.0-rc8', '7.0.0-rc9');
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
 --FILE--

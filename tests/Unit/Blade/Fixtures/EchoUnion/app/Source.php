@@ -6,8 +6,7 @@ namespace Fx;
 
 /**
  * Producers with honest unions, so the echo-position gate is exercised without depending on any
- * one Laravel helper's own stub. `old()` appears in the templates too, for the literal shape the
- * gate was reported against.
+ * one Laravel helper's own stub.
  */
 final class Source
 {
@@ -15,6 +14,11 @@ final class Source
     public function arr(): array
     {
         return [];
+    }
+
+    public static function opt(string $key): string|array|null
+    {
+        return $key;
     }
 
     public function maybeFalse(): string|false

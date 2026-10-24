@@ -26,10 +26,10 @@ final class ModelInstancePreparer
      * {@see ModelMetadataRegistryBuilder::computeCasts()}, so an `$appends` entry it backs looks unbacked and
      * false-positives {@see \Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedModelAttributeHandler}.
      *
-     * ONE walk over `getMethods()`: that order IS Laravel's initializer order (12.22+) and is PHP-dependent
+     * ONE walk over `getMethods()`: that order IS Laravel's initializer order and is PHP-dependent
      * (8.4 ranks Model's inherited concern inits first, 8.5 the class's own trait inits), so executing in it
-     * matches runtime under either. Discovery mirrors bootTraits(): conventional name or `#[Initialize]`
-     * (gated — the framework ignores the tag below 12.22), neither filtering isStatic.
+     * matches runtime under either. Discovery mirrors bootTraits(): conventional name or `#[Initialize]`,
+     * neither filtering isStatic.
      *
      * Framework and user initializers are INVOKED alike, so each does whatever the INSTALLED Laravel does —
      * version-correct by construction, with no hand-written mirror to drift when a release moves one. Exactly
@@ -51,7 +51,6 @@ final class ModelInstancePreparer
             $conventional['initialize' . \class_basename($trait)] = true;
         }
 
-        $honorInitializeAttribute = \class_exists(Initialize::class);
         // Root from Model's OWN file, never a hardcoded `/vendor/…` substring — survives custom vendor dirs,
         // path-repo symlinks and split illuminate/* packages. Trailing '/' stops `Illuminate\DatabaseExtra`.
         $eloquentRoot = \str_replace('\\', '/', \dirname((string) (new \ReflectionClass(Model::class))->getFileName(), 2));
@@ -60,8 +59,7 @@ final class ModelInstancePreparer
         foreach ($reflection->getMethods() as $method) {
             $name = $method->getName();
             // isset() first: getAttributes() is reached only for non-conventional methods.
-            $isInitializer = isset($conventional[$name])
-                || ($honorInitializeAttribute && $method->getAttributes(Initialize::class) !== []);
+            $isInitializer = isset($conventional[$name]) || $method->getAttributes(Initialize::class) !== [];
             if (isset($invoked[$name]) || !$isInitializer) {
                 continue;
             }
@@ -114,10 +112,9 @@ final class ModelInstancePreparer
      *  - `$dateFormat`, which nothing stores.
      *  - `mergeAppends()`, called below.
      *
-     * The normalizer is CALLED, never copied: Laravel 12.26+ adds an `is_object` branch that throws
-     * `InvalidArgumentException` on a non-Stringable object cast — so a copy would need to track that
-     * behavior, while calling tracks it for free. The `is_array` branch this exists for is byte-identical
-     * across the supported range, so it needs no gate.
+     * The normalizer is CALLED, never copied: its `is_object` branch throws `InvalidArgumentException` on a
+     * non-Stringable object cast — so a copy would need to track that behavior, while calling tracks it for
+     * free.
      *
      * Built from `$instance`, never `Model::class`: `ReflectionMethod::invoke()` dispatches NON-virtually and
      * does not complain about a foreign receiver, so a `Model::class` handle would silently run the
@@ -141,7 +138,7 @@ final class ModelInstancePreparer
             // either to a local would count against the plugin's 100% type-coverage target.
             $declaredCasts->setValue($instance, $normalize->invoke($instance, $declaredCasts->getValue($instance)));
         } catch (\InvalidArgumentException) {
-            // 12.26+ raises this for a non-Stringable object cast. Runtime normalizes the MERGED map and
+            // The normalizer raises this for a non-Stringable object cast. Runtime normalizes the MERGED map and
             // `casts()` wins on collisions, so a declared object cast that `casts()` overrides never reaches
             // the throw at construction. Seeing the declared half alone, this cannot tell that model from an
             // unconstructable one — so leave `$casts` raw and defer to computeCasts(), which holds the

@@ -56,4 +56,55 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $she
 
     $_branched = $team->branchedStamps(true);
     /** @psalm-trace $_branched */
+
+    $_scored = $team->scored();
+    /** @psalm-trace $_scored */
+
+    $_scored_last = $team->scoredUsingLast();
+    /** @psalm-trace $_scored_last */
+
+    $_scored_stamps = $team->scoredStamps();
+    /** @psalm-trace $_scored_stamps */
+
+    $_scored_unstamped = $team->scoredUnstamped();
+    /** @psalm-trace $_scored_unstamped */
+
+    $_plain_scored = $team->plainScored();
+    /** @psalm-trace $_plain_scored */
+
+    $_dated_scored = $team->datedScored();
+    /** @psalm-trace $_dated_scored */
+
+    $_converting_scored = $team->convertingScored();
+    /** @psalm-trace $_converting_scored */
+
+    $_hidden_scored = $team->hiddenScored();
+    /** @psalm-trace $_hidden_scored */
+
+    $_foreign_scored = $team->foreignScored();
+    /** @psalm-trace $_foreign_scored */
+
+    $_delegated_scored = $team->delegatedScored();
+    /** @psalm-trace $_delegated_scored */
+
+    $_branched_scored = $team->branchedScored(true);
+    /** @psalm-trace $_branched_scored */
+
+    $_raw_entries = $sheet->rawEntries();
+    /** @psalm-trace $_raw_entries */
+
+    $_delegated_hidden_scored = $team->delegatedHiddenScored();
+    /** @psalm-trace $_delegated_hidden_scored */
+
+    $_raw_scored = $team->rawScored();
+    /** @psalm-trace $_raw_scored */
+
+    $_caster_scored = $team->casterScored();
+    /** @psalm-trace $_caster_scored */
+
+    $_has_cast_scored = $team->hasCastScored();
+    /** @psalm-trace $_has_cast_scored */
+
+    $_casts_method_scored = $team->castsMethodScored();
+    /** @psalm-trace $_casts_method_scored */
 }

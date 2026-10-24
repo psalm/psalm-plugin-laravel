@@ -109,6 +109,14 @@ final class Plugin implements PluginEntryPointInterface
             // write to the source tree. Absent for every ordinary psalm run (#1524).
             $annotate = Blade\Annotate\AnnotateRequest::fromEnvironment();
 
+            if ($annotate instanceof Blade\Annotate\AnnotateRequest) {
+                // The codemod reads call-site types only. Psalm 7 builds the taint graph by default,
+                // and here nothing reports it, so dropping it saves analysis time and memory. The
+                // graph exists already (taint is set up before plugins load); taint handlers bail
+                // without it.
+                ProjectAnalyzer::getInstance()->getCodebase()->taint_flow_graph = null;
+            }
+
             // A request force-enables Blade even for a project that has it off: the user ran the
             // codemod, and refusing because of a config flag they never set for it would only be
             // confusing. That is safe precisely because the request is gated on a marked control
@@ -118,7 +126,7 @@ final class Plugin implements PluginEntryPointInterface
             // handler below would read an empty registry and, worse, report on templates whose
             // facts were never collected (#1518).
             $bladeActive = ($pluginConfig->bladeEnabled || $annotate instanceof Blade\Annotate\AnnotateRequest)
-                && $this->initBladeAnalysis($pluginConfig, $output);
+                && $this->initBladeAnalysis($pluginConfig, $output, $annotate);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
@@ -839,13 +847,17 @@ final class Plugin implements PluginEntryPointInterface
         // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
         // not a config flag, is what keeps an ordinary psalm run from touching the source tree.
         // The two hooks are one pass in two halves: the collector fills a static that only survives
-        // to the writer's AfterAnalysis because the command forces `--threads=1`.
+        // to the writer's AfterAnalysis because annotate mode pins the analysis to this process.
         if ($bladeActive && $annotate instanceof Blade\Annotate\AnnotateRequest) {
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Blade/Annotate/AnnotationCollector.php';
             require_once __DIR__ . '/Blade/Annotate/AnnotationWriter.php';
             Blade\Annotate\AnnotationCollector::init();
             Blade\Annotate\AnnotationWriter::init($annotate);
+            // A forked analysis worker never hands the collector's statics back, so analysis must run
+            // in this process. Psalm reads `$threads` only when analysis starts, after this init,
+            // while the scan already took its count from `--threads`: the caller's value sizes the scan.
+            ProjectAnalyzer::getInstance()->threads = 1;
             $registration->registerHooksFromClass(Blade\Annotate\AnnotationCollector::class);
             $registration->registerHooksFromClass(Blade\Annotate\AnnotationWriter::class);
         }
@@ -1001,12 +1013,15 @@ final class Plugin implements PluginEntryPointInterface
      * and the booted `BladeCompiler`'s own registration surface (see
      * `Blade\CompilerEnvironment::describe()`).
      *
+     * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod driving this run, told why
+     *                                                Blade disabled itself
+     *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
      *              published nothing, so no Blade handler may register
      *
      * @throws Blade\BladeDisabledException when Blade disabled itself and `failOnInternalError` is on
      */
-    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output): bool
+    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, ?Blade\Annotate\AnnotateRequest $annotate): bool
     {
         $registrar = new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance());
 
@@ -1021,6 +1036,10 @@ final class Plugin implements PluginEntryPointInterface
 
         if (!$bootstrapper->boot()) {
             $disabled = $bootstrapper->disabled();
+
+            if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException) {
+                $annotate?->publishError($disabled->getMessage());
+            }
 
             // Blade is opt-in: a run that silently lost it would pass CI with zero template findings.
             if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException && $pluginConfig->failOnInternalError) {

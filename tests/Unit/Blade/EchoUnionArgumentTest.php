@@ -32,9 +32,6 @@ final class EchoUnionArgumentTest extends TestCase
     private const ARGUMENTS = ['-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
 
     /**
-     * Type issues only. Psalm 7 runs taint in the same pass, so `old()` echoed raw also earns a
-     * genuine `TaintedHtml`; that is not the argument-type family these tests pin.
-     *
      * @return list<array{type: string, file: string, message: string}>
      */
     private function analyze(): array
@@ -42,10 +39,6 @@ final class EchoUnionArgumentTest extends TestCase
         $issues = [];
 
         foreach ($this->fixtureIssues(self::FIXTURE, self::ARGUMENTS) as $issue) {
-            if (\str_starts_with((string) $issue['type'], 'Tainted')) {
-                continue;
-            }
-
             $issues[] = [
                 'type' => (string) $issue['type'],
                 'file' => \basename((string) $issue['file_name']),
@@ -101,7 +94,7 @@ final class EchoUnionArgumentTest extends TestCase
     {
         $issues = $this->analyze();
 
-        foreach (['esc-old.blade.php', 'esc-old-default.blade.php', 'triple-old.blade.php'] as $template) {
+        foreach (['esc-union.blade.php', 'triple-union.blade.php'] as $template) {
             $this->assertBladeAnalyzed($issues, $template);
             $this->assertSame([], $this->forFile($issues, $template), \var_export($issues, true));
         }
@@ -116,8 +109,8 @@ final class EchoUnionArgumentTest extends TestCase
     {
         $issues = $this->analyze();
 
-        $this->assertBladeAnalyzed($issues, 'raw-old.blade.php');
-        $this->assertSame([], $this->forFile($issues, 'raw-old.blade.php'), \var_export($issues, true));
+        $this->assertBladeAnalyzed($issues, 'raw-union.blade.php');
+        $this->assertSame([], $this->forFile($issues, 'raw-union.blade.php'), \var_export($issues, true));
     }
 
     /** The `PossiblyFalseArgument` half of the family, from a `string|false` producer. */
@@ -131,9 +124,9 @@ final class EchoUnionArgumentTest extends TestCase
     }
 
     /**
-     * The load-bearing case: `@php echo e(old('k')); @endphp` and `{{ old('k') }}` compile to
-     * BYTE-IDENTICAL shadow lines, so only looking for the sliced call in the raw template tells
-     * them apart. Same for `@php echo old('k'); @endphp` against `{!! old('k') !!}`.
+     * The load-bearing case: `@php echo e($x); @endphp` and `{{ $x }}` compile to BYTE-IDENTICAL
+     * shadow lines, so only looking for the sliced call in the raw template tells them apart. Same
+     * for `@php echo $x; @endphp` against `{!! $x !!}`.
      */
     #[Test]
     public function an_authors_own_echo_inside_a_php_block_still_reports(): void
@@ -149,9 +142,8 @@ final class EchoUnionArgumentTest extends TestCase
     }
 
     /**
-     * `{{ e(old('k')) }}` compiles to `echo e(e(old('k')))`. The outer `e` is the compiler's and
-     * receives a `string`, so it never reports; the inner one is the author's own call and keeps
-     * its issue.
+     * `{{ e($x) }}` compiles to `echo e(e($x))`. The outer `e` is the compiler's and receives a
+     * `string`, so it never reports; the inner one is the author's own call and keeps its issue.
      */
     #[Test]
     public function an_authors_own_escape_call_nested_in_an_echo_still_reports(): void

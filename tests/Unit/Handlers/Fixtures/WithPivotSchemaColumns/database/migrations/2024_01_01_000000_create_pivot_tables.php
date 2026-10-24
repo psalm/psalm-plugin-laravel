@@ -62,6 +62,22 @@ return new class extends Migration {
             $table->integer('admin');
         });
 
+        // Score's own default table: it lacks the relation table's `score`, `flags` and `rank`.
+        Schema::create('scores', function (Blueprint $table): void {
+            $table->string('kind');
+        });
+
+        Schema::create('team_scores', function (Blueprint $table): void {
+            $table->foreignId('team_id');
+            $table->foreignId('user_id');
+            $table->string('score');
+            $table->string('flags')->nullable();
+            $table->integer('rank');
+            $table->string('note')->nullable();
+            $table->string('kind');
+            $table->timestamps();
+        });
+
         // morphToMany(Tag::class, 'taggable') joins the plural of the morph name.
         Schema::create('taggables', function (Blueprint $table): void {
             $table->foreignId('tag_id');

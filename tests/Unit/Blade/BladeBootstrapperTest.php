@@ -236,6 +236,39 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
+     * Two project-local hint roots: the first root's plain `widget.php` is what `FileViewFinder`
+     * renders for `pkg::widget`, so the second root's Blade template must not claim the name, or
+     * call sites are checked against a contract Laravel never renders.
+     */
+    #[Test]
+    public function a_hint_template_shadowed_by_an_earlier_local_root_does_not_claim_the_name(): void
+    {
+        $firstDir = $this->root . '/first-views';
+        \mkdir($firstDir, 0o777, true);
+        \file_put_contents($firstDir . '/widget.php', "<p>plain php</p>\n");
+
+        $secondDir = $this->root . '/second-views';
+        \mkdir($secondDir, 0o777, true);
+        $second = $secondDir . '/widget.blade.php';
+        \file_put_contents($second, "<?php /** @var string \$title */ ?>\n<p>{{ \$title }}</p>\n");
+        $second = (string) \realpath($second);
+
+        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
+        $finder->addNamespace('pkg', [$firstDir, $secondDir]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertNull(ContractRegistry::contractFor('pkg::widget'), 'the first root renders widget.php');
+        $this->assertSame([], ViewReferenceRegistry::templates(), 'the shadowed template owns no name');
+        $this->assertSame([$second], $registrar->reportableTemplates, 'the shadowed template is still analyzed');
+    }
+
+    /**
      * The hints are canonicalized before the vendor filter, so the boundary they are tested against
      * has to be canonicalized too. A vendor directory whose configured spelling differs from its
      * on-disk dirent casing otherwise fails the prefix test against every canonicalized hint, and

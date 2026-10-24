@@ -330,7 +330,7 @@ final class RelationMethodParser
         $chain = [];
         $parsed = self::findRelationCallInExpr($expr, $scopeClass, $parentClass, $pivotModel, $accessor, $chain);
         if ($parsed !== null) {
-            $parsed = self::collectPivotColumns($codebase, $parsed, $expr, $receiverClass);
+            $parsed = self::collectPivotColumns($codebase, $parsed, $expr, $scopeClass, $parentClass, $receiverClass);
 
             return self::applyDirectChain($codebase, $parsed, $chain, $methodStorage->return_type, $methodStorage->signature_return_type);
         }
@@ -352,13 +352,25 @@ final class RelationMethodParser
      * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
      * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
-    private static function collectPivotColumns(Codebase $codebase, array $parsed, PhpParser\Node\Expr $expr, string $receiverClass): array
-    {
+    private static function collectPivotColumns(
+        Codebase $codebase,
+        array $parsed,
+        PhpParser\Node\Expr $expr,
+        string $scopeClass,
+        ?string $parentClass,
+        string $receiverClass,
+    ): array {
         if (!\is_a($parsed['relationClass'], BelongsToMany::class, true)) {
             return $parsed;
         }
 
-        $chain = PivotColumnResolver::readChain($codebase, $expr, $receiverClass, $parsed['relatedModel']);
+        $chain = PivotColumnResolver::readChain(
+            $codebase,
+            $expr,
+            $receiverClass,
+            $parsed['relatedModel'],
+            fn(PhpParser\Node\Expr\MethodCall $using): ?string => self::firstClassStringArg($using, $scopeClass, $parentClass),
+        );
         $parsed['pivotColumns'] = $chain['columns'];
         // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it.
         $parsed['pivotTable'] = $chain['table'];
@@ -430,7 +442,7 @@ final class RelationMethodParser
         $visible = $parsed['pivotVisible'];
 
         foreach ($chain as [$name, $call]) {
-            $visible = $visible && PivotColumnResolver::keepsPivot($name);
+            $visible = $visible && ($name === 'using' || PivotColumnResolver::keepsPivot($name));
             // The outermost mutator runs last, so it wins; a dynamic argument leaves the slot unknown.
             if ($pivotAware && $name === 'using') {
                 $pivotModel ??= self::firstClassStringArg($call, $scopeClass, $parentClass);

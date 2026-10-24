@@ -39,7 +39,7 @@
         "psalm/psalm-plugin-api": "^0.4.1",
         "sebastian/diff": "^4.0 || ^5.0 || ^6.0 || ^7.0 || ^8.0 || ^9.0",
         "symfony/console": "^7.2 || ^8.0",
-        "vimeo/psalm": "^7.0.0-rc8 || dev-master"
+        "vimeo/psalm": "^7.0.0-rc10 || dev-master"
     },
     "bin": [
         "bin/psalm-laravel"

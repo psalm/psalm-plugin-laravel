@@ -1,1 +1,1 @@
-{{ e(old('k')) }}
+{{ e(\Fx\Source::opt('k')) }}

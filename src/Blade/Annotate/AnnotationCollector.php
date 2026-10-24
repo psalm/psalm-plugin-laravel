@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
+use Illuminate\View\ViewName;
 use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
+use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
@@ -16,6 +19,7 @@ use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic;
+use Psalm\Type\MutableTypeVisitor;
 use Psalm\Type\TypeNode;
 use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
@@ -24,24 +28,32 @@ use Psalm\Type\Union;
  * Records, per view name, the type every resolved `view()` call site passes for each data key —
  * the only sound type source {@see AnnotationWriter} has.
  *
- * Registered only in annotate mode, and only under `--threads=1`: Psalm's forked analysis workers
- * never hand their statics back to the parent, where the write runs.
+ * Registered only in annotate mode, which pins the analysis to one process: Psalm's forked analysis
+ * workers never hand their statics back to the parent, where the write runs.
  *
  * The confidence rule is deliberately narrow, because a wrong annotation becomes a false positive
  * at every call site that renders the template. A type is answered only when every producer of that
- * view agreed on it AND no producer left the view's data set open — an open set can carry the same
- * key with another type, invisibly.
+ * view agreed on it, or disagreed in a way one declaration covers ({@see self::merged()}), AND no
+ * producer left the view's data set open — an open set can carry the same key with another type,
+ * invisibly.
  *
  * @internal
  */
 final class AnnotationCollector implements AfterStatementAnalysisInterface
 {
+    /**
+     * Beyond three classes a union stops reading as a contract and starts reading as a call site
+     * passing the wrong thing.
+     */
+    private const MAX_MERGED_ATOMICS = 3;
+
     private static bool $enabled = false;
 
     /**
-     * Keyed by view name then variable name. `false` marks a key two producers disagreed on.
+     * Keyed by view name then variable name, then the distinct types passed for it by id. `false`
+     * marks a key whose passed type has no declaration a template can carry.
      *
-     * @var array<string, array<string, Union|false>>
+     * @var array<string, array<string, array<string, Union>|false>>
      */
     private static array $observed = [];
 
@@ -65,6 +77,16 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     private static bool $analyzed = false;
 
+    /**
+     * The calls of every chain already recorded: its binding call and the `with()` links folded into
+     * its data. A callback's statements are analysed, and recorded, before the statement holding the
+     * callback completes, whose scan for nested view names then meets the same call nodes again.
+     * Weak, so the analysed ASTs are not kept alive.
+     *
+     * @var \WeakMap<Expr, true>|null
+     */
+    private static ?\WeakMap $recorded = null;
+
     public static function init(): void
     {
         self::$enabled = true;
@@ -77,6 +99,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         self::$open = [];
         self::$alwaysSupplied = [];
         self::$analyzed = false;
+        self::$recorded = null;
     }
 
     /**
@@ -120,6 +143,14 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         if ($chain instanceof ViewCallChain) {
             self::record($chain->viewName, $chain->supplied(), $chain->complete);
+            /** @psalm-var \WeakMap<Expr, true> $recorded a fresh WeakMap infers as WeakMap<object, mixed> */
+            $recorded = self::$recorded ?? new \WeakMap();
+
+            for ($link = $expr; $link instanceof Expr; $link = self::innerLink($link)) {
+                $recorded[$link] = true;
+            }
+
+            self::$recorded = $recorded;
 
             return null;
         }
@@ -135,29 +166,78 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * Literal view names of every rendering call nested in an expression the chain declined. Over-
-     * marking is the safe direction: the worst it costs is a name left undeclared where a type was provable.
+     * Literal view names of every rendering call nested in an expression the chain declined, minus
+     * the calls a callback's own statement already recorded, unless the expression may write into the
+     * view such a callback returns. Over-marking is the safe direction: the worst it costs is a name
+     * left undeclared where a type was provable.
      *
      * @return list<string>
      */
     private static function viewNamesIn(Expr $expr): array
     {
         $names = [];
+        $writes = null;
 
         foreach ((new NodeFinder())->find($expr, self::isViewBinder(...)) as $call) {
             if (!$call instanceof Node\Expr\CallLike || $call->isFirstClassCallable()) {
                 continue;
             }
 
+            if (isset(self::$recorded[$call]) && !($writes ??= self::mayWriteViewData($expr))) {
+                continue;
+            }
+
             // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
             $nameArg = ArgUtil::byNameOrPosition(\array_values($call->getArgs()), 0, 'view');
 
+            // Marked under the name Laravel renders, which a spelling the chain declined
+            // (`'pkg::x::y'`, `' x '`) does not carry verbatim.
             if ($nameArg instanceof Node\Arg && !$nameArg->unpack && $nameArg->value instanceof String_ && $nameArg->value->value !== '') {
-                $names[] = $nameArg->value->value;
+                $names[] = \trim(ViewName::normalize($nameArg->value->value));
             }
         }
 
         return $names;
+    }
+
+    /**
+     * Whether the expression holds anything that can put data into a view object it was handed:
+     * a `with*()` call (`View::__call()` turns `withTitle()` into `with('title')`), `nest()`, the
+     * `ArrayAccess` and `__set()` writes, or a call whose name is not literal. The recorded data of
+     * a callback's view is only final when nothing around the callback can change it; the recorded
+     * chain's own `with()` links are already part of it.
+     */
+    private static function mayWriteViewData(Expr $expr): bool
+    {
+        return (new NodeFinder())->findFirst($expr, static function (Node $node): bool {
+            if ($node instanceof Expr && isset(self::$recorded[$node])) {
+                return false;
+            }
+
+            if ($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall || $node instanceof Expr\StaticCall) {
+                if (!$node->name instanceof Node\Identifier) {
+                    return true;
+                }
+
+                $name = $node->name->toLowerString();
+
+                return \str_starts_with($name, 'with') || \in_array($name, ['nest', 'offsetset', '__set'], true);
+            }
+
+            // `$view['title'] = 42` and `$view->title = 42`, destructuring into either included.
+            return ($node instanceof Expr\Assign || $node instanceof Expr\AssignRef || $node instanceof Expr\AssignOp)
+                && !$node->var instanceof Expr\Variable;
+        }) instanceof Node;
+    }
+
+    /** The next call towards a recorded chain's binding call, or null once the binding call is reached. */
+    private static function innerLink(Expr $link): ?Expr
+    {
+        return ($link instanceof Expr\MethodCall || $link instanceof Expr\NullsafeMethodCall)
+            && $link->name instanceof Node\Identifier
+            && \in_array($link->name->toLowerString(), ['with', 'witherrors'], true)
+            ? $link->var
+            : null;
     }
 
     private static function isViewBinder(Node $node): bool
@@ -206,10 +286,41 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 continue;
             }
 
-            self::$observed[$viewName][$name] = $seen instanceof Union && $seen->getId(false) !== $type->getId(false)
-                ? false
-                : $type;
+            if (!self::dropsLateStaticSafely($type)) {
+                self::$observed[$viewName][$name] = false;
+
+                continue;
+            }
+
+            $type = self::withoutLateStatic($type);
+            $seen ??= [];
+            $key = $type->getId(false);
+            // Literals sharing an id (`1`, `100`) are combined, not replaced: the merge's containment
+            // check must see every value a call site passed.
+            $seen[$key] = isset($seen[$key]) ? Type::combineUnionTypes($seen[$key], $type) : $type;
+            self::$observed[$viewName][$name] = $seen;
         }
+    }
+
+    /**
+     * The distinct types the producers of a view pass for a name, when they disagree in a way no
+     * declaration covers: what the user is left to declare by hand. Null otherwise, an open data set
+     * included (that is no disagreement, just an unknown).
+     *
+     * @return list<string>|null
+     */
+    public static function disagreeingTypes(string $viewName, string $name): ?array
+    {
+        $distinct = self::$observed[$viewName][$name] ?? null;
+
+        if (isset(self::$open[$viewName]) || !\is_array($distinct) || \count($distinct) < 2 || self::merged($distinct) instanceof Union) {
+            return null;
+        }
+
+        $ids = \array_map(strval(...), \array_keys($distinct));
+        \sort($ids);
+
+        return $ids;
     }
 
     /**
@@ -222,7 +333,13 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
-        $observed = self::$observed[$viewName][$name] ?? null;
+        $distinct = self::$observed[$viewName][$name] ?? null;
+
+        if (!\is_array($distinct)) {
+            return null;
+        }
+
+        $observed = \count($distinct) === 1 ? \reset($distinct) : self::merged($distinct);
 
         if (!$observed instanceof Union) {
             return null;
@@ -256,6 +373,102 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return $id;
+    }
+
+    /**
+     * One type for producers that disagree, or null when they disagree too much to share one.
+     *
+     * Merged: a difference in nullability only; one scalar kind (`true` and `false` give `bool`); up
+     * to three classes, `null` not counted. Psalm keeps one class with different generic params apart
+     * (`Collection<int, Post>|Collection<int, Video>`), which holds even where the template parameter
+     * is invariant, so each counts as a class. Never merged: a `mixed` producer, two scalar kinds, an
+     * array that differs by more than nullability, an array or a scalar with an object. Each usually
+     * means one call site passes the wrong thing. Never widened to a common parent either: which one
+     * is ambiguous, and members only a subclass has would turn into UndefinedMethod.
+     *
+     * A merge that is not a plain union of what was passed (`bool` from `true`) must still be proven
+     * to hold at every call site; unproven declines.
+     *
+     * @param array<string, Union> $distinct
+     */
+    private static function merged(array $distinct): ?Union
+    {
+        // Sorted, so the verdict cannot depend on which call site was analysed first.
+        \ksort($distinct);
+        $withoutNull = [];
+
+        foreach ($distinct as $type) {
+            if ($type->hasMixed()) {
+                return null;
+            }
+
+            $atomics = \array_filter($type->getAtomicTypes(), static fn(Atomic $atomic): bool => !$atomic instanceof Atomic\TNull);
+
+            if ($atomics !== []) {
+                $withoutNull[(new Union(\array_values($atomics)))->getId(false)] = true;
+            }
+        }
+
+        $types = \array_values($distinct);
+
+        if ($types === []) {
+            return null;
+        }
+
+        $combined = Type::combineUnionTypeArray($types, null);
+
+        if (\count($withoutNull) <= 1) {
+            return $combined;
+        }
+
+        $atomics = \array_filter($combined->getAtomicTypes(), static fn(Atomic $atomic): bool => !$atomic instanceof Atomic\TNull);
+        $objects = \array_filter($atomics, static fn(Atomic $atomic): bool => $atomic instanceof Atomic\TNamedObject);
+        $first = \reset($atomics);
+
+        $mergeable = \count($atomics) === 1
+            ? $first instanceof Atomic\TNamedObject || $first instanceof Atomic\Scalar
+            : \count($objects) === \count($atomics) && \count($atomics) <= self::MAX_MERGED_ATOMICS;
+
+        return $mergeable && self::containsEvery($combined, $distinct) ? $combined : null;
+    }
+
+    /**
+     * Whether every producer's type is contained by the merged one. An atomic the merge kept verbatim
+     * needs no proof; anything else asks the codebase, the same check call sites are held to.
+     *
+     * @param array<string, Union> $distinct
+     */
+    private static function containsEvery(Union $merged, array $distinct): bool
+    {
+        $kept = [];
+
+        foreach ($merged->getAtomicTypes() as $atomic) {
+            $kept[$atomic->getId()] = true;
+        }
+
+        foreach ($distinct as $type) {
+            foreach ($type->getAtomicTypes() as $atomic) {
+                if (!isset($kept[$atomic->getId()])) {
+                    if (!self::isContained($type, $merged)) {
+                        return false;
+                    }
+
+                    continue 2;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /** Unproven (no project analyzer, an unknown class) counts as not contained. */
+    private static function isContained(Union $type, Union $container): bool
+    {
+        try {
+            return ProjectAnalyzer::getInstance()->getCodebase()->isTypeContainedByType($type, $container);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException|\RuntimeException|\Error) {
+            return false;
+        }
     }
 
     /**
@@ -305,26 +518,183 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     private static function isContextDependent(Union $union): bool
     {
-        $visitor = new class extends TypeVisitor {
+        return self::anyAtomic($union, static fn(Atomic $atomic): bool => $atomic instanceof Atomic\TTemplateParam
+            || $atomic instanceof Atomic\TTemplateParamClass
+            || $atomic instanceof Atomic\TTemplateIndexedAccess
+            || $atomic instanceof Atomic\TTemplateKeyOf
+            || $atomic instanceof Atomic\TTemplatePropertiesOf
+            || $atomic instanceof Atomic\TTemplateValueOf
+            || $atomic instanceof Atomic\TConditional);
+    }
+
+    /** @psalm-pure */
+    private static function carriesLateStatic(Union $union): bool
+    {
+        return self::anyAtomic($union, static fn(Atomic $atomic): bool => $atomic instanceof Atomic\TNamedObject && $atomic->is_static);
+    }
+
+    /**
+     * Whether any atomic in the type matches, at any depth. `get_class($x)` keeps the type of `$x` in
+     * `TDependentGetClass::$as_type`, which Psalm's visitor does not descend into, so this does.
+     *
+     * @param \Closure[pure](Atomic): bool $matches
+     *
+     * @psalm-pure
+     */
+    private static function anyAtomic(Union $union, \Closure $matches): bool
+    {
+        $visitor = new class ($matches) extends TypeVisitor {
             public bool $found = false;
 
-            /**
-             * @psalm-external-mutation-free
-             */
+            /** @param \Closure[pure](Atomic): bool $matches */
+            public function __construct(private readonly \Closure $matches) {}
+
+            /** @psalm-external-mutation-free */
             #[\Override]
             protected function enterNode(TypeNode $type): ?int
             {
-                if ($type instanceof Atomic\TTemplateParam
-                    || $type instanceof Atomic\TTemplateParamClass
-                    || $type instanceof Atomic\TTemplateIndexedAccess
-                    || $type instanceof Atomic\TTemplateKeyOf
-                    || $type instanceof Atomic\TTemplatePropertiesOf
-                    || $type instanceof Atomic\TTemplateValueOf
-                    || $type instanceof Atomic\TConditional
-                ) {
+                if ($type instanceof Atomic && ($this->matches)($type)) {
                     $this->found = true;
+                } elseif ($type instanceof Atomic\TDependentGetClass) {
+                    $this->traverse($type->as_type);
+                }
 
-                    return self::STOP_TRAVERSAL;
+                return $this->found ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        $visitor->traverse($union);
+
+        return $visitor->found;
+    }
+
+    /**
+     * Whether dropping every `&static` in the type only widens it. That holds where the marker sits
+     * in a covariant position: the top level, an array or iterable, a class-string, a callable's
+     * return, or a template parameter the class declares covariant. In a callable parameter the
+     * marker-free type promises to accept more; in an invariant template parameter Psalm rejects
+     * `Foo&static` against `Foo`. Either way the declaration would contradict the call site, so the
+     * name is left undeclared instead.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function dropsLateStaticSafely(Union $union): bool
+    {
+        foreach ($union->getAtomicTypes() as $atomic) {
+            if (!self::dropsLateStaticSafelyIn($atomic)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @psalm-capabilities read-props */
+    private static function dropsLateStaticSafelyIn(Atomic $atomic): bool
+    {
+        if ($atomic instanceof Atomic\TCallable || $atomic instanceof Atomic\TClosure) {
+            foreach ($atomic->params ?? [] as $param) {
+                if ($param->type instanceof Union && self::carriesLateStatic($param->type)) {
+                    return false;
+                }
+            }
+
+            return !$atomic->return_type instanceof Union || self::dropsLateStaticSafely($atomic->return_type);
+        }
+
+        if ($atomic instanceof Atomic\TGenericObject) {
+            foreach ($atomic->type_params as $offset => $param) {
+                if (self::carriesLateStatic($param)
+                    && (!self::isCovariantTemplate($atomic->value, $offset) || !self::dropsLateStaticSafely($param))
+                ) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if ($atomic instanceof Atomic\TArray || $atomic instanceof Atomic\TIterable) {
+            return self::allDropLateStaticSafely($atomic->type_params);
+        }
+
+        if ($atomic instanceof Atomic\TKeyedArray) {
+            return self::allDropLateStaticSafely([...\array_values($atomic->properties), ...($atomic->fallback_params ?? [])]);
+        }
+
+        if ($atomic instanceof Atomic\TDependentGetClass) {
+            return self::dropsLateStaticSafely($atomic->as_type);
+        }
+
+        // A plain object (its own marker) and a class-string of one are covariant in that class.
+        if ($atomic instanceof Atomic\TNamedObject || $atomic instanceof Atomic\TClassString) {
+            return true;
+        }
+
+        return !self::carriesLateStatic(new Union([$atomic]));
+    }
+
+    /**
+     * @param array<Union> $types
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function allDropLateStaticSafely(array $types): bool
+    {
+        foreach ($types as $type) {
+            if (!self::dropsLateStaticSafely($type)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Unproven (an unknown class, storage not populated, no project analyzer) counts as not covariant.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isCovariantTemplate(string $class, int $offset): bool
+    {
+        try {
+            $storage = ProjectAnalyzer::getInstance()->getCodebase()->classlike_storage_provider->get($class);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException|\RuntimeException|\Error) {
+            return false;
+        }
+
+        return $storage->template_covariants[$offset] ?? false;
+    }
+
+    /**
+     * A template has no class scope, so `&static` (what Collection methods return) has nothing to bind
+     * to. Stripped at every depth before the agreement check, so two producers differing only by it
+     * agree; reached only once {@see self::dropsLateStaticSafely()} proved that only widens the type.
+     * Types are copy-on-write: the instance Psalm inferred is never mutated.
+     */
+    private static function withoutLateStatic(Union $union): Union
+    {
+        $visitor = new class extends MutableTypeVisitor {
+            /**
+             * @template T of TypeNode
+             * @param T $type
+             * @param-out T $type
+             * @return MutableTypeVisitor::STOP_TRAVERSAL|MutableTypeVisitor::DONT_TRAVERSE_CHILDREN|null
+             * @psalm-suppress ReferenceConstraintViolation T is narrowed to the one atomic rebuilt here
+             */
+            #[\Override]
+            protected function enterNode(TypeNode &$type): ?int
+            {
+                if ($type instanceof Atomic\TNamedObject) {
+                    $type = $type->setIsStatic(false);
+                } elseif ($type instanceof Atomic\TDependentGetClass) {
+                    // `get_class($x)` keeps the type of `$x` in `as_type`, which Psalm's visitor does not descend into.
+                    $inner = $type->as_type;
+                    $this->traverse($inner);
+
+                    if ($inner !== $type->as_type) {
+                        $type = new Atomic\TDependentGetClass($type->typeof, $inner);
+                    }
                 }
 
                 return null;
@@ -333,6 +703,6 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         $visitor->traverse($union);
 
-        return $visitor->found;
+        return $union;
     }
 }

@@ -51,47 +51,15 @@ final class AnnotateCommandTest extends TestCase
     }
 
     #[Test]
-    public function forces_single_threaded_analysis(): void
+    public function forwards_the_callers_thread_count_so_the_scan_runs_in_parallel(): void
     {
-        // Plugin statics collected in a forked worker never reach the parent process, where the
-        // AfterAnalysis write runs, so a multi-threaded run would annotate nothing.
-        $command = new AnnotateCommand();
-
-        $this->assertSame(['--threads=1'], $command->forwardedArguments(['psalm-laravel', 'blade:annotate']));
-    }
-
-    #[Test]
-    public function overrides_a_thread_count_the_caller_asked_for(): void
-    {
+        // The plugin pins the analysis to one process itself; forcing `--threads=1` here would
+        // serialise the scan for nothing.
         $command = new AnnotateCommand();
 
         $this->assertSame(
-            ['--threads=1'],
-            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--threads=8']),
-        );
-    }
-
-    #[Test]
-    public function keeps_its_own_dry_run_flag_out_of_the_forwarded_tokens(): void
-    {
-        $command = new AnnotateCommand();
-
-        $this->assertSame(
-            ['--threads=1', '-c', 'psalm.xml'],
-            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--dry-run', '-c', 'psalm.xml']),
-        );
-    }
-
-    #[Test]
-    public function puts_the_forced_thread_count_before_the_forwarded_arguments(): void
-    {
-        // PHP's getopt() stops at the first positional argument, so a --threads=1 appended after one
-        // is never parsed: the child forks, and the pass then refuses to write anything.
-        $command = new AnnotateCommand();
-
-        $this->assertSame(
-            ['--threads=1', '-c', 'psalm.xml'],
-            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '-c', 'psalm.xml']),
+            ['--threads=8', '-c', 'psalm.xml'],
+            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--threads=8', '-c', 'psalm.xml']),
         );
     }
 
@@ -206,6 +174,72 @@ final class AnnotateCommandTest extends TestCase
     }
 
     #[Test]
+    public function prints_a_dry_run_diff_with_template_markup_intact(): void
+    {
+        // The diff is console-formatted for colour; unescaped, `<x-card>` would be read as a style
+        // tag and the printed patch would no longer apply.
+        $diff = "--- a/v.blade.php\n+++ b/v.blade.php\n@@ -1 +1,4 @@\n+<?php\n+/** @var string \$t */\n+?>\n <x-card>{{ \$t }}</x-card>\r\n";
+        $output = new BufferedOutput();
+
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => true,
+            'changed' => ['v.blade.php' => ['t']],
+            'failures' => [],
+            'diff' => $diff,
+        ], $output));
+
+        $this->assertStringContainsString($diff, $output->fetch());
+    }
+
+    #[Test]
+    public function prints_the_diff_after_a_write_too(): void
+    {
+        $diff = "--- a/v.blade.php\n+++ b/v.blade.php\n@@ -1 +1,4 @@\n+<?php\n+/** @var string \$t */\n+?>\n <x-card>{{ \$t }}</x-card>\r\n";
+        $output = new BufferedOutput();
+
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => ['v.blade.php' => ['t']],
+            'failures' => [],
+            'diff' => $diff,
+        ], $output));
+
+        $display = $output->fetch();
+        $this->assertStringContainsString($diff, $display);
+        $this->assertStringContainsString('1 template(s) annotated.', $display);
+    }
+
+    #[Test]
+    public function lists_the_changed_templates_instead_of_the_diff_under_no_diffs(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $output = new BufferedOutput();
+
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => ['v.blade.php' => ['t', 'rows']],
+                'failures' => [],
+                'diff' => "--- a/v.blade.php\n+++ b/v.blade.php\n@@ -1 +1,2 @@\n+<?php\n",
+            ], $output, null, false));
+
+            $display = $output->fetch();
+            $this->assertStringContainsString('v.blade.php (t, rows)', $display);
+            $this->assertStringNotContainsString('@@', $display);
+        }
+    }
+
+    #[Test]
+    public function keeps_its_own_flags_out_of_the_forwarded_tokens(): void
+    {
+        $command = new AnnotateCommand();
+
+        $this->assertSame(
+            ['-c', 'psalm.xml'],
+            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--dry-run', '--no-diffs', '-c', 'psalm.xml']),
+        );
+    }
+
+    #[Test]
     public function lists_the_names_no_call_site_types_instead_of_claiming_every_template_is_declared(): void
     {
         foreach ([true, false] as $dryRun) {
@@ -226,13 +260,66 @@ final class AnnotateCommandTest extends TestCase
         }
     }
 
+    #[Test]
+    public function lists_one_line_per_name_its_call_sites_disagree_on_in_either_mode(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $output = new BufferedOutput();
+
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => [],
+                'failures' => [],
+                'diff' => '',
+                'unknown' => [],
+                'disagreed' => ['posts.index' => [
+                    'key' => ['int', 'string'],
+                    'rows' => ['Illuminate\Support\Collection<int, App\Post>', 'Illuminate\Support\Collection<int, App\Video>'],
+                ]],
+            ], $output));
+
+            $display = $output->fetch();
+            $this->assertStringContainsString('call sites disagree', $display);
+            $this->assertStringContainsString('posts.index $key: int vs string', $display);
+            $this->assertStringContainsString(
+                'posts.index $rows: Illuminate\Support\Collection<int, App\Post> vs Illuminate\Support\Collection<int, App\Video>',
+                $display,
+                'a generic type is printed as is, never read as a console style tag',
+            );
+            $this->assertStringNotContainsString('Every template already declares', $display);
+        }
+    }
+
+    #[Test]
+    public function shows_psalms_own_output_only_when_the_pass_never_ran(): void
+    {
+        // A whole-project run prints hundreds of findings that bury the summary, so a run that
+        // annotated (or found nothing to) hides them; one that never reached the pass shows them,
+        // since they are the only clue why.
+        $psalmOutput = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm-output.txt';
+        \file_put_contents($psalmOutput, "ERROR: ParseError - app/Broken.php:3:1\n");
+
+        $neverRan = new BufferedOutput();
+        $this->reportExitCode(['dryRun' => false], $neverRan, $psalmOutput);
+        $this->assertStringContainsString('ParseError - app/Broken.php', $neverRan->fetch());
+
+        $ran = new BufferedOutput();
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => [],
+            'failures' => [],
+            'diff' => '',
+        ], $ran, $psalmOutput));
+        $this->assertStringNotContainsString('ParseError', $ran->fetch());
+    }
+
     /**
      * Drives the reporting half of the command directly: the exit code depends on what the child
      * published, and no CommandTester run can produce a child.
      *
      * @param array<string, mixed> $published
      */
-    private function reportExitCode(array $published, ?BufferedOutput $output = null): int
+    private function reportExitCode(array $published, ?BufferedOutput $output = null, ?string $psalmOutput = null, bool $showDiffs = true): int
     {
         $controlFile = $this->tempDir . \DIRECTORY_SEPARATOR . 'control.json';
         \file_put_contents($controlFile, (string) \json_encode($published));
@@ -242,6 +329,6 @@ final class AnnotateCommandTest extends TestCase
         $io = new SymfonyStyle(new ArrayInput([]), $output ?? new BufferedOutput());
 
         /** @var int */
-        return $report->invoke($command, $io, $controlFile, 0);
+        return $report->invoke($command, $io, $controlFile, 0, $psalmOutput, $showDiffs);
     }
 }

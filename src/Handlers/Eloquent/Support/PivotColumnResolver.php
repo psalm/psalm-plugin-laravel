@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Support;
 
+use Illuminate\Database\Eloquent\Concerns\HasAttributes;
 use Illuminate\Database\Eloquent\Concerns\HasRelationships;
 use Illuminate\Database\Eloquent\Concerns\HasTimestamps;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Concerns\AsPivot;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Support\DateFactory;
@@ -20,14 +22,21 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TypeExpander;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TObjectWithProperties;
+use Psalm\Type\TypeNode;
+use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
@@ -42,9 +51,9 @@ final class PivotColumnResolver
     private const FACTORY_TABLE_POSITION = ['belongstomany' => 1, 'morphtomany' => 2, 'morphedbymany' => 2];
 
     /** Declarers of the Laravel defaults a model may inherit. */
-    private const STOCK_DECLARERS = [HasRelationships::class, HasTimestamps::class, Model::class];
+    private const STOCK_DECLARERS = [HasRelationships::class, HasTimestamps::class, HasAttributes::class, AsPivot::class, Model::class];
 
-    /** Relation methods that return `$this` and cannot change the pivot class or table (Laravel 12.20 and 13). */
+    /** Relation methods that return `$this` and cannot change the pivot class or table (Laravel 12.27 and 13). */
     private const PIVOT_PRESERVING = [
         'withpivot', 'withtimestamps', 'as', 'withpivotvalue', 'orderbypivot',
         'wherepivot', 'wherepivotbetween', 'wherepivotnotbetween', 'wherepivotin', 'wherepivotnotin', 'wherepivotnull', 'wherepivotnotnull',
@@ -53,15 +62,19 @@ final class PivotColumnResolver
 
     /**
      * Reads the receiver chain from $outer down to its many-to-many factory call: the columns its calls select
-     * (innermost first) and the pivot table. `table` is false when the factory is not called on `$this`: it takes
-     * that model's timestamp names and default table, not the receiver's. `visible` is true only when every link
-     * is a method that returns the same relation with the same pivot class.
+     * (innermost first), the class the outermost `using()` sets and the pivot table. `table` is false when the
+     * factory is not called on `$this`: it takes that model's timestamp names and default table, not the receiver's.
+     * `visible` is true only when every link is a method that returns the same relation with the same pivot class,
+     * or a `using()` that names its class: the outermost one runs last and wins, so a dynamic one hides the chain.
      *
-     * @return array{columns: list<string>, table: string|false|null, visible: bool}
+     * @param \Closure(MethodCall): ?string $usingClass the class a `using()` call names
+     * @return array{columns: list<string>, using: ?string, table: string|false|null, visible: bool}
      */
-    public static function readChain(Codebase $codebase, Expr $outer, ?string $parentClass, ?string $relatedClass): array
+    public static function readChain(Codebase $codebase, Expr $outer, ?string $parentClass, ?string $relatedClass, \Closure $usingClass): array
     {
         $columns = [];
+        $using = null;
+        $usingSeen = false;
         $visible = true;
         for ($call = $outer; $call instanceof MethodCall && $call->name instanceof Identifier; $call = $call->var) {
             $name = \strtolower($call->name->name);
@@ -73,16 +86,26 @@ final class PivotColumnResolver
                 // but a refusal (false) stands.
                 return [
                     'columns' => $columns,
+                    'using' => $using,
                     'table' => \is_string($table) && !$visible ? null : $table,
                     'visible' => $visible && $onThis,
                 ];
             }
 
-            $visible = $visible && self::keepsPivot($name);
+            if ($name === 'using') {
+                if (!$usingSeen) {
+                    $usingSeen = true;
+                    $using = $usingClass($call);
+                    $visible = $visible && $using !== null;
+                }
+            } else {
+                $visible = $visible && self::keepsPivot($name);
+            }
+
             $columns = [...self::callColumns($codebase, $call, $name, $parentClass), ...$columns];
         }
 
-        return ['columns' => $columns, 'table' => null, 'visible' => false];
+        return ['columns' => $columns, 'using' => $using, 'table' => null, 'visible' => false];
     }
 
     /**
@@ -221,30 +244,43 @@ final class PivotColumnResolver
     }
 
     /**
-     * Each column's type, first hit wins: the date type of the parent's created/updated column when the pivot's
-     * hydration provably casts it, the relation table's schema type, `mixed` (rationale: decisions.md,
-     * "`withPivot()` columns refine TPivotModel").
+     * Each column's type, first hit wins: the custom `using()` pivot's own answer, the date type of the parent's
+     * created/updated column when the pivot's hydration provably casts it, the relation table's schema type,
+     * `mixed` (rationale: decisions.md, "`withPivot()` columns refine TPivotModel").
      *
      * @param list<string> $columns
      * @param ?string $parentClass the model the relation is called on
      * @param bool $visible every link between the factory and the call is a pivot-preserving method
+     * @param ?string $using the pivot class a visible chain's `using()` sets, or the custom class of a hidden slot;
+     *     null for the plain pivot
      * @return array<string, Union>
      */
-    public static function columnTypes(Codebase $codebase, ?string $table, array $columns, ?string $parentClass, bool $visible): array
+    public static function columnTypes(Codebase $codebase, ?string $table, array $columns, ?string $parentClass, bool $visible, ?string $using = null): array
     {
-        $schemaTable = $table === null ? null : SchemaStateProvider::getSchema()?->tables[$table] ?? null;
+        // On the `using()` path the relation table is read only on a visible chain: a hidden one may have swapped it.
+        $schemaTable = $table === null || $using !== null && !$visible ? null : SchemaStateProvider::getSchema()?->tables[$table] ?? null;
         $parent = $parentClass === null ? null : self::parentTimestamps($codebase, $parentClass);
-        // `Pivot::fromAttributes()` switches its date casts on when its OWN `created_at` is selected. A
-        // `using()` pivot checks the parent's column instead, so only a visible chain proves which kind it is.
-        $dates = $visible && \in_array(Model::CREATED_AT, $columns, true);
+        // A plain pivot's `fromAttributes()` switches its date casts on when its OWN `created_at` is selected. Any
+        // `using()` pivot hydrates raw attributes and checks the parent's column instead, so only a visible chain
+        // proves which kind it is, and a class that moves its date handling or raw reads proves nothing.
+        $raw = $using !== null && $visible && self::hasStockHydration($codebase, $using);
+        $dates = $using === null
+            ? $visible && \in_array(Model::CREATED_AT, $columns, true)
+            : $raw && $parent !== null && $parent[0] !== null && \in_array($parent[0], $columns, true);
         $types = [];
         foreach ($columns as $column) {
             $schemaColumn = $schemaTable?->columns[$column] ?? null;
-            if ($parent !== null && ($column === $parent[0] || $column === $parent[1])) {
+            $own = $using === null || self::isFramework($using) ? null : self::ownType($codebase, $using, $column, $schemaColumn?->nullable ?? true, $raw);
+            if ($own instanceof Union) {
+                $types[$column] = $own;
+            } elseif ($parent !== null && ($column === $parent[0] || $column === $parent[1])) {
                 $types[$column] = ($dates ? self::dateType($codebase, $schemaColumn?->nullable ?? true) : null) ?? Type::getMixed();
-            } elseif ($parent === null || $schemaColumn === null || \in_array($column, [Model::CREATED_AT, Model::UPDATED_AT], true)) {
+            } elseif (
+                $parent === null || $schemaColumn === null
                 // A plain pivot's forceFill() runs before it has a parent, so it date-normalizes the DEFAULT
                 // names into strings that the parent's own names never read back as dates.
+                || ($using === null ? \in_array($column, [Model::CREATED_AT, Model::UPDATED_AT], true) : !$raw)
+            ) {
                 $types[$column] = Type::getMixed();
             } else {
                 $type = ColumnTypeMapper::mapBaseType(ModelMetadataRegistryBuilder::buildColumnInfo($schemaColumn));
@@ -256,16 +292,28 @@ final class PivotColumnResolver
     }
 
     /**
+     * The pivot class whose own types the columns read: a visible chain's `using()` class, else a hidden slot
+     * that is a custom pivot. Null for the framework's plain pivot, where a hidden chain proves nothing, and for a
+     * templated class, whose parameters a rebuilt shape would lose.
+     *
+     * @psalm-capabilities read-props
+     */
+    public static function usingFor(Codebase $codebase, ?string $class, bool $visible): ?string
+    {
+        return $class !== null && ($visible || !self::isFramework($class)) && !self::isGeneric($codebase, $class) ? $class : null;
+    }
+
+    /**
      * $pivot with $properties added to its object shape (a column already in it keeps its type: Laravel
-     * only appends pivot columns, it never retypes one), or null unless $pivot is exactly `Pivot` /
-     * `MorphPivot`, optionally already carrying one shape.
+     * only appends pivot columns, it never retypes one), or null unless $pivot is exactly `$using` (else `Pivot` /
+     * `MorphPivot`), optionally already carrying one shape.
      *
      * @param array<string, Union> $properties
      * @psalm-pure
      */
-    public static function refine(Atomic $pivot, array $properties): ?TNamedObject
+    public static function refine(Atomic $pivot, array $properties, ?string $using = null): ?TNamedObject
     {
-        if ($pivot::class !== TNamedObject::class || \strcasecmp($pivot->value, Pivot::class) !== 0 && \strcasecmp($pivot->value, MorphPivot::class) !== 0) {
+        if ($pivot::class !== TNamedObject::class || ($using === null ? !self::isFramework($pivot->value) : \strcasecmp($pivot->value, $using) !== 0)) {
             return null;
         }
 
@@ -286,7 +334,7 @@ final class PivotColumnResolver
     /**
      * The columns a `withTimestamps($createdAt, $updatedAt)` call selects: a literal name is itself, an absent
      * or `null` one is the parent's column (`createdAt()` falls back to `created_at` for a disabled constant).
-     * `false` disables the column in Laravel 13 and names none in 12.20, a dynamic name is unknown: neither adds one.
+     * `false` disables the column in Laravel 13 and names none in 12.27, a dynamic name is unknown: neither adds one.
      *
      * @return list<string>
      */
@@ -410,5 +458,154 @@ final class PivotColumnResolver
         }
 
         return $declaring instanceof MethodIdentifier && \in_array($declaring->fq_class_name, self::STOCK_DECLARERS, true);
+    }
+
+    /**
+     * The type custom pivot $class gives $column itself, null when it says nothing. Psalm's direct-read order:
+     * a native property, an `@property`, an accessor, then the cast or column of the class's default table; those
+     * beat an object shape on read, so the shape must repeat them, bound to $class as a direct read binds them.
+     * A class the registry does not hold completely may transform the column past the first two: `mixed`. A cast on
+     * a column the default table lacks still applies to the relation table's column, which is null-passing for
+     * primitive casts, unless the class changes how raw values are read.
+     *
+     * @param bool $nullable whether the column may be null in the relation's table
+     * @param bool $proven the chain is visible and the class keeps the stock hydration, so the cast fallback applies
+     */
+    private static function ownType(Codebase $codebase, string $class, string $column, bool $nullable, bool $proven): ?Union
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get($class);
+            $declaring = $storage->declaring_property_ids[$column] ?? null;
+            if ($declaring !== null) {
+                return self::bind($codebase, $storage, ($codebase->classlike_storage_provider->get($declaring)->properties[$column] ?? null)?->type);
+            }
+        } catch (\InvalidArgumentException) {
+            return Type::getMixed();
+        }
+
+        $pseudo = $storage->pseudo_property_get_types['$' . $column] ?? null;
+        if ($pseudo instanceof Union) {
+            return self::bind($codebase, $storage, $pseudo);
+        }
+
+        /** @var class-string<Model> $class */
+        $metadata = ModelMetadataRegistry::for($class);
+        if (!$metadata instanceof ModelMetadata || !$metadata->isComplete(ModelMetadata::SECTION_METHODS | ModelMetadata::SECTION_CASTS)) {
+            return Type::getMixed();
+        }
+
+        $accessor = $metadata->accessor($column)?->returnType;
+        if ($accessor instanceof Union) {
+            return self::bind($codebase, $storage, $accessor);
+        }
+
+        // Cast-derived types belong to the cast's class, not to the pivot.
+        $own = ModelPropertyHandler::resolveColumnType($codebase, $class, $column);
+        if ($own instanceof Union) {
+            return self::unbound($own);
+        }
+
+        $cast = ($metadata->casts()[$column] ?? null)?->psalmType;
+        if (!$cast instanceof Union) {
+            return null;
+        }
+
+        return !$proven ? Type::getMixed() : self::unbound($nullable ? Type::combineUnionTypes($cast, Type::getNull()) : $cast);
+    }
+
+    /**
+     * $type as a direct read of the property binds it: `self`, `static`, `$this` and `parent` are the pivot class
+     * itself. Left relative they would resolve against whatever class reads the shape. `mixed` when not provable.
+     */
+    private static function bind(Codebase $codebase, ClassLikeStorage $storage, ?Union $type): Union
+    {
+        if (!$type instanceof Union) {
+            return Type::getMixed();
+        }
+
+        return self::unbound(TypeExpander::expandUnion($codebase, $type, $storage->name, $storage->name, $storage->parent_class, final: true));
+    }
+
+    /**
+     * $type, or `mixed` when `self` / `static` / `$this` / `parent` is left in it, generics, shapes and callables
+     * included: a type the pivot did not declare (a cast's) is relative to another class.
+     *
+     * @psalm-pure
+     */
+    private static function unbound(Union $type): Union
+    {
+        $visitor = new class extends TypeVisitor {
+            /** @psalm-pure */
+            #[\Override]
+            protected function enterNode(TypeNode $type): ?int
+            {
+                $relative = $type instanceof TNamedObject
+                    && ($type->is_static || \in_array(\strtolower($type->value), ['self', 'static', 'parent', '$this'], true));
+
+                return $relative ? self::STOP_TRAVERSAL : null;
+            }
+        };
+
+        // traverse() returns false exactly when enterNode() stopped the traversal.
+        return $visitor->traverse($type) ? $type : Type::getMixed();
+    }
+
+    /**
+     * Whether the pivot class hydrates and reads attributes as stock Laravel does, so the parent's created column
+     * and `getDates()` alone decide which columns are dates and the relation table's raw values are what is read.
+     * The class (own body, ancestors, traits) must override no method of `HasAttributes`, `HasTimestamps` or
+     * `AsPivot` except `casts()`, nor `__get()` / `__call()` of `Model`. Accessors, mutators, relations and
+     * lifecycle hooks are no Laravel methods, so they stay stock.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function hasStockHydration(Codebase $codebase, string $class): bool
+    {
+        if (self::isFramework($class)) {
+            return true;
+        }
+
+        try {
+            $declared = $codebase->classlike_storage_provider->get($class)->declaring_method_ids;
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        $surface = ['__get' => true, '__call' => true];
+        foreach ([HasAttributes::class, HasTimestamps::class, AsPivot::class] as $concern) {
+            foreach ((new \ReflectionClass($concern))->getMethods() as $method) {
+                $surface[\strtolower($method->name)] = true;
+            }
+        }
+
+        unset($surface['casts']);
+
+        foreach ($declared as $name => $id) {
+            if (isset($surface[$name]) && !\in_array($id->fq_class_name, self::STOCK_DECLARERS, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * A templated pivot class loses its parameters when rebuilt from its name.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isGeneric(Codebase $codebase, string $class): bool
+    {
+        try {
+            return $codebase->classlike_storage_provider->get($class)->template_types !== null;
+        } catch (\InvalidArgumentException) {
+            return true;
+        }
+    }
+
+    /** @psalm-pure */
+    private static function isFramework(string $class): bool
+    {
+        return \strcasecmp($class, Pivot::class) === 0 || \strcasecmp($class, MorphPivot::class) === 0;
     }
 }
