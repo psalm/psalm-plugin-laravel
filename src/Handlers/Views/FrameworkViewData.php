@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\Mail\Message;
+use Illuminate\Mail\TextMessage;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
@@ -35,15 +36,19 @@ use Psalm\Type\Union;
  * wins over the `toArray()` one. The `toArray()` keys are `mixed`: the vendor property docblocks are
  * coarse (`array`) and wrong for the null defaults.
  *
- * Mailer: `Mailer::send()` adds `message`. `view()` and `markdown()` order that against the data
- * differently, so a call that also supplies a `message`, or whose data is not fully known, makes the
- * key `mixed`.
+ * Mailer: `Mailer::send()` and `render()` set `message` after every merge, so on the `view()` path it
+ * is the `Message` always, whatever a property, a passed key or an override says. The markdown
+ * renderers merge the data over it instead (`Mailable::buildMarkdownHtml()`/`buildMarkdownText()`,
+ * `MailChannel`): a property or passed `message` wins there, an override or data not fully known
+ * makes it `mixed`, and a Mailable's text pass wraps it in `TextMessage` (not a `Message` subclass),
+ * so it is `Message|TextMessage`.
  *
  * Livewire: `HandleComponents::getView()` renders `render()`'s view with
  * `Utils::getPublicPropertiesDefinedOnSubclass()` (livewire/livewire src/Mechanisms/HandleComponents/
  * HandleComponents.php, src/Drawer/BaseUtils.php): public, non-static properties whose declaring
  * class is neither `Livewire\Component` nor `Livewire\Volt\Component`. `generateBladeView()` then calls
- * `->with($properties)` on the view `render()` returned, so a property wins over a passed key.
+ * `->with($properties)` on the view `render()` returned, so a property wins over a passed key. Only
+ * that view gets them: a mail view built on the side inside `render()` does not.
  *
  * An abstract Mailable or Livewire component leaves the set open: a concrete subclass can add public
  * properties its base does not declare. A concrete receiver that is itself subclassed,
@@ -76,10 +81,11 @@ final class FrameworkViewData
     /**
      * @param array<string, Union> $passed         the data the call itself supplies
      * @param bool                 $passedComplete whether `$passed` is every key the call supplies
+     * @param bool                 $markdown       whether the template is bound by `markdown()` rather than `view()`
      *
      * @return array{0: array<string, Union>, 1: bool}
      */
-    public static function forMailable(?string $receiver, array $passed, bool $passedComplete, StatementsSource $source): array
+    public static function forMailable(?string $receiver, array $passed, bool $passedComplete, bool $markdown, StatementsSource $source): array
     {
         $codebase = $source->getCodebase();
         $storage = $receiver === null ? null : ViewClassProperties::storage($codebase, $receiver);
@@ -115,7 +121,10 @@ final class FrameworkViewData
             }
         }
 
-        $keys['message'] = self::messageType($open || !$passedComplete || isset($keys['message']) || isset($passed['message']));
+        // On the markdown path a property named `message` already won; `view()` always overwrites it.
+        if (!$markdown || !isset($keys['message'])) {
+            $keys = self::messageKey($markdown, $passed, $open || !$passedComplete, true) + $keys;
+        }
 
         foreach (self::MAILABLE_EXTRA as $name) {
             $keys[$name] = Type::getMixed();
@@ -131,7 +140,7 @@ final class FrameworkViewData
      *
      * @return array{0: array<string, Union>, 1: bool}
      */
-    public static function forMailMessage(?string $receiver, array $passed, bool $passedComplete, StatementsSource $source): array
+    public static function forMailMessage(?string $receiver, array $passed, bool $passedComplete, bool $markdown, StatementsSource $source): array
     {
         $codebase = $source->getCodebase();
         $storage = $receiver === null ? null : ViewClassProperties::storage($codebase, $receiver);
@@ -140,7 +149,7 @@ final class FrameworkViewData
             || self::overrides($storage, 'data', self::MAIL_MESSAGE)
             || self::overrides($storage, 'toarray', self::SIMPLE_MESSAGE)
         ) {
-            return [[], false];
+            return [self::messageKey($markdown, $passed, true, false), false];
         }
 
         $keys = [];
@@ -156,7 +165,7 @@ final class FrameworkViewData
             }
         }
 
-        $keys['message'] = self::messageType(!$passedComplete || isset($passed['message']));
+        $keys = self::messageKey($markdown, $passed, !$passedComplete, false) + $keys;
 
         foreach (self::MAIL_MESSAGE_EXTRA as $name) {
             $keys[$name] = Type::getMixed();
@@ -215,11 +224,35 @@ final class FrameworkViewData
     }
 
     /**
+     * The `message` entry, empty when the call's own `message` must be checked as passed.
+     *
+     * `Mailer::send()` and `render()` set it after every merge, so on the `view()` path it is the
+     * `Message` always. The markdown renderers merge the data over it instead, so a passed `message`
+     * wins, and so does an unknowable one. A Mailable's text pass first wraps it in `TextMessage`.
+     *
+     * @param array<string, Union> $passed
+     *
+     * @return array<string, Union>
+     *
      * @psalm-pure
      */
-    private static function messageType(bool $clashes): Union
+    private static function messageKey(bool $markdown, array $passed, bool $unknown, bool $textPass): array
     {
-        return $clashes ? Type::getMixed() : new Union([new TNamedObject(Message::class)]);
+        if (!$markdown) {
+            return ['message' => new Union([new TNamedObject(Message::class)])];
+        }
+
+        if (isset($passed['message'])) {
+            return [];
+        }
+
+        $atomics = [new TNamedObject(Message::class)];
+
+        if ($textPass) {
+            $atomics[] = new TNamedObject(TextMessage::class);
+        }
+
+        return ['message' => $unknown ? Type::getMixed() : new Union($atomics)];
     }
 
     private static function typeOf(

@@ -480,6 +480,58 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * `Mailer::send()` and `render()` set `message` after every merge, so on the `view()` path the
+     * template gets the `Message` object whatever a property, an extraction override or `toArray()`
+     * says. Only the markdown renderers merge the view data over it, so there a property wins.
+     */
+    #[Test]
+    public function the_message_key_loses_to_a_property_on_the_markdown_path_only(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        foreach (['MailableMessageProperty.php', 'MailableOverrideTypes.php', 'MailMessageOverrideTypes.php'] as $file) {
+            $reported = $this->forFile($issues, $file);
+
+            $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), $file . \var_export($issues, true));
+            $this->assertStringContainsString('declares $message as string, but this call passes Illuminate\Mail\Message.', $reported[0]['message'], $file);
+        }
+    }
+
+    /**
+     * `Mailable::buildMarkdownText()` wraps `message` in `TextMessage` for the text pass, so a markdown
+     * Mailable's template receives either object. `MailChannel` and the `view()` path hand it the
+     * `Message` alone.
+     */
+    #[Test]
+    public function a_markdown_mailables_message_is_a_message_or_a_text_message(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'MailableMarkdownMessage.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), \var_export($issues, true));
+        $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes Illuminate\Mail\Message|Illuminate\Mail\TextMessage.', $reported[0]['message']);
+        $this->assertSame([], $this->forFile($issues, 'MailMessageMarkdownMessage.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A `message` the call passes is replaced by the Mailer on the `view()` path and kept by the
+     * markdown renderer, so only there is the passed value checked.
+     */
+    #[Test]
+    public function a_passed_message_is_checked_on_the_markdown_path_only(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        foreach (['MailableMessagePassed.php', 'MailMessageMessagePassed.php'] as $file) {
+            $reported = $this->forFile($issues, $file);
+
+            $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), $file . \var_export($issues, true));
+            $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes ', $reported[0]['message'], $file);
+            $this->assertStringNotContainsString('passes Illuminate\Mail\Message', $reported[0]['message'], $file);
+        }
+    }
+
+    /**
      * A subclass of an abstract Mailable or Livewire component can add public properties the base
      * does not declare, so a variable no property supplies is not provably absent.
      */

@@ -382,10 +382,12 @@ final class ViewCallChain
 
         $chain = self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role, $trimName);
 
+        $markdown = $methodName === 'markdown';
+
         return match ($role) {
-            ViewNameSignatures::ROLE_MAILABLE => $chain?->supplying(FrameworkViewData::forMailable($receiverClass, $chain->data, $chain->complete, $source)),
+            ViewNameSignatures::ROLE_MAILABLE => $chain?->supplying(FrameworkViewData::forMailable($receiverClass, $chain->data, $chain->complete, $markdown, $source)),
             ViewNameSignatures::ROLE_MAIL_MESSAGE => $chain?->supplying(
-                FrameworkViewData::forMailMessage($receiverClass, $chain->data, $chain->complete, $source),
+                FrameworkViewData::forMailMessage($receiverClass, $chain->data, $chain->complete, $markdown, $source),
             ),
             default => $chain,
         };
