@@ -36,6 +36,8 @@ final class ViewContractValidationTest extends TestCase
 
     private const WRONG_TYPE = 'InvalidViewData';
 
+    private const TYPE_HINT = " Pass a value of the declared type, or correct the template's declaration.";
+
     /**
      * The command a case's `$config` resolves to. Cases naming the same config share one run.
      * `--show-info` keeps the `info` default of these experimental issues in the report.
@@ -108,10 +110,16 @@ final class ViewContractValidationTest extends TestCase
             $this->assertSame(self::MISSING, $issue['type']);
         }
 
-        $messages = \implode("\n", \array_column($reported, 'message'));
-        $this->assertStringContainsString("'name'", $messages);
-        $this->assertStringContainsString("'age'", $messages);
-        $this->assertStringContainsString("'profile'", $messages);
+        $messages = \array_column($reported, 'message');
+        \sort($messages);
+
+        // The declaring line and the fix hint are part of the message.
+        $this->assertSame([
+            'View \'profile\' requires $age (int, resources/views/profile.blade.php:2), but this call does not pass \'age\'. '
+            . 'Pass it, or mark it optional with "= null" or a @props default.',
+            'View \'profile\' requires $name (string, resources/views/profile.blade.php:1), but this call does not pass \'name\'. '
+            . 'Pass it, or mark it optional with "= null" or a @props default.',
+        ], $messages);
     }
 
     #[Test]
@@ -122,8 +130,20 @@ final class ViewContractValidationTest extends TestCase
 
         $this->assertCount(1, $reported, \var_export($issues, true));
         $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
-        $this->assertStringContainsString('$name', $reported[0]['message']);
-        $this->assertStringContainsString('string', $reported[0]['message']);
+        $this->assertSame(
+            "View 'greeting' declares \$name as string, but this call passes 123." . self::TYPE_HINT,
+            $reported[0]['message'],
+        );
+    }
+
+    #[Test]
+    public function a_printed_type_carries_no_late_static_marker(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'StaticValue.php');
+
+        $this->assertSame([
+            "View 'inc.override' declares \$title as int, but this call passes Illuminate\\Database\\Eloquent\\Builder<Illuminate\\Database\\Eloquent\\Model>." . self::TYPE_HINT,
+        ], \array_column($reported, 'message'));
     }
 
     /**
@@ -229,7 +249,7 @@ final class ViewContractValidationTest extends TestCase
         \sort($messages);
 
         $this->assertSame([
-            "View 'component-methods' declares \$label as \\Closure(int): string, but Closure[impure](string):string is passed for it",
+            "View 'component-methods' declares \$label as \\Closure(int): string, but this call passes Closure[impure](string):string." . self::TYPE_HINT,
         ], $messages);
     }
 
@@ -245,9 +265,9 @@ final class ViewContractValidationTest extends TestCase
         \sort($messages);
 
         $this->assertSame([
-            "View 'component-inherited' declares \$retParent as \\Closure(int): \\ViewContractFixture\\VcBase, but Closure[impure](int):Illuminate\\View\\Component is passed for it",
-            "View 'component-inherited' declares \$traitParent as \\Closure(int): \\ViewContractFixture\\VcBase, but Closure[impure](int):Illuminate\\View\\Component is passed for it",
-            "View 'component-inherited' declares \$traitSelf as \\Closure(int): \\ViewContractFixture\\ComponentInherited, but Closure[impure](int):ViewContractFixture\\VcBase is passed for it",
+            "View 'component-inherited' declares \$retParent as \\Closure(int): \\ViewContractFixture\\VcBase, but this call passes Closure[impure](int):Illuminate\\View\\Component." . self::TYPE_HINT,
+            "View 'component-inherited' declares \$traitParent as \\Closure(int): \\ViewContractFixture\\VcBase, but this call passes Closure[impure](int):Illuminate\\View\\Component." . self::TYPE_HINT,
+            "View 'component-inherited' declares \$traitSelf as \\Closure(int): \\ViewContractFixture\\ComponentInherited, but this call passes Closure[impure](int):ViewContractFixture\\VcBase." . self::TYPE_HINT,
         ], $messages);
     }
 
@@ -264,7 +284,7 @@ final class ViewContractValidationTest extends TestCase
         $invokable = $this->forFile($issues, 'ComponentInvokable.php');
 
         $this->assertSame([
-            'View \'component-invokable\' declares $label as \Illuminate\View\InvokableComponentVariable<int>, but Illuminate\View\InvokableComponentVariable<string> is passed for it',
+            'View \'component-invokable\' declares $label as \Illuminate\View\InvokableComponentVariable<int>, but this call passes Illuminate\View\InvokableComponentVariable<string>.' . self::TYPE_HINT,
         ], \array_column($invokable, 'message'), \var_export($issues, true));
         $this->assertSame([self::WRONG_TYPE], \array_column($invokable, 'type'));
 
@@ -528,7 +548,7 @@ final class ViewContractValidationTest extends TestCase
         $reported = [];
 
         foreach ($this->forFile($this->contractIssues('psalm.xml'), 'ComposerCallSites.php') as $issue) {
-            \preg_match("/View '([^']+)' declares \\$(\\w+)/", $issue['message'], $matches);
+            \preg_match("/View '([^']+)' (?:declares|requires) \\$(\\w+)/", $issue['message'], $matches);
             $reported[] = "{$issue['type']} {$matches[1]} \${$matches[2]}";
         }
 
@@ -582,7 +602,7 @@ final class ViewContractValidationTest extends TestCase
 
         foreach ($reported as $issue) {
             $this->assertSame(self::WRONG_TYPE, $issue['type']);
-            $this->assertStringContainsString('$title as string, but int', (string) $issue['message']);
+            $this->assertStringContainsString('$title as string, but this call passes int.', (string) $issue['message']);
         }
     }
 
@@ -604,7 +624,7 @@ final class ViewContractValidationTest extends TestCase
         $this->assertCount(1, $reported, \var_export($reported, true));
         $this->assertSame(self::MISSING, $reported[0]['type']);
         $this->assertSame(2, $reported[0]['line_from']);
-        $this->assertStringContainsString("View 'inc.card' declares \$count", (string) $reported[0]['message']);
+        $this->assertStringContainsString("View 'inc.card' requires \$count", (string) $reported[0]['message']);
     }
 
     #[Test]
@@ -626,7 +646,7 @@ final class ViewContractValidationTest extends TestCase
         $this->assertCount(1, $reported, \var_export($reported, true));
         $this->assertSame(self::MISSING, $reported[0]['type']);
         $this->assertSame(1, $reported[0]['line_from']);
-        $this->assertStringContainsString("View 'greeting' declares \$name", (string) $reported[0]['message']);
+        $this->assertStringContainsString("View 'greeting' requires \$name", (string) $reported[0]['message']);
     }
 
     #[Test]
@@ -696,7 +716,7 @@ final class ViewContractValidationTest extends TestCase
 
         foreach ($reported as $issue) {
             $this->assertSame(self::WRONG_TYPE, $issue['type']);
-            $this->assertStringContainsString("View 'inc.card' declares \$title as string, but int", (string) $issue['message']);
+            $this->assertStringContainsString("View 'inc.card' declares \$title as string, but this call passes int.", (string) $issue['message']);
         }
     }
 
@@ -765,7 +785,7 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame(
             [self::WRONG_TYPE . ' $title', self::MISSING . ' $count', self::WRONG_TYPE . ' $count', self::WRONG_TYPE . ' $title'],
             \array_map(
-                static fn(array $issue): string => $issue['type'] . ' ' . (\preg_match('/declares (\\$\w+)/', $issue['message'], $m) === 1 ? $m[1] : ''),
+                static fn(array $issue): string => $issue['type'] . ' ' . (\preg_match('/(?:declares|requires) (\\$\w+)/', $issue['message'], $m) === 1 ? $m[1] : ''),
                 $this->forFile($issues, 'NamespacedViews.php'),
             ),
             \var_export($issues, true),

@@ -15,11 +15,11 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
+use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic;
-use Psalm\Type\MutableTypeVisitor;
 use Psalm\Type\TypeNode;
 use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
@@ -292,7 +292,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 continue;
             }
 
-            $type = self::withoutLateStatic($type);
+            $type = LateStatic::strip($type);
             $seen ??= [];
             $key = $type->getId(false);
             // Literals sharing an id (`1`, `100`) are combined, not replaced: the merge's containment
@@ -664,45 +664,5 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return $storage->template_covariants[$offset] ?? false;
-    }
-
-    /**
-     * A template has no class scope, so `&static` (what Collection methods return) has nothing to bind
-     * to. Stripped at every depth before the agreement check, so two producers differing only by it
-     * agree; reached only once {@see self::dropsLateStaticSafely()} proved that only widens the type.
-     * Types are copy-on-write: the instance Psalm inferred is never mutated.
-     */
-    private static function withoutLateStatic(Union $union): Union
-    {
-        $visitor = new class extends MutableTypeVisitor {
-            /**
-             * @template T of TypeNode
-             * @param T $type
-             * @param-out T $type
-             * @return MutableTypeVisitor::STOP_TRAVERSAL|MutableTypeVisitor::DONT_TRAVERSE_CHILDREN|null
-             * @psalm-suppress ReferenceConstraintViolation T is narrowed to the one atomic rebuilt here
-             */
-            #[\Override]
-            protected function enterNode(TypeNode &$type): ?int
-            {
-                if ($type instanceof Atomic\TNamedObject) {
-                    $type = $type->setIsStatic(false);
-                } elseif ($type instanceof Atomic\TDependentGetClass) {
-                    // `get_class($x)` keeps the type of `$x` in `as_type`, which Psalm's visitor does not descend into.
-                    $inner = $type->as_type;
-                    $this->traverse($inner);
-
-                    if ($inner !== $type->as_type) {
-                        $type = new Atomic\TDependentGetClass($type->typeof, $inner);
-                    }
-                }
-
-                return null;
-            }
-        };
-
-        $visitor->traverse($union);
-
-        return $union;
     }
 }

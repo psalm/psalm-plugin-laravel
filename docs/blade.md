@@ -262,7 +262,7 @@ By default Blade analysis never fails a run. If the compiler or view finder cann
 
 Degradation is all-or-nothing: the template facts the compile pass collects (contracts, data-include sets) are published only once the shadows have actually joined the analysis, so a run that turns the feature off reports nothing from it, and the [view data checks](config.md#view-data-checks) stay silent for that run.
 
-A template that fails to compile (see [Known limits](#known-limits)), or whose declarations crash the plugin's own parser, is skipped rather than aborting the run, and reported as a [`BladeCompileFailure`](issues/BladeCompileFailure.md) error on its line 1 (`Template not analysed: <cause>`). Being an issue, it survives `--no-progress`, fails the run, enters baselines, and reaches `<issueHandlers>`. This holds even when no template compiled. Other skipped templates (one that cannot be read, or whose shadow cannot be written) are summarized in one warning instead: up to three paths are named directly, and `--debug` lists every individual cause.
+A template that fails to compile (see [Known limits](#known-limits)), or whose declarations crash the plugin's own parser, is skipped rather than aborting the run, and reported as a [`BladeCompileFailure`](issues/BladeCompileFailure.md) error on its line 1 (`Template not analyzed: <cause>`). Being an issue, it survives `--no-progress`, fails the run, enters baselines, and reaches `<issueHandlers>`. This holds even when no template compiled. Other skipped templates (one that cannot be read, or whose shadow cannot be written) are summarized in one warning instead: up to three paths are named directly, and `--debug` lists every individual cause.
 
 
 ## Declaring view variables

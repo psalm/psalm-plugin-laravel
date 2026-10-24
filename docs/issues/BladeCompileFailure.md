@@ -6,7 +6,7 @@ nav_order: 13
 
 # BladeCompileFailure
 
-Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on. The template is skipped, and the message reads `Template not analysed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
+Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on. The template is skipped, and the message reads `Template not analyzed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
 
 ## Why it matters
 
@@ -20,7 +20,7 @@ A template that does not compile is skipped, and every finding it would have pro
 ```
 
 ```text
-ERROR: BladeCompileFailure - resources/views/help.blade.php:1:1 - Template not analysed: @component needs arguments; write @@component to print it as text
+ERROR: BladeCompileFailure - resources/views/help.blade.php:1:1 - Template not analyzed: @component needs arguments; write @@component to print it as text
 ```
 
 ## Common causes

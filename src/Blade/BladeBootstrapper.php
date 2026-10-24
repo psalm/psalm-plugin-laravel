@@ -888,7 +888,7 @@ final class BladeBootstrapper
             . '): every template is recompiled. Slower only; analysis results are unaffected.';
 
         foreach ($inputs as ['input' => $input, 'file' => $file]) {
-            $message .= "\n  - {$input}" . ($file === null ? '' : ' in ' . $this->displayPath($file, $vendorDir));
+            $message .= "\n  - {$input}" . ($file === null ? '' : ' in ' . self::displayPath($file, $vendorDir === null ? null : \dirname($vendorDir)));
         }
 
         if ($count > 0) {
@@ -900,18 +900,18 @@ final class BladeBootstrapper
     }
 
     /**
-     * Relative to the project root (the vendor directory's parent), so the list reads `vendor/livewire/...`
-     * and `app/...` like Psalm's own issue paths. A file outside the project keeps its absolute path.
+     * Relative to the project root, so a path reads `vendor/livewire/...` and `app/...` like Psalm's own
+     * issue paths. A file outside the project, or an unknown root, keeps the path it came with.
      */
-    private function displayPath(string $file, ?string $vendorDir): string
+    public static function displayPath(string $file, ?string $projectRoot): string
     {
-        if ($vendorDir === null) {
+        if ($projectRoot === null) {
             return $file;
         }
 
         $resolved = \realpath($file);
         $canonical = PathCaseCanonicalizer::canonicalize($resolved === false ? $file : $resolved);
-        $root = \rtrim(\dirname($vendorDir), \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
+        $root = \rtrim($projectRoot, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
 
         return \str_starts_with($canonical, $root) ? \substr($canonical, \strlen($root)) : $file;
     }

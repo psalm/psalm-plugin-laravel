@@ -84,7 +84,7 @@ final class BladeCompileFailureTest extends TestCase
         // The directive sits on line 2, but the exception carries a line of the provider file, not
         // of the template: line 1 is the anchor.
         $this->assertSame(1, $failure['line_from']);
-        $this->assertSame('Template not analysed: the explode directive needs a request', $failure['message']);
+        $this->assertSame('Template not analyzed: the explode directive needs a request', $failure['message']);
         $this->assertSame('error', $failure['severity']);
     }
 
@@ -100,7 +100,7 @@ final class BladeCompileFailureTest extends TestCase
         $this->assertNotNull($failure, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
         $this->assertSame(1, $failure['line_from']);
         $this->assertSame(
-            'Template not analysed: @component needs arguments; write @@component to print it as text',
+            'Template not analyzed: @component needs arguments; write @@component to print it as text',
             $failure['message'],
         );
         $this->assertSame('error', $failure['severity']);

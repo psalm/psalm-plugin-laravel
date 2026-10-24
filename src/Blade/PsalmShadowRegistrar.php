@@ -100,7 +100,7 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
         // Nothing to suppress from: the template never compiled, so `<issueHandlers>` is the only
         // way to silence it.
         IssueBuffer::accepts(
-            new BladeCompileFailure("Template not analysed: {$message}", $location),
+            new BladeCompileFailure("Template not analyzed: {$message}", $location),
             [],
         );
     }
