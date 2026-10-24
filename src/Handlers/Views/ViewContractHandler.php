@@ -12,6 +12,7 @@ use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
 use Psalm\LaravelPlugin\Blade\ComposerKeyResolver;
 use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
@@ -19,9 +20,11 @@ use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
+use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
-use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
-use Psalm\LaravelPlugin\Issues\MissingViewVariable;
+use Psalm\LaravelPlugin\Internal\LateStatic;
+use Psalm\LaravelPlugin\Issues\InvalidViewData;
+use Psalm\LaravelPlugin\Issues\MissingViewData;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
@@ -34,8 +37,8 @@ use Psalm\Type;
  * Checks a `view()` call site against the contract its template declares: a
  * `@var \App\Models\User $user` docblock or a `@props([...])` entry.
  *
- * Reports a declared variable the call never passes ({@see MissingViewVariable}) and a passed value
- * that does not satisfy the declared type ({@see InvalidViewVariableType}).
+ * Reports a declared variable the call never passes ({@see MissingViewData}) and a passed value
+ * that does not satisfy the declared type ({@see InvalidViewData}).
  *
  * Hooked on statement analysis rather than expression analysis because expressions are visited
  * post-order: the inner `view('greeting')` of a `view('greeting')->with('name', $n)` chain would be
@@ -173,7 +176,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
                 $passed = $supplied[$name] ?? null;
 
                 if ($passed === null) {
-                    self::reportMissing($chain, $contract, $var, $codeLocation, $suppressedIssues);
+                    self::reportMissing($chain, $contract, $var, $codeLocation, $source, $suppressedIssues);
 
                     continue;
                 }
@@ -221,7 +224,8 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
 
             IssueBuffer::accepts(
                 new UnusedViewData(
-                    "View '{$chain->viewName}' never reads \${$name}, but the call site passes '{$name}' to it",
+                    "View '{$chain->viewName}' never reads \${$name}, but this call passes '{$name}'. "
+                    . 'Remove the key, or declare it with @var if the template needs it.',
                     $codeLocation,
                 ),
                 $suppressedIssues,
@@ -237,6 +241,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         ViewDataContract $contract,
         ContractVar $var,
         CodeLocation $codeLocation,
+        StatementsSource $source,
         array $suppressedIssues,
     ): void {
         // `optional` is a @props entry with a literal default, which Blade fills in itself, or a
@@ -247,9 +252,15 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             return;
         }
 
+        $templatePath = ViewReferenceRegistry::templatePathFor($chain->viewName);
+        $declaredAt = $templatePath === null
+            ? ''
+            : ', ' . BladeBootstrapper::displayPath($templatePath, $source->getCodebase()->config->base_dir) . ":{$var->declarationLine}";
+
         IssueBuffer::accepts(
-            new MissingViewVariable(
-                "View '{$chain->viewName}' declares \${$var->name} but the call site does not pass '{$var->name}'",
+            new MissingViewData(
+                "View '{$chain->viewName}' requires \${$var->name} ({$var->typeString}{$declaredAt}), but this call does not pass '{$var->name}'. "
+                . 'Pass it, or mark it optional with "= null" or a @props default.',
                 $codeLocation,
             ),
             $suppressedIssues,
@@ -305,9 +316,9 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         }
 
         IssueBuffer::accepts(
-            new InvalidViewVariableType(
-                "View '{$chain->viewName}' declares \${$var->name} as {$var->typeString}, but "
-                . $supplied->getId() . ' is passed for it',
+            new InvalidViewData(
+                "View '{$chain->viewName}' declares \${$var->name} as {$var->typeString}, but this call passes "
+                . LateStatic::strip($supplied)->getId() . ". Pass a value of the declared type, or correct the template's declaration.",
                 $codeLocation,
             ),
             $suppressedIssues,

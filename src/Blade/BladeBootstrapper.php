@@ -370,14 +370,14 @@ final class BladeBootstrapper
                     }
                 }
             } catch (\Throwable $throwable) {
-                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+                $this->skipUncompiled(CompileFailureReason::fromThrowable($template, $throwable), $source, $roots, $failures);
 
                 continue;
             }
 
             $shadow = $compiler->compile($template, $source, $propTypes);
 
-            if ($shadow instanceof BladeCompileError) {
+            if ($shadow instanceof CompileFailureReason) {
                 $this->skipUncompiled($shadow, $source, $roots, $failures);
 
                 continue;
@@ -393,7 +393,7 @@ final class BladeBootstrapper
                 // from "collected nothing".
                 $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
             } catch (\Throwable $throwable) {
-                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+                $this->skipUncompiled(CompileFailureReason::fromThrowable($template, $throwable), $source, $roots, $failures);
 
                 continue;
             }
@@ -413,12 +413,12 @@ final class BladeBootstrapper
     }
 
     /**
-     * Skips a template this pass could not compile; it is reported as a `BladeCompileFailure`.
+     * Skips a template this pass could not compile; it is reported as a `BladeCompileError`.
      *
      * @param list<array{0: string, 1: string|null}> $roots
      * @param array<string, string>                  $failures
      */
-    private function skipUncompiled(BladeCompileError $error, string $source, array $roots, array &$failures): void
+    private function skipUncompiled(CompileFailureReason $error, string $source, array $roots, array &$failures): void
     {
         $failures[$error->templatePath] = $error->message;
         $this->compileFailures[$error->templatePath] = [$source, $error->message];
@@ -847,7 +847,7 @@ final class BladeBootstrapper
      *
      * @param array<string, string> $failures
      * @param array<string, array{0: string, 1: string}> $reportedAsIssues templates left out of the
-     *        warning, because each is reported as a `BladeCompileFailure` instead
+     *        warning, because each is reported as a `BladeCompileError` instead
      */
     private function reportFailures(array $failures, array $reportedAsIssues = []): void
     {
@@ -888,7 +888,7 @@ final class BladeBootstrapper
             . '): every template is recompiled. Slower only; analysis results are unaffected.';
 
         foreach ($inputs as ['input' => $input, 'file' => $file]) {
-            $message .= "\n  - {$input}" . ($file === null ? '' : ' in ' . $this->displayPath($file, $vendorDir));
+            $message .= "\n  - {$input}" . ($file === null ? '' : ' in ' . self::displayPath($file, $vendorDir === null ? null : \dirname($vendorDir)));
         }
 
         if ($count > 0) {
@@ -900,18 +900,18 @@ final class BladeBootstrapper
     }
 
     /**
-     * Relative to the project root (the vendor directory's parent), so the list reads `vendor/livewire/...`
-     * and `app/...` like Psalm's own issue paths. A file outside the project keeps its absolute path.
+     * Relative to the project root, so a path reads `vendor/livewire/...` and `app/...` like Psalm's own
+     * issue paths. A file outside the project, or an unknown root, keeps the path it came with.
      */
-    private function displayPath(string $file, ?string $vendorDir): string
+    public static function displayPath(string $file, ?string $projectRoot): string
     {
-        if ($vendorDir === null) {
+        if ($projectRoot === null) {
             return $file;
         }
 
         $resolved = \realpath($file);
         $canonical = PathCaseCanonicalizer::canonicalize($resolved === false ? $file : $resolved);
-        $root = \rtrim(\dirname($vendorDir), \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
+        $root = \rtrim($projectRoot, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
 
         return \str_starts_with($canonical, $root) ? \substr($canonical, \strlen($root)) : $file;
     }

@@ -31,7 +31,7 @@ final class ShadowCompiler
      * @param array<string, string> $propTypes variable name (without $) => the type a `@props` literal
      *                                         default gives the body, see {@see ContractVar::$defaultType}
      */
-    public function compile(string $templatePath, string $source, array $propTypes = []): ShadowResult|BladeCompileError
+    public function compile(string $templatePath, string $source, array $propTypes = []): ShadowResult|CompileFailureReason
     {
         // The prefix is absent from author text, including real PHP comments.
         $markerPrefix = MarkerComment::prefixFor($source);
@@ -49,8 +49,8 @@ final class ShadowCompiler
             $advice = $throwable instanceof \TypeError ? $this->typedArgumentAdvice($throwable) : null;
 
             return $advice !== null
-                ? new BladeCompileError($templatePath, $advice)
-                : BladeCompileError::fromThrowable($templatePath, $throwable);
+                ? new CompileFailureReason($templatePath, $advice)
+                : CompileFailureReason::fromThrowable($templatePath, $throwable);
         } finally {
             \restore_error_handler();
         }

@@ -101,7 +101,14 @@ final class UnusedViewDataTest extends TestCase
     #[Test]
     public function a_passed_key_the_template_never_reads_is_reported(): void
     {
-        $this->assertReportsOnly($this->unusedDataIssues('psalm.xml'), 'UnreadKey.php', 'orphan');
+        $issues = $this->unusedDataIssues('psalm.xml');
+        $this->assertReportsOnly($issues, 'UnreadKey.php', 'orphan');
+
+        $this->assertSame(
+            "View 'simple' never reads \$orphan, but this call passes 'orphan'. "
+            . 'Remove the key, or declare it with @var if the template needs it.',
+            $this->forFile($issues, 'UnreadKey.php')[0]['message'],
+        );
     }
 
     #[Test]

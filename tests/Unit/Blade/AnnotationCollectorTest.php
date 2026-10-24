@@ -307,7 +307,7 @@ final class AnnotationCollectorTest extends TestCase
     #[Test]
     public function reports_a_name_a_provably_closed_call_site_leaves_out(): void
     {
-        // Declaring it would report MissingViewVariable at that very call site, which passes a
+        // Declaring it would report MissingViewData at that very call site, which passes a
         // provably closed data set without it.
         AnnotationCollector::record('home', ['title' => Type::getString()], true);
         AnnotationCollector::record('home', [], true);
