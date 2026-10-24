@@ -192,7 +192,7 @@ final class CompilerEnvironment
      * `Blade::if()` closure written in a provider's `boot()`, as laravel/pennant and
      * spatie/laravel-ray do) is trusted too: its file (the provider) is hashed, and provider
      * instance state read while compiling is accepted as unfingerprinted, the same trade
-     * documented for runtime `config()` reads in docs/blade.md.
+     * documented for runtime `config()` reads in docs/contributing/blade.md.
      *
      * The file hash alone also cannot tell two callables declared in the SAME file apart (e.g.
      * `Str::upper` versus `Str::lower`), so the reflected name, source line range, and declaring

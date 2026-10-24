@@ -289,7 +289,7 @@ final class ShadowIssueRelocator
         // names one of the same three ambient variables. `PossiblyNullReference` on a subsequent
         // `$attributes->` read is a separate, NOT-gated consequence of the inferred-branch
         // reconciliation above (Psalm keeps the reconciled null in the never-taken arm and re-unions
-        // it at the guard's `endif`) and stays visible; see docs/blade.md known limitations.
+        // it at the guard's `endif`) and stays visible; see docs/contributing/blade.md known limits.
         //
         // These five classes render the checked name in one of TWO positions, never anywhere else
         // (`Reconciler::triggerIssueForImpossible()` and `AssertionReconciler`/

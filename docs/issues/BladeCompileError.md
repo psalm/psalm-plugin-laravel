@@ -51,5 +51,5 @@ A `{{-- @psalm-suppress --}}` comment in the template cannot silence it: that co
 
 ## Limitations
 
-* Not reported when Blade analysis turned itself off for the run (see [Degradation](../blade.md#degradation)). The run-level warning covers every template instead.
+* Not reported when Blade analysis turned itself off for the run (see [Degradation](../contributing/blade.md#degradation)). The run-level warning covers every template instead.
 * A template that cannot be read, or whose compiled shadow cannot be written, is not a compile failure. It stays in the run-level warning.
