@@ -475,23 +475,80 @@ final class ViewCallChain
     }
 
     /**
-     * The view a compiled include renders, whatever shape its data takes. {@see self::fromInclude()}
+     * The views a compiled include may render, whatever shape its data takes. {@see self::fromInclude()}
      * refuses a non-literal data argument because it type-checks keys; a taint write follows any of
-     * them, so it asks only for the name. The data positions are {@see self::ownEntries()}'s.
+     * them, so it asks only for names. The data positions are {@see self::ownEntries()}'s.
+     *
+     * `first()` yields every literal candidate up to the first one known to exist: a candidate of
+     * unknowable existence (namespaced) may be the one rendered, so it is included, and one provably
+     * absent is skipped. A sound over-approximation, unlike the single view type-checking needs.
+     *
+     * @return list<string>
      */
-    public static function includedView(Expr\MethodCall $call, StatementsSource $source): ?string
+    public static function includedViews(Expr\MethodCall $call, StatementsSource $source): array
     {
-        $target = self::includeTarget($call, $source);
+        $include = self::includeCall($call, $source);
 
-        return $target === null ? null : self::build($target[0], null, $source, [], true, true, null, true)?->viewName;
+        if ($include === null) {
+            return [];
+        }
+
+        [$args, $methodName] = $include;
+
+        $names = match ($methodName) {
+            'make' => [self::viewArg($args)],
+            'renderwhen', 'renderunless' => [ArgUtil::byNameOrPosition($args, 1, 'view')?->value],
+            'first' => self::mayBeRendered(self::literalCandidates(ArgUtil::byNameOrPosition($args, 0, 'views'))),
+            default => [],
+        };
+
+        $views = [];
+
+        foreach ($names as $name) {
+            $view = self::build($name, null, $source, [], true, true, null, true)?->viewName;
+
+            if ($view !== null) {
+                $views[] = $view;
+            }
+        }
+
+        return $views;
     }
 
     /**
-     * @return array{0: ?Expr, 1: int, 2: list<Arg>, 3: string}|null the view name expression, the
-     *                                                              argument position before `$data`, the
-     *                                                              arguments and the lower-cased method
+     * The candidates of an `Factory::first()` that could be the rendered one: in order, up to and
+     * including the first known to exist, leaving out those provably absent.
+     *
+     * @param list<String_> $candidates
+     * @return list<String_>
      */
-    private static function includeTarget(Expr\MethodCall $call, StatementsSource $source): ?array
+    private static function mayBeRendered(array $candidates): array
+    {
+        $possible = [];
+
+        foreach ($candidates as $candidate) {
+            $exists = MissingViewHandler::viewExists($candidate->value);
+
+            if ($exists === false) {
+                continue;
+            }
+
+            $possible[] = $candidate;
+
+            if ($exists === true) {
+                break;
+            }
+        }
+
+        return $possible;
+    }
+
+    /**
+     * The arguments and lower-cased method of a call on a view factory, or null for any other receiver.
+     *
+     * @return array{0: list<Arg>, 1: string}|null
+     */
+    private static function includeCall(Expr\MethodCall $call, StatementsSource $source): ?array
     {
         $args = self::args($call);
 
@@ -502,9 +559,23 @@ final class ViewCallChain
         $methodName = $call->name->toLowerString();
 
         // Resolved only now: the receiver's role depends on which method is called on it.
-        if (self::roleOfReceiver($call->var, $source, $methodName) !== ViewNameSignatures::ROLE_VIEW_FACTORY) {
+        return self::roleOfReceiver($call->var, $source, $methodName) === ViewNameSignatures::ROLE_VIEW_FACTORY ? [$args, $methodName] : null;
+    }
+
+    /**
+     * @return array{0: ?Expr, 1: int, 2: list<Arg>, 3: string}|null the view name expression, the
+     *                                                              argument position before `$data`, the
+     *                                                              arguments and the lower-cased method
+     */
+    private static function includeTarget(Expr\MethodCall $call, StatementsSource $source): ?array
+    {
+        $include = self::includeCall($call, $source);
+
+        if ($include === null) {
             return null;
         }
+
+        [$args, $methodName] = $include;
 
         [$name, $at] = match ($methodName) {
             'make' => [self::viewArg($args), 0],
@@ -533,23 +604,7 @@ final class ViewCallChain
      */
     private static function firstExistingCandidate(?Arg $views): ?String_
     {
-        if (!$views instanceof Arg || !$views->value instanceof Expr\Array_) {
-            return null;
-        }
-
-        $candidates = [];
-
-        foreach ($views->value->items as $item) {
-            if ($item === null
-                || $item->key instanceof Expr
-                || !$item->value instanceof String_
-                || $item->value->value !== \trim($item->value->value)
-            ) {
-                return null;
-            }
-
-            $candidates[] = $item->value;
-        }
+        $candidates = self::literalCandidates($views);
 
         foreach ($candidates as $candidate) {
             $exists = MissingViewHandler::viewExists($candidate->value);
@@ -560,6 +615,38 @@ final class ViewCallChain
         }
 
         return null;
+    }
+
+    /**
+     * The candidates of a list made only of plain, already trimmed string literals; empty for any
+     * other list. A key anywhere can overwrite an earlier element, and `FileViewFinder::find()` trims
+     * a name, so `' inc.card '` may render `inc.card` while a lookup of the padded name misses it.
+     *
+     * @return list<String_>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function literalCandidates(?Arg $views): array
+    {
+        if (!$views instanceof Arg || !$views->value instanceof Expr\Array_) {
+            return [];
+        }
+
+        $candidates = [];
+
+        foreach ($views->value->items as $item) {
+            if ($item === null
+                || $item->key instanceof Expr
+                || !$item->value instanceof String_
+                || $item->value->value !== \trim($item->value->value)
+            ) {
+                return [];
+            }
+
+            $candidates[] = $item->value;
+        }
+
+        return $candidates;
     }
 
     /**

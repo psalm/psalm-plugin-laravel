@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 use Illuminate\View\ViewName;
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
@@ -15,6 +16,7 @@ use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewNameSignatures;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
@@ -105,15 +107,23 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
         }
 
         // A compiled include is a Factory call whose data is any shape, so it is resolved by its own rules.
-        $includedView = $inTemplate && $call instanceof Expr\MethodCall && isset(self::INCLUDE_CALLS[$name])
-            ? ViewCallChain::includedView($call, $source)
-            : null;
+        $includedViews = $inTemplate && $call instanceof Expr\MethodCall && isset(self::INCLUDE_CALLS[$name])
+            ? ViewCallChain::includedViews($call, $source)
+            : [];
 
-        if ($includedView !== null && $call instanceof Expr\MethodCall) {
-            self::bridgeCall($codebase, $source, $call, $includedView, ViewNameSignatures::ROLE_VIEW_FACTORY);
+        if ($includedViews !== [] && $call instanceof Expr\MethodCall) {
+            if (self::isDisabled($call, $name, $source)) {
+                return null;
+            }
 
-            if (self::passesScope($call)) {
-                self::bridgeScope($codebase, $source, $call, $includedView, $event->getContext());
+            $scope = self::passesScope($call, $name);
+
+            foreach ($includedViews as $includedView) {
+                self::bridgeCall($codebase, $source, $call, $includedView, ViewNameSignatures::ROLE_VIEW_FACTORY);
+
+                if ($scope) {
+                    self::bridgeScope($codebase, $source, $call, $includedView, $event->getContext());
+                }
             }
 
             return null;
@@ -135,6 +145,10 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
     private static function bridgeCall(Codebase $codebase, StatementsSource $source, Expr\CallLike $call, string $view, ?string $binder): void
     {
         foreach (ViewCallChain::ownEntries($call, $binder) as [$key, $value]) {
+            if (!self::isVariableName($key)) {
+                continue;
+            }
+
             self::write($codebase, $source, $view, $key, "\${$key} passed to view {$view}", $source->getNodeTypeProvider()->getType($value), $value);
         }
 
@@ -144,24 +158,76 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
     }
 
     /**
-     * A compiled `@include` hands its includer's whole scope over as `$mergeData`
-     * (`array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])`), which Psalm cannot follow,
-     * so every variable in scope is written under its own name: a sound over-approximation. Matching the
-     * compiled shape, not a variable name, keeps a hand-written look-alike out of a PHP file from
-     * inheriting anything.
+     * `@includeWhen`/`@includeUnless` render nothing, and run no include, when the condition is
+     * decided: `renderWhen(false, ...)`, `renderUnless(true, ...)`.
      */
-    private static function passesScope(Expr\MethodCall $call): bool
+    private static function isDisabled(Expr\MethodCall $call, string $name, StatementsSource $source): bool
     {
-        foreach ($call->getArgs() as $arg) {
-            $diff = $arg->value;
-            $scope = $diff instanceof Expr\FuncCall && self::isFunction($diff, 'array_diff_key') ? ($diff->getArgs()[0]->value ?? null) : null;
+        if ($name !== 'renderwhen' && $name !== 'renderunless') {
+            return false;
+        }
 
-            if ($scope instanceof Expr\FuncCall && self::isFunction($scope, 'get_defined_vars')) {
+        $condition = ArgUtil::byNameOrPosition(\array_values($call->getArgs()), 0, 'condition');
+        $type = $condition instanceof Arg ? $source->getNodeTypeProvider()->getType($condition->value) : null;
+
+        if (!$type instanceof Union) {
+            return false;
+        }
+
+        return $name === 'renderwhen' ? $type->isAlwaysFalsy() : $type->isAlwaysTruthy();
+    }
+
+    /**
+     * A compiled `@include` hands its includer's whole scope over as `$data` (when the author passed
+     * none) or `$mergeData`: `array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])`.
+     * Psalm cannot follow it, so every variable in scope is written under its own name: a sound
+     * over-approximation. Only that exact text counts, not a variable name or a filter an author wrote
+     * (`array_diff_key(get_defined_vars(), ['q' => 1])`), and only where the compiler puts it, in the
+     * two data positions after the view name.
+     */
+    private static function passesScope(Expr\MethodCall $call, string $name): bool
+    {
+        $args = \array_values($call->getArgs());
+        $at = $name === 'renderwhen' || $name === 'renderunless' ? 1 : 0;
+
+        foreach ([ArgUtil::byNameOrPosition($args, $at + 1, 'data'), ArgUtil::byNameOrPosition($args, $at + 2, 'mergedata')] as $arg) {
+            if ($arg instanceof Arg && self::isCompiledScope($arg->value)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static function isCompiledScope(Expr $expr): bool
+    {
+        if (!$expr instanceof Expr\FuncCall || !self::isFunction($expr, 'array_diff_key') || \count($expr->getArgs()) !== 2) {
+            return false;
+        }
+
+        [$scope, $excluded] = $expr->getArgs();
+
+        if (!$scope->value instanceof Expr\FuncCall || !self::isFunction($scope->value, 'get_defined_vars') || $scope->value->getArgs() !== []) {
+            return false;
+        }
+
+        if (!$excluded->value instanceof Expr\Array_ || \count($excluded->value->items) !== 2) {
+            return false;
+        }
+
+        $keys = [];
+
+        foreach ($excluded->value->items as $item) {
+            if ($item === null || $item->unpack || !$item->key instanceof String_) {
+                return false;
+            }
+
+            $keys[] = $item->key->value;
+        }
+
+        \sort($keys);
+
+        return $keys === ['__data', '__path'];
     }
 
     private static function isFunction(Expr\FuncCall $call, string $name): bool
@@ -211,8 +277,23 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
         }
 
         foreach (ViewCallChain::arrayEntries($data) as [$key, $value]) {
+            if (!self::isVariableName($key)) {
+                continue;
+            }
+
             self::write($codebase, $source, $view, $key, "\${$key} passed to view {$view}", $source->getNodeTypeProvider()->getType($value), $value);
         }
+    }
+
+    /**
+     * `extract()` skips a key that is not a variable name, so such a literal key is never view data
+     * (and `*` would collide with the store name of a whole array).
+     *
+     * @psalm-pure
+     */
+    private static function isVariableName(string $key): bool
+    {
+        return \preg_match('/^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/', $key) === 1;
     }
 
     /** One write of a tainted value into the store of `$view`, under `$key`. A value that carries no taint writes nothing. */
