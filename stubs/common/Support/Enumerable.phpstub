@@ -79,13 +79,15 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
     public function min($callback = null);
 
     /**
-     * Same widening as the `EnumeratesValues` trait stub (see the note there).
+     * Same widening as the `EnumeratesValues` trait stub (see the note there). A lazy receiver
+     * drops the callback's keys (`LazyCollection::collapse()` yields without them), so the key
+     * is `int` or the callback's key.
      *
      * @template TFlatMapKey of array-key
      * @template TFlatMapValue
      *
      * @param  callable(TValue, TKey): (\Illuminate\Support\Collection<TFlatMapKey, TFlatMapValue>|array<TFlatMapKey, TFlatMapValue>)  $callback
-     * @return static<(TFlatMapKey is int ? int : TFlatMapKey), TFlatMapValue>
+     * @return static<int|TFlatMapKey, TFlatMapValue>
      */
     public function flatMap(callable $callback);
 
@@ -100,4 +102,17 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
      */
     public function get($key, $default = null);
+
+    /**
+     * A closure default only runs when nothing matches, so its result joins `TValue`; Laravel's
+     * single default template binds to the Closure itself when one is passed.
+     *
+     * @template TFirstDefault
+     * @template TFirstDefaultFromClosure
+     *
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
+     * @return ($default is \Closure ? TFirstDefaultFromClosure|TValue : (TFirstDefault | TValue))
+     */
+    public function first(?callable $callback = null, $default = null);
 }

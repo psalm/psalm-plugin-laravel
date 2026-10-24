@@ -483,6 +483,16 @@ Both are Psalm-side defects. The stub does not work around them: a per-shape wor
 ### `groupBy()`/`keyBy()` with a `mixed`-returning callback is answered by a handler, not the stub
 
 Laravel casts group/key values to array keys at runtime, but the stub's `TGroupKey`/`TNewKey` conditional keeps `mixed` in the outer key (`array-key|mixed`), so the next `static<TKey, ...>` call reports `InvalidTemplateParam` (#1884). Rewriting those conditionals did not help (two attempts, probed dead end); `CollectionGroupByKeyByHandler` answers `array-key` for callbacks whose return type contains `mixed` and declines for every typed callback.
+### `times()` without a callback is answered by a handler, not the stub
+
+Laravel's `@return static<int, TTimesValue>` leaves the template unbound without a callback, so the stub infers `never` (a literal `null` callback gives `mixed`); the runtime value is `range(1, $n)`. `CollectionTimesHandler` answers `<int, int>` (plain `int`: a range or literal value type would make invariant template comparisons lenient elsewhere) when there is no second argument or it is literally `null`, and only for the called class exactly `Support\Collection` or `Support\LazyCollection`. Eloquent collections and user subclasses decline: they may reshape the template list. `LazyCollection` does not re-declare `times()`, so the `EnumeratesValues` registration covers both.
+
+**Rejected (probed dead ends, Psalm 7 rc2):**
+- Conditional on `$callback` (`($callback is null ? static<int, int> : static<int, TTimesValue>)`; reverted earlier, not re-probed in this pass): an untyped closure parameter loses its contextual `int` (`MissingClosureParamType`, result `<int, mixed>`).
+- Conditional on the template, `static<int, (TTimesValue is never ? int : TTimesValue)>`: the unbound case works, but a bound `bool` template is not provably non-`never`, so the result is the union of both branches (`Collection<int, bool|int>`).
+- A second template for the callback (`TTimesCallback of (callable(int): TTimesValue)|null`, conditional on `TTimesCallback is null`): the untyped closure again loses its parameter type.
+- `@template TTimesValue = int` (template default): ignored, still `never`.
+
 ### `filter()`/`reject()`/`where()` narrow TValue from a class-typed closure parameter (#1912)
 
 **Decision:** `CollectionFilterHandler` narrows the result TValue of `filter(Closure)`, `where(Closure)` and `reject(Closure)` from the closure's first parameter. Laravel calls the callback for every element and keeps the original item, and PHP never coerces an object into a class type, so any non-instance throws `TypeError`: every surviving element is an instance of the parameter type. Return type only; `ArgumentTypeCoercion` / `MixedArgumentTypeCoercion` are still reported.
