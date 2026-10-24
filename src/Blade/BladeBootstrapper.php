@@ -370,14 +370,14 @@ final class BladeBootstrapper
                     }
                 }
             } catch (\Throwable $throwable) {
-                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+                $this->skipUncompiled(CompileFailureReason::fromThrowable($template, $throwable), $source, $roots, $failures);
 
                 continue;
             }
 
             $shadow = $compiler->compile($template, $source, $propTypes);
 
-            if ($shadow instanceof BladeCompileError) {
+            if ($shadow instanceof CompileFailureReason) {
                 $this->skipUncompiled($shadow, $source, $roots, $failures);
 
                 continue;
@@ -393,7 +393,7 @@ final class BladeBootstrapper
                 // from "collected nothing".
                 $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
             } catch (\Throwable $throwable) {
-                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+                $this->skipUncompiled(CompileFailureReason::fromThrowable($template, $throwable), $source, $roots, $failures);
 
                 continue;
             }
@@ -413,12 +413,12 @@ final class BladeBootstrapper
     }
 
     /**
-     * Skips a template this pass could not compile; it is reported as a `BladeCompileFailure`.
+     * Skips a template this pass could not compile; it is reported as a `BladeCompileError`.
      *
      * @param list<array{0: string, 1: string|null}> $roots
      * @param array<string, string>                  $failures
      */
-    private function skipUncompiled(BladeCompileError $error, string $source, array $roots, array &$failures): void
+    private function skipUncompiled(CompileFailureReason $error, string $source, array $roots, array &$failures): void
     {
         $failures[$error->templatePath] = $error->message;
         $this->compileFailures[$error->templatePath] = [$source, $error->message];
@@ -847,7 +847,7 @@ final class BladeBootstrapper
      *
      * @param array<string, string> $failures
      * @param array<string, array{0: string, 1: string}> $reportedAsIssues templates left out of the
-     *        warning, because each is reported as a `BladeCompileFailure` instead
+     *        warning, because each is reported as a `BladeCompileError` instead
      */
     private function reportFailures(array $failures, array $reportedAsIssues = []): void
     {

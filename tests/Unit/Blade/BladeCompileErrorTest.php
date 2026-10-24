@@ -10,7 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
 use Psalm\LaravelPlugin\Blade\PsalmShadowRegistrar;
-use Psalm\LaravelPlugin\Issues\BladeCompileFailure;
+use Psalm\LaravelPlugin\Issues\BladeCompileError;
 
 /**
  * End-to-end proof that a template the real Blade compiler throws on is reported as an issue on
@@ -19,13 +19,13 @@ use Psalm\LaravelPlugin\Issues\BladeCompileFailure;
  */
 #[CoversClass(BladeBootstrapper::class)]
 #[CoversClass(PsalmShadowRegistrar::class)]
-#[CoversClass(BladeCompileFailure::class)]
+#[CoversClass(BladeCompileError::class)]
 #[Group('subprocess')]
-final class BladeCompileFailureTest extends TestCase
+final class BladeCompileErrorTest extends TestCase
 {
     use AnalysesFixtureApp;
 
-    private const FIXTURE = __DIR__ . '/Fixtures/BladeCompileFailure';
+    private const FIXTURE = __DIR__ . '/Fixtures/BladeCompileError';
 
     /**
      * @return list<array{type: string, file_name: string, line_from: int, severity: string, message: string}>
@@ -65,7 +65,7 @@ final class BladeCompileFailureTest extends TestCase
     {
         $failures = [];
 
-        foreach ($this->ofType($issues, 'BladeCompileFailure') as $failure) {
+        foreach ($this->ofType($issues, 'BladeCompileError') as $failure) {
             $failures[$failure['file_name']] = $failure;
         }
 

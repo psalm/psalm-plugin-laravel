@@ -38,7 +38,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
-        require_once __DIR__ . '/Issues/BladeCompileFailure.php';
+        require_once __DIR__ . '/Issues/BladeCompileError.php';
         require_once __DIR__ . '/Issues/MissingViewData.php';
         require_once __DIR__ . '/Issues/InvalidViewData.php';
         require_once __DIR__ . '/Issues/UnusedViewData.php';

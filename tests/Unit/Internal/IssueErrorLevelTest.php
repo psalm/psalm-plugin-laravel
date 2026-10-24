@@ -13,7 +13,7 @@ use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation;
 use Psalm\Config;
 use Psalm\Issue\PluginIssue;
-use Psalm\LaravelPlugin\Issues\BladeCompileFailure;
+use Psalm\LaravelPlugin\Issues\BladeCompileError;
 use Psalm\LaravelPlugin\Issues\InvalidViewData;
 use Psalm\LaravelPlugin\Issues\MissingViewData;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
@@ -45,7 +45,7 @@ final class IssueErrorLevelTest extends TestCase
         yield 'MissingViewData' => [MissingViewData::class, 6];
         yield 'InvalidViewData' => [InvalidViewData::class, 6];
         yield 'UnusedViewData' => [UnusedViewData::class, 4];
-        yield 'BladeCompileFailure' => [BladeCompileFailure::class, -1];
+        yield 'BladeCompileError' => [BladeCompileError::class, -1];
         yield 'UndefinedModelRelation' => [UndefinedModelRelation::class, 6];
         yield 'UnknownModelAttribute' => [UnknownModelAttribute::class, 4];
     }
