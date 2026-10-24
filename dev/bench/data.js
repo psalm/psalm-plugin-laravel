@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792835149238,
+  "lastUpdate": 1792848116353,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15815,6 +15815,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8686186b616e52443ebec2ba7acdfe627f820df0",
+          "message": "Run Blade view-data checks whenever Blade is on, as experimental issues (drop `validateViewData` / `reportUnusedViewData`) (#1993)\n\n* feat(blade): run the view-data checks whenever Blade is on, as experimental issues\n\nDrop the `validateViewData` and `reportUnusedViewData` `<blade>` attributes and\ntheir `blade.*` override keys. `ViewContractHandler` now registers whenever the\nBlade boot activates, and the compile pass always collects read sets.\n`MissingViewVariable`, `InvalidViewVariableType` and `UnusedViewData` join\n`ExperimentalIssuePolicy`: `info` by default, `error` under\n`<experimental value=\"true\" />`, or per issue through `issueHandlers`.\n\nRefs #1985\n\n* fix(blade): skip the view-data checks when only the annotate codemod enables Blade\n\nA run where the codemod switched Blade on for a project that has it off never\ninitializes the view finder that `@includeFirst` candidates resolve through, so\nViewContractHandler now also requires the project's own Blade setting. Read\nsets stay always collected, since the codemod needs them.\n\nRefs #1985",
+          "timestamp": "2026-10-24T15:19:10+02:00",
+          "tree_id": "33315c1298998dfa5fceca8f94d2168415e142cb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8686186b616e52443ebec2ba7acdfe627f820df0"
+        },
+        "date": 1792848114568,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.01,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
