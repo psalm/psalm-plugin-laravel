@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792853896058,
+  "lastUpdate": 1792854822099,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15880,6 +15880,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.81,
             "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "62e16262775074ca060c60f02978d0c37e2798f9",
+          "message": "Record include directives as `blade:annotate` producers and print `int<min, max>` as `int` (#2018)\n\n* fix(blade): print blade:annotate types without static markers or int<min, max> #2011\n\nA template has no class scope, yet a Collection method declared to return\nstatic printed as Collection<int, string>&static, nested ones included.\nTypes are normalized when recorded, so a static-marked and a plain type\nfrom two call sites also agree, and an unbounded int range prints as int.\n\n* fix(blade): count include directives as blade:annotate producers #2011\n\nCompiled includes are echo statements, which the collector skipped, so a\ntemplate rendered by both a controller and an include was declared from\nthe controller alone. An @includeIsolated with a literal array now records\nits types (the flow type at the directive); a directive that passes the\nincluding scope, or data the plugin cannot read, leaves the view open.\n\n* fix(blade): mark the @each empty view open in blade:annotate #2011\n\nrenderEach() renders a literal empty view with no data, so a controller\ntype declared on it would be required where nothing is passed. A raw|\nempty value is text, not a view.\n\n* fix(blade): close blade:annotate producer gaps found in review #2011\n\n- @component, @componentFirst and anonymous <x-...> targets mark the view open.\n- A recorded producer still has renders nested in its data scanned.\n- An echoed render($callback) is no compiled include and is not recorded.\n- View names are canonicalized, so cards/item and cards.item are one view.\n- raw| is text only in @each's empty-view argument.\n\n* test(blade): skip the @includeIsolated end-to-end case below Laravel 12.47 #2011\n\n* fix(blade): restore the MutableTypeVisitor import lost in the 4.x merge #2011",
+          "timestamp": "2026-10-24T17:09:12+02:00",
+          "tree_id": "0bd1277867c1110e19bf8f6a12918ae8719fa8a0",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/62e16262775074ca060c60f02978d0c37e2798f9"
+        },
+        "date": 1792854819918,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.7,
+            "range": "± 0.18",
             "unit": "s"
           },
           {
