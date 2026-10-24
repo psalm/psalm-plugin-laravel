@@ -827,6 +827,9 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
             require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
             $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
+            // Checks a class component tag's arguments against its constructor (#1936).
+            require_once __DIR__ . '/Blade/ComponentArgumentHandler.php';
+            $registration->registerHooksFromClass(Blade\ComponentArgumentHandler::class);
         }
 
         // Checks view() call sites against the contracts the compiled templates declare, and reports

@@ -71,6 +71,9 @@ final class ComponentViewRegistry
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
+    /** @var array<string, true> shadow path => true, every view a component's render() may name, seeded or not */
+    private static array $claimedShadows = [];
+
     /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
     private static array $declaredFunctions = [];
 
@@ -94,9 +97,16 @@ final class ComponentViewRegistry
         return self::$seeds[$shadowPath] ?? null;
     }
 
+    /** A view some component's `render()` may name, whether or not it could be typed. */
+    public static function isClassComponentView(string $shadowPath): bool
+    {
+        return isset(self::$claimedShadows[$shadowPath]);
+    }
+
     public static function build(Codebase $codebase): void
     {
         self::$seeds = [];
+        self::$claimedShadows = [];
         // Not skipped without a single `<x-…>` tag: a class's own view still needs its `@props`
         // defaults undone below, whichever way it is rendered.
         $templates = ViewReferenceRegistry::templates();
@@ -187,6 +197,10 @@ final class ComponentViewRegistry
             $source = $shadowPath === null ? null : ShadowRegistry::templateSource($templatePath);
             $defaults = [];
 
+            if ($shadowPath !== null) {
+                self::$claimedShadows[$shadowPath] = true;
+            }
+
             // `data()` and `render()`'s own data reach a class's view before `@props` falls back to a
             // default, so no literal default may type it (#1828); seeding `mixed` undoes the prelude's.
             foreach ($source === null ? [] : $parser->parseDeclarations($source)->vars as $name => $var) {
@@ -231,6 +245,7 @@ final class ComponentViewRegistry
         self::$namedSlots = [];
         self::$renderedByName = [];
         self::$seeds = [];
+        self::$claimedShadows = [];
         self::$declaredFunctions = [];
     }
 
