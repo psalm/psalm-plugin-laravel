@@ -14,9 +14,11 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
+use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
+use Psalm\StatementsSource;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\MutableTypeVisitor;
@@ -25,8 +27,8 @@ use Psalm\Type\TypeVisitor;
 use Psalm\Type\Union;
 
 /**
- * Records, per view name, the type every resolved `view()` call site passes for each data key —
- * the only sound type source {@see AnnotationWriter} has.
+ * Records, per view name, the type every resolved `view()` call site and compiled include passes
+ * for each data key — the only sound type source {@see AnnotationWriter} has.
  *
  * Registered only in annotate mode, which pins the analysis to one process: Psalm's forked analysis
  * workers never hand their statics back to the parent, where the write runs.
@@ -126,9 +128,15 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         self::markAnalyzed();
 
-        // The same two statement shapes, and the same outermost-first walk, that
-        // {@see \Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler} checks call sites with.
+        // The same statement shapes, and the same outermost-first walk, that
+        // {@see ViewContractHandler} checks call sites with.
         $stmt = $event->getStmt();
+
+        if ($stmt instanceof Stmt\Echo_) {
+            self::recordEcho($stmt, $event->getStatementsSource());
+
+            return null;
+        }
 
         $expr = match (true) {
             $stmt instanceof Stmt\Expression, $stmt instanceof Stmt\Return_ => $stmt->expr,
@@ -141,6 +149,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         $chain = ViewCallChain::from($expr, $event->getStatementsSource());
 
+        $skip = [];
+
         if ($chain instanceof ViewCallChain) {
             self::record($chain->viewName, $chain->supplied(), $chain->complete);
             /** @psalm-var \WeakMap<Expr, true> $recorded a fresh WeakMap infers as WeakMap<object, mixed> */
@@ -151,14 +161,14 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             }
 
             self::$recorded = $recorded;
-
-            return null;
+            $skip = self::spine($expr);
         }
 
         // The chain declines any shape it does not fully understand — `$view = view('home', [...])`
         // among them, since the walk starts at the outermost expression. Its data would otherwise be
-        // invisible, and a disagreement with it would read as agreement.
-        foreach (self::viewNamesIn($expr) as $viewName) {
+        // invisible, and a disagreement with it would read as agreement. A recorded chain can still
+        // nest another render in its data (`view('a', ['x' => view('a', [...])->render()])`).
+        foreach (self::viewNamesIn($expr, $skip) as $viewName) {
             self::markUnreadable($viewName);
         }
 
@@ -166,20 +176,75 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * Literal view names of every rendering call nested in an expression the chain declined, minus
+     * A compiled include is a producer of the view it renders like any `view()` call: left unseen, a
+     * controller's type gets declared that the include then passes something else for. One that
+     * passes the including scope (`@include`, `@extends`) leaves the data set open.
+     */
+    private static function recordEcho(Stmt\Echo_ $stmt, StatementsSource $source): void
+    {
+        $echoed = $stmt->exprs[0] ?? null;
+
+        // Blade compiles a bare `render()`; an author's `render($callback)` can render the view again.
+        $include = $echoed instanceof Expr\MethodCall && self::methodName($echoed) === 'render' && $echoed->args !== []
+            ? null
+            : ViewContractHandler::compiledInclude($stmt);
+        $chain = $include instanceof Expr\MethodCall ? ViewCallChain::fromInclude($include, $source) : null;
+        $skip = [];
+
+        if ($chain instanceof ViewCallChain && $echoed instanceof Expr) {
+            self::record($chain->viewName, $chain->supplied(), $chain->complete);
+            $skip = self::spine($echoed);
+        }
+
+        // Matching `make`/`view`/`markdown` on any receiver here only costs coverage (a view marked
+        // open), never a wrong declaration.
+        foreach ($stmt->exprs as $expr) {
+            foreach (self::viewNamesIn($expr, $skip) as $viewName) {
+                self::markUnreadable($viewName);
+            }
+        }
+    }
+
+    /**
+     * The calls of a recorded chain, receiver-wards from the outermost: the producer already
+     * recorded, which the nested-render scan must not mark open again.
+     *
+     * @return array<int, true> keyed by spl_object_id()
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function spine(Expr $expr): array
+    {
+        $spine = [];
+
+        while ($expr instanceof Expr\MethodCall || $expr instanceof Expr\NullsafeMethodCall) {
+            $spine[\spl_object_id($expr)] = true;
+            $expr = $expr->var;
+        }
+
+        $spine[\spl_object_id($expr)] = true;
+
+        return $spine;
+    }
+
+    /**
+     * Literal view names of every rendering call nested in an expression the chain declined (or nested
+     * in a recorded chain's data), minus
      * the calls a callback's own statement already recorded, unless the expression may write into the
      * view such a callback returns. Over-marking is the safe direction: the worst it costs is a name
      * left undeclared where a type was provable.
      *
+     * @param array<int, true> $skip calls (by spl_object_id()) already recorded as a producer
+     *
      * @return list<string>
      */
-    private static function viewNamesIn(Expr $expr): array
+    private static function viewNamesIn(Expr $expr, array $skip = []): array
     {
         $names = [];
         $writes = null;
 
         foreach ((new NodeFinder())->find($expr, self::isViewBinder(...)) as $call) {
-            if (!$call instanceof Node\Expr\CallLike || $call->isFirstClassCallable()) {
+            if (!$call instanceof Node\Expr\CallLike || $call->isFirstClassCallable() || isset($skip[\spl_object_id($call)])) {
                 continue;
             }
 
@@ -187,17 +252,93 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 continue;
             }
 
-            // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
-            $nameArg = ArgUtil::byNameOrPosition(\array_values($call->getArgs()), 0, 'view');
-
-            // Marked under the name Laravel renders, which a spelling the chain declined
-            // (`'pkg::x::y'`, `' x '`) does not carry verbatim.
-            if ($nameArg instanceof Node\Arg && !$nameArg->unpack && $nameArg->value instanceof String_ && $nameArg->value->value !== '') {
-                $names[] = \trim(ViewName::normalize($nameArg->value->value));
+            foreach (self::viewNameExprs($call) as $candidate) {
+                // Marked under the name Laravel renders, which a spelling the chain declined
+                // (`'pkg::x::y'`, `' x '`) does not carry verbatim.
+                if ($candidate instanceof String_ && $candidate->value !== '') {
+                    $names[] = \trim(ViewName::normalize($candidate->value));
+                }
             }
         }
 
         return $names;
+    }
+
+    /**
+     * The expressions a rendering call may take its view name from.
+     *
+     * @return list<Expr|null>
+     */
+    private static function viewNameExprs(Expr\CallLike $call): array
+    {
+        $args = \array_values($call->getArgs());
+
+        // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
+        $arg = static function (int $position, string $name) use ($args): ?Expr {
+            $found = ArgUtil::byNameOrPosition($args, $position, $name);
+
+            return $found instanceof Node\Arg && !$found->unpack ? $found->value : null;
+        };
+
+        $exprs = match ($call instanceof Expr\FuncCall ? 'view' : self::methodName($call)) {
+            'renderwhen', 'renderunless' => [$arg(1, 'view')],
+            'first' => [$arg(0, 'views')],
+            'startcomponentfirst' => [$arg(0, 'names')],
+            // `@each` renders its empty view with no data; a `raw|` one there is text, not a view.
+            'rendereach' => [$arg(0, 'view'), self::unlessRaw($arg(3, 'empty'))],
+            'resolve' => [self::anonymousComponentView($arg(0, 'data'))],
+            default => [$arg(0, 'view')],
+        };
+
+        $flat = [];
+
+        // `first()` renders whichever candidate exists, so every literal one may be the view.
+        foreach ($exprs as $expr) {
+            if (!$expr instanceof Expr\Array_) {
+                $flat[] = $expr;
+
+                continue;
+            }
+
+            foreach ($expr->items as $item) {
+                $flat[] = $item?->value;
+            }
+        }
+
+        return $flat;
+    }
+
+    /** @psalm-capabilities read-props */
+    private static function unlessRaw(?Expr $expr): ?Expr
+    {
+        return $expr instanceof String_ && \str_starts_with($expr->value, 'raw|') ? null : $expr;
+    }
+
+    /**
+     * The `'view' => '...'` entry of the data an anonymous `<x-...>` tag compiles to.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function anonymousComponentView(?Expr $data): ?Expr
+    {
+        // `resolve([...] + (isset($attributes) ? $attributes->all() : []))`
+        if ($data instanceof Expr\BinaryOp\Plus) {
+            $data = $data->left;
+        }
+
+        if (!$data instanceof Expr\Array_) {
+            return null;
+        }
+
+        foreach ($data->items as $item) {
+            $key = $item?->key;
+
+            if ($item !== null && $key instanceof String_ && $key->value === 'view') {
+                return $item->value;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -253,14 +394,44 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return false;
         }
 
-        return $node->name instanceof Node\Identifier
-            && \in_array($node->name->toLowerString(), ['make', 'view', 'markdown'], true);
+        $method = self::methodName($node);
+
+        if (\in_array($method, ['make', 'view', 'markdown'], true)) {
+            return true;
+        }
+
+        if ($node instanceof Expr\StaticCall) {
+            return $method === 'resolve'
+                && $node->class instanceof Node\Name
+                && \strtolower(\ltrim($node->class->toString(), '\\')) === 'illuminate\\view\\anonymouscomponent';
+        }
+
+        // The other Factory methods compiled includes and components call (`@includeFirst`,
+        // `@includeWhen`, `@each`, `@component`), too common as names to match on any receiver.
+        return $node instanceof Expr\MethodCall
+            && $node->var instanceof Expr\Variable
+            && $node->var->name === '__env'
+            && \in_array($method, ['first', 'renderwhen', 'renderunless', 'rendereach', 'startcomponent', 'startcomponentfirst'], true);
+    }
+
+    private static function methodName(Node $call): ?string
+    {
+        return ($call instanceof Expr\MethodCall || $call instanceof Expr\NullsafeMethodCall || $call instanceof Expr\StaticCall)
+            && $call->name instanceof Node\Identifier
+                ? $call->name->toLowerString()
+                : null;
     }
 
     /** A producer of this view whose contribution could not be read at all. */
     public static function markUnreadable(string $viewName): void
     {
-        self::$open[$viewName] = true;
+        self::$open[self::canonical($viewName)] = true;
+    }
+
+    /** `cards/inner` and `cards.inner` name one template: the view finder normalizes the slash. */
+    private static function canonical(string $viewName): string
+    {
+        return ViewName::normalize($viewName);
     }
 
     /**
@@ -269,6 +440,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     public static function record(string $viewName, array $data, bool $complete): void
     {
+        $viewName = self::canonical($viewName);
+
         if ($complete) {
             $keys = \array_fill_keys(\array_keys($data), true);
 
@@ -292,7 +465,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 continue;
             }
 
-            $type = self::withoutLateStatic($type);
+            $type = self::withoutUnboundedIntRange(self::withoutLateStatic($type));
             $seen ??= [];
             $key = $type->getId(false);
             // Literals sharing an id (`1`, `100`) are combined, not replaced: the merge's containment
@@ -329,6 +502,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     public static function typeFor(string $viewName, string $name): ?string
     {
+        $viewName = self::canonical($viewName);
+
         if (isset(self::$open[$viewName])) {
             return null;
         }
@@ -478,7 +653,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     public static function isOptional(string $viewName, string $name): bool
     {
-        $supplied = self::$alwaysSupplied[$viewName] ?? null;
+        $supplied = self::$alwaysSupplied[self::canonical($viewName)] ?? null;
 
         return $supplied !== null && !isset($supplied[$name]);
     }
@@ -509,6 +684,32 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             static fn(array $match): string => $match[0][0] === "'" || $match[0][0] === '"' ? $match[0] : '\\' . $match[0],
             $id,
         );
+    }
+
+    /**
+     * `int<min, max>` is plain `int`, at any depth (a difference of two counts infers it). Normalized
+     * before the agreement check, so `int` and `int<min, max>` from two call sites agree.
+     */
+    private static function withoutUnboundedIntRange(Union $union): Union
+    {
+        $visitor = new class extends MutableTypeVisitor {
+            /**
+             * @psalm-capabilities read-props|write-this-props|write-refs
+             */
+            #[\Override]
+            protected function enterNode(TypeNode &$type): ?int
+            {
+                if ($type instanceof Atomic\TIntRange && $type->min_bound === null && $type->max_bound === null) {
+                    $type = new Atomic\TInt($type->from_docblock);
+                }
+
+                return null;
+            }
+        };
+
+        $visitor->traverse($union);
+
+        return $union;
     }
 
     /**

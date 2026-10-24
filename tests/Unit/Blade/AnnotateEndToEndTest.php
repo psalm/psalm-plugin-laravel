@@ -61,6 +61,11 @@ final class AnnotateEndToEndTest extends TestCase
         'merged' => "{{ json_encode([\$author, \$media, \$trio, \$flag, \$posts, \$any, \$key]) }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
+        'statics' => "<p>{{ \$stats['total'] }}</p>\n",
+        'outer' => "<?php\n/** @var true|null \$showCount = null */\n\$showCount ??= false;\n?>\n"
+            . "@includeIsolated('inner', ['showCount' => \$showCount])\n@includeIsolated('counter', ['showCount' => \$showCount])\n",
+        'inner' => "<p>{{ \$showCount ? 'yes' : 'no' }}</p>\n",
+        'counter' => "<p>{{ \$showCount ? 'yes' : 'no' }}</p>\n",
         'modal-arrow' => "{{ \$text }}\n",
         'modal-closure' => "{{ \$text }}\n",
         'modal-nested' => "{{ \$text }}\n",
@@ -212,6 +217,29 @@ final class AnnotateEndToEndTest extends TestCase
             "<?php /**\n * @var string \$title\n * @var string \$extra\n */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
             $this->template('declared'),
         );
+    }
+
+    #[Test]
+    public function prints_an_unbounded_int_range_as_int(): void
+    {
+        $this->annotate();
+
+        $this->assertSame("<?php\n/**\n * @var array{total: int} \$stats\n */\n?>\n" . self::TEMPLATES['statics'], $this->template('statics'));
+    }
+
+    #[Test]
+    public function an_include_site_counts_as_a_producer_of_the_included_view(): void
+    {
+        // The include passes `bool` (the flow type after `??= false`), the controller `true`: declaring
+        // the controller's type alone would be a type error at the include; `bool` covers both.
+        $result = $this->annotate();
+
+        $this->assertSame("<?php\n/**\n * @var bool \$showCount\n */\n?>\n" . self::TEMPLATES['inner'], $this->template('inner'));
+        $this->assertNull($this->unknownFor($result, 'inner'));
+
+        // Where the controller passes `bool` too, the two agree: the include's type is the one
+        // after the reassignment, not the including template's declared `true|null`.
+        $this->assertSame("<?php\n/**\n * @var bool \$showCount\n */\n?>\n" . self::TEMPLATES['counter'], $this->template('counter'));
     }
 
     #[Test]
@@ -371,7 +399,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(12, $result['changed']);
+        $this->assertCount(15, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
