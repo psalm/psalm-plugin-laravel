@@ -92,6 +92,18 @@ final class BladeComponentTaintTest extends TestCase
         yield 'container make() with a data array' => ['resources/views/components/made.blade.php'];
         yield 'new Foo($input), promoted property' => ['resources/views/components/constructed.blade.php'];
         yield 'new Foo($input), plain property' => ['resources/views/components/constructed-plain.blade.php'];
+        yield 'constructor parameter stored under another property name' => ['resources/views/components/renamed.blade.php'];
+        yield 'trait property, tag' => ['resources/views/components/trait-a.blade.php'];
+        yield 'trait property, new' => ['resources/views/components/trait-d.blade.php'];
+        yield '@component(Foo::class, ...)' => ['resources/views/components/compo.blade.php'];
+        yield 'literal spread carrying the value last' => ['resources/views/components/spread-taint.blade.php'];
+        yield 'view shared by two classes, first tainted' => ['resources/views/components/shared-x.blade.php'];
+        yield 'view shared by two classes, second tainted' => ['resources/views/components/shared-y.blade.php'];
+        // Accepted over-reports (docs/contributing/blade.md): a non-literal $except keeps every name, and a
+        // property declared by a shared base class is one node for every subclass.
+        yield 'docblock-typed $except (over-report)' => ['resources/views/components/except-doc.blade.php'];
+        yield 'shared base class property (over-report)' => ['resources/views/components/sib-a.blade.php'];
+        yield 'shared base class, sibling with a literal (over-report)' => ['resources/views/components/sib-b.blade.php'];
     }
 
     #[Test]
@@ -111,6 +123,19 @@ final class BladeComponentTaintTest extends TestCase
         yield 'literal attribute' => ['resources/views/components/literal.blade.php'];
         yield 'non-public property' => ['resources/views/components/hidden.blade.php'];
         yield 'class whose render() maps to no view' => ['resources/views/components/unmapped.blade.php'];
+        yield 'constructor escapes the value' => ['resources/views/components/san-e.blade.php'];
+        yield 'constructor replaces the value' => ['resources/views/components/replaced.blade.php'];
+        yield 'tag key that is not a constructor parameter' => ['resources/views/components/unbound.blade.php'];
+        yield 'trait property of an unrelated component using the same trait' => ['resources/views/components/trait-b.blade.php'];
+        yield 'literal $except hides the property' => ['resources/views/components/except-lit.blade.php'];
+        yield 'static property' => ['resources/views/components/static-prop.blade.php'];
+        yield 'name Component::data() ignores' => ['resources/views/components/ignored-name.blade.php'];
+        yield 'public method of the same name wins' => ['resources/views/components/method-wins.blade.php'];
+        yield 'make() on a factory that is not a container' => ['resources/views/components/not-container.blade.php'];
+        yield 'make() overridden by a userland container' => ['resources/views/components/overridden-make.blade.php'];
+        yield 'named data argument' => ['resources/views/components/named-arg.blade.php'];
+        yield 'spread argument' => ['resources/views/components/spread-arg.blade.php'];
+        yield 'literal spread overwrites the value' => ['resources/views/components/spread-safe.blade.php'];
     }
 
     #[Test]
@@ -178,17 +203,9 @@ final class BladeComponentTaintTest extends TestCase
 
         \sort($reported);
 
-        $this->assertSame(
-            [
-                'resources/views/components/alert.blade.php',
-                'resources/views/components/card.blade.php',
-                'resources/views/components/constructed-plain.blade.php',
-                'resources/views/components/constructed.blade.php',
-                'resources/views/components/made.blade.php',
-                'resources/views/components/notice.blade.php',
-            ],
-            $reported,
-            $run['output'],
-        );
+        $expected = \array_column(\iterator_to_array(self::reachingViews()), 0);
+        \sort($expected);
+
+        $this->assertSame($expected, $reported, $run['output']);
     }
 }

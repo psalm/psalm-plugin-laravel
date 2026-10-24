@@ -6,6 +6,7 @@ namespace App\Http;
 
 use App\View\Components\Constructed;
 use App\View\Components\ConstructedPlain;
+use App\View\Components\TraitD;
 use Illuminate\Http\Request;
 
 final class Controller
@@ -18,5 +19,10 @@ final class Controller
     public function plain(Request $request): ConstructedPlain
     {
         return new ConstructedPlain((string) $request->input('q'));
+    }
+
+    public function trait(Request $request): TraitD
+    {
+        return new TraitD((string) $request->input('q'));
     }
 }
