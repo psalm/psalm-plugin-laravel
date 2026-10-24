@@ -16,6 +16,7 @@ use Psalm\CodeLocation;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\DataFlow\DataFlowNode;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
@@ -113,7 +114,14 @@ final class ComponentPropertyTaintBridge implements AfterExpressionAnalysisInter
 
         [$casedId, $storage] = $constructor;
 
-        foreach (self::literalEntries($dataArg->value) as $key => $value) {
+        // The compiled `[…] + $attributes`: the tag's own attributes are the left operand.
+        $data = $dataArg->value;
+
+        while ($data instanceof Expr\BinaryOp\Plus) {
+            $data = $data->left;
+        }
+
+        foreach ($data instanceof Expr\Array_ ? ViewCallChain::arrayEntries($data) : [] as [$key, $value]) {
             $type = $source->getNodeTypeProvider()->getType($value);
             $offset = self::parameterOffset($storage->params, $key);
 
@@ -260,43 +268,6 @@ final class ComponentPropertyTaintBridge implements AfterExpressionAnalysisInter
         }
 
         return $make instanceof MethodIdentifier && isset(self::OWN_MAKE[\strtolower($make->fq_class_name)]);
-    }
-
-    /**
-     * The literal-keyed entries of a data array in PHP's order, a later key winning, so a literal array
-     * spread into it overwrites or is overwritten. A spread that is not a literal array may overwrite any
-     * key, which is not knowable: earlier keys stay (an over-report, never a hidden flow). For the
-     * compiled `[…] + $attributes` only the left operand, which is where the tag's own attributes are.
-     *
-     * @return array<string, Expr>
-     *
-     * @psalm-capabilities read-props
-     */
-    private static function literalEntries(Expr $data): array
-    {
-        while ($data instanceof Expr\BinaryOp\Plus) {
-            $data = $data->left;
-        }
-
-        $entries = [];
-
-        if (!$data instanceof Expr\Array_) {
-            return $entries;
-        }
-
-        foreach ($data->items as $item) {
-            if ($item === null) {
-                continue;
-            }
-
-            if ($item->unpack) {
-                $entries = [...$entries, ...self::literalEntries($item->value)];
-            } elseif ($item->key instanceof String_) {
-                $entries[$item->key->value] = $item->value;
-            }
-        }
-
-        return $entries;
     }
 
     private static function dataCall(Expr $expr): Expr\StaticCall|Expr\MethodCall|null

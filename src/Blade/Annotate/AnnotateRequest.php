@@ -57,12 +57,16 @@ final class AnnotateRequest
      * @param array<string, list<string>> $changed  template path => names declared for it
      * @param array<string, string>       $failures template path => why it was left alone
      * @param array<string, list<string>> $unknown  template path => names read but left undeclared,
-     *                                              since no call site types them
+     *                                              since no readable call site types them
      * @param array<string, array<string, list<string>>> $disagreed view name => names left undeclared
      *                                                            because its call sites disagree => the
      *                                                            distinct types they pass
+     * @param array<string, array{site: string, names: list<string>}> $unreadable template path => the
+     *                                                            names left undeclared because a call site
+     *                                                            the pass could not read renders it, and
+     *                                                            the first such site
      */
-    public function publish(array $changed, array $failures, string $diff, array $unknown = [], array $disagreed = []): void
+    public function publish(array $changed, array $failures, string $diff, array $unknown = [], array $disagreed = [], array $unreadable = []): void
     {
         $this->write([
             'dryRun' => $this->dryRun,
@@ -71,6 +75,7 @@ final class AnnotateRequest
             'diff' => $diff,
             'unknown' => $unknown,
             'disagreed' => $disagreed,
+            'unreadable' => $unreadable,
         ]);
     }
 

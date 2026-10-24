@@ -13,6 +13,8 @@ use PhpParser\NodeFinder;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
+use Psalm\LaravelPlugin\Blade\ShadowEntry;
+use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
@@ -60,7 +62,12 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     private static array $observed = [];
 
-    /** @var array<string, true> views at least one producer left an open data set for, or could not be read at all */
+    /**
+     * Views at least one producer left an open data set for, or could not be read at all, each with
+     * the `path:line` of the first such producer ('' when unknown), so the report can point at it.
+     *
+     * @var array<string, string>
+     */
     private static array $open = [];
 
     /**
@@ -153,7 +160,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $skip = [];
 
         if ($chain instanceof ViewCallChain) {
-            self::record($chain->viewName, $chain->supplied(), $chain->complete);
+            self::record($chain->viewName, $chain->supplied(), $chain->complete, self::site($expr, $event->getStatementsSource()));
             /** @psalm-var \WeakMap<Expr, true> $recorded a fresh WeakMap infers as WeakMap<object, mixed> */
             $recorded = self::$recorded ?? new \WeakMap();
 
@@ -170,7 +177,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         // invisible, and a disagreement with it would read as agreement. A recorded chain can still
         // nest another render in its data (`view('a', ['x' => view('a', [...])->render()])`).
         foreach (self::viewNamesIn($expr, $skip) as $viewName) {
-            self::markUnreadable($viewName);
+            self::markUnreadable($viewName, self::site($expr, $event->getStatementsSource()));
         }
 
         return null;
@@ -193,7 +200,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $skip = [];
 
         if ($chain instanceof ViewCallChain && $echoed instanceof Expr) {
-            self::record($chain->viewName, $chain->supplied(), $chain->complete);
+            self::record($chain->viewName, $chain->supplied(), $chain->complete, self::site($stmt, $source));
             $skip = self::spine($echoed);
         }
 
@@ -201,7 +208,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         // open), never a wrong declaration.
         foreach ($stmt->exprs as $expr) {
             foreach (self::viewNamesIn($expr, $skip) as $viewName) {
-                self::markUnreadable($viewName);
+                self::markUnreadable($viewName, self::site($stmt, $source));
             }
         }
     }
@@ -423,10 +430,42 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 : null;
     }
 
-    /** A producer of this view whose contribution could not be read at all. */
-    public static function markUnreadable(string $viewName): void
+    /**
+     * A producer of this view whose contribution could not be read at all. The smallest site is
+     * kept, so the report does not depend on the order files were analysed in.
+     */
+    public static function markUnreadable(string $viewName, string $site = ''): void
     {
-        self::$open[self::canonical($viewName)] = true;
+        $viewName = self::canonical($viewName);
+        $kept = self::$open[$viewName] ?? null;
+
+        if ($kept === null || ($site !== '' && ($kept === '' || \strnatcmp($site, $kept) < 0))) {
+            self::$open[$viewName] = $site;
+        }
+    }
+
+    /** The `path:line` of the first producer that left this view open, '' when unknown, null when none did. */
+    public static function unreadableSite(string $viewName): ?string
+    {
+        return self::$open[self::canonical($viewName)] ?? null;
+    }
+
+    /**
+     * Where a producer sits, as the template line for one inside a compiled Blade shadow: the
+     * shadow's own path is a cache file the user never sees.
+     */
+    private static function site(Node $node, StatementsSource $source): string
+    {
+        $path = $source->getFilePath();
+        $line = $node->getStartLine();
+        $entry = ShadowRegistry::entryFor($path);
+
+        if ($entry instanceof ShadowEntry) {
+            $path = $entry->templatePath;
+            $line = $entry->lineMap[$line] ?? 0;
+        }
+
+        return $line > 0 ? "{$path}:{$line}" : $path;
     }
 
     /** `cards/inner` and `cards.inner` name one template: the view finder normalizes the slash. */
@@ -438,8 +477,9 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     /**
      * @param array<string, Union> $data     supplied variable name => the type passed for it
      * @param bool                 $complete whether the producer's key set was proven closed
+     * @param string               $site     the producer's `path:line`, reported when it leaves the set open
      */
-    public static function record(string $viewName, array $data, bool $complete): void
+    public static function record(string $viewName, array $data, bool $complete, string $site = ''): void
     {
         $viewName = self::canonical($viewName);
 
@@ -450,7 +490,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 ? \array_intersect_key(self::$alwaysSupplied[$viewName], $keys)
                 : $keys;
         } else {
-            self::markUnreadable($viewName);
+            self::markUnreadable($viewName, $site);
         }
 
         foreach ($data as $name => $type) {
@@ -557,8 +597,9 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      * Merged: a difference in nullability only; one scalar kind (`true` and `false` give `bool`); up
      * to three classes, `null` not counted. Psalm keeps one class with different generic params apart
      * (`Collection<int, Post>|Collection<int, Video>`), which holds even where the template parameter
-     * is invariant, so each counts as a class. Never merged: a `mixed` producer, two scalar kinds, an
-     * array that differs by more than nullability, an array or a scalar with an object. Each usually
+     * is invariant, so each counts as a class; arrays when one call site's array covers every other
+     * (`[]` and `list{string}` beside `list<string>`). Never merged: a `mixed` producer, two scalar
+     * kinds, arrays only a new combined shape covers, an array or a scalar with an object. Each usually
      * means one call site passes the wrong thing. Never widened to a common parent either: which one
      * is ambiguous, and members only a subclass has would turn into UndefinedMethod.
      *
@@ -600,6 +641,18 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $atomics = \array_filter($combined->getAtomicTypes(), static fn(Atomic $atomic): bool => !$atomic instanceof Atomic\TNull);
         $objects = \array_filter($atomics, static fn(Atomic $atomic): bool => $atomic instanceof Atomic\TNamedObject);
         $first = \reset($atomics);
+
+        // A covering producer's own type, never the combined one: combining shapes invents optional
+        // keys and value unions no call site passed.
+        if ($atomics !== [] && \count(\array_filter($atomics, static fn(Atomic $atomic): bool => $atomic instanceof Atomic\TArray || $atomic instanceof Atomic\TKeyedArray)) === \count($atomics)) {
+            foreach ($distinct as $candidate) {
+                if (\array_filter($distinct, static fn(Union $type): bool => !self::isContained($type, $candidate)) === []) {
+                    return $candidate;
+                }
+            }
+
+            return null;
+        }
 
         $mergeable = \count($atomics) === 1
             ? $first instanceof Atomic\TNamedObject || $first instanceof Atomic\Scalar

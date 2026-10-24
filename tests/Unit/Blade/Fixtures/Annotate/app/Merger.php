@@ -66,6 +66,32 @@ final class Merger
         ]);
     }
 
+    public function emptyLabels(): View
+    {
+        return view('arrays', ['labels' => [], 'params' => ['a' => $this->text()]]);
+    }
+
+    public function fixedLabels(): View
+    {
+        return view('arrays', ['labels' => [$this->text(), $this->text()], 'params' => ['a' => $this->text(), 'b' => $this->text()]]);
+    }
+
+    public function listedLabels(): View
+    {
+        return view('arrays', ['labels' => $this->labels(), 'params' => ['a' => $this->text()]]);
+    }
+
+    /** @return list<string> */
+    private function labels(): array
+    {
+        return [$this->text()];
+    }
+
+    private function text(): string
+    {
+        return \str_repeat('x', \random_int(1, 3));
+    }
+
     private function maybeAuthor(): ?Post
     {
         return \random_int(0, 1) === 1 ? new Post() : null;

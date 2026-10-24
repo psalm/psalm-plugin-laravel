@@ -192,7 +192,7 @@ final class AnnotateCommand extends Command
         // The shape is this plugin's own, written back by AnnotateRequest::publish() in the child.
         // The is_array() guard below is the real check: a child that died mid-run leaves the
         // request JSON the command itself wrote, which carries no `changed` key.
-        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, unknown?: array<string, list<string>>, disagreed?: array<string, array<string, list<string>>>, error?: string}|null $result */
+        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, unknown?: array<string, list<string>>, unreadable?: array<string, array{site: string, names: list<string>}>, disagreed?: array<string, array<string, list<string>>>, error?: string}|null $result */
         $result = \is_string($raw) ? \json_decode($raw, true) : null;
 
         $error = \is_array($result) ? $result['error'] ?? null : null;
@@ -253,6 +253,19 @@ final class AnnotateCommand extends Command
             $io->newLine();
         }
 
+        $unreadable = $result['unreadable'] ?? [];
+
+        if ($unreadable !== []) {
+            // Its own list: "no call site types them" would be false here, and the site is what to change.
+            $io->writeln('  Undeclared, a call site could not be read (pass a literal array there, or declare them by hand):');
+
+            foreach ($unreadable as $path => ['site' => $site, 'names' => $names]) {
+                $io->writeln(\sprintf('  %s (%s)%s', $path, \implode(', ', $names), $site === '' ? '' : ", at {$site}"));
+            }
+
+            $io->newLine();
+        }
+
         $disagreed = $result['disagreed'] ?? [];
 
         if ($disagreed !== []) {
@@ -284,8 +297,8 @@ final class AnnotateCommand extends Command
 
         if ($changed === []) {
             $io->success(match (true) {
-                $unknown === [] && $disagreed === [] => 'Every template already declares the variables it reads.',
-                $disagreed === [] => \sprintf('Nothing to annotate: %d template(s) read only names no call site types.', \count($unknown)),
+                $unknown === [] && $unreadable === [] && $disagreed === [] => 'Every template already declares the variables it reads.',
+                $unreadable === [] && $disagreed === [] => \sprintf('Nothing to annotate: %d template(s) read only names no call site types.', \count($unknown)),
                 default => 'Nothing to annotate: every undeclared name is listed above.',
             });
 

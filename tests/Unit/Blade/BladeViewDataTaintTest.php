@@ -112,6 +112,25 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'overwritten by a later with() link (over-report)' => ['resources/views/overwritten-chain.blade.php', 1];
         yield 'name Blade also shares' => ['resources/views/owned.blade.php', 1];
         yield 'double-underscore name' => ['resources/views/dunder.blade.php', 1];
+        yield 'data array held in a variable' => ['resources/views/var-array.blade.php', 1];
+        yield 'compact()' => ['resources/views/compacted.blade.php', 1];
+        yield 'with() of an array variable' => ['resources/views/with-array-var.blade.php', 1];
+        yield 'untyped request array' => ['resources/views/untyped-array.blade.php', 1];
+        yield 'mergeData held in a variable' => ['resources/views/merge-array-var.blade.php', 1];
+        yield '@include data' => ['resources/views/included.blade.php', 1];
+        yield '@includeIf data' => ['resources/views/inc-if.blade.php', 1];
+        yield '@includeWhen data' => ['resources/views/inc-when.blade.php', 1];
+        yield '@includeUnless data' => ['resources/views/inc-unless.blade.php', 1];
+        yield '@includeFirst data' => ['resources/views/inc-first.blade.php', 1];
+        yield '@extends data' => ['resources/views/inc-extends.blade.php', 1];
+        yield '@include data held in a variable' => ['resources/views/inc-var.blade.php', 1];
+        yield 'variable the includer assigned' => ['resources/views/scope-partial.blade.php', 1];
+        yield 'variable the includer received as view data' => ['resources/views/scope-data-partial.blade.php', 1];
+        yield 'anonymous component prop' => ['resources/views/components/card.blade.php', 1];
+        yield 'anonymous component: only the tainted prop' => ['resources/views/components/card-sibling.blade.php', 2];
+        yield '`*` key beside a real one' => ['resources/views/star-key-sibling.blade.php', 1];
+        yield '@includeFirst of a namespaced candidate' => ['resources/pkg-views/second.blade.php', 1];
+        yield '@includeFirst past a namespaced candidate of unknown existence' => ['resources/views/inc-first-b.blade.php', 1];
     }
 
     #[Test]
@@ -139,8 +158,21 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'imported unrelated function named view' => ['resources/views/probe-imported.blade.php'];
         yield 'userland factory overriding make()' => ['resources/views/custom-factory.blade.php'];
         yield 'userland response factory overriding view()' => ['resources/views/custom-response.blade.php'];
-        // Known limit: a compiled `@include` passes its data in-template, which is a separate slice (#2032).
-        yield 'data of an @include' => ['resources/views/included.blade.php'];
+        yield 'data array variable without taint' => ['resources/views/clean-array.blade.php'];
+        yield '@include of another key' => ['resources/views/inc-other-key.blade.php'];
+        yield '@includeIsolated inherits nothing' => ['resources/views/inc-isolated.blade.php'];
+        yield '@include of a literal value' => ['resources/views/inc-literal.blade.php'];
+        yield 'includer variable without taint' => ['resources/views/scope-clean-partial.blade.php'];
+        yield 'includer that only echoes the value escaped' => ['resources/views/scope-data-includer.blade.php'];
+        yield 'look-alike include outside a template' => ['resources/views/lookalike-php.blade.php'];
+        yield 'look-alike make() on another receiver in a template' => ['resources/views/lk-partial.blade.php'];
+        yield '@includeWhen(false) data' => ['resources/views/off-when.blade.php'];
+        yield '@includeWhen(false) scope' => ['resources/views/off-when-scope.blade.php'];
+        yield '@includeUnless(true) data' => ['resources/views/off-unless.blade.php'];
+        yield '@includeUnless(true) scope' => ['resources/views/off-unless-scope.blade.php'];
+        yield 'author filter that removes the variable from the scope' => ['resources/views/filtered-scope-partial.blade.php'];
+        yield '`*` view data key' => ['resources/views/star-key.blade.php'];
+        yield '@includeFirst candidate after the first existing one' => ['resources/views/inc-first-never.blade.php'];
     }
 
     #[Test]
@@ -148,6 +180,14 @@ final class BladeViewDataTaintTest extends TestCase
     public function a_value_that_does_not_flow_to_the_echo_reports_no_taint(string $template): void
     {
         $this->assertSame([], $this->taintIssuesIn($template), $this->raw());
+    }
+
+    #[Test]
+    public function an_escaped_attribute_bag_next_to_a_tainted_prop_reports_no_taint(): void
+    {
+        $lines = \array_unique(\array_column($this->taintIssuesIn('resources/views/components/card.blade.php'), 'line_from'));
+
+        $this->assertSame([1], \array_values($lines), $this->raw());
     }
 
     #[Test]
@@ -203,5 +243,9 @@ final class BladeViewDataTaintTest extends TestCase
 
         $this->assertContains('resources/views/search.blade.php:1', $reported, $run['output']);
         $this->assertContains('resources/views/typed.blade.php:2', $reported, $run['output']);
+        $this->assertContains('resources/views/var-array.blade.php:1', $reported, $run['output']);
+        $this->assertContains('resources/views/included.blade.php:1', $reported, $run['output']);
+        $this->assertContains('resources/views/scope-partial.blade.php:1', $reported, $run['output']);
+        $this->assertContains('resources/views/components/card.blade.php:1', $reported, $run['output']);
     }
 }

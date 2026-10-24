@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\View as ViewFacade;
+use Illuminate\View\Factory;
 
 /**
  * Calls that must NOT carry taint into their template.
@@ -68,5 +69,31 @@ final class Negatives
     public function overridingResponses(OverridingResponses $responses, Request $request): Response
     {
         return $responses->view('custom-response', ['q' => $request->input('q')])->with('r', $request->input('q'));
+    }
+
+    /** `extract()` skips a key that is not a variable name, so `*` never reaches the template. */
+    public function starKey(Request $request): View
+    {
+        return view('star-key', ['*' => $request->input('q'), 'q' => 'fixed']);
+    }
+
+    public function cleanArrayVariable(): View
+    {
+        $data = ['q' => 'fixed'];
+
+        return view('clean-array', $data);
+    }
+
+    /**
+     * A hand-written copy of a compiled include's scope argument: outside a compiled template it
+     * inherits nothing, because the plugin recognises the shape only inside a shadow.
+     *
+     * @psalm-suppress UnusedVariable
+     */
+    public function lookAlikeOutsideShadow(Factory $__env, Request $request): View
+    {
+        $q = (string) $request->input('q');
+
+        return $__env->make('lookalike-php', ['t' => 'fixed'], array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]));
     }
 }

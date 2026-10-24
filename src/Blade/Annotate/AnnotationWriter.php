@@ -82,14 +82,17 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $changed = [];
         $failures = [];
         $unknown = [];
+        $unreadable = [];
         $diff = '';
         [$plans, $disagreed] = self::plans();
 
-        foreach ($plans as $templatePath => [$planned, $optional, $disagreeing]) {
+        foreach ($plans as $templatePath => [$planned, $optional, $disagreeing, $site]) {
             $vars = \array_filter($planned, static fn(?string $type): bool => $type !== null);
             $untyped = \array_keys(\array_diff_key($planned, $vars, $disagreeing));
 
-            if ($untyped !== []) {
+            if ($untyped !== [] && $site !== null) {
+                $unreadable[$templatePath] = ['site' => $site, 'names' => $untyped];
+            } elseif ($untyped !== []) {
                 $unknown[$templatePath] = $untyped;
             }
 
@@ -116,7 +119,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
             $diff .= $hunk;
         }
 
-        $request->publish($changed, $failures, $diff, $unknown, $disagreed);
+        $request->publish($changed, $failures, $diff, $unknown, $disagreed, $unreadable);
     }
 
     /**
@@ -125,11 +128,12 @@ final class AnnotationWriter implements AfterAnalysisInterface
      * report it twice. A name the two names' call sites type differently has no type.
      *
      * @return array{
-     *     0: array<string, array{0: array<string, string|null>, 1: array<string, true>, 2: array<string, true>}>,
+     *     0: array<string, array{0: array<string, string|null>, 1: array<string, true>, 2: array<string, true>, 3: string|null}>,
      *     1: array<string, array<string, list<string>>>,
      * } template path => [variable name => type string (null when unknown), the names a closed call
-     *   site omits, the names its call sites disagree on]; and per view name, each name its call sites
-     *   disagree on => the distinct types they pass
+     *   site omits, the names its call sites disagree on, the first call site that left it open (null
+     *   when none did)]; and per view name, each name its call sites disagree on => the distinct types
+     *   they pass
      */
     private static function plans(): array
     {
@@ -137,6 +141,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $optional = [];
         $disagreeing = [];
         $disagreed = [];
+        $sites = [];
 
         foreach (ViewReferenceRegistry::templates() as $viewName => $templatePath) {
             // PHP stored a numeric view name (`123.blade.php` is legal) under the int it cast the
@@ -146,6 +151,8 @@ final class AnnotationWriter implements AfterAnalysisInterface
             if (!$contract instanceof ViewDataContract) {
                 continue;
             }
+
+            $sites[$templatePath] ??= AnnotationCollector::unreadableSite((string) $viewName);
 
             foreach (self::plan((string) $viewName, $contract) as $name => $type) {
                 $plans[$templatePath][$name] = !\array_key_exists($name, $plans[$templatePath] ?? [])
@@ -169,7 +176,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $result = [];
 
         foreach ($plans as $templatePath => $vars) {
-            $result[$templatePath] = [$vars, $optional[$templatePath] ?? [], $disagreeing[$templatePath] ?? []];
+            $result[$templatePath] = [$vars, $optional[$templatePath] ?? [], $disagreeing[$templatePath] ?? [], $sites[$templatePath] ?? null];
         }
 
         return [$result, $disagreed];

@@ -293,12 +293,16 @@ final class BladeThreadParityTest extends TestCase
         $this->assertEveryFindingCarriesAJourney($single['issues'], 'single-process run');
         $this->assertEveryFindingCarriesAJourney($forked['issues'], 'forked run');
 
-        $templateFindings = \array_filter(
-            $single['findings'],
-            static fn(string $finding): bool => \str_contains($finding, 'resources/views/search.blade.php:1:') && \str_contains($finding, 'TaintedHtml'),
-        );
+        // The template-to-template hops (#2032) cross workers too: the includer's write and the partial's read.
+        foreach (['search.blade.php', 'var-array.blade.php', 'included.blade.php', 'scope-partial.blade.php', 'components/card.blade.php'] as $template) {
+            $templateFindings = \array_filter(
+                $single['findings'],
+                static fn(string $finding): bool => \str_contains($finding, 'resources/views/' . $template . ':1:') && \str_contains($finding, 'TaintedHtml'),
+            );
 
-        $this->assertNotSame([], $templateFindings, 'The bridged template finding is missing, so equality proves nothing about it.');
+            $this->assertNotSame([], $templateFindings, "The bridged finding of {$template} is missing, so equality proves nothing about it.");
+        }
+
         $this->assertStringNotContainsString('blade-shadows-threads', $forked['raw'], $forked['raw']);
     }
 
