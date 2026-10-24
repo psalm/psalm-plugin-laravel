@@ -269,7 +269,7 @@ An explicit `<TaintedLlmPrompt errorLevel="..." />` in `issueHandlers` always wi
 
 Analyze `*.blade.php` templates as PHP files at their own paths. Omit the element, or write `<blade value="false" />`, to turn it off; `psalm-laravel analyze --blade` / `--no-blade` switches it for one run. User guide: [Blade Template Analysis](blade.md).
 
-`value` and `cacheDir` are the only attributes. Any other one aborts the run like an unknown `--plugin-option` key; the removed `validateViewData`, `reportUnusedViewData` and `reportMixedIssues` name their replacement in the message.
+`value` and `cacheDir` are the only attributes. Any other one aborts the run like an unknown `--plugin-option` key.
 
 ### `cacheDir`
 

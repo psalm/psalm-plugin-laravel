@@ -785,53 +785,13 @@ final class PluginConfigTest extends TestCase
         PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade cachDir="x" /></pluginClass>'));
     }
 
-    /** @return iterable<string, array{string, string}> */
-    public static function removedBladeAttributes(): iterable
-    {
-        yield 'validateViewData' => ['validateViewData', '<experimental value="true" />'];
-        yield 'reportUnusedViewData' => ['reportUnusedViewData', 'issueHandlers'];
-        yield 'reportMixedIssues' => ['reportMixedIssues', "Psalm's Mixed* issues are always dropped in templates."];
-    }
-
     #[Test]
     public function blade_validates_every_blade_element_not_only_the_first(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("<blade>: unknown attribute 'validateViewData'");
+        $this->expectExceptionMessage("<blade>: unknown attribute 'typo'");
 
-        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /><blade validateViewData="true" /></pluginClass>'));
-    }
-
-    #[Test]
-    #[DataProvider('removedBladeAttributes')]
-    public function blade_names_the_replacement_of_a_removed_attribute(string $attribute, string $hint): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches(
-            '/' . \preg_quote("<blade>: unknown attribute '{$attribute}'. Supported attributes: value, cacheDir.", '/') . '.*' . \preg_quote($hint, '/') . '/',
-        );
-
-        PluginConfig::fromXml(new \SimpleXMLElement("<pluginClass><blade {$attribute}=\"true\" /></pluginClass>"));
-    }
-
-    #[Test]
-    public function blade_attributes_are_validated_even_when_the_override_wins(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-
-        PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade typo="1" /></pluginClass>'),
-            PluginOverrides::parse('blade=true'),
-        );
-    }
-
-    #[Test]
-    public function blade_accepts_value_and_cache_dir(): void
-    {
-        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade value="true" cacheDir="build/x" /></pluginClass>'));
-
-        $this->assertTrue($config->bladeEnabled);
-        $this->assertSame('build/x', $config->bladeCacheDir);
+        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /><blade typo="1" /></pluginClass>'));
     }
 
     /** @return iterable<string, array{string}> */
@@ -839,6 +799,7 @@ final class PluginConfigTest extends TestCase
     {
         yield 'bad bool' => ['<resolveDynamicWhereClauses value="maybe" />'];
         yield 'bad blade value' => ['<blade value="yes" />'];
+        yield 'unknown blade attribute' => ['<blade typo="1" />'];
         yield 'bad enum' => ['<modelProperties columnFallback="db" />'];
         yield 'prompt injection without value' => ['<findPromptInjection />'];
     }

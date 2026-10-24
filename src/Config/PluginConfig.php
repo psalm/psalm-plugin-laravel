@@ -18,13 +18,6 @@ final readonly class PluginConfig
 {
     private const BLADE_ATTRIBUTES = ['value', 'cacheDir'];
 
-    /** Attributes dropped before 4.18.0, mapped to what replaces them. */
-    private const REMOVED_BLADE_ATTRIBUTES = [
-        'validateViewData' => 'the view-data rules are experimental issues, so enable them with <experimental value="true" /> or set their level in issueHandlers.',
-        'reportUnusedViewData' => 'the view-data rules are experimental issues, so enable them with <experimental value="true" /> or set their level in issueHandlers.',
-        'reportMixedIssues' => "Psalm's Mixed* issues are always dropped in templates.",
-    ];
-
     /**
      * @param list<string> $configDirectories
      *
@@ -278,33 +271,20 @@ final readonly class PluginConfig
             return false;
         }
 
-        // Value and cacheDir are read from the first element only, but a typo on any repeat must not slip through.
+        // Rejected like an unknown `--plugin-option` key, so a typo or a dropped attribute never silently does nothing.
+        // Only the first element is read, but a typo on a repeat must not slip through either.
         /** @psalm-var \SimpleXMLElement $element */
         foreach ($config->blade as $element) {
-            self::assertKnownBladeAttributes($element);
+            foreach ($element->attributes() ?? [] as $name => $_) {
+                if (!\in_array($name, self::BLADE_ATTRIBUTES, true)) {
+                    $supported = \implode(', ', self::BLADE_ATTRIBUTES);
+
+                    throw new \InvalidArgumentException("<blade>: unknown attribute '{$name}'. Supported attributes: {$supported}.");
+                }
+            }
         }
 
         return self::xmlBoolAttr($blade, 'blade', true);
-    }
-
-    /**
-     * An unknown attribute is rejected like an unknown `--plugin-option` key (same wording), so a typo or
-     * an attribute dropped in an earlier release never silently does nothing. Removed ones name their replacement.
-     */
-    private static function assertKnownBladeAttributes(\SimpleXMLElement $blade): void
-    {
-        foreach ($blade->attributes() ?? [] as $key => $_) {
-            $name = (string) $key;
-
-            if (\in_array($name, self::BLADE_ATTRIBUTES, true)) {
-                continue;
-            }
-
-            $supported = \implode(', ', self::BLADE_ATTRIBUTES);
-            $hint = isset(self::REMOVED_BLADE_ATTRIBUTES[$name]) ? ' It was removed: ' . self::REMOVED_BLADE_ATTRIBUTES[$name] : '';
-
-            throw new \InvalidArgumentException("<blade>: unknown attribute '{$name}'. Supported attributes: {$supported}.{$hint}");
-        }
     }
 
     /**
