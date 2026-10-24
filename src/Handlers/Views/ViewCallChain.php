@@ -97,8 +97,11 @@ final class ViewCallChain
         $merged = ComponentRenderData::forSource($source);
 
         if ($merged === null) {
-            // Livewire merges the component's properties into the view its `render()` returns.
-            return $chain->supplying(self::isInRenderMethod($source) ? FrameworkViewData::forLivewire($source) : null);
+            // Livewire merges the component's properties into the view its `render()` returns: a
+            // `view()` or factory view. A mail view built on the side in `render()` gets none of them.
+            $returnsView = $chain->binder === null || $chain->binder === ViewNameSignatures::ROLE_VIEW_FACTORY;
+
+            return $chain->supplying($returnsView && self::isInRenderMethod($source) ? FrameworkViewData::forLivewire($source) : null);
         }
 
         // A component's public `render()` can be called, and its result chained, from anywhere

@@ -493,6 +493,21 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * Livewire merges a component's properties into the view `render()` returns and nothing else, so
+     * a `MailMessage` view built on the side inside `render()` still lacks `$count` while the
+     * returned view has it.
+     */
+    #[Test]
+    public function livewire_properties_reach_only_the_view_render_returns(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'LivewireForeignView.php');
+
+        $this->assertSame([self::MISSING . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
+        $this->assertStringContainsString("View 'livewire.placeholder' requires \$count", $reported[0]['message']);
+    }
+
+    /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
      * half is asserted together: a protected property, a static one and a view built outside
      * `render()` are still missing.
