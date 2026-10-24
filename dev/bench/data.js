@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792860362920,
+  "lastUpdate": 1792867404770,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16020,6 +16020,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.28,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bb1589daeb192217c45956325c6d96bf3ef0def1",
+          "message": "Reject unknown `<blade>` attributes like unknown `--plugin-option` keys (#2041)\n\n* fix(blade): reject unknown <blade> attributes\n\nAn unknown attribute on <blade> now aborts the run with the same wording as an unknown --plugin-option key. The removed validateViewData, reportUnusedViewData and reportMixedIssues attributes name their replacement. Refs #1990.\n\n* fix(blade): validate every <blade> element and narrow the reportMixedIssues hint\n\nA repeated <blade> element with an unknown attribute is now rejected too. The reportMixedIssues hint says only Psalm's Mixed* issues are dropped, since derived findings can still appear. Refs #1990.\n\n* refactor(blade): reject unknown <blade> attributes without per-attribute hints\n\n* test(blade): use a non-dictionary attribute name for the unknown-attribute case",
+          "timestamp": "2026-10-24T20:39:47+02:00",
+          "tree_id": "9a527d0590184f74e42c623d363f9d6a38167bdf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bb1589daeb192217c45956325c6d96bf3ef0def1"
+        },
+        "date": 1792867403087,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 41.22,
+            "range": "± 0.55",
             "unit": "s"
           },
           {
