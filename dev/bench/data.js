@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792873159271,
+  "lastUpdate": 1792874659784,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16095,6 +16095,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "11d0f8fd0b1c157a5c507317d5da0b9922166b1c",
+          "message": "feat(blade): name the unreadable call site in blade:annotate, merge covered arrays (#2049)\n\nA template whose view has a call site the annotate pass cannot read (a\ndeclined rendering shape such as `$view = view(...)` or `view(...)->render()`,\na scope-passing include, an open data set) was listed as \"no call site\ntypes them\", which is false and hides what to change. It now has its own\nlist with the first such site as `path:line` (the template line for an\ninclude directive).\n\nCall sites passing arrays now merge when one call site's array type\nalready contains the others (`[]` and a fixed list beside `list<string>`).\nArrays only a newly combined shape would cover are still listed.",
+          "timestamp": "2026-10-24T22:41:15+02:00",
+          "tree_id": "f0110292cda24117faf144eb96c58db515ad23a4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/11d0f8fd0b1c157a5c507317d5da0b9922166b1c"
+        },
+        "date": 1792874657625,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.49,
+            "range": "± 0.43",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
