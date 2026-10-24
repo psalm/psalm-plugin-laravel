@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792829884786,
+  "lastUpdate": 1792831674109,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15745,6 +15745,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8ecb440f88c5741cba5cdce607bfd158753620d0",
+          "message": "Narrow `keyBy()` keys for int-backed enum columns and drop pre-12.27 version gates (#2006)\n\n* feat: narrow keyBy() key for int-backed enum columns\n\nLaravel resolves a UnitEnum key through enum_value() since 12.26.4, so\nkeyBy('kind') on an int-backed enum column keys by int, like groupBy().\nString-backed and pure enums still decline.\n\nRefs #1994\n\n* refactor: remove version gates made dead by the Laravel 12.27 floor\n\n- Drop the #[Initialize] and #[Scope] capability skips/gate in\n  ModelInstancePreparer and tests; #[UseEloquentBuilder] skip and fixture\n  workaround likewise (all attributes exist at 12.27).\n- Delete the Schema\\Builder::blueprintResolver() stub correction and its\n  type test; Laravel's own docblock matches from 12.22.\n- Reword comments, stubs and decisions.md that described releases below\n  12.27 (casts/appends divergence, readWriteType, proxy annotation range).\n\nRefs #1994",
+          "timestamp": "2026-10-24T10:43:33+02:00",
+          "tree_id": "76d5020d1cab15c4f304ce6ccc5b043124282851",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8ecb440f88c5741cba5cdce607bfd158753620d0"
+        },
+        "date": 1792831672795,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.85,
+            "range": "± 0.73",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
