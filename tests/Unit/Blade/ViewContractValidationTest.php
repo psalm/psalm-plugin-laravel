@@ -336,6 +336,281 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * @param list<array{type: string, file: string, message: string}> $issues
+     *
+     * @return list<string> `Type $variable` per issue, sorted
+     */
+    private function variablesOf(array $issues): array
+    {
+        $variables = \array_map(
+            static fn(array $issue): string => $issue['type'] . ' ' . (\preg_match('/(?:declares|requires) (\\$\w+)/', $issue['message'], $m) === 1 ? $m[1] : ''),
+            $issues,
+        );
+        \sort($variables);
+
+        return $variables;
+    }
+
+    /**
+     * `Mailable::buildViewData()` merges every public property (statics included) and `Mailer`
+     * adds `$message`, so none of them is missing; the one name nothing supplies still is.
+     */
+    #[Test]
+    public function a_mailables_public_properties_and_message_count_as_supplied(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        foreach (['MailableProps.php', 'MailableMarkdown.php'] as $file) {
+            $this->assertSame([self::MISSING . ' $absent'], $this->variablesOf($this->forFile($issues, $file)), $file . \var_export($issues, true));
+        }
+    }
+
+    /** The receiver's class supplies the properties; a receiver typed as the base class proves nothing. */
+    #[Test]
+    public function an_external_mailable_view_call_reads_the_receivers_class_and_declines_on_the_base_class(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'MailableExternal.php');
+
+        $this->assertSame([self::MISSING . ' $absent'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString("View 'mail-external'", $reported[0]['message']);
+    }
+
+    #[Test]
+    public function a_mailable_property_is_checked_against_its_declared_type(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'MailableWrongType.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $order'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString('but this call passes ViewContractFixture\Thing.', $reported[0]['message']);
+    }
+
+    /**
+     * A key the framework supplies was never passed, so it is never unused: only the `with()` key
+     * is, and `unread`, `note` and the rest are not.
+     */
+    #[Test]
+    public function a_framework_supplied_key_is_never_reported_as_unused(): void
+    {
+        $unused = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if ($issue['type'] === 'UnusedViewData' && \in_array(\basename((string) $issue['file_name']), ['MailableProps.php', 'NotificationMail.php', 'LivewireCounter.php'], true)) {
+                $unused[] = (string) $issue['message'];
+            }
+        }
+
+        $this->assertCount(1, $unused, \var_export($unused, true));
+        $this->assertStringContainsString("passes 'extra'", $unused[0]);
+    }
+
+    /**
+     * `MailMessage::data()` is `array_merge(toArray(), viewData)`: the `toArray()` keys and
+     * `$message` are supplied, a passed key wins over its `toArray()` twin (an `int` greeting
+     * satisfies `@var int`), and a subclass overriding `toArray()` leaves the key set open.
+     */
+    #[Test]
+    public function a_mail_messages_array_keys_and_message_count_as_supplied(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'NotificationMail.php');
+
+        $this->assertSame([self::MISSING . ' $absent'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString("View 'mail-notification'", $reported[0]['message']);
+    }
+
+    /**
+     * The vendor property docblocks (`array`, `string`) are coarser than the values a MailMessage
+     * carries, so its `toArray()` keys are exempt from the type check: `list<string>`, a literal
+     * union and `string|null` declarations are not reported.
+     */
+    #[Test]
+    public function a_mail_messages_array_keys_are_not_type_checked(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $narrow = \array_filter($this->forFile($issues, 'NotificationMail.php'), static fn(array $issue): bool => \str_contains($issue['message'], 'mail-notification-narrow'));
+
+        $this->assertSame([], $narrow, \var_export($issues, true));
+    }
+
+    /**
+     * `markdown()` merges the view data after the injected `$message`, and an uninitialized property
+     * leaves a passed value in place: in both cases the key may hold what the call passed.
+     */
+    #[Test]
+    public function a_mailable_key_the_call_may_pass_is_not_type_checked(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableOpenData.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'MailableFallback.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A userland `buildViewData()` or `additionalMessageData()` can add, drop or change any key:
+     * nothing is typed, nothing is missing, and a passed key loses its passed type too. The passed
+     * but unread key is still unused, as framework entries never touch what was passed.
+     */
+    #[Test]
+    public function a_mailable_overriding_its_view_data_leaves_the_key_set_open(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableOverride.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'MailableAdditional.php'), \var_export($issues, true));
+
+        $unused = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if ($issue['type'] === 'UnusedViewData' && \basename((string) $issue['file_name']) === 'MailableAdditional.php') {
+                $unused[] = (string) $issue['message'];
+            }
+        }
+
+        $this->assertCount(1, $unused, \var_export($unused, true));
+        $this->assertStringContainsString("passes 'junk'", $unused[0]);
+    }
+
+    /** `parent` in a property type names the class declaring the property, not the rendered subclass. */
+    #[Test]
+    public function a_property_typed_parent_resolves_against_its_declaring_class(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'ChildMail.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $owner'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString('but this call passes Illuminate\Mail\Mailable.', $reported[0]['message']);
+    }
+
+    /**
+     * `Mailer::send()` and `render()` set `message` after every merge, so on the `view()` path the
+     * template gets the `Message` object whatever a property, an extraction override or `toArray()`
+     * says. Only the markdown renderers merge the view data over it, so there a property wins.
+     */
+    #[Test]
+    public function the_message_key_loses_to_a_property_on_the_markdown_path_only(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        foreach (['MailableMessageProperty.php', 'MailableOverrideTypes.php', 'MailMessageOverrideTypes.php'] as $file) {
+            $reported = $this->forFile($issues, $file);
+
+            $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), $file . \var_export($issues, true));
+            $this->assertStringContainsString('declares $message as string, but this call passes Illuminate\Mail\Message.', $reported[0]['message'], $file);
+        }
+    }
+
+    /**
+     * `Mailable::buildMarkdownText()` wraps `message` in `TextMessage` for the text pass, so a markdown
+     * Mailable's template receives either object. `MailChannel` and the `view()` path hand it the
+     * `Message` alone.
+     */
+    #[Test]
+    public function a_markdown_mailables_message_is_a_message_or_a_text_message(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'MailableMarkdownMessage.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), \var_export($issues, true));
+        $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes Illuminate\Mail\Message|Illuminate\Mail\TextMessage.', $reported[0]['message']);
+        $this->assertSame([], $this->forFile($issues, 'MailMessageMarkdownMessage.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A `message` the call passes is replaced by the Mailer on the `view()` path and kept by the
+     * markdown renderer, so only there is the passed value checked.
+     */
+    #[Test]
+    public function a_passed_message_is_checked_on_the_markdown_path_only(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        foreach (['MailableMessagePassed.php', 'MailMessageMessagePassed.php'] as $file) {
+            $reported = $this->forFile($issues, $file);
+
+            $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), $file . \var_export($issues, true));
+            $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes ', $reported[0]['message'], $file);
+            $this->assertStringNotContainsString('passes Illuminate\Mail\Message', $reported[0]['message'], $file);
+        }
+    }
+
+    /**
+     * A subclass of an abstract Mailable or Livewire component can add public properties the base
+     * does not declare, so a variable no property supplies is not provably absent.
+     */
+    #[Test]
+    public function an_abstract_base_leaves_the_key_set_open(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableBase.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'LivewireBase.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A look-alike class with the same public property and `render()` is not a framework subclass,
+     * so the framework merges nothing into its view and every variable stays missing.
+     */
+    #[Test]
+    public function a_class_that_merely_looks_like_a_mailable_or_component_supplies_nothing(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([self::MISSING . ' $absent', self::MISSING . ' $title'], $this->variablesOf($this->forFile($issues, 'NotAMailable.php')), \var_export($issues, true));
+        $this->assertSame([self::MISSING . ' $absent', self::MISSING . ' $count'], $this->variablesOf($this->forFile($issues, 'NotLivewire.php')), \var_export($issues, true));
+    }
+
+    /**
+     * Only a public property reaches a Mailable's view, and `ReflectionClass::getProperties()` lists
+     * a public static one too.
+     */
+    #[Test]
+    public function only_public_mailable_properties_are_supplied_and_statics_count(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'MailableVisibility.php');
+
+        $this->assertSame([self::MISSING . ' $priv', self::MISSING . ' $prot'], $this->variablesOf($reported), \var_export($reported, true));
+    }
+
+    /**
+     * Livewire merges a component's properties into the view `render()` returns and nothing else, so
+     * a `MailMessage` view built on the side inside `render()` still lacks `$count` while the
+     * returned view has it.
+     */
+    #[Test]
+    public function livewire_properties_reach_only_the_view_render_returns(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'LivewireForeignView.php');
+
+        $this->assertSame([self::MISSING . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
+        $this->assertStringContainsString("View 'livewire.placeholder' requires \$count", $reported[0]['message']);
+    }
+
+    /**
+     * Livewire renders `render()`'s view with the component's public, non-static properties. Every
+     * half is asserted together: a protected property, a private one, a static one and a view built
+     * outside `render()` are still missing.
+     */
+    #[Test]
+    public function a_livewire_components_public_properties_count_as_supplied_in_render(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame(
+            [self::MISSING . ' $count', self::MISSING . ' $hidden', self::MISSING . ' $instances', self::MISSING . ' $secret'],
+            $this->variablesOf($this->forFile($issues, 'LivewireCounter.php')),
+            \var_export($issues, true),
+        );
+        $this->assertStringContainsString("View 'livewire.placeholder' requires \$count", \implode(' ', \array_column($this->forFile($issues, 'LivewireCounter.php'), 'message')));
+    }
+
+    #[Test]
+    public function a_livewire_property_is_checked_against_its_declared_type(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'LivewireWrongType.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $count'], $this->variablesOf($reported), \var_export($reported, true));
+    }
+
+    /**
      * A `@props` entry with a literal default is optional and one without is not. Both halves are
      * asserted together: a template whose props failed to parse would be silent for BOTH, and the
      * optional case alone could not tell that apart from the gate working.
