@@ -682,7 +682,7 @@ Known limitation: a date type inferred BEFORE an unproven link survives it. In `
 
 **Decision:** `ShadowIssueRelocator::isGeneratedAwareArgument()` drops argument 1 and string-cast issues on `$__value` in the generated list-form `$__env->getConsumableComponentData($__value)` call, and `NoValue` on `$__key` in the keyed call, only when that call text is absent from the raw template (#1695; gate from #1708, keyed `NoValue` arm from #1716). `Factory::getConsumableComponentData()` keeps Laravel's own `string $key`.
 
-**Why:** the finding is a correlation gap, not a wrong signature. `compileAware()` picks the arm by `is_string($__key)`, and Psalm does not tie that ternary to the key it narrowed, so a keyed non-string default reaches an arm that runs only for an int key. The fault lives in one compiled shape, so the fix belongs where that shape is recognised. Residuals: [Compiler-generated code](../blade.md#compiler-generated-code).
+**Why:** the finding is a correlation gap, not a wrong signature. `compileAware()` picks the arm by `is_string($__key)`, and Psalm does not tie that ternary to the key it narrowed, so a keyed non-string default reaches an arm that runs only for an int key. The fault lives in one compiled shape, so the fix belongs where that shape is recognised. Residuals: [Compiler-generated code](blade.md#compiler-generated-code).
 
 **Rejected alternatives:**
 - **A `string|null $key` stub.** Silences the `null` default from the original report, but hides a real `null` passed to a hand-written call in any PHP file. It also covers only `null`: `false`, `0`, `[]` defaults and the keyed arm's `NoValue` keep reporting.

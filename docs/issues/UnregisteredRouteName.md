@@ -73,4 +73,4 @@ The plugin arms the check only when the route table can be trusted, and otherwis
 - Routes registered conditionally (feature flag, env check, package-specific registration) can produce a false positive if the analysed boot does not register them like production does
 - A stale route cache (written before a route was added, renamed, or named) can produce a false positive; `php artisan route:cache` or `route:clear` fixes it
 - A missing-named-route resolver registered after boot (middleware, controller, test) cannot be detected
-- Blade templates are out of scope
+- Inside Blade templates, names are checked when [Blade analysis](../blade.md) is on
