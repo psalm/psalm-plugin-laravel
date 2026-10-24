@@ -776,11 +776,30 @@ final class PluginConfigTest extends TestCase
         $this->assertSame('from-xml', $config->bladeCacheDir);
     }
 
+    #[Test]
+    public function blade_rejects_an_unknown_attribute(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("<blade>: unknown attribute 'cacheDirectory'. Supported attributes: value, cacheDir.");
+
+        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade cacheDirectory="x" /></pluginClass>'));
+    }
+
+    #[Test]
+    public function blade_validates_every_blade_element_not_only_the_first(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("<blade>: unknown attribute 'typo'");
+
+        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /><blade typo="1" /></pluginClass>'));
+    }
+
     /** @return iterable<string, array{string}> */
     public static function malformedXml(): iterable
     {
         yield 'bad bool' => ['<resolveDynamicWhereClauses value="maybe" />'];
         yield 'bad blade value' => ['<blade value="yes" />'];
+        yield 'unknown blade attribute' => ['<blade typo="1" />'];
         yield 'bad enum' => ['<modelProperties columnFallback="db" />'];
         yield 'prompt injection without value' => ['<findPromptInjection />'];
     }

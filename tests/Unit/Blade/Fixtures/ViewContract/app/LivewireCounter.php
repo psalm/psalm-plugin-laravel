@@ -19,6 +19,8 @@ final class LivewireCounter extends Component
 
     protected string $secret = 's';
 
+    private string $hidden = 'h';
+
     public function render(): View
     {
         // Livewire renders this view with the component's public, non-static properties.

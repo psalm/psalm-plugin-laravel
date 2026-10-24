@@ -97,8 +97,11 @@ final class ViewCallChain
         $merged = ComponentRenderData::forSource($source);
 
         if ($merged === null) {
-            // Livewire merges the component's properties into the view its `render()` returns.
-            return $chain->supplying(self::isInRenderMethod($source) ? FrameworkViewData::forLivewire($source) : null);
+            // Livewire merges the component's properties into the view its `render()` returns: a
+            // `view()` or factory view. A mail view built on the side in `render()` gets none of them.
+            $returnsView = $chain->binder === null || $chain->binder === ViewNameSignatures::ROLE_VIEW_FACTORY;
+
+            return $chain->supplying($returnsView && self::isInRenderMethod($source) ? FrameworkViewData::forLivewire($source) : null);
         }
 
         // A component's public `render()` can be called, and its result chained, from anywhere
@@ -379,10 +382,12 @@ final class ViewCallChain
 
         $chain = self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role, $trimName);
 
+        $markdown = $methodName === 'markdown';
+
         return match ($role) {
-            ViewNameSignatures::ROLE_MAILABLE => $chain?->supplying(FrameworkViewData::forMailable($receiverClass, $chain->data, $chain->complete, $source)),
+            ViewNameSignatures::ROLE_MAILABLE => $chain?->supplying(FrameworkViewData::forMailable($receiverClass, $chain->data, $chain->complete, $markdown, $source)),
             ViewNameSignatures::ROLE_MAIL_MESSAGE => $chain?->supplying(
-                FrameworkViewData::forMailMessage($receiverClass, $chain->data, $chain->complete, $source),
+                FrameworkViewData::forMailMessage($receiverClass, $chain->data, $chain->complete, $markdown, $source),
             ),
             default => $chain,
         };

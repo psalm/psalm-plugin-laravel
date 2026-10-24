@@ -480,6 +480,111 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * `Mailer::send()` and `render()` set `message` after every merge, so on the `view()` path the
+     * template gets the `Message` object whatever a property, an extraction override or `toArray()`
+     * says. Only the markdown renderers merge the view data over it, so there a property wins.
+     */
+    #[Test]
+    public function the_message_key_loses_to_a_property_on_the_markdown_path_only(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        foreach (['MailableMessageProperty.php', 'MailableOverrideTypes.php', 'MailMessageOverrideTypes.php'] as $file) {
+            $reported = $this->forFile($issues, $file);
+
+            $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), $file . \var_export($issues, true));
+            $this->assertStringContainsString('declares $message as string, but this call passes Illuminate\Mail\Message.', $reported[0]['message'], $file);
+        }
+    }
+
+    /**
+     * `Mailable::buildMarkdownText()` wraps `message` in `TextMessage` for the text pass, so a markdown
+     * Mailable's template receives either object. `MailChannel` and the `view()` path hand it the
+     * `Message` alone.
+     */
+    #[Test]
+    public function a_markdown_mailables_message_is_a_message_or_a_text_message(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'MailableMarkdownMessage.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), \var_export($issues, true));
+        $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes Illuminate\Mail\Message|Illuminate\Mail\TextMessage.', $reported[0]['message']);
+        $this->assertSame([], $this->forFile($issues, 'MailMessageMarkdownMessage.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A `message` the call passes is replaced by the Mailer on the `view()` path and kept by the
+     * markdown renderer, so only there is the passed value checked.
+     */
+    #[Test]
+    public function a_passed_message_is_checked_on_the_markdown_path_only(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        foreach (['MailableMessagePassed.php', 'MailMessageMessagePassed.php'] as $file) {
+            $reported = $this->forFile($issues, $file);
+
+            $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), $file . \var_export($issues, true));
+            $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes ', $reported[0]['message'], $file);
+            $this->assertStringNotContainsString('passes Illuminate\Mail\Message', $reported[0]['message'], $file);
+        }
+    }
+
+    /**
+     * A subclass of an abstract Mailable or Livewire component can add public properties the base
+     * does not declare, so a variable no property supplies is not provably absent.
+     */
+    #[Test]
+    public function an_abstract_base_leaves_the_key_set_open(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableBase.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'LivewireBase.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A look-alike class with the same public property and `render()` is not a framework subclass,
+     * so the framework merges nothing into its view and every variable stays missing.
+     */
+    #[Test]
+    public function a_class_that_merely_looks_like_a_mailable_or_component_supplies_nothing(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([self::MISSING . ' $absent', self::MISSING . ' $title'], $this->variablesOf($this->forFile($issues, 'NotAMailable.php')), \var_export($issues, true));
+        $this->assertSame([self::MISSING . ' $absent', self::MISSING . ' $count'], $this->variablesOf($this->forFile($issues, 'NotLivewire.php')), \var_export($issues, true));
+    }
+
+    /**
+     * Only a public property reaches a Mailable's view, and `ReflectionClass::getProperties()` lists
+     * a public static one too.
+     */
+    #[Test]
+    public function only_public_mailable_properties_are_supplied_and_statics_count(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'MailableVisibility.php');
+
+        $this->assertSame([self::MISSING . ' $priv', self::MISSING . ' $prot'], $this->variablesOf($reported), \var_export($reported, true));
+    }
+
+    /**
+     * Livewire merges a component's properties into the view `render()` returns and nothing else, so
+     * a `MailMessage` view built on the side inside `render()` still lacks `$count` while the
+     * returned view has it.
+     */
+    #[Test]
+    public function livewire_properties_reach_only_the_view_render_returns(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $reported = $this->forFile($issues, 'LivewireForeignView.php');
+
+        $this->assertSame([self::MISSING . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
+        $this->assertStringContainsString("View 'livewire.placeholder' requires \$count", $reported[0]['message']);
+    }
+
+    /**
      * #2043: `parent` in a class component's property type names the class declaring the property, and a
      * trait's `self` the class using the trait, not the component the view renders for.
      */
@@ -509,8 +614,8 @@ final class ViewContractValidationTest extends TestCase
 
     /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
-     * half is asserted together: a protected property, a static one and a view built outside
-     * `render()` are still missing.
+     * half is asserted together: a protected property, a private one, a static one and a view built
+     * outside `render()` are still missing.
      */
     #[Test]
     public function a_livewire_components_public_properties_count_as_supplied_in_render(): void
@@ -518,7 +623,7 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->contractIssues('psalm.xml');
 
         $this->assertSame(
-            [self::MISSING . ' $count', self::MISSING . ' $instances', self::MISSING . ' $secret'],
+            [self::MISSING . ' $count', self::MISSING . ' $hidden', self::MISSING . ' $instances', self::MISSING . ' $secret'],
             $this->variablesOf($this->forFile($issues, 'LivewireCounter.php')),
             \var_export($issues, true),
         );

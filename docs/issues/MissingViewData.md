@@ -102,17 +102,32 @@ Three more receivers have framework-supplied keys, which count as supplied. They
 - **Mailable** (`$this->view()` / `->markdown()`, or `$mailable->view()` on a receiver typed as one
   `Mailable` subclass): every public property, static ones included, that the subclass declares
   (promoted, defaulted or assigned), plus `$message`. A receiver typed as `Mailable` itself, a
-  contract, a union or an intersection has an unknowable key set, so this issue is off for it (passed keys are still type-checked by InvalidViewData, and UnusedViewData still runs). A
-  property the call also passes by name, and `$message` when the call passes `message` or its data is
-  not fully known, is `mixed`: at runtime the passed value can win. `mailer` and `__laravel_mailable`
-  count too (`mixed`). A Mailable overriding `buildViewData()` or `additionalMessageData()` has an open key set too: this issue is off, and its passed keys are `mixed`.
+  contract, a union or an intersection has an unknowable key set, so this issue is off for it (passed keys are still type-checked by InvalidViewData, and UnusedViewData still runs). So does an
+  abstract Mailable, since a concrete subclass can add public properties its base does not declare.
+  A property the call also passes by name is `mixed`: at runtime the passed value can win. `mailer`
+  and `__laravel_mailable` count too (`mixed`). A Mailable overriding `buildViewData()` or
+  `additionalMessageData()` has an open key set too: this issue is off, and its passed keys are `mixed`.
 - **MailMessage** (`(new MailMessage)->view()` / `->markdown()`): `level`, `subject`, `greeting`,
   `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`,
   `$message`, `mailer` and the `__laravel_notification*` keys. A key the call passes wins over its own entry here. The property keys are `mixed`
   (Laravel's own docblocks are coarser than the real values); `displayableActionUrl` is a `string`.
   A subclass overriding `data()` or `toArray()` has an open key set: this issue is off, and the passed keys are still type-checked.
-- **Livewire** (`view()` inside `render()` of a `Livewire\Component` subclass): every public,
-  non-static property the component declares.
+- **Livewire** (`view()` or `View::make()` inside `render()` of a `Livewire\Component` subclass): every
+  public, non-static property the component declares. Only the view `render()` returns gets them: a
+  mail view built on the side inside `render()` does not. An abstract component has an open key set,
+  so this issue is off for it.
+
+The type of `$message` depends on the path, because `Mailer::send()` sets it after merging the data on
+the `view()` path and the markdown renderers merge the data over it:
+
+- `view()` (Mailable or MailMessage): always `Illuminate\Mail\Message`, whatever a property, a passed
+  key or an extraction override says.
+- Mailable `markdown()`: a property named `message` wins, then a passed `message`, each with its own
+  type. Otherwise it is `mixed` when the data is not fully known or an override is present, and
+  `Illuminate\Mail\Message|Illuminate\Mail\TextMessage` when not, because the text pass wraps the
+  message in `TextMessage`, which is not a `Message` subclass.
+- MailMessage `markdown()`: a passed `message` wins with its own type. Otherwise it is `mixed` when
+  the data is not fully known, and `Illuminate\Mail\Message` when it is.
 
 ## Composers and creators
 
