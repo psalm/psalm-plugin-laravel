@@ -6,7 +6,7 @@ nav_order: 3
 
 # Psalm Type Syntax
 
-Every type expression Psalm 7 accepts inside a docblock, for writing stubs and for building `Union`/`Atomic` values in handlers. Verified against Psalm `7.0.0-beta24` (the plugin requires `^7.0.0-beta23`; the type grammar did not change between them).
+Every type expression Psalm 7 accepts inside a docblock, for writing stubs and for building `Union`/`Atomic` values in handlers. Verified against Psalm `7.0.0-beta24`.
 
 Companion pages: [Docblock Annotations](annotations.md) (the tags that carry these types), [Purity and Capabilities](purity.md) (the `[pure]` part of callable and iterable types), [Taint Analysis Stubs](taint-analysis.md).
 
