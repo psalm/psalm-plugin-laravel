@@ -265,11 +265,19 @@ final class ViewCallChain
      */
     private static function addsDataOutsideChain(Expr $expr, StatementsSource $source): bool
     {
+        // The body below may be a fresh parse or a cache copy of the file, never the analyzed nodes
+        // themselves, so a link is recognized by its source span rather than by identity.
         $links = [];
         $receiver = $expr;
 
         while ($receiver instanceof Expr\MethodCall || $receiver instanceof Expr\NullsafeMethodCall) {
-            $links[] = $receiver;
+            $span = self::span($receiver);
+
+            if ($span !== null) {
+                // A link without a position stays unmatched and counts as a `with()` elsewhere: a decline.
+                $links[$span] = true;
+            }
+
             $receiver = $receiver->var;
         }
 
@@ -294,9 +302,11 @@ final class ViewCallChain
 
         return (new NodeFinder())->findFirst($body, static function (Node $node) use ($links): bool {
             if ($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall) {
+                $span = self::span($node);
+
                 return self::isThis($node->var)
                     && (!$node->name instanceof Identifier || $node->name->toLowerString() === 'with')
-                    && !\in_array($node, $links, true);
+                    && ($span === null || !isset($links[$span]));
             }
 
             return $node instanceof Expr\PropertyFetch
@@ -312,6 +322,16 @@ final class ViewCallChain
     private static function isThis(Expr $expr): bool
     {
         return $expr instanceof Expr\Variable && $expr->name === 'this';
+    }
+
+    private static function span(Node $node): ?string
+    {
+        /** @psalm-var mixed $start */
+        $start = $node->getAttribute('startFilePos');
+        /** @psalm-var mixed $end */
+        $end = $node->getAttribute('endFilePos');
+
+        return \is_int($start) && \is_int($end) ? $start . ':' . $end : null;
     }
 
     private static function walk(Expr $expr, StatementsSource $source, bool $trimName): ?self
