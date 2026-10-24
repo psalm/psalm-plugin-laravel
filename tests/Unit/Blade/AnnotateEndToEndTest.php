@@ -39,6 +39,14 @@ final class AnnotateEndToEndTest extends TestCase
 
     private const VIEWS = self::FIXTURE . '/resources/views';
 
+    /** A `loadViewsFrom()` hint root outside vendor/, registered as `pkg` by the fixture's bootstrap. */
+    private const PKG_VIEWS = self::FIXTURE . '/resources/pkg-views';
+
+    private const PKG_WIDGET = "<p>{{ \$title }}</p>\n";
+
+    /** Rendered under a spelling Laravel normalizes (`pkg::spelled::tail`, `' pkg::padded '`) too. */
+    private const PKG_RESPELLED = ['spelled', 'padded'];
+
     private const TEMPLATES = [
         'home' => "<h1>{{ \$title }}</h1>\n<p>{{ \$post->slug }}</p>\n",
         'declared' => "<?php /** @var string \$title */ ?>\n<h1>{{ \$title }}</h1>\n<p>{{ \$extra }}</p>\n",
@@ -66,6 +74,12 @@ final class AnnotateEndToEndTest extends TestCase
         foreach (self::TEMPLATES as $name => $contents) {
             \file_put_contents(self::VIEWS . "/{$name}.blade.php", $contents);
         }
+
+        \file_put_contents(self::PKG_VIEWS . '/widget.blade.php', self::PKG_WIDGET);
+
+        foreach (self::PKG_RESPELLED as $name) {
+            \file_put_contents(self::PKG_VIEWS . "/{$name}.blade.php", self::PKG_WIDGET);
+        }
     }
 
     protected function tearDown(): void
@@ -87,6 +101,32 @@ final class AnnotateEndToEndTest extends TestCase
             "<?php\n/**\n * @var \\AnnotateFixture\\Post \$post\n * @var string \$title\n */\n?>\n" . self::TEMPLATES['home'],
             $this->template('home'),
         );
+    }
+
+    #[Test]
+    public function declares_a_namespaced_view_from_its_qualified_call_sites(): void
+    {
+        $this->annotate();
+
+        $this->assertSame(
+            "<?php\n/**\n * @var string \$title\n */\n?>\n" . self::PKG_WIDGET,
+            (string) \file_get_contents(self::PKG_VIEWS . '/widget.blade.php'),
+        );
+    }
+
+    /**
+     * `view('pkg::spelled::tail')` renders `pkg::spelled` (`ViewName::normalize()` keeps two segments)
+     * and `view(' pkg::padded ')` renders `pkg::padded` (the finder trims), passing another type there.
+     */
+    #[Test]
+    public function a_respelled_producer_blocks_the_template_it_really_renders(): void
+    {
+        $result = $this->annotate();
+
+        foreach (self::PKG_RESPELLED as $name) {
+            $this->assertSame(self::PKG_WIDGET, (string) \file_get_contents(self::PKG_VIEWS . "/{$name}.blade.php"), $name);
+            $this->assertSame(['title'], $this->unknownFor($result, $name), $name);
+        }
     }
 
     #[Test]
@@ -241,7 +281,7 @@ final class AnnotateEndToEndTest extends TestCase
 
         $this->assertSame(self::TEMPLATES['home'], $this->template('home'), 'the template must be left alone');
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(7, $result['changed']);
+        $this->assertCount(8, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
@@ -330,7 +370,7 @@ final class AnnotateEndToEndTest extends TestCase
 
     private function clean(): void
     {
-        foreach (\glob(self::VIEWS . '/*.blade.php') ?: [] as $template) {
+        foreach ([...\glob(self::VIEWS . '/*.blade.php') ?: [], ...\glob(self::PKG_VIEWS . '/*.blade.php') ?: []] as $template) {
             \unlink($template);
         }
 

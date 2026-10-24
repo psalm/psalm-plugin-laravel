@@ -71,7 +71,7 @@ This check is disabled by default, and needs Blade analysis enabled. Enable it i
 
 The check declines rather than guess. It is silent when:
 
-- The view name is not a string literal, or is namespaced (`pkg::view`).
+- The view name is not a string literal, or names a template that is not analyzed: a namespace hint (`pkg::view`) under your vendor directory, or an unknown namespace.
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
 - The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
 - The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
