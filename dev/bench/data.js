@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792854822099,
+  "lastUpdate": 1792855711500,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15920,6 +15920,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "db9f4e3d7ac572102735571f25c112dc10d2009a",
+          "message": "refactor(blade): drop the reportMixedIssues option, always hide Mixed issues in templates (#2039)\n\nRemove `<blade reportMixedIssues>` and `blade.reportMixedIssues`. The\n`MixedIssue` family is now dropped unconditionally and first in\nShadowIssueRelocator, which makes the compiled save/restore matcher, its\ntext-presence helper and the MixedMethodCall clause of the #1909 gate dead;\nthey go with it.\n\nRefs #1986",
+          "timestamp": "2026-10-24T17:25:06+02:00",
+          "tree_id": "e3c8f852b7c3cf21f1cc8601bff9d80e54d9213f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/db9f4e3d7ac572102735571f25c112dc10d2009a"
+        },
+        "date": 1792855709738,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.5,
+            "range": "± 1.78",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
             "unit": "MB"
           }
         ]
