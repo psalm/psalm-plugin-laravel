@@ -25,10 +25,42 @@ final class MailableNoSeparateWith extends Mailable
         return $this->view('mail-separate-with');
     }
 
-    /** The chain's own `with()` is read as part of the chain, and does not supply `$total`. */
+    /** A `with()` above the binder is read as part of the chain, and does not supply `$total`. */
     public function ownChainLink(): self
     {
-        return $this->with('other', 1)->view('mail-separate-with');
+        return $this->view('mail-separate-with')->with('other', 1);
+    }
+
+    /** A `with`-prefixed method the class does declare is no magic setter. */
+    public function declaredWithMethod(): self
+    {
+        $this->withSymfonyMessage(static function (): void {});
+
+        return $this->view('mail-separate-with');
+    }
+
+    /** A fluent call on `$this` that adds no view data. */
+    public function unrelatedFluentCall(): self
+    {
+        $this->subject('Receipt');
+
+        return $this->view('mail-separate-with');
+    }
+
+    /** `text()` without a data argument adds nothing. */
+    public function textWithoutData(): self
+    {
+        $this->text('mail-separate-with');
+
+        return $this->view('mail-separate-with');
+    }
+
+    /** `$this` as a return value or a receiver does not escape. */
+    public function returnsThis(): self
+    {
+        $this->view('mail-separate-with');
+
+        return $this;
     }
 
     /** The same closure shape as in the declining fixture, with nothing added to the data. */

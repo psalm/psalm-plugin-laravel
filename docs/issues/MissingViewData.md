@@ -107,9 +107,14 @@ Three more receivers have framework-supplied keys, which count as supplied. They
   A property the call also passes by name is `mixed`: at runtime the passed value can win. `mailer`
   and `__laravel_mailable` count too (`mixed`). A Mailable overriding `buildViewData()` or
   `additionalMessageData()` has an open key set too: this issue is off, and its passed keys are `mixed`.
-  So does a method that, besides the `$this->view()` chain, holds another `$this->with(...)`
-  (before or after the chain), a `$this->viewData` access, or a `$this` call with a dynamic method name: the
-  data added there is not modeled, so the check declines for that method. A `with()` in another method or the constructor is not seen,
+  So does a method that, besides the `$this->view()` chain, feeds the Mailable's data some other
+  way, on `$this` or on a call chain rooted at it (`$this->subject('x')->with(...)`): another `with()`
+  (before or after the chain), a `with`-prefixed call the class does not declare (`withTotal(1)`,
+  forwarded to `with()` by the framework), `view()` / `markdown()` / `text()` passing a data argument, any
+  `$this->viewData` access (a read included), a `$this` call or property fetch with a dynamic name, or `$this`
+  assigned, put in an array or passed as an argument. A `with()` below the `view()` call
+  (`$this->with('total', 1)->view('x')`) counts; one chained after it (`$this->view('x')->with(...)`) is part of the
+  chain. The flow is not modeled, so the check declines for that whole method. A `with()` in another method or the constructor is not seen,
   so a name supplied only there is still reported; supply it in the chain, or suppress the issue on that call.
 - **MailMessage** (`(new MailMessage)->view()` / `->markdown()`): `level`, `subject`, `greeting`,
   `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`,

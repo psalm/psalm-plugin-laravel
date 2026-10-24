@@ -492,7 +492,7 @@ final class ViewContractValidationTest extends TestCase
         $reported = $this->forFile($this->contractIssues('psalm.xml'), 'MailableNoSeparateWith.php');
 
         $this->assertSame(
-            [self::MISSING . ' $total', self::MISSING . ' $total', self::MISSING . ' $total', self::MISSING . ' $total', self::MISSING . ' $total'],
+            \array_fill(0, 9, self::MISSING . ' $total'),
             $this->variablesOf($reported),
             \var_export($reported, true),
         );
