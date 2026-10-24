@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Providers\ModelMetadata;
 
 use Illuminate\Database\Eloquent\Attributes\Appends;
-use Illuminate\Database\Eloquent\Attributes\Initialize;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
@@ -64,12 +63,6 @@ final class ModelInstancePreparerTest extends TestCase
     #[Test]
     public function attribute_tagged_trait_initializer_is_invoked(): void
     {
-        // #[Initialize] and the bootTraits branch reading it arrive in Laravel 12.22; below that the framework
-        // ignores the tag and the replay stays convention-only, so `via_attr` is legitimately absent.
-        if (!\class_exists(Initialize::class)) {
-            self::markTestSkipped('The #[Initialize] attribute discovery branch requires Laravel >= 12.22.');
-        }
-
         // seedViaAttribute() is non-conventionally named: only the attribute-discovery branch reaches it.
         $this->assertSame(
             AsCollection::class,
@@ -152,7 +145,7 @@ final class ModelInstancePreparerTest extends TestCase
     {
         // Laravel normalizes array_merge($casts, casts()) and casts() WINS on collisions, so this model
         // constructs fine — the enum never reaches the is_object arm. The mirror sees the declared half alone
-        // and would throw (12.26+), taking all four instance-derived sections with it. Master gets this right
+        // and would throw, taking all four instance-derived sections with it. Master gets this right
         // by never normalizing, so the throw would be a REGRESSION, not merely an escalation.
         $casts = new \ReflectionProperty(Model::class, 'casts');
 

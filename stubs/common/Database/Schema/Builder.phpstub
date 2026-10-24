@@ -77,7 +77,7 @@ class Builder
     /*
      * Introspection methods whose Laravel `@return` contradicts what the driver processors
      * (Illuminate\Database\Query\Processors\*) emit. Shapes below are the union over every driver and
-     * are identical on Laravel 12.20 through 13.x. The facade reaches them through its `@mixin`.
+     * are identical on Laravel 12.27 through 13.x. The facade reaches them through its `@mixin`.
      */
 
     /**
@@ -123,13 +123,4 @@ class Builder
      * @return list<array{name: string|null, columns: list<string>, foreign_schema: string|null, foreign_table: string, foreign_columns: list<string>, on_update: string|null, on_delete: string|null}>
      */
     public function getForeignKeys($table) {}
-
-    /**
-     * Laravel 12.20-12.21 document `Closure(string, Closure, string): Blueprint|null`; createBlueprint()
-     * calls the resolver with `($connection, $table, $callback)`.
-     *
-     * @param  \Closure(\Illuminate\Database\Connection, string, \Closure|null): \Illuminate\Database\Schema\Blueprint  $resolver
-     * @return void
-     */
-    public function blueprintResolver(Closure $resolver) {}
 }

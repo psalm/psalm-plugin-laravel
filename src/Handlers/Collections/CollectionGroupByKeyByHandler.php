@@ -58,7 +58,6 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             $key = $model === null ? null : self::resolveKeyType(
                 ModelPropertyHandler::resolveColumnType($source->getCodebase(), $model, $arg->getSingleStringLiteral()->value),
                 $source->getCodebase(),
-                $method === 'groupby',
             );
             $value = $templates[1] ?? ($model === null ? null : new Union([new TNamedObject($model)]));
         } elseif (self::returnsMixed($arg) && self::isBaseCollection($class) && self::isExactBaseCollection($lhs)) {
@@ -137,7 +136,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
     }
 
     /** @psalm-mutation-free */
-    private static function resolveKeyType(?Union $type, \Psalm\Codebase $codebase, bool $groupBy): ?Union
+    private static function resolveKeyType(?Union $type, \Psalm\Codebase $codebase): ?Union
     {
         if (!$type instanceof Union) {
             return null;
@@ -145,7 +144,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
 
         $atomics = $type->getAtomicTypes();
         $atomic = reset($atomics);
-        if ($groupBy && \count($atomics) === 1 && $atomic instanceof TNamedObject) {
+        if (\count($atomics) === 1 && $atomic instanceof TNamedObject) {
             try {
                 return $codebase->classlike_storage_provider->get($atomic->value)->enum_type === 'int'
                     ? Type::getInt()
