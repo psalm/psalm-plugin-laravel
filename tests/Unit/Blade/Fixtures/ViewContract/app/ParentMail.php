@@ -8,5 +8,7 @@ use Illuminate\Mail\Mailable;
 
 class ParentMail extends Mailable
 {
+    use MailProperties;
+
     public parent $owner;
 }

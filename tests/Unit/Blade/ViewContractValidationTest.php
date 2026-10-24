@@ -444,13 +444,29 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'MailableFallback.php'), \var_export($issues, true));
     }
 
-    /** A userland `buildViewData()` can add, drop or change any key: nothing is typed, nothing is missing. */
+    /**
+     * A userland `buildViewData()` or `additionalMessageData()` can add, drop or change any key:
+     * nothing is typed, nothing is missing, and a passed key loses its passed type too. The passed
+     * but unread key is still unused, as framework entries never touch what was passed.
+     */
     #[Test]
-    public function a_mailable_overriding_build_view_data_leaves_the_key_set_open(): void
+    public function a_mailable_overriding_its_view_data_leaves_the_key_set_open(): void
     {
         $issues = $this->contractIssues('psalm.xml');
 
         $this->assertSame([], $this->forFile($issues, 'MailableOverride.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'MailableAdditional.php'), \var_export($issues, true));
+
+        $unused = [];
+
+        foreach ($this->fixtureIssues(self::FIXTURE, $this->arguments('psalm.xml')) as $issue) {
+            if ($issue['type'] === 'UnusedViewData' && \basename((string) $issue['file_name']) === 'MailableAdditional.php') {
+                $unused[] = (string) $issue['message'];
+            }
+        }
+
+        $this->assertCount(1, $unused, \var_export($unused, true));
+        $this->assertStringContainsString("passes 'junk'", $unused[0]);
     }
 
     /** `parent` in a property type names the class declaring the property, not the rendered subclass. */

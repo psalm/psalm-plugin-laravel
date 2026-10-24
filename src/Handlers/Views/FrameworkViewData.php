@@ -103,7 +103,14 @@ final class FrameworkViewData
             if (\strtolower($declaring->name) !== self::MAILABLE) {
                 // An uninitialized typed property is skipped at runtime and leaves a passed value of
                 // the same name in place.
-                $keys[$name] = $open || isset($passed[$name]) ? Type::getMixed() : self::typeOf($codebase, $storage, $declaring, $property);
+                $keys[$name] = $open || isset($passed[$name]) ? Type::getMixed() : self::typeOf($codebase, $storage, $name, $declaring, $property);
+            }
+        }
+
+        if ($open) {
+            // The override may replace any passed value too, so none of them keeps its passed type.
+            foreach (\array_keys($passed) as $name) {
+                $keys[$name] = Type::getMixed();
             }
         }
 
@@ -186,7 +193,7 @@ final class FrameworkViewData
 
         foreach ($properties as $name => [$declaring, $property]) {
             if ($property->is_static !== true && !\in_array(\strtolower($declaring->name), self::LIVEWIRE_BASES, true)) {
-                $keys[$name] = self::typeOf($codebase, $storage, $declaring, $property);
+                $keys[$name] = self::typeOf($codebase, $storage, $name, $declaring, $property);
             }
         }
 
@@ -215,6 +222,7 @@ final class FrameworkViewData
     private static function typeOf(
         Codebase $codebase,
         ClassLikeStorage $storage,
+        string $name,
         ClassLikeStorage $declaring,
         PropertyStorage $property,
     ): Union {
@@ -222,13 +230,25 @@ final class FrameworkViewData
             return Type::getMixed();
         }
 
-        // `self` and `parent` name the class that declares the property; `static` is the rendered one.
+        // `self` and `parent` name the class that declares the property, which for a trait's property
+        // is the class the trait appears in; `static` is the rendered one.
+        $owner = $declaring;
+
+        if ($declaring->is_trait) {
+            $appearing = \strstr($storage->appearing_property_ids[$name] ?? '', '::', true);
+            $owner = $appearing === false ? null : ViewClassProperties::storage($codebase, $appearing);
+
+            if (!$owner instanceof ClassLikeStorage) {
+                return Type::getMixed();
+            }
+        }
+
         return TypeExpander::expandUnion(
             $codebase,
             $property->type,
-            $declaring->name,
+            $owner->name,
             $storage->name,
-            $declaring->parent_class,
+            $owner->parent_class,
             final: true,
         );
     }
