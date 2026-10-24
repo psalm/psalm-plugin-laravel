@@ -27,13 +27,16 @@ use Psalm\Type\Union;
  * Mailable: `Mailable::buildViewData()` merges `$viewData` with every initialized public property
  * whose declaring class is not `Mailable` itself, statics included
  * (`ReflectionClass::getProperties(IS_PUBLIC)`), so a property overrides a `with()` key. An
- * uninitialized typed property still counts as supplied: a superset only ever silences a report.
+ * uninitialized typed property still counts as supplied (a superset only ever silences a report),
+ * but is typed `mixed` when the call passes the same name, as Laravel then keeps the passed value.
  *
  * MailMessage: `MailMessage::data()` is `array_merge(toArray(), viewData)`, so a key the call passes
- * wins over the `toArray()` one.
+ * wins over the `toArray()` one. The `toArray()` keys are `mixed`: the vendor property docblocks are
+ * coarse (`array`) and wrong for the null defaults.
  *
  * Mailer: `Mailer::send()` adds `message`. `view()` and `markdown()` order that against the data
- * differently, so a call that also supplies a `message` makes the key `mixed`.
+ * differently, so a call that also supplies a `message`, or whose data is not fully known, makes the
+ * key `mixed`.
  *
  * Livewire: `HandleComponents::getView()` renders `render()`'s view with
  * `Utils::getPublicPropertiesDefinedOnSubclass()` (livewire/livewire src/Mechanisms/HandleComponents/
@@ -63,11 +66,12 @@ final class FrameworkViewData
     private const MESSAGE_KEYS = ['level', 'subject', 'greeting', 'salutation', 'introLines', 'outroLines', 'actionText', 'actionUrl'];
 
     /**
-     * @param array<string, Union> $passed the data the call itself supplies
+     * @param array<string, Union> $passed         the data the call itself supplies
+     * @param bool                 $passedComplete whether `$passed` is every key the call supplies
      *
      * @return array{0: array<string, Union>, 1: bool}
      */
-    public static function forMailable(?string $receiver, array $passed, StatementsSource $source): array
+    public static function forMailable(?string $receiver, array $passed, bool $passedComplete, StatementsSource $source): array
     {
         $codebase = $source->getCodebase();
         $storage = $receiver === null ? null : ViewClassProperties::storage($codebase, $receiver);
@@ -87,11 +91,13 @@ final class FrameworkViewData
 
         foreach ($properties as $name => [$declaring, $property]) {
             if (\strtolower($declaring->name) !== self::MAILABLE) {
-                $keys[$name] = self::typeOf($codebase, $storage, $declaring, $property);
+                // An uninitialized typed property is skipped at runtime and leaves a passed value of
+                // the same name in place.
+                $keys[$name] = isset($passed[$name]) ? Type::getMixed() : self::typeOf($codebase, $storage, $declaring, $property);
             }
         }
 
-        $keys['message'] = self::messageType(isset($keys['message']) || isset($passed['message']));
+        $keys['message'] = self::messageType(!$passedComplete || isset($keys['message']) || isset($passed['message']));
 
         return [$keys, true];
     }
@@ -114,25 +120,15 @@ final class FrameworkViewData
             return [[], false];
         }
 
-        $properties = ViewClassProperties::publicOf(
-            $codebase,
-            $storage,
-            static fn(string $name): bool => !\in_array($name, self::MESSAGE_KEYS, true),
-        );
-
-        if ($properties === null) {
-            return [[], false];
-        }
-
         $keys = [];
 
         // A key the call passes wins, and a passed set that is not fully known may hold any of them.
+        // `SimpleMessage`'s docblock types are coarse (`array`) and wrong for its null defaults, so
+        // the keys are `mixed`: only `displayableActionUrl`, a computed string, has a trustworthy type.
         if ($passedComplete) {
             foreach ([...self::MESSAGE_KEYS, 'displayableActionUrl'] as $name) {
                 if (!isset($passed[$name])) {
-                    $keys[$name] = isset($properties[$name])
-                        ? self::typeOf($codebase, $storage, $properties[$name][0], $properties[$name][1])
-                        : ($name === 'displayableActionUrl' ? Type::getString() : Type::getMixed());
+                    $keys[$name] = $name === 'displayableActionUrl' ? Type::getString() : Type::getMixed();
                 }
             }
         }

@@ -418,6 +418,33 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * The vendor property docblocks (`array`, `string`) are coarser than the values a MailMessage
+     * carries, so its `toArray()` keys are exempt from the type check: `list<string>`, a literal
+     * union and `string|null` declarations are not reported.
+     */
+    #[Test]
+    public function a_mail_messages_array_keys_are_not_type_checked(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $narrow = \array_filter($this->forFile($issues, 'NotificationMail.php'), static fn(array $issue): bool => \str_contains($issue['message'], 'mail-notification-narrow'));
+
+        $this->assertSame([], $narrow, \var_export($issues, true));
+    }
+
+    /**
+     * `markdown()` merges the view data after the injected `$message`, and an uninitialized property
+     * leaves a passed value in place: in both cases the key may hold what the call passed.
+     */
+    #[Test]
+    public function a_mailable_key_the_call_may_pass_is_not_type_checked(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+
+        $this->assertSame([], $this->forFile($issues, 'MailableOpenData.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'MailableFallback.php'), \var_export($issues, true));
+    }
+
+    /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
      * half is asserted together: a protected property, a static one and a view built outside
      * `render()` are still missing.

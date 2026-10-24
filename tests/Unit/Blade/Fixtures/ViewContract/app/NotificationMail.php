@@ -20,6 +20,12 @@ final class NotificationMail extends Notification
         return (new MailMessage())->markdown('mail-notification-passed', ['greeting' => 5]);
     }
 
+    public function toNarrow(object $notifiable): MailMessage
+    {
+        // The vendor property docblocks are coarser than the real values, so these declarations hold.
+        return (new MailMessage())->view('mail-notification-narrow');
+    }
+
     public function toCustom(object $notifiable): CustomMailMessage
     {
         return (new CustomMailMessage())->view('mail-override');

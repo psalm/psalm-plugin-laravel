@@ -97,18 +97,19 @@ though the `render()` passes only `['component' => $this]`. Property types are k
 declarations. A component with its own `data()` override can add names nothing can enumerate, so its
 supplied set is treated as open and this check declines for it.
 
-Three more receivers have framework-supplied keys, which count as supplied (and are checked by
-[InvalidViewData](InvalidViewData.md) against the declared property type; an untyped property is
-`mixed` and exempt). They are never "passed", so [UnusedViewData](UnusedViewData.md) ignores them:
+Three more receivers have framework-supplied keys, which count as supplied. They are never "passed", so [UnusedViewData](UnusedViewData.md) ignores them. [InvalidViewData](InvalidViewData.md) checks a Mailable or Livewire property against its declared type; an untyped property is `mixed` and exempt:
 
 - **Mailable** (`$this->view()` / `->markdown()`, or `$mailable->view()` on a receiver typed as one
   `Mailable` subclass): every public property, static ones included, that the subclass declares
   (promoted, defaulted or assigned), plus `$message`. A receiver typed as `Mailable` itself, a
-  contract or a union is silent, as the instance's properties are unknowable.
+  contract, a union or an intersection is silent, as the instance's properties are unknowable. A
+  property the call also passes by name, and `$message` when the call passes `message` or its data is
+  not fully known, is `mixed`: at runtime the passed value can win.
 - **MailMessage** (`(new MailMessage)->view()` / `->markdown()`): `level`, `subject`, `greeting`,
   `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`
-  and `$message`. A key the call passes wins over its own entry here. A subclass overriding `data()`
-  or `toArray()` is silent.
+  and `$message`. A key the call passes wins over its own entry here. The property keys are `mixed`
+  (Laravel's own docblocks are coarser than the real values); `displayableActionUrl` is a `string`.
+  A subclass overriding `data()` or `toArray()` is silent.
 - **Livewire** (`view()` inside `render()` of a `Livewire\Component` subclass): every public,
   non-static property the component declares.
 

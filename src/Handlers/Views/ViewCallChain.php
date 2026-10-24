@@ -380,7 +380,7 @@ final class ViewCallChain
         $chain = self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role, $trimName);
 
         return match ($role) {
-            ViewNameSignatures::ROLE_MAILABLE => $chain?->supplying(FrameworkViewData::forMailable($receiverClass, $chain->data, $source)),
+            ViewNameSignatures::ROLE_MAILABLE => $chain?->supplying(FrameworkViewData::forMailable($receiverClass, $chain->data, $chain->complete, $source)),
             ViewNameSignatures::ROLE_MAIL_MESSAGE => $chain?->supplying(
                 FrameworkViewData::forMailMessage($receiverClass, $chain->data, $chain->complete, $source),
             ),
@@ -757,7 +757,8 @@ final class ViewCallChain
     {
         $atomic = self::soleAtomic($receiver, $source);
 
-        return $atomic instanceof TNamedObject ? $atomic->value : null;
+        // An intersection is not provably one class.
+        return $atomic instanceof TNamedObject && $atomic->extra_types === [] ? $atomic->value : null;
     }
 
     private static function roleOfStaticClass(Name|Expr $class): ?string
