@@ -127,7 +127,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
     private static function plans(): array
     {
         $plans = [];
-        $required = [];
+        $optional = [];
 
         foreach (ViewReferenceRegistry::templates() as $viewName => $templatePath) {
             // PHP stored a numeric view name (`123.blade.php` is legal) under the int it cast the
@@ -142,9 +142,10 @@ final class AnnotationWriter implements AfterAnalysisInterface
                 $plans[$templatePath][$name] = !\array_key_exists($name, $plans[$templatePath] ?? [])
                     || $plans[$templatePath][$name] === $type ? $type : null;
 
-                // Optional only when every name this file is rendered under agrees.
-                if (!AnnotationCollector::isOptional((string) $viewName, $name)) {
-                    $required[$templatePath][$name] = true;
+                // Optional once a closed call site omits it under ANY of the file's names: that call
+                // renders this same file without it.
+                if (AnnotationCollector::isOptional((string) $viewName, $name)) {
+                    $optional[$templatePath][$name] = true;
                 }
             }
         }
@@ -152,15 +153,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $result = [];
 
         foreach ($plans as $templatePath => $vars) {
-            $optional = [];
-
-            foreach (\array_keys($vars) as $name) {
-                if (!isset($required[$templatePath][$name])) {
-                    $optional[$name] = true;
-                }
-            }
-
-            $result[$templatePath] = [$vars, $optional];
+            $result[$templatePath] = [$vars, $optional[$templatePath] ?? []];
         }
 
         return $result;

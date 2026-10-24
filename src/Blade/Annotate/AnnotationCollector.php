@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
+use Illuminate\View\ViewName;
 use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Scalar\String_;
@@ -156,8 +157,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
             $nameArg = ArgUtil::byNameOrPosition(\array_values($call->getArgs()), 0, 'view');
 
+            // Marked under the name Laravel renders, which a spelling the chain declined
+            // (`'pkg::x::y'`, `' x '`) does not carry verbatim.
             if ($nameArg instanceof Node\Arg && !$nameArg->unpack && $nameArg->value instanceof String_ && $nameArg->value->value !== '') {
-                $names[] = $nameArg->value->value;
+                $names[] = \trim(ViewName::normalize($nameArg->value->value));
             }
         }
 

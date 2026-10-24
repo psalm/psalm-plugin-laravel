@@ -14,6 +14,9 @@ $app->register(new class ($app) extends ServiceProvider {
     public function boot(): void
     {
         $this->loadViewsFrom(\dirname(__DIR__) . '/resources/pkg-views', 'pkg');
+        // Markdown mail swaps `mail` for its component paths at render time, so this hint never
+        // renders behind a markdown() call.
+        $this->loadViewsFrom(\dirname(__DIR__) . '/resources/mail-views', 'mail');
     }
 });
 
