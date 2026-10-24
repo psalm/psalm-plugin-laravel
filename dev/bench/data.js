@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792855711500,
+  "lastUpdate": 1792856604931,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -15950,6 +15950,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.5,
             "range": "± 1.78",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f7d25d6af1efb5d5935ec1cffa853e4063a89551",
+          "message": "docs(blade): rewrite the Blade guide around one mental model (#2040)\n\nCut docs/blade.md to a short user guide: templates analyzed as PHP files\nat their own paths, onboarding with blade:annotate, what is checked with\nand without @var, the experimental view-data issues, suppression and\nbaseline, and the top known limits.\n\nMove the behaviour reference (cache invalidation, compiler-generated\ncode, ambient variables, class components, declaration rules, annotate\ndetails, the full limits list) to docs/contributing/blade.md, trim the\nblade section of docs/config.md to the switch and cacheDir, and repoint\nlinks into the removed sections.\n\nRefs #1991",
+          "timestamp": "2026-10-24T17:40:57+02:00",
+          "tree_id": "8b8a6b70ecf85be7fefeeef6bcac30ece86752a7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f7d25d6af1efb5d5935ec1cffa853e4063a89551"
+        },
+        "date": 1792856603344,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 24.14,
+            "range": "± 0.15",
             "unit": "s"
           },
           {
