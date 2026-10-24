@@ -706,7 +706,6 @@ final class PluginConfigTest extends TestCase
             'findOctaneIncompatibleBinding=true',
             'findPromptInjection=false',
             'blade=true',
-            'blade.reportMixedIssues=true',
             'experimental=true',
             'failOnInternalError=true',
         ])));
@@ -723,7 +722,6 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->findOctaneIncompatibleBinding);
         $this->assertFalse($config->findPromptInjection);
         $this->assertTrue($config->bladeEnabled);
-        $this->assertTrue($config->bladeReportMixedIssues);
         $this->assertTrue($config->experimental);
         $this->assertTrue($config->failOnInternalError);
     }
@@ -764,28 +762,18 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    public function blade_override_switches_blade_either_way_and_keeps_xml_sub_settings(): void
+    public function blade_override_switches_blade_either_way_and_keeps_the_xml_cache_dir(): void
     {
         $this->assertTrue(PluginConfig::fromXml(null, PluginOverrides::parse('blade=true'))->bladeEnabled);
         $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'), PluginOverrides::parse('blade=false'))->bladeEnabled);
 
         $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade value="false" reportMixedIssues="true" cacheDir="from-xml" /></pluginClass>'),
+            new \SimpleXMLElement('<pluginClass><blade value="false" cacheDir="from-xml" /></pluginClass>'),
             PluginOverrides::parse('blade=true'),
         );
 
         $this->assertTrue($config->bladeEnabled);
-        $this->assertTrue($config->bladeReportMixedIssues);
         $this->assertSame('from-xml', $config->bladeCacheDir);
-    }
-
-    #[Test]
-    public function blade_sub_settings_never_enable_blade(): void
-    {
-        $subSettings = PluginOverrides::parse('blade.reportMixedIssues=true');
-
-        $this->assertFalse(PluginConfig::fromXml(null, $subSettings)->bladeEnabled);
-        $this->assertFalse(PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'), $subSettings)->bladeEnabled);
     }
 
     /** @return iterable<string, array{string}> */
@@ -793,7 +781,6 @@ final class PluginConfigTest extends TestCase
     {
         yield 'bad bool' => ['<resolveDynamicWhereClauses value="maybe" />'];
         yield 'bad blade value' => ['<blade value="yes" />'];
-        yield 'bad blade sub-setting' => ['<blade reportMixedIssues="yes" />'];
         yield 'bad enum' => ['<modelProperties columnFallback="db" />'];
         yield 'prompt injection without value' => ['<findPromptInjection />'];
     }
@@ -806,7 +793,7 @@ final class PluginConfigTest extends TestCase
 
         PluginConfig::fromXml(
             new \SimpleXMLElement("<pluginClass>{$inner}</pluginClass>"),
-            PluginOverrides::parse('resolveDynamicWhereClauses=true blade=true blade.reportMixedIssues=true modelProperties.columnFallback=none findPromptInjection=true'),
+            PluginOverrides::parse('resolveDynamicWhereClauses=true blade=true modelProperties.columnFallback=none findPromptInjection=true'),
         );
     }
 }

@@ -49,9 +49,9 @@ final class DeltaSelectAppsTest extends TestCase
         // Plugin option keys are camelCase, so only names and groups are case-folded.
         yield 'flag case kept' => ['BLADE --opt=camelKey=x', 'alpha,beta', '--opt=camelKey=x'];
         yield 'undeclared plugin option' => [
-            'blade --blade --plugin-option=blade.reportMixedIssues=true',
+            'blade --blade --plugin-option=modelProperties.columnFallback=none',
             'alpha,beta',
-            '--blade --plugin-option=blade.reportMixedIssues=true',
+            '--blade --plugin-option=modelProperties.columnFallback=none',
         ];
     }
 

@@ -275,7 +275,7 @@ Opt-in because the compile pass costs time proportional to the number of templat
 
 Notes on this release:
 
-- Every template variable the plugin cannot prove a type for is `mixed`, silently. A `@var` docblock (`<?php /** @var \App\Models\User $user */ ?>`) types the template's own body as well as the call-site checks below; a `@props([...])` entry is typed in the body from a literal default (`'lg'` as `string`) and is `mixed` otherwise. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
+- Every template variable the plugin cannot prove a type for is `mixed`, silently. A `@var` docblock (`<?php /** @var \App\Models\User $user */ ?>`) types the template's own body as well as the call-site checks below; a `@props([...])` entry is typed in the body from a literal default (`'lg'` as `string`) and is `mixed` otherwise. The `Mixed*` issues that fallback produces are never reported in templates; see [`Mixed*` issues](blade.md#mixed-issues).
 - Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
 - `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
 
@@ -315,20 +315,6 @@ Inside templates, the literal data array of `@include`, `@includeIf`, `@includeW
 
 [UnusedViewData](issues/UnusedViewData.md) looks the other way: it reports a data key the rendered template neither reads nor declares. A key that a template reached through `@include` or `@extends` reads or declares counts as consumed, because those directives inherit the including template's whole scope. The chain is followed as far as every include in it names a literal template; one dynamic `@include($name)` at any depth silences the check for that call site alone, not for the run. A template whose compiled body hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked; the issue page lists every gate.
 
-### `reportMixedIssues`
-
-**default**: off (the `Mixed*` family is suppressed)
-
-```xml
-<blade reportMixedIssues="true" />
-```
-
-Every template variable the plugin cannot prove a type for is `mixed` (see the notes above), so `MixedArgument`, `MixedAssignment`, and the rest of Psalm's `MixedIssue` family are overwhelmingly noise about the prelude's own fallback rather than a real template bug. They are dropped at the point issues are relocated onto the template, before Psalm's own suppression accounting sees them.
-
-Set `reportMixedIssues="true"` to opt back in and see them at the template's file and line, same as any other issue type. Opting in restores only findings that map to a real template line: a `Mixed*` finding on an unmapped line (the prelude that declares the fallback types) stays dropped unconditionally, because it can only ever describe the fallback itself, and so does one on Laravel's compiled save/restore bookkeeping (see [Compiler-generated code](blade.md#compiler-generated-code)). No recompile needed either way: the flag changes only which issues are reported, never what the compile pass collects, so flipping it reuses a warm shadow cache.
-
-For some but not all of the family back, first set `reportMixedIssues="true"`, then silence the unwanted `Mixed*` types over `resources/views` with [an `issueHandlers` entry](blade.md#suppressing-issues). An `issueHandlers` entry alone cannot bring anything back: with the flag off the plugin drops the whole family before Psalm's issue handlers are consulted.
-
 ### Degradation
 
 By default Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if a view directory cannot be read and no template was found elsewhere, if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. With [`failOnInternalError`](#failoninternalerror) enabled, that disable fails the run instead. Templates that fail to compile are skipped and reported as [`BladeCompileFailure`](issues/BladeCompileFailure.md) issues. Other skipped templates are summarized in a single warning; run with `--debug` for the individual causes.
@@ -343,13 +329,12 @@ Bool and enum settings on this page can be overridden for one run without touchi
 vendor/bin/psalm-laravel analyze --experimental --plugin-option=modelProperties.columnFallback=none
 ```
 
-* Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`, `blade.reportMixedIssues`). `psalm-laravel analyze --help` lists every key with its values.
+* Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`). `psalm-laravel analyze --help` lists every key with its values.
 * Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
 * Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
 * `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false` and `--experimental` for `experimental=true`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.
 * There is no environment-variable form for a bare `vendor/bin/psalm`; edit `psalm.xml` there.
 * `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless an override or the XML sets one of them explicitly.
-* `blade.*` settings never switch Blade on by themselves; only `blade=true` does.
 * An unknown key, a token without `=`, or a value outside the key's values aborts the run with a non-zero exit and a message naming the problem. `analyze` checks them before it starts Psalm. An override never skips the XML checks: a malformed element in `psalm.xml` still fails the run.
 
 ### Result cache

@@ -54,7 +54,7 @@ final class BladeConfigTest extends TestCase
     public function blade_value_false_switches_the_present_element_off(): void
     {
         $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade value="false" reportMixedIssues="true" /></pluginClass>'),
+            new \SimpleXMLElement('<pluginClass><blade value="false" /></pluginClass>'),
         );
 
         $this->assertFalse($config->bladeEnabled);
@@ -85,52 +85,5 @@ final class BladeConfigTest extends TestCase
         );
 
         $this->assertSame('build/blade-shadows', $config->bladeCacheDir);
-    }
-
-    #[Test]
-    public function report_mixed_issues_is_disabled_when_the_element_is_absent(): void
-    {
-        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass />'));
-
-        $this->assertFalse($config->bladeReportMixedIssues);
-    }
-
-    #[Test]
-    public function report_mixed_issues_is_disabled_when_the_element_carries_no_such_attribute(): void
-    {
-        $config = PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade /></pluginClass>'));
-
-        $this->assertFalse($config->bladeReportMixedIssues);
-    }
-
-    #[Test]
-    public function report_mixed_issues_is_enabled_by_the_attribute(): void
-    {
-        $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade reportMixedIssues="true" /></pluginClass>'),
-        );
-
-        $this->assertTrue($config->bladeReportMixedIssues);
-    }
-
-    #[Test]
-    public function report_mixed_issues_false_is_accepted(): void
-    {
-        $config = PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade reportMixedIssues="false" /></pluginClass>'),
-        );
-
-        $this->assertFalse($config->bladeReportMixedIssues);
-    }
-
-    #[Test]
-    public function report_mixed_issues_rejects_a_non_boolean_value(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches("/Invalid blade reportMixedIssues value 'yes'/");
-
-        PluginConfig::fromXml(
-            new \SimpleXMLElement('<pluginClass><blade reportMixedIssues="yes" /></pluginClass>'),
-        );
     }
 }

@@ -54,8 +54,6 @@ final readonly class PluginConfig
         public bool $bladeEnabled,
         /** Directory the compiled Blade shadow files live in. Absolute, or relative to the working directory. */
         public string $bladeCacheDir,
-        /** Opt back in to the `MixedIssue` family inside templates, suppressed by default (`<blade reportMixedIssues="true" />`). */
-        public bool $bladeReportMixedIssues,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -98,7 +96,6 @@ final readonly class PluginConfig
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
         $xmlBladeEnabled = self::xmlBladeEnabled($config);
-        $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
         $cachePath = self::resolveCachePath();
 
         return new self(
@@ -115,10 +112,8 @@ final readonly class PluginConfig
             findOctaneIncompatibleBinding: $overrides->bool('findOctaneIncompatibleBinding') ?? $findOctaneIncompatibleBinding,
             findPromptInjection: $overrides->bool('findPromptInjection') ?? $findPromptInjection,
             cachePath: $cachePath,
-            // Sub-settings below never reach this switch: only `blade` itself enables the Blade pass.
             bladeEnabled: $overrides->bool('blade') ?? $xmlBladeEnabled,
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
-            bladeReportMixedIssues: $overrides->bool('blade.reportMixedIssues') ?? $bladeReportMixedIssues,
             experimental: $experimental,
             failOnInternalError: $overrides->bool('failOnInternalError') ?? $failOnInternalError,
         );
@@ -182,17 +177,17 @@ final readonly class PluginConfig
     }
 
     /**
-     * Read a boolean attribute of an XML element, `value` unless $attribute says otherwise.
+     * Read a boolean attribute of an XML element's `value`.
      * Expects `<element value="true" />` or `<element value="false" />`.
      * Returns $default when the element or the attribute is absent.
      */
-    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false, string $attribute = 'value'): bool
+    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false): bool
     {
         if (!$element instanceof \SimpleXMLElement) {
             return $default;
         }
 
-        $value = (string) ($element[$attribute] ?? ($default ? 'true' : 'false'));
+        $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");
