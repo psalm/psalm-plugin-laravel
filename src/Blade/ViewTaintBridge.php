@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Illuminate\View\ViewName;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Nop;
+use Psalm\Codebase;
 use Psalm\CodeLocation;
+use Psalm\Context;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewNameSignatures;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
+use Psalm\StatementsSource;
 use Psalm\Type\Union;
 
 /**
@@ -31,10 +36,17 @@ use Psalm\Type\Union;
  * store API in one file.
  *
  * Source side: the `view()` helper, `View::make()`, `Factory::make()`, `response()->view()`, and the
- * literal data array or `with()` entries they pass. Each link of a chain writes only its own
- * arguments, which is what lets a nested `response(view(...))` work. Skipped: a dynamic view name,
- * `View::share()`, composers, `Route::view()`, Livewire, mail, and calls inside compiled templates
- * (`@include` data is its own slice).
+ * data or `with()` entries they pass. Each link of a chain writes only its own arguments, which is
+ * what lets a nested `response(view(...))` work. A literal array is written key by key. Any other
+ * array (a variable, `compact()`) is written whole under the `*` name, and the sink reads it back
+ * with `arrayvalue-fetch-'key'`, so Psalm's own array key paths keep the per-key precision. Skipped:
+ * a dynamic view name, `View::share()`, composers, `Route::view()`, Livewire and mail.
+ *
+ * Inside a compiled template (#2032) the same calls cover the include directives, whose compiled
+ * `$__env->make(...)` also hands over the includer's scope (`array_diff_key(get_defined_vars(), ...)`,
+ * written as every variable in scope under its own name), and the anonymous component tag, whose
+ * `AnonymousComponent::resolve(['view' => ..., 'data' => [...]])` data is written raw. The component's
+ * `withAttributes()` copy goes through `e()`, so `{{ $attributes }}` stays clean and is never written.
  *
  * Sink side: runs on the same sentinel as {@see ComponentViewSeedHandler}, and MUST be registered
  * after it, because the seed replaces a variable's whole type and would drop the nodes attached here.
@@ -46,6 +58,12 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
     /** `with` and the binders' own names: nothing else can start a bridged call. */
     private const CALL_NAMES = ['view' => true, 'make' => true, 'with' => true];
 
+    /** Names common elsewhere (`Collection::first()`), so they start a bridged call only inside a compiled template. */
+    private const TEMPLATE_CALL_NAMES = ['first' => true, 'renderwhen' => true, 'renderunless' => true, 'resolve' => true];
+
+    /** The `$__env` methods a compiled include directive calls. */
+    private const INCLUDE_CALLS = ['make' => true, 'first' => true, 'renderwhen' => true, 'renderunless' => true];
+
     /**
      * Names view data never reaches the template under: `extract($__data, EXTR_SKIP)` keeps the engine's
      * own `$__path` and `$__data`, and `$__env` is the factory every compiled directive calls. Every other
@@ -54,45 +72,158 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
      */
     private const NEVER_VIEW_DATA = ['__env' => true, '__path' => true, '__data' => true];
 
+    /** The name a whole data array is stored under: a variable name is never `*`. */
+    private const WHOLE_ARRAY = '*';
+
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
     {
-        $call = self::bindingCall($event->getExpr());
+        $call = $event->getExpr();
+        $name = self::callName($call);
 
-        if (!$call instanceof Expr\CallLike) {
+        if ($name === null || !$call instanceof Expr\CallLike || (!isset(self::CALL_NAMES[$name]) && !isset(self::TEMPLATE_CALL_NAMES[$name]))) {
             return null;
         }
 
         $source = $event->getStatementsSource();
         $codebase = $event->getCodebase();
 
-        // A template's own `@include` is analysed as a Factory::make() call too; that flow is not
-        // part of this bridge, so a shadow never writes.
-        if (!$codebase->tracksTaintFlow($source) || ShadowRegistry::entryFor($source->getFilePath()) instanceof ShadowEntry) {
+        if (!$codebase->tracksTaintFlow($source)) {
+            return null;
+        }
+
+        $inTemplate = ShadowRegistry::entryFor($source->getFilePath()) instanceof ShadowEntry;
+
+        if (!$inTemplate && isset(self::TEMPLATE_CALL_NAMES[$name])) {
+            return null;
+        }
+
+        if ($call instanceof Expr\StaticCall && $name === 'resolve') {
+            self::bridgeAnonymousComponent($codebase, $source, $call);
+
+            return null;
+        }
+
+        // A compiled include is a Factory call whose data is any shape, so it is resolved by its own rules.
+        $includedView = $inTemplate && $call instanceof Expr\MethodCall && isset(self::INCLUDE_CALLS[$name])
+            ? ViewCallChain::includedView($call, $source)
+            : null;
+
+        if ($includedView !== null && $call instanceof Expr\MethodCall) {
+            self::bridgeCall($codebase, $source, $call, $includedView, ViewNameSignatures::ROLE_VIEW_FACTORY);
+
+            if (self::passesScope($call)) {
+                self::bridgeScope($codebase, $source, $call, $includedView, $event->getContext());
+            }
+
             return null;
         }
 
         // Laravel's finder trims the name before it resolves it, so a padded literal still binds its template.
         $chain = ViewCallChain::from($call, $source, true);
 
-        if (!$chain instanceof ViewCallChain
-            || (!\in_array($chain->binder, [null, ViewNameSignatures::ROLE_VIEW_FACTORY, ViewNameSignatures::ROLE_RESPONSE_FACTORY], true))
+        if ($chain instanceof ViewCallChain
+            && \in_array($chain->binder, [null, ViewNameSignatures::ROLE_VIEW_FACTORY, ViewNameSignatures::ROLE_RESPONSE_FACTORY], true)
         ) {
-            return null;
-        }
-
-        foreach (ViewCallChain::ownEntries($call, $chain->binder) as [$key, $value]) {
-            $type = $source->getNodeTypeProvider()->getType($value);
-
-            if (!$type instanceof Union || $type->parent_nodes === []) {
-                continue;
-            }
-
-            $node = $codebase->getTaintNode($source, "\${$key} passed to view {$chain->viewName}", new CodeLocation($source, $value));
-            $codebase->addTaintStoreWrite($source, self::store($chain->viewName), [[true, $key]], $node, '=', $type);
+            self::bridgeCall($codebase, $source, $call, $chain->viewName, $chain->binder);
         }
 
         return null;
+    }
+
+    /** What THIS call passes: literal keys one by one, any other array whole. */
+    private static function bridgeCall(Codebase $codebase, StatementsSource $source, Expr\CallLike $call, string $view, ?string $binder): void
+    {
+        foreach (ViewCallChain::ownEntries($call, $binder) as [$key, $value]) {
+            self::write($codebase, $source, $view, $key, "\${$key} passed to view {$view}", $source->getNodeTypeProvider()->getType($value), $value);
+        }
+
+        foreach (ViewCallChain::ownArrays($call, $binder, $source) as $array) {
+            self::write($codebase, $source, $view, self::WHOLE_ARRAY, "data passed to view {$view}", $source->getNodeTypeProvider()->getType($array), $array);
+        }
+    }
+
+    /**
+     * A compiled `@include` hands its includer's whole scope over as `$mergeData`
+     * (`array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])`), which Psalm cannot follow,
+     * so every variable in scope is written under its own name: a sound over-approximation. Matching the
+     * compiled shape, not a variable name, keeps a hand-written look-alike out of a PHP file from
+     * inheriting anything.
+     */
+    private static function passesScope(Expr\MethodCall $call): bool
+    {
+        foreach ($call->getArgs() as $arg) {
+            $diff = $arg->value;
+            $scope = $diff instanceof Expr\FuncCall && self::isFunction($diff, 'array_diff_key') ? ($diff->getArgs()[0]->value ?? null) : null;
+
+            if ($scope instanceof Expr\FuncCall && self::isFunction($scope, 'get_defined_vars')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function isFunction(Expr\FuncCall $call, string $name): bool
+    {
+        return !$call->isFirstClassCallable() && $call->name instanceof Name && $call->name->toLowerString() === $name;
+    }
+
+    private static function bridgeScope(Codebase $codebase, StatementsSource $source, Expr\MethodCall $call, string $view, Context $context): void
+    {
+        foreach ($context->vars_in_scope as $variable => $type) {
+            // The context also keys narrowed `$a['b']` and `$a->b`; only a plain name can be a view variable.
+            if (\preg_match('/^\$(\w+)$/', $variable, $match) !== 1 || isset(self::NEVER_VIEW_DATA[$match[1]])) {
+                continue;
+            }
+
+            self::write($codebase, $source, $view, $match[1], "\${$match[1]} inherited by view {$view}", $type, $call);
+        }
+    }
+
+    /**
+     * `AnonymousComponent::resolve(['view' => 'components.x', 'data' => [...]] + $outerAttributes)`: the
+     * `data` values are the component view's variables and reach it raw. The tag's `withAttributes()`
+     * copy is sanitised by `e()` and is not written.
+     */
+    private static function bridgeAnonymousComponent(Codebase $codebase, StatementsSource $source, Expr\StaticCall $call): void
+    {
+        $class = $call->class;
+        $resolved = $class instanceof Name ? $class->getAttribute('resolvedName') ?? $class->toString() : null;
+
+        if (!\is_string($resolved) || \strtolower(\ltrim($resolved, '\\')) !== 'illuminate\view\anonymouscomponent' || $call->isFirstClassCallable()) {
+            return;
+        }
+
+        $array = $call->getArgs()[0]->value ?? null;
+        $array = $array instanceof Expr\BinaryOp\Plus ? $array->left : $array;
+
+        $view = null;
+        $data = null;
+
+        foreach ($array instanceof Expr\Array_ ? ViewCallChain::arrayEntries($array) : [] as [$key, $value]) {
+            $view = $key === 'view' && $value instanceof String_ ? \trim(ViewName::normalize($value->value)) : $view;
+            $data = $key === 'data' && $value instanceof Expr\Array_ ? $value : $data;
+        }
+
+        if ($view === null || $view === '' || !$data instanceof Expr\Array_) {
+            return;
+        }
+
+        foreach (ViewCallChain::arrayEntries($data) as [$key, $value]) {
+            self::write($codebase, $source, $view, $key, "\${$key} passed to view {$view}", $source->getNodeTypeProvider()->getType($value), $value);
+        }
+    }
+
+    /** One write of a tainted value into the store of `$view`, under `$key`. A value that carries no taint writes nothing. */
+    private static function write(Codebase $codebase, StatementsSource $source, string $view, string $key, string $label, ?Union $type, Expr $at): void
+    {
+        if (!$type instanceof Union || $type->parent_nodes === []) {
+            return;
+        }
+
+        $node = $codebase->getTaintNode($source, $label, new CodeLocation($source, $at));
+        $codebase->addTaintStoreWrite($source, self::store($view), [[true, $key]], $node, '=', $type);
     }
 
     #[\Override]
@@ -134,6 +265,8 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
             foreach ($views as $view) {
                 $node = $codebase->getTaintNode($source, "\${$name} (view data of {$view})", $location);
                 $codebase->addTaintStoreRead($source, self::store($view), [[true, $name]], $node, '=');
+                // A whole array written under `*` keeps its per-key paths: only this key leaves it.
+                $codebase->addTaintStoreRead($source, self::store($view), [[true, self::WHOLE_ARRAY]], $node, "arrayvalue-fetch-'{$name}'");
                 $reads[$node->id] = $node;
             }
 
@@ -153,8 +286,8 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
         return 'Illuminate\View\View::$data@' . $viewName;
     }
 
-    /** The cheapest gate: a bridged call is named `view`, `make` or `with`, whatever it is called on. */
-    private static function bindingCall(Expr $expr): ?Expr\CallLike
+    /** The cheapest gate: the lower-cased name of a function, method or static call, whatever it is called on. */
+    private static function callName(Expr $expr): ?string
     {
         $name = match (true) {
             $expr instanceof Expr\FuncCall => $expr->name instanceof Name ? $expr->name : null,
@@ -162,6 +295,6 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
             default => null,
         };
 
-        return $name !== null && isset(self::CALL_NAMES[$name->toLowerString()]) && $expr instanceof Expr\CallLike ? $expr : null;
+        return $name?->toLowerString();
     }
 }

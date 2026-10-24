@@ -129,16 +129,8 @@ final class ViewCallChain
             return [];
         }
 
-        if (!$call instanceof Expr\MethodCall && !$call instanceof Expr\NullsafeMethodCall && !$call instanceof Expr\StaticCall
-            || !$call->name instanceof Identifier
-            || $call->name->toLowerString() !== 'with'
-        ) {
-            // `response()->view($view, $data, $status, $headers)` has no `$mergeData`: position 2 is the status.
-            $mergeData = $call instanceof Expr\FuncCall || $binder === ViewNameSignatures::ROLE_VIEW_FACTORY
-                ? ArgUtil::byNameOrPosition($args, 2, 'mergedata')
-                : null;
-
-            return self::literalEntries([$mergeData, ArgUtil::byNameOrPosition($args, 1, 'data')]);
+        if (!self::isWith($call)) {
+            return self::literalEntries(self::dataArgs($call, $args, $binder));
         }
 
         $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
@@ -157,6 +149,78 @@ final class ViewCallChain
     }
 
     /**
+     * The data arrays THIS call passes that are not written out literally (a variable, `compact()`,
+     * a call result): what {@see self::ownEntries()} cannot split into keys. A `with()` key that may
+     * be an array is one too; a string key (literal or not) never is.
+     *
+     * @return list<Expr>
+     */
+    public static function ownArrays(Expr\CallLike $call, ?string $binder, StatementsSource $source): array
+    {
+        $args = self::args($call);
+
+        if ($args === null) {
+            return [];
+        }
+
+        if (self::isWith($call)) {
+            $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
+            $isLiteral = $keyArg instanceof Arg && ($keyArg->value instanceof Expr\Array_ || $keyArg->value instanceof String_);
+
+            return $keyArg instanceof Arg && !$isLiteral && self::mergesArray($keyArg, $source) !== false ? [$keyArg->value] : [];
+        }
+
+        $arrays = [];
+
+        foreach (self::dataArgs($call, $args, $binder) as $arg) {
+            if ($arg instanceof Arg && !$arg->value instanceof Expr\Array_) {
+                $arrays[] = $arg->value;
+            }
+        }
+
+        return $arrays;
+    }
+
+    /**
+     * The `key => value expression` pairs of one array literal, the last write of a key winning.
+     *
+     * @return list<array{0: string, 1: Expr}>
+     *
+     * @psalm-capabilities read-props
+     */
+    public static function arrayEntries(Expr\Array_ $array): array
+    {
+        return self::entriesOf(self::collectLiteralKeys($array, []));
+    }
+
+    private static function isWith(Expr\CallLike $call): bool
+    {
+        return ($call instanceof Expr\MethodCall || $call instanceof Expr\NullsafeMethodCall || $call instanceof Expr\StaticCall)
+            && $call->name instanceof Identifier
+            && $call->name->toLowerString() === 'with';
+    }
+
+    /**
+     * The data arguments of a binder in the order PHP merges them (a later array wins a shared key):
+     * `$mergeData`, then `$data`. `response()->view($view, $data, $status, $headers)` has no
+     * `$mergeData`: position 2 is the status. A compiled `@includeWhen`/`@includeUnless` puts its
+     * condition first, which shifts both.
+     *
+     * @param list<Arg> $args
+     * @return list<Arg|null>
+     */
+    private static function dataArgs(Expr\CallLike $call, array $args, ?string $binder): array
+    {
+        $shift = $call instanceof Expr\MethodCall && $call->name instanceof Identifier
+            && \in_array($call->name->toLowerString(), ['renderwhen', 'renderunless'], true) ? 1 : 0;
+        $mergeData = $call instanceof Expr\FuncCall || $binder === ViewNameSignatures::ROLE_VIEW_FACTORY
+            ? ArgUtil::byNameOrPosition($args, 2 + $shift, 'mergedata')
+            : null;
+
+        return [$mergeData, ArgUtil::byNameOrPosition($args, 1 + $shift, 'data')];
+    }
+
+    /**
      * @param list<Arg|null> $arrays in the order PHP merges them: a later array wins a shared key
      * @return list<array{0: string, 1: Expr}>
      *
@@ -172,6 +236,17 @@ final class ViewCallChain
             }
         }
 
+        return self::entriesOf($latest);
+    }
+
+    /**
+     * @param array<array-key, Expr> $latest
+     * @return list<array{0: string, 1: Expr}>
+     *
+     * @psalm-pure
+     */
+    private static function entriesOf(array $latest): array
+    {
         $entries = [];
 
         foreach ($latest as $key => $value) {
@@ -378,6 +453,46 @@ final class ViewCallChain
      */
     public static function fromInclude(Expr\MethodCall $call, StatementsSource $source): ?self
     {
+        $target = self::includeTarget($call, $source);
+
+        if ($target === null) {
+            return null;
+        }
+
+        [$name, $at, $args, $methodName] = $target;
+
+        $dataArg = ArgUtil::byNameOrPosition($args, $at + 1, 'data');
+        $literalData = $dataArg instanceof Arg && $dataArg->value instanceof Expr\Array_;
+        $isolatedWithoutData = !$dataArg instanceof Arg && $methodName === 'make' && \count($args) === 1;
+
+        if (!$literalData && !$isolatedWithoutData) {
+            return null;
+        }
+
+        $complete = $methodName !== 'first' && !ArgUtil::byNameOrPosition($args, $at + 2, 'mergedata') instanceof Arg;
+
+        return self::build($name, $dataArg, $source, [], true, $complete);
+    }
+
+    /**
+     * The view a compiled include renders, whatever shape its data takes. {@see self::fromInclude()}
+     * refuses a non-literal data argument because it type-checks keys; a taint write follows any of
+     * them, so it asks only for the name. The data positions are {@see self::ownEntries()}'s.
+     */
+    public static function includedView(Expr\MethodCall $call, StatementsSource $source): ?string
+    {
+        $target = self::includeTarget($call, $source);
+
+        return $target === null ? null : self::build($target[0], null, $source, [], true, true, null, true)?->viewName;
+    }
+
+    /**
+     * @return array{0: ?Expr, 1: int, 2: list<Arg>, 3: string}|null the view name expression, the
+     *                                                              argument position before `$data`, the
+     *                                                              arguments and the lower-cased method
+     */
+    private static function includeTarget(Expr\MethodCall $call, StatementsSource $source): ?array
+    {
         $args = self::args($call);
 
         if ($args === null || !$call->name instanceof Identifier) {
@@ -398,17 +513,7 @@ final class ViewCallChain
             default => [null, 0],
         };
 
-        $dataArg = ArgUtil::byNameOrPosition($args, $at + 1, 'data');
-        $literalData = $dataArg instanceof Arg && $dataArg->value instanceof Expr\Array_;
-        $isolatedWithoutData = !$dataArg instanceof Arg && $methodName === 'make' && \count($args) === 1;
-
-        if (!$literalData && !$isolatedWithoutData) {
-            return null;
-        }
-
-        $complete = $methodName !== 'first' && !ArgUtil::byNameOrPosition($args, $at + 2, 'mergedata') instanceof Arg;
-
-        return self::build($name, $dataArg, $source, [], true, $complete);
+        return [$name, $at, $args, $methodName];
     }
 
     /**
