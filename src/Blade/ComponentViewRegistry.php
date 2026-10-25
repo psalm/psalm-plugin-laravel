@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Illuminate\View\ViewName;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
@@ -124,7 +125,7 @@ final class ComponentViewRegistry
         $contested = [];
 
         foreach (\array_keys(self::$renderedByName) as $viewName) {
-            $templatePath = $templates[$viewName] ?? null;
+            $templatePath = self::templateOf($templates, (string) $viewName);
 
             if ($templatePath !== null) {
                 $contested[$templatePath] = true;
@@ -166,7 +167,7 @@ final class ComponentViewRegistry
             }
 
             $view = $views[$declaring];
-            $templatePath = $view === null ? null : ($templates[$view[0]] ?? null);
+            $templatePath = $view === null ? null : self::templateOf($templates, $view[0]);
 
             if ($view === null || $templatePath === null) {
                 continue;
@@ -349,7 +350,7 @@ final class ComponentViewRegistry
         }
 
         foreach ((new NodeFinder())->findInstanceOf($stmts, String_::class) as $string) {
-            $templatePath = $templates[$string->value] ?? null;
+            $templatePath = self::templateOf($templates, $string->value);
 
             if ($templatePath !== null) {
                 $contested[$templatePath] = true;
@@ -357,6 +358,19 @@ final class ComponentViewRegistry
         }
 
         return null;
+    }
+
+    /**
+     * The template a view name renders: Laravel's `Factory::make()` turns `a/b` into `a.b` and the
+     * finder trims it, so every spelling of a name reaches the one file the templates are keyed by (#2074).
+     *
+     * @param array<array-key, string> $templates view name => template path
+     */
+    private static function templateOf(array $templates, string $viewName): ?string
+    {
+        $normalized = \trim(ViewName::normalize($viewName));
+
+        return $normalized === '' ? null : ($templates[$normalized] ?? null);
     }
 
     /**

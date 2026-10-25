@@ -20,3 +20,7 @@
 <x-toolbar/>
 <x-owned/>
 <x-snapshot/>
+<x-slash-render/>
+<x-slash-included/>
+@include('components/slash-included', ['title' => 42])
+<x-slash-gallery/>

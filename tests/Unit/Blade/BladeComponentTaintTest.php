@@ -154,6 +154,8 @@ final class BladeComponentTaintTest extends TestCase
         yield 'constructor parameter stored under another property name' => ['resources/views/components/renamed.blade.php'];
         yield 'trait property' => ['resources/views/components/trait-a.blade.php'];
         yield '@component(Foo::class, ...)' => ['resources/views/components/compo.blade.php'];
+        // #2074: Laravel renders `components/slashed` as `components.slashed`.
+        yield 'render() spelling its view with a slash' => ['resources/views/components/slashed.blade.php'];
         yield 'render() passing non-literal data' => ['resources/views/components/extra.blade.php'];
         yield 'view shared by two classes, one tainted' => ['resources/views/components/shared-x.blade.php'];
         // Accepted over-report (docs/contributing/blade.md): a property declared by a shared base class is

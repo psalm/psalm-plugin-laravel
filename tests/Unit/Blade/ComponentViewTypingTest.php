@@ -105,6 +105,10 @@ final class ComponentViewTypingTest extends TestCase
         yield 'a data argument that is not a literal array' => ['compacted.blade.php', ['$title: mixed']];
         yield 'a ->with() link after the view call' => ['withed.blade.php', ['$title: mixed']];
         yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];
+        // #2074: Laravel renders `components/x` as `components.x`, so every spelling reaches the same template.
+        yield 'render() spelling its view with a slash' => ['slash-render.blade.php', ['$title: string']];
+        yield 'also rendered by an @include spelled with a slash' => ['slash-included.blade.php', ['$title: mixed']];
+        yield 'another render() outside the shape spelling the view with a slash' => ['slash-gallery.blade.php', ['$caption: mixed']];
     }
 
     /**
