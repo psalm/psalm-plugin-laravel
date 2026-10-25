@@ -43,10 +43,8 @@ final class ShadowCompiler
         // the whole Psalm command line. Raised here instead (same class and code), it names the directive.
         \set_error_handler($this->throwCompileError(...));
 
-        // Laravel's own compile() sets the path before compileString(); a directive or precompiler
-        // reading getPath() sees null otherwise. The shared compiler gets its previous path back.
-        /** @var string|null $previousPath */
-        $previousPath = $this->compiler->getPath();
+        // Laravel's own compile() sets the path before compileString() and never restores it; a
+        // directive or precompiler reading getPath() sees null otherwise.
         $this->compiler->setPath($templatePath);
 
         try {
@@ -59,9 +57,6 @@ final class ShadowCompiler
                 : CompileFailureReason::fromThrowable($templatePath, $throwable);
         } finally {
             \restore_error_handler();
-            // `$path` is untyped and null on a fresh compiler; only setPath()'s docblock says string.
-            /** @psalm-suppress PossiblyNullArgument */
-            $this->compiler->setPath($previousPath);
         }
 
         if (PreludeBuilder::isComponentView($source) && !AttributesRestoreReassert::templateAssignsAttributes($source)) {

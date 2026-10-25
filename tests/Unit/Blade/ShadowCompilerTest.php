@@ -82,7 +82,7 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
-    public function directives_and_precompilers_see_the_template_path_and_the_shared_compiler_gets_its_own_back(): void
+    public function directives_and_precompilers_see_the_template_path(): void
     {
         $bladeCompiler = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
         $seen = [];
@@ -96,13 +96,11 @@ final class ShadowCompilerTest extends TestCase
 
             return $value;
         });
-        $bladeCompiler->setPath('/outer/being-compiled.blade.php');
 
         $result = (new ShadowCompiler($bladeCompiler))->compile('/views/page.blade.php', "@where\n");
 
         $this->assertInstanceOf(ShadowResult::class, $result);
         $this->assertSame(['/views/page.blade.php', '/views/page.blade.php'], $seen);
-        $this->assertSame('/outer/being-compiled.blade.php', $bladeCompiler->getPath());
     }
 
     #[Test]
