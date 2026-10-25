@@ -94,6 +94,20 @@ trait RunsAnnotateFixture
         // The parent's call sites disagree (`int`, `string`), and the child has a typed one of its own.
         'split-top' => "@includeIsolated('split-leaf', ['member' => \$member])\n",
         'split-leaf' => "<p>{{ \$member }}</p>\n",
+        // A write that keeps the type id `mixed`: `??=` is no plain assignment, so `$x` is no local.
+        'wr-coalesce' => "@php\n\$x ??= json_decode('{}');\n@endphp\n@includeIsolated('wr-coalesce-leaf', ['x' => \$x])\n",
+        'wr-coalesce-leaf' => "<p>{{ \$x?->slug }}</p>\n",
+        // A reference alias: the condition names `$alias`, not `$x`.
+        'wr-alias-clause' => "@php\n\$alias =& \$x;\n@endphp\n@if (\$alias !== null)\n@includeIsolated('wr-alias-clause-leaf', ['x' => \$x])\n@endif\n",
+        'wr-alias-clause-leaf' => "<p>{{ \$x?->slug }}</p>\n",
+        'wr-alias-write' => "@php\n\$alias =& \$x;\n\$alias = json_decode('{}');\n@endphp\n@includeIsolated('wr-alias-write-leaf', ['x' => \$x])\n",
+        'wr-alias-write-leaf' => "<p>{{ \$x?->slug }}</p>\n",
+        // `unset()` and a by-reference array item write the variable without a plain assignment: both keep
+        // the type id `mixed`, and neither is a local.
+        'wr-touch' => "@php\nunset(\$u);\n\$refs = [&\$r];\n@endphp\n"
+            . "@includeIsolated('wr-touch-unset', ['u' => \$u])\n@includeIsolated('wr-touch-array', ['r' => \$r])\n",
+        'wr-touch-unset' => "<p>{{ \$u?->slug }}</p>\n",
+        'wr-touch-array' => "<p>{{ \$r?->slug }}</p>\n",
     ];
 
     /**

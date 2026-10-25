@@ -20,6 +20,8 @@ use Symfony\Component\Process\Process;
 #[CoversClass(AnnotationWriter::class)]
 final class AnnotationWriterTest extends TestCase
 {
+    private const DIAMOND_LEVELS = 20;
+
     private string $tempDir;
 
     protected function setUp(): void
@@ -395,6 +397,104 @@ final class AnnotationWriterTest extends TestCase
                 \chdir($previous);
             }
         }
+    }
+
+    /**
+     * Two templates per level, each including both templates of the next level with the same key:
+     * every path down the diamonds is a distinct walk, 2^levels of them, to the same answer. Resolved
+     * pair by pair once each, it takes a few milliseconds; resolved per path it does not finish.
+     */
+    #[Test]
+    public function resolves_a_deep_diamond_of_isolated_includes_once_per_template(): void
+    {
+        $levels = self::DIAMOND_LEVELS;
+        $names = [];
+
+        foreach (\range(0, $levels - 1) as $level) {
+            foreach (['a', 'b'] as $side) {
+                $name = "l{$level}{$side}";
+                $names[] = $name;
+                ViewReferenceRegistry::registerTemplate($name, 0, "/virtual/{$name}.blade.php");
+                ContractRegistry::register($name, 0, new ViewDataContract([], false, ['x'], false));
+
+                if ($level === 0) {
+                    AnnotationCollector::record($name, ['x' => Type::getString()], true);
+
+                    continue;
+                }
+
+                foreach (['a', 'b'] as $parent) {
+                    $parentName = 'l' . ($level - 1) . $parent;
+                    AnnotationCollector::record($name, ['x' => Type::getMixed()], true, '', ['x' => ["/virtual/{$parentName}.blade.php", 'x']]);
+                }
+            }
+        }
+
+        $started = \hrtime(true);
+
+        foreach (\array_reverse($names) as $name) {
+            $this->assertSame('string', AnnotationCollector::typeFor($name, 'x'), $name);
+        }
+
+        $seconds = (\hrtime(true) - $started) / 1e9;
+        $this->assertLessThan(2.0, $seconds, "resolving {$levels} levels of diamonds took {$seconds}s");
+    }
+
+    /**
+     * A cycle's answer depends on which of its members the walk started from, so it is never kept:
+     * asking for the downstream template first or last gives the same answer.
+     */
+    #[Test]
+    public function answers_a_template_below_a_cycle_the_same_whichever_member_is_asked_first(): void
+    {
+        $answers = [];
+
+        foreach ([['sink', 'down', 'up'], ['up', 'down', 'sink'], ['down', 'sink', 'up']] as $order) {
+            AnnotationCollector::reset();
+
+            foreach (['up', 'down', 'sink'] as $name) {
+                ViewReferenceRegistry::registerTemplate($name, 0, "/virtual/{$name}.blade.php");
+                ContractRegistry::register($name, 0, new ViewDataContract([], false, ['x'], false));
+            }
+
+            // up <-> down is a cycle; `up` also has a typed producer, and `sink` is included from `up`.
+            AnnotationCollector::record('up', ['x' => Type::getString()], true);
+            AnnotationCollector::record('up', ['x' => Type::getMixed()], true, '', ['x' => ['/virtual/down.blade.php', 'x']]);
+            AnnotationCollector::record('down', ['x' => Type::getMixed()], true, '', ['x' => ['/virtual/up.blade.php', 'x']]);
+            AnnotationCollector::record('sink', ['x' => Type::getMixed()], true, '', ['x' => ['/virtual/up.blade.php', 'x']]);
+
+            $answered = [];
+
+            foreach ($order as $name) {
+                $answered[$name] = AnnotationCollector::typeFor($name, 'x');
+            }
+
+            \ksort($answered);
+            $answers[] = $answered;
+        }
+
+        $this->assertSame(['down' => 'mixed', 'sink' => 'mixed', 'up' => null], $answers[0]);
+        $this->assertSame($answers[0], $answers[1]);
+        $this->assertSame($answers[0], $answers[2]);
+    }
+
+    /** The memo holds what the producers passed so far: a producer recorded later changes the answer. */
+    #[Test]
+    public function forgets_a_resolved_include_type_when_another_producer_is_recorded(): void
+    {
+        foreach (['parent', 'child'] as $name) {
+            ViewReferenceRegistry::registerTemplate($name, 0, "/virtual/{$name}.blade.php");
+            ContractRegistry::register($name, 0, new ViewDataContract([], false, ['x'], false));
+        }
+
+        AnnotationCollector::record('parent', ['x' => Type::getString()], true);
+        AnnotationCollector::record('child', ['x' => Type::getMixed()], true, '', ['x' => ['/virtual/parent.blade.php', 'x']]);
+
+        $this->assertSame('string', AnnotationCollector::typeFor('child', 'x'));
+
+        AnnotationCollector::record('parent', ['x' => Type::getInt()], true);
+
+        $this->assertSame('mixed', AnnotationCollector::typeFor('child', 'x'), 'the parent now disagrees with itself, so the include passes an unknown');
     }
 
     /** A relative header lets `git apply` use its default single-component strip from the project root — no `--unsafe-paths`, no forcing the process to `/`. */

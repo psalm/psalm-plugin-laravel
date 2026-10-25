@@ -99,12 +99,24 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     private static array $resolving = [];
 
     /**
-     * Per analysed file, the variable names an `isset()` or `empty()` in it mentions, see
-     * {@see self::isTested()}.
+     * Per analysed file, the variable names it tests or writes without making them locals, see
+     * {@see self::isTouched()}.
      *
      * @var array<string, array<string, true>>
      */
-    private static array $tested = [];
+    private static array $touched = [];
+
+    /**
+     * What {@see self::observations()} answered for a pair whose resolution never met the cycle
+     * guard, so a diamond of includes resolves each pair once instead of once per path. Emptied
+     * whenever a producer is recorded: the answers read what the producers passed.
+     *
+     * @var array<string, array<string, Union>|false|null>
+     */
+    private static array $resolved = [];
+
+    /** How often the cycle guard answered, so a caller can tell whether its subtree met it. */
+    private static int $cycleHits = 0;
 
     /**
      * Whether the statement hook ran at all in THIS process. Psalm forks its analysis workers once
@@ -137,7 +149,9 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         self::$alwaysSupplied = [];
         self::$edges = [];
         self::$resolving = [];
-        self::$tested = [];
+        self::$touched = [];
+        self::$resolved = [];
+        self::$cycleHits = 0;
         self::$analyzed = false;
         self::$recorded = null;
     }
@@ -255,7 +269,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      *
      * Declined, so the key keeps being observed as `mixed`: a name the template binds for itself or
      * reads unknowably is no input to type (a planned type never exists for one, see
-     * {@see AnnotationWriter::fileVariable()}), and a name a condition around the include narrows.
+     * {@see AnnotationWriter::fileVariable()}), a name a condition around the include narrows, and a
+     * name the file tests or writes in a way that keeps `mixed` (see {@see self::isTouched()}).
      * Psalm keeps the type id `mixed` through `$x !== null` and `isset($x)` (`if ($x)` is already
      * `non-empty-mixed`), so the parent's planned type (`Member|null` when a call site omits it) would
      * be declared where a second run, with the parent typed, narrows it to `Member`. A value that is
@@ -278,7 +293,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 && \is_string($value->name)
                 && ($chain->data[$key] ?? null)?->getId(false) === 'mixed'
                 && !self::hasClause($context, $value->name)
-                && !self::isTested($source, $value->name)
+                && !self::isTouched($source, $value->name)
             ) {
                 $keys[$key] = [$entry->templatePath, $value->name];
             }
@@ -308,30 +323,56 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * Whether an `isset()` or `empty()` anywhere in the file mentions the variable. Psalm leaves no
-     * clause for one and keeps `mixed`, so the context cannot tell whether the include sits inside it;
-     * a file that tests the name at all is declined, which only costs a rerun.
+     * Whether the file tests or writes the variable, anywhere: `isset()`, `empty()`, `unset()`, a
+     * compound assignment (`??=`, `.=`), a reference binding (`$alias =& $x`, either side), or a by
+     * reference array item (`[&$x]`).
+     *
+     * Psalm leaves no clause for an `isset()`, and it keeps `mixed` through a compound assignment,
+     * a reference write and an `unset()`; a condition on a reference alias names the alias, never the
+     * variable. So neither the exact-`mixed` check nor {@see self::hasClause()} can tell that the
+     * parent's declared type is not what reaches the include, and a file that touches the name at all
+     * is declined, which only costs a rerun. A plain assignment is not listed: it makes the name a
+     * local, which the plan never declares. One scan per file.
      */
-    private static function isTested(StatementsSource $source, string $variable): bool
+    private static function isTouched(StatementsSource $source, string $variable): bool
     {
         $path = $source->getFilePath();
 
-        if (!isset(self::$tested[$path])) {
+        if (!isset(self::$touched[$path])) {
             $finder = new NodeFinder();
             $names = [];
 
-            foreach ($finder->find($source->getCodebase()->getStatementsForFile($path), static fn(Node $node): bool => $node instanceof Expr\Isset_ || $node instanceof Expr\Empty_) as $test) {
-                foreach ($finder->findInstanceOf($test, Expr\Variable::class) as $tested) {
-                    if (\is_string($tested->name)) {
-                        $names[$tested->name] = true;
+            foreach ($finder->find($source->getCodebase()->getStatementsForFile($path), static fn(Node $node): bool => self::touchedBy($node) !== []) as $node) {
+                foreach ($finder->findInstanceOf(self::touchedBy($node), Expr\Variable::class) as $touched) {
+                    if (\is_string($touched->name)) {
+                        $names[$touched->name] = true;
                     }
                 }
             }
 
-            self::$tested[$path] = $names;
+            self::$touched[$path] = $names;
         }
 
-        return isset(self::$tested[$path][$variable]);
+        return isset(self::$touched[$path][$variable]);
+    }
+
+    /**
+     * The expressions a node tests or writes, see {@see self::isTouched()}; empty for any other node.
+     *
+     * @return list<Node>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function touchedBy(Node $node): array
+    {
+        return match (true) {
+            $node instanceof Expr\Isset_, $node instanceof Stmt\Unset_ => \array_values($node->vars),
+            $node instanceof Expr\Empty_ => [$node->expr],
+            $node instanceof Expr\AssignOp => [$node->var],
+            $node instanceof Expr\AssignRef => [$node->var, $node->expr],
+            $node instanceof Node\ArrayItem && $node->byRef => [$node->value],
+            default => [],
+        };
     }
 
     /**
@@ -557,6 +598,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     public static function markUnreadable(string $viewName, string $site = ''): void
     {
+        self::$resolved = [];
         $viewName = self::canonical($viewName);
         $kept = self::$open[$viewName] ?? null;
 
@@ -604,6 +646,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     public static function record(string $viewName, array $data, bool $complete, string $site = '', array $deferred = []): void
     {
+        self::$resolved = [];
         $viewName = self::canonical($viewName);
 
         if ($complete) {
@@ -676,11 +719,18 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
         $pair = "{$viewName}\0{$name}";
 
+        if (\array_key_exists($pair, self::$resolved)) {
+            return self::$resolved[$pair];
+        }
+
         if (isset(self::$resolving[$pair])) {
+            ++self::$cycleHits;
+
             return self::observe([], Type::getMixed());
         }
 
         self::$resolving[$pair] = true;
+        $hitsBefore = self::$cycleHits;
 
         try {
             foreach ($edges as [$templatePath, $variable]) {
@@ -688,6 +738,12 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             }
         } finally {
             unset(self::$resolving[$pair]);
+        }
+
+        // A result that met the cycle guard anywhere below it stood in for a pair still being
+        // resolved higher up, so it depends on where the walk started: never kept.
+        if (self::$cycleHits === $hitsBefore) {
+            self::$resolved[$pair] = $seen;
         }
 
         return $seen;

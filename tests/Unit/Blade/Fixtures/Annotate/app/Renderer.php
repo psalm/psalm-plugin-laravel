@@ -206,6 +206,36 @@ final class Renderer
         return view('split-leaf', ['member' => $this->title()]);
     }
 
+    public function writeCoalesceGiven(): View
+    {
+        return view('wr-coalesce', ['x' => $this->post()]);
+    }
+
+    public function writeCoalesceOmitted(): View
+    {
+        return view('wr-coalesce', []);
+    }
+
+    public function writeAliasClauseGiven(): View
+    {
+        return view('wr-alias-clause', ['x' => $this->post()]);
+    }
+
+    public function writeAliasClauseOmitted(): View
+    {
+        return view('wr-alias-clause', []);
+    }
+
+    public function writeAliasWrite(): View
+    {
+        return view('wr-alias-write', ['x' => $this->post()]);
+    }
+
+    public function writeTouch(): View
+    {
+        return view('wr-touch', ['u' => $this->post(), 'r' => $this->post()]);
+    }
+
     /** @return list<string> */
     private function items(): array
     {

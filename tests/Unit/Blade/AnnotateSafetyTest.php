@@ -47,8 +47,9 @@ final class AnnotateSafetyTest extends TestCase
         $this->assertIsArray($result['changed'] ?? null);
         // 16 for the templates that need no include; the chains add 10 where `@includeIsolated` compiles
         // (pair 2, chain 3, opt 2, narrow 3), and only the 5 parents that read the name themselves
-        // (pair-top, chain-top, cyc-a, narrow-top, narrow-isset-top) where it stays text.
-        $this->assertCount(16 + (\method_exists(BladeCompiler::class, 'compileIncludeIsolated') ? 10 : 5), $result['changed']);
+        // (pair-top, chain-top, cyc-a, narrow-top, narrow-isset-top) where it stays text. The 4 parents
+        // that write the name (wr-coalesce, wr-alias-clause, wr-alias-write, wr-touch) count either way.
+        $this->assertCount(16 + 4 + (\method_exists(BladeCompiler::class, 'compileIncludeIsolated') ? 10 : 5), $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
