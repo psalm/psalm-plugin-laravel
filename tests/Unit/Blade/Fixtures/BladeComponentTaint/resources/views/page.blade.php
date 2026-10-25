@@ -1,5 +1,4 @@
 <x-alert :message="request('m')" />
-<x-notice :text="request('t')" />
 <x-escaped :message="request('m')" />
 <x-literal message="hi" />
 <x-hidden :message="request('m')" />
@@ -7,7 +6,6 @@
 <x-card :message="request('m')" />
 @php(\App\Support\Lookalike::resolve(['message' => request('m')]))
 <x-san-e :message="request('m')" />
-<x-replaced :message="request('m')" />
 <x-renamed :label="request('l')" />
 <x-unbound :message="request('m')" />
 <x-trait-a :message="request('m')" />

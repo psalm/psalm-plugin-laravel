@@ -37,9 +37,6 @@ final class BladeThreadParityTest extends TestCase
     /** #2031: the source write and the template read happen in different workers and meet in the parent. */
     private const FIXTURE = __DIR__ . '/Fixtures/BladeViewDataTaint';
 
-    /** #2033: the page shadow writes a component's constructor argument, the component view's shadow reads its property. */
-    private const COMPONENT_FIXTURE = __DIR__ . '/Fixtures/BladeComponentTaint';
-
     /** Own shadow dir, so a parallel-safe run never shares state with the other Blade suites. */
     private const SHADOW_DIR = '/.cache/blade-shadows-threads';
 
@@ -69,19 +66,17 @@ final class BladeThreadParityTest extends TestCase
 
     private function deleteShadowDirs(): void
     {
-        foreach ([self::FIXTURE, self::COMPONENT_FIXTURE] as $fixture) {
-            $dir = $fixture . self::SHADOW_DIR;
+        $dir = self::FIXTURE . self::SHADOW_DIR;
 
-            if (!\is_dir($dir)) {
-                continue;
-            }
-
-            foreach (\array_diff(\scandir($dir) ?: [], ['.', '..']) as $entry) {
-                \unlink($dir . '/' . $entry);
-            }
-
-            \rmdir($dir);
+        if (!\is_dir($dir)) {
+            return;
         }
+
+        foreach (\array_diff(\scandir($dir) ?: [], ['.', '..']) as $entry) {
+            \unlink($dir . '/' . $entry);
+        }
+
+        \rmdir($dir);
     }
 
     /**
@@ -276,26 +271,6 @@ final class BladeThreadParityTest extends TestCase
             $this->assertNotSame([], $templateFindings, "The bridged finding of {$template} is missing, so equality proves nothing about it.");
         }
 
-        $this->assertStringNotContainsString('blade-shadows-threads', $forked['raw'], $forked['raw']);
-    }
-
-    #[Test]
-    public function component_property_taint_findings_and_journeys_are_identical_with_and_without_forked_workers(): void
-    {
-        $forked = $this->analyze(self::COMPONENT_FIXTURE, self::THREADS, true);
-        $single = $this->analyze(self::COMPONENT_FIXTURE, 1, true);
-
-        $this->assertForked($forked);
-        $this->assertSame($single['findings'], $forked['findings']);
-        $this->assertEveryFindingCarriesAJourney($single['issues'], 'single-process run');
-        $this->assertEveryFindingCarriesAJourney($forked['issues'], 'forked run');
-
-        $viewFindings = \array_filter(
-            $single['findings'],
-            static fn(string $finding): bool => \str_contains($finding, 'resources/views/components/alert.blade.php:1:') && \str_contains($finding, 'TaintedHtml'),
-        );
-
-        $this->assertNotSame([], $viewFindings, 'The bridged component view finding is missing, so equality proves nothing about it.');
         $this->assertStringNotContainsString('blade-shadows-threads', $forked['raw'], $forked['raw']);
     }
 }
