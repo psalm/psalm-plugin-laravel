@@ -310,6 +310,7 @@ require getcwd() . '/vendor/autoload.php';
 
 Handlers implement Psalm event interfaces to override type inference.
 Create the handler class in the appropriate `src/Handlers/` subdirectory, then register it in `Plugin::registerHandlers()`.
+`CollectionInputTypeResolver` widens the literal scalar values and range keys an array argument binds at `collect()` and `Collection::make()` / `LazyCollection::make()` (class-strings, rows and mixed unions stay; `new Collection([...])` is not touched). See decisions.md, "Collection literal generalization".
 `CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
 `ConditionableWhenHandler` narrows the return type of `Conditionable::when()`/`unless()`. `ConditionableCallbackParamsHandler` types their closure-literal callback params from the receiver and the `$value` narrowed to truthy/falsy. It is a params provider registered per host class, because params providers dispatch on the called class, not on the declaring trait.
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#12251).
