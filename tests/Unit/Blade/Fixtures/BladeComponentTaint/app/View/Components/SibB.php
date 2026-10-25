@@ -6,7 +6,7 @@ namespace App\View\Components;
 
 use Illuminate\Contracts\View\View;
 
-final class SibB extends SibBase
+final class SibB extends BaseCard
 {
     #[\Override]
     public function render(): View

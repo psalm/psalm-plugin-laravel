@@ -200,7 +200,8 @@ final class ComponentRenderData
      * set only ever REPORTS:
      *
      *  - a name in a literal `$except` default is dropped (a non-literal one keeps every name);
-     *  - a public method of the same name wins the variable (`array_merge($properties, $methods)`);
+     *  - a public method of the same name, which wins the variable in `data()`, is not consulted (an
+     *    accepted over-report);
      *  - the class is the one Psalm writes the property node for: the declaring class, or for a trait
      *    property the (farthest) class using the trait, never the trait itself or an unrelated user of it.
      *
@@ -216,7 +217,7 @@ final class ComponentRenderData
         $ids = [];
 
         foreach (ViewClassProperties::publicOf($codebase, $storage, self::ignored(...)) ?? [] as $name => [$declaring, $property]) {
-            if ($property->is_static === true || \in_array($name, $except, true) || self::publicMethodNamed($codebase, $storage, $name)) {
+            if ($property->is_static === true || \in_array($name, $except, true)) {
                 continue;
             }
 
@@ -227,26 +228,9 @@ final class ComponentRenderData
     }
 
     /**
-     * A public, non-ignored method called exactly `$name` (the variable it becomes).
-     *
-     * @psalm-capabilities read-props
-     */
-    private static function publicMethodNamed(Codebase $codebase, ClassLikeStorage $storage, string $name): bool
-    {
-        $methodId = $storage->declaring_method_ids[\strtolower($name)] ?? null;
-        $method = $methodId instanceof MethodIdentifier
-            ? ViewClassProperties::storage($codebase, $methodId->fq_class_name)?->methods[\strtolower($name)] ?? null
-            : null;
-
-        return $method instanceof MethodStorage
-            && !self::ignored($name)
-            && $method->visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC
-            && ($method->cased_name ?? \strtolower($name)) === $name;
-    }
-
-    /**
      * The class whose property node Psalm writes for `$this->name = ...`: the declaring class, or for a
-     * trait the farthest class of the hierarchy that uses it.
+     * trait the farthest class of the hierarchy that uses it. Psalm links no subclass id to an inherited
+     * property's node, so the concrete class's `Card::$message` would never be written.
      *
      * @psalm-capabilities read-props
      */

@@ -14,6 +14,9 @@ use PhpParser\Node\Stmt\Nop;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Context;
+use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\DataFlow\DataFlowNode;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewNameSignatures;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
@@ -49,6 +52,9 @@ use Psalm\Type\Union;
  * written as every variable in scope under its own name), and the anonymous component tag, whose
  * `AnonymousComponent::resolve(['view' => ..., 'data' => [...]])` data is written raw. The component's
  * `withAttributes()` copy goes through `e()`, so `{{ $attributes }}` stays clean and is never written.
+ * A class component tag's data flows through the constructor into the public property nodes (#2033),
+ * which the sink connects to the view(s) {@see ComponentViewRegistry} maps the class to. A property node
+ * belongs to its class, not to a tag: one tainted `<x-alert>` taints `$message` in every render of it.
  *
  * Sink side: runs on the same sentinel as {@see ComponentViewSeedHandler}, and MUST be registered
  * after it, because the seed replaces a variable's whole type and would drop the nodes attached here.
@@ -73,6 +79,10 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
      * the shared values; a name the compiled code assigns before reading it loses the read node there.
      */
     private const NEVER_VIEW_DATA = ['__env' => true, '__path' => true, '__data' => true];
+
+    private const COMPONENT = 'illuminate\view\component';
+
+    private const ANONYMOUS_COMPONENT = 'illuminate\view\anonymouscomponent';
 
     /** The name a whole data array is stored under: a variable name is never `*`. */
     private const WHOLE_ARRAY = '*';
@@ -101,7 +111,13 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
         }
 
         if ($call instanceof Expr\StaticCall && $name === 'resolve') {
-            self::bridgeAnonymousComponent($codebase, $source, $call);
+            $class = self::receiverClass($call->class);
+
+            if ($class === self::ANONYMOUS_COMPONENT) {
+                self::bridgeAnonymousComponent($codebase, $source, $call);
+            } elseif ($class !== null) {
+                self::bridgeClassComponent($codebase, $source, $call, $class);
+            }
 
             return null;
         }
@@ -254,16 +270,7 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
      */
     private static function bridgeAnonymousComponent(Codebase $codebase, StatementsSource $source, Expr\StaticCall $call): void
     {
-        $class = $call->class;
-        $resolved = $class instanceof Name ? $class->getAttribute('resolvedName') ?? $class->toString() : null;
-
-        if (!\is_string($resolved) || \strtolower(\ltrim($resolved, '\\')) !== 'illuminate\view\anonymouscomponent' || $call->isFirstClassCallable()) {
-            return;
-        }
-
-        $array = $call->getArgs()[0]->value ?? null;
-        $array = $array instanceof Expr\BinaryOp\Plus ? $array->left : $array;
-
+        $array = self::tagData($call);
         $view = null;
         $data = null;
 
@@ -283,6 +290,81 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
 
             self::write($codebase, $source, $view, $key, "\${$key} passed to view {$view}", $source->getNodeTypeProvider()->getType($value), $value);
         }
+    }
+
+    /**
+     * `Foo::resolve([...] + $outerAttributes)`, what `<x-foo>` and `@component(Foo::class)` compile to:
+     * `new static(...array_intersect_key($data, ...))` binds each key to the constructor PARAMETER of that
+     * name. So each entry flows into the argument node `new Foo($x)` uses, and on through the constructor
+     * body: `e($message)` stays clean, a parameter stored under another name still reaches it. The view
+     * reads the resulting property nodes at the sentinel.
+     */
+    private static function bridgeClassComponent(Codebase $codebase, StatementsSource $source, Expr\StaticCall $call, string $className): void
+    {
+        try {
+            $class = $codebase->classlike_storage_provider->get($className);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return;
+        }
+
+        // A look-alike's own `resolve()` hands its data to code this bridge knows nothing about.
+        $constructor = isset($class->parent_classes[self::COMPONENT]) ? $class->declaring_method_ids['__construct'] ?? null : null;
+        $array = self::tagData($call);
+
+        if (!$constructor instanceof MethodIdentifier || !$array instanceof Expr\Array_ || !$codebase->methods->hasStorage($constructor)) {
+            return;
+        }
+
+        $casedId = $codebase->methods->getCasedMethodId($constructor);
+        $storage = $codebase->methods->getStorage($constructor);
+        $offsets = [];
+
+        foreach ($storage->params as $offset => $param) {
+            if (!$param->is_variadic) {
+                $offsets[$param->name] = $offset;
+            }
+        }
+
+        foreach (ViewCallChain::arrayEntries($array) as [$key, $value]) {
+            $type = $source->getNodeTypeProvider()->getType($value);
+
+            if (!isset($offsets[$key]) || !$type instanceof Union || $type->parent_nodes === []) {
+                continue;
+            }
+
+            $node = $codebase->getTaintNode($source, "\${$key} of component {$class->name}", new CodeLocation($source, $value), $type);
+            $codebase->addTaintPath($source, $node, DataFlowNode::getForMethodArgument($casedId, $offsets[$key], $storage), 'arg');
+        }
+    }
+
+    /** The tag's own data array: the left operand of the compiled `[...] + $attributes`. */
+    private static function tagData(Expr\StaticCall $call): ?Expr
+    {
+        $arg = $call->isFirstClassCallable() ? null : ($call->getArgs()[0] ?? null);
+        $array = $arg === null || $arg->unpack ? null : $arg->value;
+
+        return $array instanceof Expr\BinaryOp\Plus ? $array->left : $array;
+    }
+
+    /**
+     * The lower-cased class a `Foo::resolve()` or `Foo::class::resolve()` receiver names.
+     *
+     * @return lowercase-string|null
+     */
+    private static function receiverClass(Expr|Name $class): ?string
+    {
+        if ($class instanceof Expr\ClassConstFetch && $class->name instanceof Identifier && $class->name->toLowerString() === 'class') {
+            $class = $class->class;
+        }
+
+        if (!$class instanceof Name) {
+            return null;
+        }
+
+        /** @psalm-var ?string $resolved */
+        $resolved = $class->getAttribute('resolvedName');
+
+        return \strtolower(\ltrim(\is_string($resolved) ? $resolved : $class->toString(), '\\'));
     }
 
     /**
@@ -326,8 +408,9 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
         }
 
         $views = ViewReferenceRegistry::namesFor($entry->templatePath);
+        $properties = ComponentViewRegistry::propertyIdsFor($source->getFilePath());
 
-        if ($views === []) {
+        if ($views === [] && $properties === []) {
             return null;
         }
 
@@ -342,6 +425,17 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
             }
 
             $reads = [];
+
+            // A class component's view: the public property nodes of every class rendering it.
+            if (isset($properties[$name])) {
+                $node = $codebase->getTaintNode($source, "\${$name} (component property)", $location);
+
+                foreach ($properties[$name] as $id) {
+                    $codebase->addTaintPath($source, Codebase::getTaintPropertyNode($id), $node);
+                }
+
+                $reads[$node->id] = $node;
+            }
 
             foreach ($views as $view) {
                 $node = $codebase->getTaintNode($source, "\${$name} (view data of {$view})", $location);

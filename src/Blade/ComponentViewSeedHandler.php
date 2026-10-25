@@ -22,7 +22,7 @@ use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
  * template's contract still wins.
  *
  * Types only: a seeded value carries no taint data-flow node. A component's properties reach the
- * template's taint graph through {@see ComponentPropertyTaintBridge}, registered after this handler.
+ * template's taint graph through {@see ViewTaintBridge}, registered after this handler.
  *
  * @internal
  */

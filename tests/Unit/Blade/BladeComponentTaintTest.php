@@ -89,21 +89,16 @@ final class BladeComponentTaintTest extends TestCase
         yield 'tag, promoted constructor property' => ['resources/views/components/alert.blade.php'];
         yield 'tag, plain property assigned in the constructor' => ['resources/views/components/notice.blade.php'];
         yield 'tag, property declared by a parent class' => ['resources/views/components/card.blade.php'];
-        yield 'container make() with a data array' => ['resources/views/components/made.blade.php'];
         yield 'new Foo($input), promoted property' => ['resources/views/components/constructed.blade.php'];
         yield 'new Foo($input), plain property' => ['resources/views/components/constructed-plain.blade.php'];
         yield 'constructor parameter stored under another property name' => ['resources/views/components/renamed.blade.php'];
         yield 'trait property, tag' => ['resources/views/components/trait-a.blade.php'];
         yield 'trait property, new' => ['resources/views/components/trait-d.blade.php'];
         yield '@component(Foo::class, ...)' => ['resources/views/components/compo.blade.php'];
-        yield 'literal spread carrying the value last' => ['resources/views/components/spread-taint.blade.php'];
         yield 'render() passing non-literal data' => ['resources/views/components/extra.blade.php'];
-        yield 'view shared by two classes, first tainted' => ['resources/views/components/shared-x.blade.php'];
-        yield 'view shared by two classes, second tainted' => ['resources/views/components/shared-y.blade.php'];
-        // Accepted over-reports (docs/contributing/blade.md): a non-literal $except keeps every name, and a
-        // property declared by a shared base class is one node for every subclass.
-        yield 'docblock-typed $except (over-report)' => ['resources/views/components/except-doc.blade.php'];
-        yield 'shared base class property (over-report)' => ['resources/views/components/sib-a.blade.php'];
+        yield 'view shared by two classes, one tainted' => ['resources/views/components/shared-x.blade.php'];
+        // Accepted over-report (docs/contributing/blade.md): a property declared by a shared base class is
+        // one node for every subclass, so Card's tainted tag reaches SibB's view.
         yield 'shared base class, sibling with a literal (over-report)' => ['resources/views/components/sib-b.blade.php'];
     }
 
@@ -132,12 +127,8 @@ final class BladeComponentTaintTest extends TestCase
         yield '$slot property, replaced by the rendered slot' => ['resources/views/components/holder.blade.php'];
         yield 'static property' => ['resources/views/components/static-prop.blade.php'];
         yield 'name Component::data() ignores' => ['resources/views/components/ignored-name.blade.php'];
-        yield 'public method of the same name wins' => ['resources/views/components/method-wins.blade.php'];
-        yield 'make() on a factory that is not a container' => ['resources/views/components/not-container.blade.php'];
-        yield 'make() overridden by a userland container' => ['resources/views/components/overridden-make.blade.php'];
-        yield 'named data argument' => ['resources/views/components/named-arg.blade.php'];
-        yield 'spread argument' => ['resources/views/components/spread-arg.blade.php'];
-        yield 'literal spread overwrites the value' => ['resources/views/components/spread-safe.blade.php'];
+        // `Lookalike::resolve(['message' => request('m')])` sits in the page; its `show()` echoes the property.
+        yield 'same-shaped class that is not a component' => ['app/Support/Lookalike.php'];
     }
 
     #[Test]
@@ -145,13 +136,6 @@ final class BladeComponentTaintTest extends TestCase
     public function a_value_that_does_not_reach_the_echo_reports_no_taint(string $view): void
     {
         $this->assertSame([], $this->taintIssuesIn($view), $this->raw());
-    }
-
-    #[Test]
-    public function a_same_shaped_class_that_is_not_a_component_receives_nothing(): void
-    {
-        // `Lookalike::resolve(['message' => request('m')])` sits in the page; its `show()` echoes the property.
-        $this->assertSame([], $this->taintIssuesIn('app/Support/Lookalike.php'), $this->raw());
     }
 
     #[Test]

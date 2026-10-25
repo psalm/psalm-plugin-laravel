@@ -71,7 +71,7 @@ final class ComponentViewRegistry
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
-    /** @var array<string, array<string, array<string, string>>> shadow path => variable name => property id => property id */
+    /** @var array<string, array<string, list<string>>> shadow path => variable name => property ids */
     private static array $propertyIds = [];
 
     /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
@@ -99,19 +99,13 @@ final class ComponentViewRegistry
 
     /**
      * The property nodes a class component's own view reads its variables from (taint only; see
-     * {@see ComponentPropertyTaintBridge}).
+     * {@see ViewTaintBridge}).
      *
      * @return array<string, list<string>> variable name => property ids
      */
     public static function propertyIdsFor(string $shadowPath): array
     {
-        $byName = [];
-
-        foreach (self::$propertyIds[$shadowPath] ?? [] as $name => $ids) {
-            $byName[$name] = \array_values($ids);
-        }
-
-        return $byName;
+        return self::$propertyIds[$shadowPath] ?? [];
     }
 
     public static function build(Codebase $codebase): void
@@ -246,7 +240,7 @@ final class ComponentViewRegistry
             foreach ($classes as $storage) {
                 foreach (ComponentRenderData::exposedPropertyIds($codebase, $storage) as $name => $id) {
                     if (!isset(self::SLOT_OWNED[$name])) {
-                        self::$propertyIds[$shadowPath][$name][$id] = $id;
+                        self::$propertyIds[$shadowPath][$name][] = $id;
                     }
                 }
             }

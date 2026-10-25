@@ -834,10 +834,6 @@ final class Plugin implements PluginEntryPointInterface
                 require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
                 require_once __DIR__ . '/Blade/ViewTaintBridge.php';
                 $registration->registerHooksFromClass(Blade\ViewTaintBridge::class);
-                // Carries taint from a class component's public properties into its own view (#2033).
-                // After ComponentViewSeedHandler for the same reason.
-                require_once __DIR__ . '/Blade/ComponentPropertyTaintBridge.php';
-                $registration->registerHooksFromClass(Blade\ComponentPropertyTaintBridge::class);
             }
         }
 
