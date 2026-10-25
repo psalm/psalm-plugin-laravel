@@ -191,6 +191,20 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
+        // A rendering call in a condition is no statement of its own, so the chain walk never meets it.
+        // The body statements are analysed on their own; only the condition expressions are read here.
+        $conditions = self::conditionsOf($stmt);
+
+        if ($conditions !== []) {
+            foreach ($conditions as $condition) {
+                foreach (self::viewNamesIn($condition) as $viewName) {
+                    self::markUnreadable($viewName, self::site($condition, $event->getStatementsSource()));
+                }
+            }
+
+            return null;
+        }
+
         $expr = match (true) {
             $stmt instanceof Stmt\Expression, $stmt instanceof Stmt\Return_ => $stmt->expr,
             default => null,
@@ -226,6 +240,29 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return null;
+    }
+
+    /**
+     * The expressions a compound statement evaluates itself, outside any body: `if`/`elseif` tests, loop
+     * headers, the `switch` subject and its `case` values.
+     *
+     * @return list<Expr>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function conditionsOf(Stmt $stmt): array
+    {
+        return match (true) {
+            $stmt instanceof Stmt\If_ => [$stmt->cond, ...\array_map(static fn(Stmt\ElseIf_ $elseIf): Expr => $elseIf->cond, $stmt->elseifs)],
+            $stmt instanceof Stmt\While_, $stmt instanceof Stmt\Do_ => [$stmt->cond],
+            $stmt instanceof Stmt\For_ => [...$stmt->init, ...$stmt->cond, ...$stmt->loop],
+            $stmt instanceof Stmt\Foreach_ => [$stmt->expr],
+            $stmt instanceof Stmt\Switch_ => [
+                $stmt->cond,
+                ...\array_values(\array_filter(\array_map(static fn(Stmt\Case_ $case): ?Expr => $case->cond, $stmt->cases))),
+            ],
+            default => [],
+        };
     }
 
     /**
