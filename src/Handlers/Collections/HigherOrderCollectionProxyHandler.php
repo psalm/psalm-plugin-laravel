@@ -133,19 +133,19 @@ final class HigherOrderCollectionProxyHandler implements
             return;
         }
 
-        // A receiver union of several collections cannot be modelled from one branch: keep
-        // Psalm's own resolution instead of the single-collection override or fallback.
-        $proxyExpr = $expr->var;
-        if ($proxyExpr instanceof PropertyFetch) {
-            $receiverType = $source->getNodeTypeProvider()->getType($proxyExpr->var);
-            if ($receiverType instanceof Union && \count(self::collectionAtomics($receiverType, $source->getCodebase())) > 1) {
-                return;
-            }
-        }
-
         foreach ($calleeType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TGenericObject || \strtolower($atomic->value) !== self::PROXY_CLASS_LOWER) {
                 continue;
+            }
+
+            // A receiver union of several collections cannot be modelled from one branch: keep
+            // Psalm's own resolution instead of the single-collection override or fallback.
+            $proxyExpr = $expr->var;
+            if ($proxyExpr instanceof PropertyFetch) {
+                $receiverType = $source->getNodeTypeProvider()->getType($proxyExpr->var);
+                if ($receiverType instanceof Union && \count(self::collectionAtomics($receiverType, $source->getCodebase())) > 1) {
+                    return;
+                }
             }
 
             $typeParams = $atomic->type_params;
