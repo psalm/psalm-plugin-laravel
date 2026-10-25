@@ -95,6 +95,15 @@ final class BladeTemplatesTest extends TestCase
             ];
         }
 
+        // Positive control for every silence case below: `php-e` is the author's own `e()` call, which must
+        // always reach the analyzer and report. Without it, shadows that never reached analysis would pass
+        // as silent.
+        $this->assertContains(
+            'PossiblyInvalidArgument',
+            \array_column(\array_filter($issues, static fn(array $issue): bool => $issue['file'] === 'php-e.blade.php'), 'type'),
+            "No template finding reached the report, so silence proves nothing.\n" . self::$output,
+        );
+
         return self::$issues = $issues;
     }
 
@@ -237,7 +246,7 @@ final class BladeTemplatesTest extends TestCase
         $this->assertSilent('foreach.blade.php');
         // The real getLastLoop() returns `(object) $last`, a \stdClass instance: a plain `object{...}` stub return would
         // make a `?\stdClass` wrapper report LessSpecificReturnStatement.
-        $this->assertSame([], $this->in('Source.php'));
+        $this->assertSame([], $this->in('LoopWrapper.php'));
     }
 
     /**

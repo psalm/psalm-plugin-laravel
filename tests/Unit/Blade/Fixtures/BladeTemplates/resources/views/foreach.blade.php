@@ -1,4 +1,4 @@
-@if((new \Fx\Source())->loopAsStdClass($__env))
+@if((new \Fx\LoopWrapper())->loopAsStdClass($__env))
 @endif
 @foreach((new \Fx\Source)->items() as $item)
     @if($loop->first)
