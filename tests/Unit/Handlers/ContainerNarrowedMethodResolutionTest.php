@@ -39,13 +39,13 @@ use Symfony\Component\Process\Process;
 #[Group('subprocess')]
 final class ContainerNarrowedMethodResolutionTest extends TestCase
 {
-    /** @var list<array{type: string, message: string}>|null */
-    private static ?array $findings = null;
+    /** @var list<array{type: string, message: string, file: string}>|null */
+    private static ?array $report = null;
 
     #[Test]
     public function it_resolves_encrypter_methods_reached_only_through_container_narrowing(): void
     {
-        $findings = $this->findings();
+        $findings = $this->findings('EncrypterMethodResolution');
 
         // The regression was a flood of UndefinedMethod on Illuminate\Encryption\Encrypter. None must
         // remain — assert on the class so an unrelated UndefinedMethod elsewhere can't mask it.
@@ -74,7 +74,7 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
     #[Test]
     public function it_resolves_session_guard_methods_reached_only_through_auth_narrowing(): void
     {
-        $findings = $this->findings();
+        $findings = $this->findings('GuardMethodResolution');
         $joined = \implode("\n", $this->messagesOfType($findings, 'UndefinedMethod'));
 
         // The regression was a flood of UndefinedMethod on Illuminate\Auth\SessionGuard. None must
@@ -94,7 +94,7 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
         // #1616: a stub that re-declares a class shadowed its vendor file when nothing else queued
         // it, so `hasListeners()` resolved through Macroable `__call` to `mixed`. No issue names the
         // gap, so the fixture pins the return type and any CheckType mismatch is the regression.
-        $typeMismatches = $this->messagesOfType($this->findings(), 'CheckType');
+        $typeMismatches = $this->messagesOfType($this->findings('StubbedClassMethodResolution'), 'CheckType');
 
         $this->assertSame(
             [],
@@ -108,7 +108,7 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
     {
         // The plugin instantiates the container's bindings once at init and queues each resolved class.
         // 'composer' resolves to a class no stub and no source names, so it narrows only if queued.
-        $findings = $this->findings();
+        $findings = $this->findings('BoundClassResolution');
         $problems = [
             ...$this->messagesOfType($findings, 'CheckType'),
             ...$this->messagesOfType($findings, 'MixedMethodCall'),
@@ -145,15 +145,31 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
     }
 
     /**
-     * One Psalm run over a single fixture project shared by every case: the four entry files each
-     * name no concrete Laravel class, so they cannot mask one another's narrowing.
+     * Findings reported in one entry file (`app/<entry>.php`) of the shared fixture project. Psalm runs
+     * once per process; filtering by file keeps a regression in one entry from failing the other cases.
      *
      * @return list<array{type: string, message: string}>
      */
-    private function findings(): array
+    private function findings(string $entry): array
     {
-        if (self::$findings !== null) {
-            return self::$findings;
+        $file = 'app/' . $entry . '.php';
+
+        return \array_values(\array_filter(
+            $this->report(),
+            static fn(array $finding): bool => $finding['file'] === $file,
+        ));
+    }
+
+    /**
+     * One Psalm run over a single fixture project shared by every case: the four entry files each
+     * name no concrete Laravel class, so they cannot mask one another's narrowing.
+     *
+     * @return list<array{type: string, message: string, file: string}>
+     */
+    private function report(): array
+    {
+        if (self::$report !== null) {
+            return self::$report;
         }
 
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
@@ -179,10 +195,11 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
                 $findings[] = [
                     'type' => $finding['type'],
                     'message' => (string) ($finding['message'] ?? ''),
+                    'file' => (string) ($finding['file_name'] ?? ''),
                 ];
             }
         }
 
-        return self::$findings = $findings;
+        return self::$report = $findings;
     }
 }
