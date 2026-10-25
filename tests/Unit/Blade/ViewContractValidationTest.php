@@ -235,6 +235,22 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A `with()` array of a closed shape can replace only its own keys (optional ones included), so
+     * only those lose their earlier type; an unreadable array (a union of shapes, a spread call)
+     * keeps the whole chain unchecked or widened.
+     */
+    #[Test]
+    public function a_closed_shape_widens_only_its_own_keys(): void
+    {
+        $issues = $this->contractIssues();
+        $reported = $this->forFile($issues, 'WithClosedShape.php');
+
+        $this->assertCount(1, $reported, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertStringContainsString('passes 456', $reported[0]['message']);
+    }
+
+    /**
      * A MailMessage chain reaches `SimpleMessage::with($line)`, which appends a notification line
      * and binds no template data — so the chain's key set stays closed and the declared variable is
      * still reported as missing.
