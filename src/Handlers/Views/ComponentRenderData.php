@@ -17,7 +17,6 @@ use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TKeyedArray;
-use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Union;
 
 /**
@@ -213,11 +212,11 @@ final class ComponentRenderData
      */
     public static function exposedPropertyIds(Codebase $codebase, ClassLikeStorage $storage): array
     {
-        $except = self::literalExcept($codebase, $storage);
+        $except = self::exceptedNames($codebase, $storage) ?? [];
         $ids = [];
 
         foreach (ViewClassProperties::publicOf($codebase, $storage, self::ignored(...)) ?? [] as $name => [$declaring, $property]) {
-            if ($property->is_static === true || isset($except[$name]) || self::publicMethodNamed($codebase, $storage, $name)) {
+            if ($property->is_static === true || \in_array($name, $except, true) || self::publicMethodNamed($codebase, $storage, $name)) {
                 continue;
             }
 
@@ -225,44 +224,6 @@ final class ComponentRenderData
         }
 
         return $ids;
-    }
-
-    /**
-     * The names of an `$except` default that is a literal list of strings; none when the default is
-     * anything else (a docblock type, a constant, no default), which keeps every name.
-     *
-     * @return array<string, true>
-     *
-     * @psalm-capabilities read-props
-     */
-    private static function literalExcept(Codebase $codebase, ClassLikeStorage $storage): array
-    {
-        $declaring = ViewClassProperties::storage($codebase, $storage->declaring_property_ids['except'] ?? self::COMPONENT);
-        $property = $declaring?->properties['except'] ?? null;
-
-        if (!$declaring instanceof ClassLikeStorage || \strtolower($declaring->name) === self::COMPONENT || $property === null || $property->type !== null) {
-            return [];
-        }
-
-        $atomic = $property->suggested_type?->isSingle() === true ? $property->suggested_type->getSingleAtomic() : null;
-
-        if (!$atomic instanceof TKeyedArray) {
-            return [];
-        }
-
-        $names = [];
-
-        foreach ($atomic->properties as $value) {
-            $literal = $value->isSingle() ? $value->getSingleAtomic() : null;
-
-            if (!$literal instanceof TLiteralString) {
-                return [];
-            }
-
-            $names[$literal->value] = true;
-        }
-
-        return $names;
     }
 
     /**
