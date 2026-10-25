@@ -585,6 +585,34 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * #2043: `parent` in a class component's property type names the class declaring the property, and a
+     * trait's `self` the class using the trait, not the component the view renders for.
+     */
+    #[Test]
+    public function a_component_properties_self_and_parent_name_their_declaring_class(): void
+    {
+        $reported = $this->forFile($this->contractIssues('psalm.xml'), 'ComponentOwner.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $owner'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString('but this call passes Illuminate\View\Component.', $reported[0]['message']);
+    }
+
+    /**
+     * `forSource()` ignores a userland `$except` for presence (a superset), but a property it names keeps
+     * the value the call passes: the class's own type for it must not replace that value. A property not
+     * named still reports, and a list Psalm cannot read (a `@var`-typed default) drops every property type.
+     */
+    #[Test]
+    public function an_excepted_property_keeps_the_value_the_call_passes(): void
+    {
+        $issues = $this->contractIssues('psalm.xml');
+        $excepted = $this->forFile($issues, 'ComponentExcepted.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $count'], $this->variablesOf($excepted), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'ComponentExceptedOpaque.php'), \var_export($issues, true));
+    }
+
+    /**
      * Livewire renders `render()`'s view with the component's public, non-static properties. Every
      * half is asserted together: a protected property, a private one, a static one and a view built
      * outside `render()` are still missing.

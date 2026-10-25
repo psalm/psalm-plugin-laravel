@@ -96,7 +96,7 @@ With `<x-alert title="Hi" />` in any template, `components/alert.blade.php` gets
 
 | Variable          | Type                                                                                                     |
 |-------------------|----------------------------------------------------------------------------------------------------------|
-| public property   | its declared type (`$title: string`)                                                                     |
+| public property   | its declared type (`$title: string`); `self` and `parent` name the class declaring it, a trait property's `self` the class using the trait, and `static` the component |
 | public method     | `Illuminate\View\InvokableComponentVariable<TValue>` with no parameters, `TValue` being its return type (`$isActive: InvokableComponentVariable<bool>`), otherwise a `Closure` of its signature (`$format: Closure(string): string`). A generic method or class, or a method with neither parameters nor a return type, is `mixed` (not checked) |
 | `$attributes`     | `Illuminate\View\ComponentAttributeBag`                                                                  |
 | `$componentName`  | `string` (`Component::$componentName`'s declared type)                                                   |
@@ -106,6 +106,8 @@ To declare such a method in the template, write `@var \Illuminate\View\Invokable
 The method closure is what `Closure::fromCallable()` returns at runtime: parameter and return types as Psalm reads them (docblock first), optional and variadic parameters kept, `self` and `parent` resolved against the class the method appears in (for a trait method, the class using the trait), `static` resolved to the component class, and the method's own purity kept. The same type is what [InvalidViewData](../issues/InvalidViewData.md) compares against a template's `@var \Closure(...)` declaration on the `render()` path, so a declaration matching the method passes and a mismatched one is reported.
 
 These are exactly the keys `Component::data()` merges into the view on that path, with its precedence: a method wins a name a property also has. The view must be named literally, by a `render()` whose whole body is one `return` of `view('name', …)`, `view()->make('name', …)`, `View::make('name', …)`, `$this->view('name', …)`, or `'name'`; an inherited `render()` counts.
+
+On that path a userland `$except` only silences: the names it lists stay supplied but are `mixed`, because Laravel then keeps the value the call passes under that key. A default Psalm cannot read (a `@var`-typed or computed list) makes every property `mixed`.
 
 A typed key is typed as present, so a defensive guard on it (`{{ $title ?? '' }}`, `@isset($title)`) now reports `RedundantCondition` / `TypeDoesNotContainNull` when the declared type is not nullable. Drop the guard: component data is always present.
 
