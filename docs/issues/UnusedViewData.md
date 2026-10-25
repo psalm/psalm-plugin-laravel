@@ -40,6 +40,6 @@ Every gate below silences the check for that call site rather than guessing:
 - **Ambient and framework-supplied names are never reported.** `$errors`, `$slot`, `$attributes`, `$component`, `$loop` and `$__env` are Blade's own; see also [Framework-supplied data](../blade.md#framework-supplied-data).
 - **Loop aliases count as read.** `@foreach ($items as $item)` marks both `items` and `item` as read: the read set is deliberately template-wide rather than scope-aware, and over-counting a name as used is the safe direction.
 - **A write-only variable does not count as a read.** `@php $key = 1; @endphp` with `key` passed in is reported, because the passed value is provably discarded.
-- Only literal string keys in the data array or a `with()` call are checked, on the same [supported call sites](../blade.md#supported-call-sites) as the other view data issues. A view with a composer the plugin cannot read is still checked here, so a key only that composer reads can be reported ([composers](../blade.md#composers-and-creators)).
+- Only literal string keys in the data array or a `with()` call are checked, on the same [supported call sites](../blade.md#supported-call-sites) as the other view data issues. A view with a composer the plugin cannot read is skipped, since that composer may read a passed key the template never mentions ([composers](../blade.md#composers-and-creators)).
 
 For promotion and suppression, see the shared [reporting level](../blade.md#reporting-level).
