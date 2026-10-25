@@ -10,6 +10,15 @@ __('auth.nonexistent');
 // Missing translations via trans() — should emit MissingTranslation
 trans('messages.missing');
 
+// A typo in the group is still reported under keys="short" (the shared opt-in config)
+__('mesages.welcome');
+
+// keys="short" skips sentence-style keys (whitespace), a trailing-period sentence and a bare word
+__('Online courses - more coming up!');
+__('Done.');
+__('Dashboard');
+trans('Dashboard');
+
 // Existing translations — should return narrowed string type
 $failed = __('auth.failed');
 /** @psalm-check-type-exact $failed = non-empty-string */
@@ -43,3 +52,4 @@ __($key);
 MissingTranslation on line %d: Translation key 'nonexistent.key' not found in language files
 MissingTranslation on line %d: Translation key 'auth.nonexistent' not found in language files
 MissingTranslation on line %d: Translation key 'messages.missing' not found in language files
+MissingTranslation on line %d: Translation key 'mesages.welcome' not found in language files
