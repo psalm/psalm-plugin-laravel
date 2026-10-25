@@ -908,6 +908,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
+        if (self::pairsWithBladeBlock($id)) {
+            return null;
+        }
+
         // The template comment is read back by Psalm on the next run. A type whose id does not
         // survive that round trip is no annotation at all. Any throwable counts: the fallback is
         // no declaration, which is never wrong.
@@ -918,6 +922,19 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return $id;
+    }
+
+    /**
+     * Blade pairs `@verbatim` with `@endverbatim` and `@php` with `@endphp` over the whole template, before it
+     * sets the leading `<?php ?>` block aside. A shape key spelling one of them, written into that block's
+     * docblock, would pair with a closer further down and swallow the template text between them. Matched
+     * without a word boundary and in any case, as Blade's own patterns have none: `@phpx` opens one too.
+     *
+     * @psalm-pure
+     */
+    private static function pairsWithBladeBlock(string $id): bool
+    {
+        return \preg_match('/@(?:end)?(?:verbatim|php)/i', $id) === 1;
     }
 
     /**

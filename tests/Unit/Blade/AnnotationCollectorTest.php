@@ -149,6 +149,35 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertNull(AnnotationCollector::typeFor('home', 'payload'));
     }
 
+    /**
+     * Blade pairs `@verbatim` with `@endverbatim` and `@php` with `@endphp` across the whole file before
+     * it protects the leading `<?php ?>` block, so a shape key spelling one opener inside the written
+     * `@var` swallows template text up to the next closer and corrupts the header.
+     *
+     * Checked on the printed id directly: a composite id only round-trips through a live Psalm
+     * (pinned end to end in AnnotateEndToEndTest), which is what `typeFor()` asks next.
+     *
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function idsAgainstBladeBlocks(): iterable
+    {
+        foreach (['@verbatim', '@endverbatim', '@php', '@endphp', '@PHP', '@phpx'] as $delimiter) {
+            yield "key {$delimiter}" => ["array{'{$delimiter}': string}", true];
+        }
+
+        yield 'in a nested shape' => ["list<array{id: int, 'a@php': string}>", true];
+        yield 'a key that only looks like a directive' => ["array{'@context': string}", false];
+        yield 'an email-like key' => ["array{'a@b.c': string}", false];
+        yield 'a plain shape' => ['array{php: string}', false];
+    }
+
+    #[Test]
+    #[DataProvider('idsAgainstBladeBlocks')]
+    public function recognises_an_id_blade_would_pair_with_a_block_closer(string $id, bool $pairs): void
+    {
+        $this->assertSame($pairs, (new \ReflectionMethod(AnnotationCollector::class, 'pairsWithBladeBlock'))->invoke(null, $id));
+    }
+
     #[Test]
     public function declines_a_template_parameter_even_though_its_id_parses(): void
     {
