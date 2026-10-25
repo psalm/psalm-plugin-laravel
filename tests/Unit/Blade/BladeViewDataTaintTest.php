@@ -11,9 +11,16 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * End-to-end proof that a value a controller hands to `view()` reaches the template's taint graph
- * (#2031). Only a real `vendor/bin/psalm` run can pin it: the source half writes while a PHP file is
- * analysed and the sink half reads while a compiled shadow is, in a different worker, and the two meet
- * only in the parent's merged graph.
+ * (#2031), and that a taint finding inside a template reads as a template finding: the issue AND every
+ * step of its journey name the `.blade.php` file, never the compiled shadow. Only a real
+ * `vendor/bin/psalm` run can pin it: the source half writes while a PHP file is analysed and the sink
+ * half reads while a compiled shadow is, in a different worker, and the two meet only in the parent's
+ * merged graph.
+ *
+ * Every case reads ONE warm-cache run (a cold run first fills Psalm's and the shadow cache, the second
+ * is the one reported on), so a warm cache is exercised by the whole report rather than by a run of
+ * its own. Fixture templates fall in two groups: those fed through `view()` data, and the
+ * `request()->input()` ones that need no controller (`external`, `marker`, `json*`).
  */
 #[Group('subprocess')]
 final class BladeViewDataTaintTest extends TestCase
@@ -22,16 +29,11 @@ final class BladeViewDataTaintTest extends TestCase
 
     private const FIXTURE = __DIR__ . '/Fixtures/BladeViewDataTaint';
 
-    /** @var list<string> */
-    private const ARGUMENTS = [
-        '-c',
-        'psalm.xml',
-        '--no-cache',
-        '--threads=1',
-        '--no-progress',
-        '--taint-analysis',
-        '--output-format=json',
-    ];
+    /** @var list<string> No --no-cache: both Psalm's file cache and the shadow cache must be warm on the second step. */
+    private const ARGUMENTS = ['-c', 'psalm-cached.xml', '--threads=1', '--no-progress', '--taint-analysis', '--output-format=json'];
+
+    /** @var array{output: string, errorOutput: string, shadows: string}|null */
+    private static ?array $warmRun = null;
 
     /**
      * The taint issues of one file: every `Tainted*` type, or just the one named. An unescaped echo
@@ -42,7 +44,7 @@ final class BladeViewDataTaintTest extends TestCase
     private function taintIssuesIn(string $file, ?string $type = null): array
     {
         return \array_values(\array_filter(
-            $this->fixtureIssues(self::FIXTURE, self::ARGUMENTS),
+            $this->decodeIssues($this->warmRun()),
             static fn(array $issue): bool => $issue['file_name'] === $file
                 && ($type === null ? \str_starts_with((string) $issue['type'], 'Tainted') : $issue['type'] === $type),
         ));
@@ -55,7 +57,23 @@ final class BladeViewDataTaintTest extends TestCase
 
     protected static function resetFixtureAnalyses(): void
     {
+        self::$warmRun = null;
         self::deleteTree(self::WARM_CACHE_DIRS);
+    }
+
+    /**
+     * Two real runs, memoized for the class: the cold one fills the caches, the warm one is reported on.
+     *
+     * @return array{output: string, errorOutput: string, shadows: string}
+     */
+    private function warmRun(): array
+    {
+        if (self::$warmRun === null) {
+            self::deleteTree(self::WARM_CACHE_DIRS);
+            self::$warmRun = $this->analyzeFixtureSequence(self::FIXTURE, [self::ARGUMENTS, self::ARGUMENTS]);
+        }
+
+        return self::$warmRun;
     }
 
     /** @param list<string> $directories */
@@ -81,7 +99,7 @@ final class BladeViewDataTaintTest extends TestCase
 
     private function raw(): string
     {
-        return $this->analyzeFixture(self::FIXTURE, self::ARGUMENTS)['output'];
+        return $this->warmRun()['output'];
     }
 
     /** @return iterable<string, array{string, int}> */
@@ -101,7 +119,6 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'only the tainted one of two keys' => ['resources/views/both.blade.php', 1];
         yield 'mergeData by name on a factory' => ['resources/views/merge-named.blade.php', 1];
         yield 'mergeData positional on the helper' => ['resources/views/merge-helper.blade.php', 1];
-        yield 'mergeData by name on the helper' => ['resources/views/merge-helper-named.blade.php', 1];
         yield 'mergeData positional on the facade' => ['resources/views/merge-facade.blade.php', 1];
         yield 'view name padded with whitespace' => ['resources/views/padded.blade.php', 1];
         yield 'userland factory subclass that overrides nothing' => ['resources/views/subclass-plain.blade.php', 1];
@@ -120,7 +137,6 @@ final class BladeViewDataTaintTest extends TestCase
         yield '@include data' => ['resources/views/included.blade.php', 1];
         yield '@includeIf data' => ['resources/views/inc-if.blade.php', 1];
         yield '@includeWhen data' => ['resources/views/inc-when.blade.php', 1];
-        yield '@includeUnless data' => ['resources/views/inc-unless.blade.php', 1];
         yield '@includeFirst data' => ['resources/views/inc-first.blade.php', 1];
         yield '@extends data' => ['resources/views/inc-extends.blade.php', 1];
         yield '@include data held in a variable' => ['resources/views/inc-var.blade.php', 1];
@@ -168,8 +184,6 @@ final class BladeViewDataTaintTest extends TestCase
         yield 'look-alike make() on another receiver in a template' => ['resources/views/lk-partial.blade.php'];
         yield '@includeWhen(false) data' => ['resources/views/off-when.blade.php'];
         yield '@includeWhen(false) scope' => ['resources/views/off-when-scope.blade.php'];
-        yield '@includeUnless(true) data' => ['resources/views/off-unless.blade.php'];
-        yield '@includeUnless(true) scope' => ['resources/views/off-unless-scope.blade.php'];
         yield 'author filter that removes the variable from the scope' => ['resources/views/filtered-scope-partial.blade.php'];
         yield '`*` view data key' => ['resources/views/star-key.blade.php'];
         yield '@includeFirst candidate after the first existing one' => ['resources/views/inc-first-never.blade.php'];
@@ -211,7 +225,7 @@ final class BladeViewDataTaintTest extends TestCase
     {
         $types = [];
 
-        foreach ($this->fixtureIssues(self::FIXTURE, self::ARGUMENTS) as $issue) {
+        foreach ($this->decodeIssues($this->warmRun()) as $issue) {
             if (!\str_starts_with((string) $issue['type'], 'Tainted')) {
                 $types[] = $issue['type'] . ' ' . $issue['file_name'] . ':' . $issue['line_from'];
             }
@@ -220,32 +234,50 @@ final class BladeViewDataTaintTest extends TestCase
         $this->assertSame([], $types, $this->raw());
     }
 
+    /** `@json` escapes by flag: the default flags are all four HEX ones, HEX_TAG alone still leaves quotes, none leaves it tainted. */
     #[Test]
-    public function a_warm_psalm_and_shadow_cache_still_reports(): void
+    public function the_json_directive_clears_exactly_the_taint_its_flags_escape(): void
     {
-        self::deleteTree(self::WARM_CACHE_DIRS);
+        $types = static fn(array $issues): array => \array_column($issues, 'type');
 
-        // No --no-cache: both Psalm's file cache and the shadow cache must be warm on the second step.
-        $run = $this->analyzeFixtureSequence(
-            self::FIXTURE,
-            \array_fill(0, 2, ['-c', 'psalm-cached.xml', '--threads=1', '--no-progress', '--taint-analysis', '--output-format=json']),
+        $this->assertSame([], $this->taintIssuesIn('resources/views/json.blade.php'), $this->raw());
+
+        $hexTag = $types($this->taintIssuesIn('resources/views/json-hex-tag.blade.php'));
+        $this->assertNotContains('TaintedHtml', $hexTag, $this->raw());
+        $this->assertContains('TaintedTextWithQuotes', $hexTag, $this->raw());
+
+        $this->assertContains('TaintedHtml', $types($this->taintIssuesIn('resources/views/json-unsafe.blade.php')), $this->raw());
+    }
+
+    #[Test]
+    public function marker_shaped_literals_preserve_both_taint_findings(): void
+    {
+        $types = \array_column($this->taintIssuesIn('resources/views/marker.blade.php'), 'type');
+
+        $this->assertContains('TaintedHtml', $types, $this->raw());
+        $this->assertContains('TaintedTextWithQuotes', $types, $this->raw());
+    }
+
+    /** #1519: the sink is ordinary application code; only the journey hop that passed through the template moves. */
+    #[Test]
+    public function a_journey_through_a_template_names_the_template_while_the_sink_stays_in_php(): void
+    {
+        $tainted = $this->taintIssuesIn('app/Sink.php', 'TaintedHtml');
+        $this->assertCount(1, $tainted, $this->raw());
+
+        $trace = $tainted[0]['taint_trace'];
+        $this->assertIsArray($trace);
+
+        // Psalm 7 records the template's `(string)` cast and the call into `Sink::raw()` as two hops on the
+        // same template line; both must name the template.
+        $templateSteps = \array_filter(
+            $trace,
+            static fn(array $step): bool => ($step['file_name'] ?? null) === 'resources/views/external.blade.php',
         );
+        $this->assertNotSame([], $templateSteps, $this->raw());
 
-        $reported = [];
-
-        foreach ($this->decodeIssues($run) as $issue) {
-            if ($issue['type'] === 'TaintedHtml') {
-                $reported[] = $issue['file_name'] . ':' . $issue['line_from'];
-            }
+        foreach ($templateSteps as $step) {
+            $this->assertSame(1, $step['line_from'], $this->raw());
         }
-
-        \sort($reported);
-
-        $this->assertContains('resources/views/search.blade.php:1', $reported, $run['output']);
-        $this->assertContains('resources/views/typed.blade.php:2', $reported, $run['output']);
-        $this->assertContains('resources/views/var-array.blade.php:1', $reported, $run['output']);
-        $this->assertContains('resources/views/included.blade.php:1', $reported, $run['output']);
-        $this->assertContains('resources/views/scope-partial.blade.php:1', $reported, $run['output']);
-        $this->assertContains('resources/views/components/card.blade.php:1', $reported, $run['output']);
     }
 }

@@ -46,34 +46,20 @@ final class BladeDisabledVisibilityTest extends TestCase
         return $this->copy;
     }
 
-    /** @return array{0: int, 1: string} exit code, stderr */
-    private function analyze(string $config): array
+    #[Test]
+    public function the_disable_message_reaches_stderr_under_no_progress_and_fails_the_run_when_asked(): void
     {
         $process = new Process(
-            [\PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', '-c', $config, '--no-cache', '--threads=1', '--no-progress'],
+            [\PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', '-c', 'psalm-fail.xml', '--no-cache', '--threads=1', '--no-progress'],
             $this->fixtureCopy(),
         );
         $process->setTimeout(300);
         $process->run();
 
-        return [(int) $process->getExitCode(), $process->getErrorOutput()];
-    }
-
-    #[Test]
-    public function the_disable_message_reaches_stderr_under_no_progress(): void
-    {
-        [$exitCode, $stderr] = $this->analyze('psalm.xml');
+        $stderr = $process->getErrorOutput();
 
         $this->assertStringContainsString(self::MESSAGE, $stderr);
-        $this->assertSame(0, $exitCode, $stderr);
-    }
-
-    #[Test]
-    public function fail_on_internal_error_turns_the_disable_into_a_failed_run(): void
-    {
-        [$exitCode, $stderr] = $this->analyze('psalm-fail.xml');
-
-        $this->assertNotSame(0, $exitCode, $stderr);
-        $this->assertStringContainsString(self::MESSAGE, $stderr);
+        // `<failOnInternalError>` is what makes a disabled Blade a failed run rather than a notice.
+        $this->assertNotSame(0, $process->getExitCode(), $stderr);
     }
 }

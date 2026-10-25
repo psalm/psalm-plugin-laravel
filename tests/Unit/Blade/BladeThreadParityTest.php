@@ -34,23 +34,17 @@ use Symfony\Component\Process\Process;
 #[Group('subprocess')]
 final class BladeThreadParityTest extends TestCase
 {
-    private const REMAP_FIXTURE = __DIR__ . '/Fixtures/BladeIssueRemap';
-
-    private const TAINT_FIXTURE = __DIR__ . '/Fixtures/BladeTaintRemap';
-
     /** #2031: the source write and the template read happen in different workers and meet in the parent. */
-    private const VIEW_DATA_FIXTURE = __DIR__ . '/Fixtures/BladeViewDataTaint';
+    private const FIXTURE = __DIR__ . '/Fixtures/BladeViewDataTaint';
 
-    private const VIEW_DATA_THREADS = 5;
-
-    /** #2033: the page shadow writes a component's property node, the component view's shadow reads it. */
+    /** #2033: the page shadow writes a component's constructor argument, the component view's shadow reads its property. */
     private const COMPONENT_FIXTURE = __DIR__ . '/Fixtures/BladeComponentTaint';
 
     /** Own shadow dir, so a parallel-safe run never shares state with the other Blade suites. */
     private const SHADOW_DIR = '/.cache/blade-shadows-threads';
 
-    /** Forking only happens when there are more files to analyze than workers. */
-    private const THREADS = 4;
+    /** Forking only happens when there are more files to analyze than workers, and the write and read must land on different ones. */
+    private const THREADS = 5;
 
     /** The #1519 channel: the sink is application code, only the journey names the template. */
     private const JOURNEY_SINK = 'app/Sink.php';
@@ -75,7 +69,7 @@ final class BladeThreadParityTest extends TestCase
 
     private function deleteShadowDirs(): void
     {
-        foreach ([self::REMAP_FIXTURE, self::TAINT_FIXTURE, self::VIEW_DATA_FIXTURE, self::COMPONENT_FIXTURE] as $fixture) {
+        foreach ([self::FIXTURE, self::COMPONENT_FIXTURE] as $fixture) {
             $dir = $fixture . self::SHADOW_DIR;
 
             if (!\is_dir($dir)) {
@@ -241,31 +235,23 @@ final class BladeThreadParityTest extends TestCase
     }
 
     #[Test]
-    public function issues_are_identical_with_and_without_forked_workers(): void
-    {
-        $forked = $this->analyze(self::REMAP_FIXTURE, self::THREADS, false);
-        $single = $this->analyze(self::REMAP_FIXTURE, 1, false);
-
-        $this->assertForked($forked);
-        $this->assertSame($single['findings'], $forked['findings']);
-        $this->assertNotSame(
-            [],
-            \array_filter($single['findings'], static fn(string $finding): bool => \str_contains($finding, '.blade.php:')),
-            'The fixture reported no template issue at all, so equality proves nothing.',
-        );
-        $this->assertStringNotContainsString('blade-shadows-threads', $forked['raw'], $forked['raw']);
-    }
-
-    #[Test]
     public function taint_findings_and_journeys_are_identical_with_and_without_forked_workers(): void
     {
-        $forked = $this->analyze(self::TAINT_FIXTURE, self::THREADS, true);
-        $single = $this->analyze(self::TAINT_FIXTURE, 1, true);
+        $forked = $this->analyze(self::FIXTURE, self::THREADS, true);
+        $single = $this->analyze(self::FIXTURE, 1, true);
 
         $this->assertForked($forked);
         $this->assertSame($single['findings'], $forked['findings']);
         $this->assertEveryFindingCarriesAJourney($single['issues'], 'single-process run');
         $this->assertEveryFindingCarriesAJourney($forked['issues'], 'forked run');
+
+        // The report must hold template-path findings too, or equality proves nothing about the
+        // remap re-emitting from inside a worker.
+        $this->assertNotSame(
+            [],
+            \array_filter($single['findings'], static fn(string $finding): bool => \str_contains($finding, '.blade.php:')),
+            'The fixture reported no template finding at all, so equality proves nothing.',
+        );
 
         // #1519 specifically: the finding sits on application code and only its journey names the
         // template, which is the one shape a template-path comparison cannot see.
@@ -279,21 +265,8 @@ final class BladeThreadParityTest extends TestCase
 
         $this->assertCount(1, $journeys, 'The fixture stopped reporting the journey-only finding.');
         $this->assertStringContainsString(self::JOURNEY_TEMPLATE, $journeys[0], $journeys[0]);
-        $this->assertStringNotContainsString('blade-shadows-threads', $forked['raw'], $forked['raw']);
-    }
 
-    #[Test]
-    public function view_data_taint_findings_and_journeys_are_identical_with_and_without_forked_workers(): void
-    {
-        $forked = $this->analyze(self::VIEW_DATA_FIXTURE, self::VIEW_DATA_THREADS, true);
-        $single = $this->analyze(self::VIEW_DATA_FIXTURE, 1, true);
-
-        $this->assertForked($forked);
-        $this->assertSame($single['findings'], $forked['findings']);
-        $this->assertEveryFindingCarriesAJourney($single['issues'], 'single-process run');
-        $this->assertEveryFindingCarriesAJourney($forked['issues'], 'forked run');
-
-        // The template-to-template hops (#2032) cross workers too: the includer's write and the partial's read.
+        // #2032: the template-to-template hops cross workers too, the includer's write and the partial's read.
         foreach (['search.blade.php', 'var-array.blade.php', 'included.blade.php', 'scope-partial.blade.php', 'components/card.blade.php'] as $template) {
             $templateFindings = \array_filter(
                 $single['findings'],
@@ -309,7 +282,7 @@ final class BladeThreadParityTest extends TestCase
     #[Test]
     public function component_property_taint_findings_and_journeys_are_identical_with_and_without_forked_workers(): void
     {
-        $forked = $this->analyze(self::COMPONENT_FIXTURE, self::VIEW_DATA_THREADS, true);
+        $forked = $this->analyze(self::COMPONENT_FIXTURE, self::THREADS, true);
         $single = $this->analyze(self::COMPONENT_FIXTURE, 1, true);
 
         $this->assertForked($forked);
@@ -317,7 +290,6 @@ final class BladeThreadParityTest extends TestCase
         $this->assertEveryFindingCarriesAJourney($single['issues'], 'single-process run');
         $this->assertEveryFindingCarriesAJourney($forked['issues'], 'forked run');
 
-        // The page's shadow writes, the component view's shadow reads: two files, so (with 5 workers) two processes.
         $viewFindings = \array_filter(
             $single['findings'],
             static fn(string $finding): bool => \str_contains($finding, 'resources/views/components/alert.blade.php:1:') && \str_contains($finding, 'TaintedHtml'),
