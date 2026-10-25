@@ -603,8 +603,10 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
-     * Like Livewire, a class component's `data()` is merged into the view `render()` resolves only: a
-     * second view built by another method of the class still lacks `$count`.
+     * `data()` is merged into the view `render()` resolves and nothing else, so a mail view built on
+     * the side lacks `$count`. A view another method builds MAY reach `render()` (a helper it returns),
+     * so there the component's names count as supplied, untyped: `$count` is not reported, while a
+     * declared name no `data()` key covers (`$absent`) still is.
      */
     #[Test]
     public function class_component_properties_reach_only_the_view_render_returns(): void
@@ -612,12 +614,35 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->contractIssues();
         $reported = $this->forFile($issues, 'ComponentForeignView.php');
 
-        $this->assertSame([self::MISSING . ' $count', self::MISSING . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
+        $this->assertSame([self::MISSING . ' $absent', self::MISSING . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
 
         $messages = \implode("\n", \array_column($reported, 'message'));
-        $this->assertStringContainsString("View 'component-foreign-side' requires", $messages);
-        $this->assertStringContainsString("View 'component-foreign-mail' requires", $messages);
+        $this->assertStringContainsString("View 'component-foreign-side' requires \$absent", $messages);
+        $this->assertStringContainsString("View 'component-foreign-mail' requires \$count", $messages);
         $this->assertStringNotContainsString("View 'component-foreign' requires", $messages);
+    }
+
+    /**
+     * A public helper `render()` returns, and a view built inside the closure `render()` returns
+     * (Laravel calls `with($data)` on its result), both receive the component's properties.
+     */
+    #[Test]
+    public function a_view_that_may_reach_render_counts_the_component_properties_as_supplied(): void
+    {
+        $issues = $this->contractIssues();
+
+        foreach (['ComponentHelperRender.php', 'ComponentClosureRender.php'] as $file) {
+            $this->assertSame([], $this->forFile($issues, $file), $file . \var_export($issues, true));
+        }
+    }
+
+    /** A closure `render()` returns is part of `render()`: the properties are typed there, not merely supplied. */
+    #[Test]
+    public function a_view_built_in_the_closure_render_returns_gets_typed_component_properties(): void
+    {
+        $reported = $this->forFile($this->contractIssues(), 'ComponentClosureRenderTyped.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $count'], $this->variablesOf($reported), \var_export($reported, true));
     }
 
     /**

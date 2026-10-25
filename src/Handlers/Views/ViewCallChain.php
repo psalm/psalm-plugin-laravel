@@ -13,6 +13,7 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\Analyzer\ClosureAnalyzer;
 use Psalm\Internal\Analyzer\FunctionAnalyzer;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
 use Psalm\Internal\Analyzer\MethodAnalyzer;
@@ -107,19 +108,23 @@ final class ViewCallChain
         }
 
         // `Component::data()` and Livewire's properties are merged into the view `render()` returns, a
-        // `view()` or factory view, and no other: a view another method builds, or a mail view built on
-        // the side in `render()`, receives none of them.
-        $returnsView = self::isInRenderMethod($source)
-            && ($chain->binder === null || $chain->binder === ViewNameSignatures::ROLE_VIEW_FACTORY);
-
-        if (!$returnsView) {
+        // `view()` or factory view, and no other: a mail view built on the side receives none of them.
+        if ($chain->binder !== null && $chain->binder !== ViewNameSignatures::ROLE_VIEW_FACTORY) {
             return $chain;
         }
 
+        $inRender = self::isInRenderMethod($source);
         $merged = ComponentRenderData::forSource($source);
 
         if ($merged === null) {
-            return $chain->supplying(FrameworkViewData::forLivewire($source));
+            // Livewire renders its `placeholder()` and other views without the properties.
+            return $inRender ? $chain->supplying(FrameworkViewData::forLivewire($source)) : $chain;
+        }
+
+        if (!$inRender) {
+            // A view another method builds (a public helper `render()` returns) may reach `render()`: the
+            // component's names count as supplied, but nothing can be said about their types.
+            return $chain->supplying([FrameworkViewData::untyped($merged[0]) + ($merged[1] ? [] : FrameworkViewData::untyped($chain->data)), $merged[1]]);
         }
 
         // A component's public `render()` can be called, and its result chained, from anywhere
@@ -330,6 +335,12 @@ final class ViewCallChain
     private static function isInRenderMethod(StatementsSource $source): bool
     {
         $analyzer = self::enclosingFunctionLike($source);
+
+        // `render()` may return a closure whose result Laravel merges the data into: a closure is part of
+        // the method that holds it.
+        while ($analyzer instanceof ClosureAnalyzer) {
+            $analyzer = self::enclosingFunctionLike($analyzer->getSource());
+        }
 
         return $analyzer instanceof FunctionLikeAnalyzer && \strtolower((string) $analyzer->getMethodName()) === 'render';
     }
