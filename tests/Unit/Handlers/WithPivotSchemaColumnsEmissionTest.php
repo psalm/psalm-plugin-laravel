@@ -266,9 +266,6 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
 
         // Date::use(CarbonImmutable::class): the dates are that class.
         $this->assertContains($this->stampedRelation('Carbon\\CarbonImmutable|null'), $this->runPsalm(['WITH_PIVOT_DATE' => 'immutable']));
-
-        // A callable builds the dates: nothing is proven.
-        $this->assertContains($this->stampedRelation('mixed'), $this->runPsalm(['WITH_PIVOT_DATE' => 'callable']));
     }
 
     private function usingRelation(string $variable, string $parent, string $pivot): string

@@ -44,6 +44,7 @@ trait RunsAnnotateFixture
         'panel' => "{{ \$family->count() }} {{ \$handler instanceof \\Closure }}\n",
         'panel-kind' => "{{ \$kind }}\n",
         'merged' => "{{ json_encode([\$author, \$media, \$trio, \$flag, \$posts, \$any, \$key]) }}\n",
+        'merge-control' => "{{ \$flag }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
         'statics' => "<p>{{ \$stats['total'] }}</p>\n",
@@ -107,9 +108,9 @@ trait RunsAnnotateFixture
      * @return array<string, mixed> the annotate pass's result, as the writer reported it back
      *                              through the control file
      */
-    private function annotateResult(string $mode = 'annotate'): array
+    private function annotateResult(string $mode = 'annotate', string $config = 'psalm.xml'): array
     {
-        $decoded = \json_decode($this->analyse($mode)['control'], true);
+        $decoded = \json_decode($this->analyse($mode, $config)['control'], true);
         $this->assertIsArray($decoded, 'the annotate pass never reported back');
 
         return $decoded;
