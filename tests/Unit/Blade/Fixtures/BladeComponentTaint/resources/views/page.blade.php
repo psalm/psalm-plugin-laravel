@@ -13,6 +13,7 @@
 @component(\App\View\Components\Compo::class, 'compo', ['message' => request('m')])
 @endComponentClass
 <x-except-lit :message="request('m')" />
+<x-except-ctor :message="request('m')" />
 <x-static-prop :message="request('m')" />
 <x-ignored-name :data="request('d')" />
 <x-shared-x-one :message="request('m')" />

@@ -630,6 +630,7 @@ final class ViewContractValidationTest extends TestCase
 
         $this->assertSame([self::WRONG_TYPE . ' $count'], $this->variablesOf($excepted), \var_export($issues, true));
         $this->assertSame([], $this->forFile($issues, 'ComponentExceptedOpaque.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'ComponentExceptedMethod.php'), \var_export($issues, true));
     }
 
     /**

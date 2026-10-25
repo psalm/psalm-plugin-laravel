@@ -5,10 +5,16 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\View\InvokableComponentVariable;
+use PhpParser\Node;
+use PhpParser\Node\Expr\PropertyFetch;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Identifier;
+use PhpParser\NodeFinder;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
+use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
@@ -35,8 +41,9 @@ use Psalm\Type\Union;
  * additionally drop statics; methods do not. A method wins a name a property also has.
  *
  * `$except` and an overridden `ignoredMethods()` / `shouldIgnore()` only ever REMOVE names, so
- * {@see self::forSource()} ignores them and stays a superset of the real set — the safe direction
- * there, because a name in the set only ever silences a report. {@see self::guaranteedFor()}
+ * {@see self::forSource()} keeps them supplied (a superset of the real set — the safe direction
+ * there, because a name in the set only ever silences a report) but untyped: Laravel then leaves the
+ * value the call passes under that key. {@see self::guaranteedFor()}
  * declares the names as present, so it declines on them instead. An overridden `data()` or
  * extraction method can ADD names or change their values, which nothing static can enumerate, so
  * both consumers treat it as unknowable.
@@ -115,6 +122,7 @@ final class ComponentRenderData
         if (!isset($storage->parent_classes[self::COMPONENT])
             || self::overridesAny($storage, self::NARROWING_OVERRIDES)
             || \strtolower($storage->declaring_property_ids['except'] ?? '') !== self::COMPONENT
+            || self::constructorMentionsExcept($codebase, $storage)
         ) {
             return null;
         }
@@ -166,7 +174,7 @@ final class ComponentRenderData
             return null;
         }
 
-        $methods = self::publicMethods($codebase, $storage);
+        $methods = self::publicMethods($codebase, $storage, $typedOnly ? [] : self::exceptedNames($codebase, $storage));
 
         if ($methods === null) {
             return null;
@@ -304,6 +312,11 @@ final class ComponentRenderData
      */
     private static function exceptedNames(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
+        // The default is not the value `data()` reads once a constructor has replaced or extended it.
+        if (self::constructorMentionsExcept($codebase, $storage)) {
+            return null;
+        }
+
         $declaringClass = $storage->declaring_property_ids['except'] ?? self::COMPONENT;
 
         if (\strtolower($declaringClass) === self::COMPONENT) {
@@ -336,14 +349,58 @@ final class ComponentRenderData
     }
 
     /**
+     * Whether a constructor the class runs (its own, or one a parent declares) touches `$this->except`.
+     * A constructor Psalm cannot locate in source (a trait's) is not read.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function constructorMentionsExcept(Codebase $codebase, ClassLikeStorage $storage): bool
+    {
+        $finder = new NodeFinder();
+        $seen = [];
+
+        foreach ([$storage->name, ...\array_keys($storage->parent_classes)] as $className) {
+            $class = ViewClassProperties::storage($codebase, $className);
+            $constructor = $class?->declaring_method_ids['__construct'] ?? null;
+
+            if (!$constructor instanceof MethodIdentifier || isset($seen[(string) $constructor])) {
+                continue;
+            }
+
+            $seen[(string) $constructor] = true;
+            $resolved = ClassMethodResolver::resolve($codebase, $constructor);
+
+            $mention = $finder->findFirst(
+                $resolved['classMethod']->stmts ?? [],
+                static fn(Node $node): bool => $node instanceof PropertyFetch
+                    && $node->var instanceof Variable
+                    && $node->var->name === 'this'
+                    && $node->name instanceof Identifier
+                    && $node->name->name === 'except',
+            );
+
+            if ($mention instanceof Node) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Every public method becomes a variable of the same (cased) name, built by
      * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` of the method's return
      * type for a method with no parameters at all (optional ones count), a `Closure` of the method's
      * signature otherwise.
      *
+     * @param list<string>|null $excepted the names `$except` removes: `shouldIgnore()` is shared with the
+     *        properties, so an excluded method keeps the value the call passes and is `mixed` here, the
+     *        way {@see self::publicProperties()} treats a property; null when the list is unreadable,
+     *        which leaves every method that way
+     *
      * @return array<string, Union>|null
      */
-    private static function publicMethods(Codebase $codebase, ClassLikeStorage $storage): ?array
+    private static function publicMethods(Codebase $codebase, ClassLikeStorage $storage, ?array $excepted): ?array
     {
         $methods = [];
 
@@ -364,7 +421,15 @@ final class ComponentRenderData
                 continue;
             }
 
-            $methods[$method->cased_name ?? $methodName] = $method->params === []
+            $casedName = $method->cased_name ?? $methodName;
+
+            if ($excepted === null || \in_array($casedName, $excepted, true)) {
+                $methods[$casedName] = Type::getMixed();
+
+                continue;
+            }
+
+            $methods[$casedName] = $method->params === []
                 ? self::invokableOf($codebase, $storage, $declaring, $method, $methodName)
                 : self::closureOf($codebase, $storage, $declaring, $method, $methodName);
         }
