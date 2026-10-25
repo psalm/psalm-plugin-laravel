@@ -40,7 +40,7 @@ final class ContractParser
      * that docblock (`DocblockParser::resolveTags()`). Tag names run to the first character outside
      * `[\w\-\\:]`, as Psalm reads them, so `@psalm-ignore-variable-method` is another tag.
      */
-    private const IGNORE_VAR = '/(?:^\h*\*?\h*|\A\/\*+\h*)@(?:psalm-)?ignore-var(?![\w\-\\\\:])/m';
+    public const IGNORE_VAR = '/(?:^\h*\*?\h*|\A\/\*+\h*)@(?:psalm-)?ignore-var(?![\w\-\\\\:])/m';
 
     /**
      * Mirrors `BladeCompiler::compileStatements()`'s own tokenizer regex

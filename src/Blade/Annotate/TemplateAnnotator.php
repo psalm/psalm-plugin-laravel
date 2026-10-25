@@ -16,7 +16,9 @@ use Psalm\LaravelPlugin\Blade\PhpDocBlocks;
  * 1. the first doc comment of a `<?php` block the file opens with — appended before its `*\/`, so
  *    the template keeps one docblock (a second one before the same statement is dropped by the PHP
  *    parser, which attaches only the last). A one-line docblock is opened out first, so every tag
- *    sits on its own line;
+ *    sits on its own line. Never one carrying `@psalm-ignore-var`: Psalm drops its `@var` tags, so the
+ *    lines would never type the template (nor would a rerun add them, the names then counting as
+ *    declared); it takes 2 instead;
  * 2. a new `<?php /** ... *\/ ?>` block directly after that leading block, so a
  *    `declare(strict_types=1)` stays the first statement;
  * 3. the same new block at the very top of the file, after any BOM.
@@ -41,6 +43,9 @@ final class TemplateAnnotator
      * @param array<string, true> $optional names a closed call site omits: declared `T|null $x = null`
      *
      * @return string|null the annotated source; null when the template already declares every name
+     *
+     * @throws \RuntimeException when the template's only possible header docblock ignores `@var` tags and
+     *                           the leading block never closes, so no placement keeps both meanings
      *
      * @psalm-pure
      */
@@ -68,8 +73,9 @@ final class TemplateAnnotator
         }
 
         $header = self::leadingPhpBlock($source, $bom);
+        $ignored = $header !== null && $header['doc'] !== null && \preg_match(ContractParser::IGNORE_VAR, $header['doc'][1]) === 1;
 
-        if ($header !== null && $header['doc'] !== null) {
+        if ($header !== null && $header['doc'] !== null && !$ignored) {
             [$offset, $docblock] = $header['doc'];
             $extended = self::intoDocblock($docblock, self::indentBefore($source, $offset), $declarations, $eol);
 
@@ -84,6 +90,14 @@ final class TemplateAnnotator
 
         if ($header['closeEnd'] !== null) {
             return \substr_replace($source, '<?php' . $eol . $docblock . '?>' . $eol, $header['closeEnd'], 0);
+        }
+
+        // Before this docblock a new one would be the earlier of two and lose the statement to it; after
+        // it, the statement's docblock would change meaning. A new `<?php` block would land before a `declare`.
+        if ($ignored) {
+            throw new \RuntimeException(
+                "the template's header docblock carries @psalm-ignore-var and its PHP block never closes, so no declaration can be placed. Declare the variables by hand.",
+            );
         }
 
         // The file never leaves PHP, so a new PHP block would land before a `declare`; a plain

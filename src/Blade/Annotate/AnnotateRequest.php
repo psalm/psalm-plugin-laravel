@@ -65,8 +65,10 @@ final class AnnotateRequest
      *                                                            names left undeclared because a call site
      *                                                            the pass could not read renders it, and
      *                                                            the first such site
+     * @param array<string, string> $parseErrors file path => the first parse error Psalm reported there, a
+     *                                            file whose views the pass treated as unreadable
      */
-    public function publish(array $changed, array $failures, string $diff, array $unknown = [], array $disagreed = [], array $unreadable = []): void
+    public function publish(array $changed, array $failures, string $diff, array $unknown = [], array $disagreed = [], array $unreadable = [], array $parseErrors = []): void
     {
         $this->write([
             'dryRun' => $this->dryRun,
@@ -76,6 +78,7 @@ final class AnnotateRequest
             'unknown' => $unknown,
             'disagreed' => $disagreed,
             'unreadable' => $unreadable,
+            'parseErrors' => $parseErrors,
         ]);
     }
 

@@ -14,6 +14,7 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
@@ -190,6 +191,20 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
+        // A rendering call in a condition is no statement of its own, so the chain walk never meets it.
+        // The body statements are analysed on their own; only the condition expressions are read here.
+        $conditions = self::conditionsOf($stmt);
+
+        if ($conditions !== []) {
+            foreach ($conditions as $condition) {
+                foreach (self::viewNamesIn($condition) as $viewName) {
+                    self::markUnreadable($viewName, self::site($condition, $event->getStatementsSource()));
+                }
+            }
+
+            return null;
+        }
+
         $expr = match (true) {
             $stmt instanceof Stmt\Expression, $stmt instanceof Stmt\Return_ => $stmt->expr,
             default => null,
@@ -225,6 +240,29 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return null;
+    }
+
+    /**
+     * The expressions a compound statement evaluates itself, outside any body: `if`/`elseif` tests, loop
+     * headers, the `switch` subject and its `case` values.
+     *
+     * @return array<Expr>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function conditionsOf(Stmt $stmt): array
+    {
+        return match (true) {
+            $stmt instanceof Stmt\If_ => [$stmt->cond, ...\array_map(static fn(Stmt\ElseIf_ $elseIf): Expr => $elseIf->cond, $stmt->elseifs)],
+            $stmt instanceof Stmt\While_, $stmt instanceof Stmt\Do_ => [$stmt->cond],
+            $stmt instanceof Stmt\For_ => [...$stmt->init, ...$stmt->cond, ...$stmt->loop],
+            $stmt instanceof Stmt\Foreach_ => [$stmt->expr],
+            $stmt instanceof Stmt\Switch_ => [
+                $stmt->cond,
+                ...\array_values(\array_filter(\array_map(static fn(Stmt\Case_ $case): ?Expr => $case->cond, $stmt->cases))),
+            ],
+            default => [],
+        };
     }
 
     /**
@@ -656,18 +694,38 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return true;
         }
 
-        if ($node instanceof Expr\StaticCall) {
-            return $method === 'resolve'
-                && $node->class instanceof Node\Name
-                && \strtolower(\ltrim($node->class->toString(), '\\')) === 'illuminate\\view\\anonymouscomponent';
-        }
-
         // The other Factory methods compiled includes and components call (`@includeFirst`,
         // `@includeWhen`, `@each`, `@component`), too common as names to match on any receiver.
-        return $node instanceof Expr\MethodCall
-            && $node->var instanceof Expr\Variable
-            && $node->var->name === '__env'
-            && \in_array($method, ['first', 'renderwhen', 'renderunless', 'rendereach', 'startcomponent', 'startcomponentfirst'], true);
+        $factoryMethod = \in_array($method, ['first', 'renderwhen', 'renderunless', 'rendereach', 'startcomponent', 'startcomponentfirst'], true);
+
+        if ($node instanceof Expr\StaticCall) {
+            if (!$node->class instanceof Node\Name) {
+                return false;
+            }
+
+            if ($method === 'resolve') {
+                return \strtolower(\ltrim($node->class->toString(), '\\')) === 'illuminate\\view\\anonymouscomponent';
+            }
+
+            // The facade (`View::first(...)`, whatever the import or alias spelling) forwards to the Factory.
+            // Psalm leaves an imported name as written and records what it resolves to on the node.
+            /** @psalm-var ?string $resolved */
+            $resolved = $node->class->getAttribute('resolvedName');
+            $class = \is_string($resolved) ? new Node\Name($resolved) : $node->class;
+
+            return $factoryMethod && \in_array(\strtolower($class->getLast()), ['view', 'factory'], true);
+        }
+
+        if (!$factoryMethod) {
+            return false;
+        }
+
+        // `$__env` is what compiled templates call; `view()` without arguments is the Factory itself.
+        return $node->var instanceof Expr\Variable && $node->var->name === '__env'
+            || $node->var instanceof Expr\FuncCall
+            && $node->var->name instanceof Node\Name
+            && $node->var->name->toLowerString() === 'view'
+            && $node->var->args === [];
     }
 
     private static function methodName(Node $call): ?string
@@ -860,6 +918,11 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
+        // A key a composer owns is not for the call sites to settle: left out of the disagreement list, too.
+        if (self::composerMayWrite(self::canonical($viewName), $name)) {
+            return null;
+        }
+
         $ids = \array_map(strval(...), \array_keys($distinct));
         \sort($ids);
 
@@ -874,7 +937,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     {
         $viewName = self::canonical($viewName);
 
-        if (isset(self::$open[$viewName])) {
+        if (isset(self::$open[$viewName]) || self::composerMayWrite($viewName, $name)) {
             return null;
         }
 
@@ -908,6 +971,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
+        if (self::pairsWithBladeBlock($id)) {
+            return null;
+        }
+
         // The template comment is read back by Psalm on the next run. A type whose id does not
         // survive that round trip is no annotation at all. Any throwable counts: the fallback is
         // no declaration, which is never wrong.
@@ -918,6 +985,44 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return $id;
+    }
+
+    /**
+     * Whether some producer of the view was seen at all: a name only a published override's other spelling
+     * (`vendor.pkg.card` beside `pkg::card`) claims has none, and says nothing about the template.
+     */
+    public static function hasProducer(string $viewName): bool
+    {
+        $viewName = self::canonical($viewName);
+
+        return isset(self::$observed[$viewName]) || isset(self::$open[$viewName])
+            || isset(self::$alwaysSupplied[$viewName]) || isset(self::$edges[$viewName]);
+    }
+
+    /**
+     * Whether a view composer or creator may write the key after (or before) the call site passes it:
+     * the template then reads the composer's value, so the call site's type says nothing about it. An
+     * unreadable composer may write any key. Reuses what the call-site checks consult
+     * ({@see ContractRegistry::composedKeys()}).
+     */
+    private static function composerMayWrite(string $viewName, string $name): bool
+    {
+        $composed = ContractRegistry::composedKeys($viewName);
+
+        return $composed === null || isset($composed[$name]);
+    }
+
+    /**
+     * Blade pairs `@verbatim` with `@endverbatim` and `@php` with `@endphp` over the whole template, before it
+     * sets the leading `<?php ?>` block aside. A shape key spelling one of them, written into that block's
+     * docblock, would pair with a closer further down and swallow the template text between them. Matched
+     * without a word boundary and in any case, as Blade's own patterns have none: `@phpx` opens one too.
+     *
+     * @psalm-pure
+     */
+    private static function pairsWithBladeBlock(string $id): bool
+    {
+        return \preg_match('/@(?:end)?(?:verbatim|php)/i', $id) === 1;
     }
 
     /**

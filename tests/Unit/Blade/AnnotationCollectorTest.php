@@ -16,6 +16,7 @@ use PHPUnit\Framework\TestCase;
 use Psalm\Context;
 use Psalm\Internal\Provider\NodeDataProvider;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationCollector;
+use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type;
@@ -26,11 +27,13 @@ final class AnnotationCollectorTest extends TestCase
     protected function setUp(): void
     {
         AnnotationCollector::reset();
+        ContractRegistry::reset();
     }
 
     protected function tearDown(): void
     {
         AnnotationCollector::reset();
+        ContractRegistry::reset();
     }
 
     #[Test]
@@ -149,6 +152,56 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertNull(AnnotationCollector::typeFor('home', 'payload'));
     }
 
+    /**
+     * Blade pairs `@verbatim` with `@endverbatim` and `@php` with `@endphp` across the whole file before
+     * it protects the leading `<?php ?>` block, so a shape key spelling one opener inside the written
+     * `@var` swallows template text up to the next closer and corrupts the header.
+     *
+     * Checked on the printed id directly: a composite id only round-trips through a live Psalm
+     * (pinned end to end in AnnotateEndToEndTest), which is what `typeFor()` asks next.
+     *
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function idsAgainstBladeBlocks(): iterable
+    {
+        foreach (['@verbatim', '@endverbatim', '@php', '@endphp', '@PHP', '@phpx'] as $delimiter) {
+            yield "key {$delimiter}" => ["array{'{$delimiter}': string}", true];
+        }
+
+        yield 'in a nested shape' => ["list<array{id: int, 'a@php': string}>", true];
+        yield 'a key that only looks like a directive' => ["array{'@context': string}", false];
+        yield 'an email-like key' => ["array{'a@b.c': string}", false];
+        yield 'a plain shape' => ['array{php: string}', false];
+    }
+
+    #[Test]
+    #[DataProvider('idsAgainstBladeBlocks')]
+    public function recognises_an_id_blade_would_pair_with_a_block_closer(string $id, bool $pairs): void
+    {
+        $this->assertSame($pairs, (new \ReflectionMethod(AnnotationCollector::class, 'pairsWithBladeBlock'))->invoke(null, $id));
+    }
+
+    #[Test]
+    public function declines_a_key_a_view_composer_may_overwrite(): void
+    {
+        // The call site's type is not what the template reads once a composer writes the key.
+        AnnotationCollector::record('home', ['title' => Type::getString(), 'other' => Type::getString()], true);
+        ContractRegistry::registerComposerSources(['home' => [['App\\Composer', 'compose']]]);
+        ContractRegistry::registerComposedKeys(['home' => ['title' => true]]);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+        $this->assertSame('string', AnnotationCollector::typeFor('home', 'other'), 'a key no composer writes keeps its type');
+    }
+
+    #[Test]
+    public function declines_every_key_when_a_view_composer_cannot_be_read(): void
+    {
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        ContractRegistry::registerComposerSources(['home' => null]);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
     #[Test]
     public function declines_a_template_parameter_even_though_its_id_parses(): void
     {
@@ -222,6 +275,64 @@ final class AnnotationCollectorTest extends TestCase
         );
 
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
+     * A rendering call in a condition is no statement of its own, so only the compound statement
+     * holding it can see it: `if ($v = view(...))`, `while (...)`, a loop header, a `switch` subject.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function conditionsRenderingView(): iterable
+    {
+        $call = "view('home', ['title' => 42])";
+
+        yield 'if' => ["if (\$v = {$call}) {\n}"];
+        yield 'elseif' => ["if (\$a) {\n} elseif (\$v = {$call}) {\n}"];
+        yield 'while' => ["while (\$v = {$call}) {\n}"];
+        yield 'do while' => ["do {\n} while (\$v = {$call});"];
+        yield 'for' => ["for (\$v = {$call}; \$v; \$v = null) {\n}"];
+        yield 'foreach' => ["foreach ({$call} as \$row) {\n}"];
+        yield 'switch' => ["switch (\$v = {$call}) {\n}"];
+        yield 'case' => ["switch (\$a) {\n    case \$v = {$call}:\n}"];
+    }
+
+    #[Test]
+    #[DataProvider('conditionsRenderingView')]
+    public function marks_a_view_unreadable_when_a_condition_renders_it(string $code): void
+    {
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\n{$code}",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
+     * `Factory::first()` renders whichever candidate exists, reached through the facade or the helper.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function firstProducers(): iterable
+    {
+        yield 'facade' => ["return View::first(['home', 'fallback'], ['title' => 42]);"];
+        yield 'fully qualified facade' => ["return \\Illuminate\\Support\\Facades\\View::first(['home', 'fallback'], ['title' => 42]);"];
+        yield 'helper' => ["return view()->first(['home', 'fallback'], ['title' => 42]);"];
+    }
+
+    #[Test]
+    #[DataProvider('firstProducers')]
+    public function marks_every_candidate_of_a_first_call_unreadable(string $code): void
+    {
+        // The second array literal is the candidate list, not data.
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\nview('fallback', ['title' => 'text']);\n{$code}",
+            [['title' => Type::getString()], ['title' => Type::getString()], ['x' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+        $this->assertNull(AnnotationCollector::typeFor('fallback', 'title'));
     }
 
     #[Test]

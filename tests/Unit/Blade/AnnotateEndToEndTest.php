@@ -107,6 +107,18 @@ final class AnnotateEndToEndTest extends TestCase
             self::TEMPLATES['collections'],
         )];
 
+        // Psalm drops the `@var` tags of the docblock that says `@psalm-ignore-var`, so the declaration goes into a
+        // block of its own after it.
+        yield 'a header docblock that ignores @var tags gets a block of its own' => ['edge-ignored', "<?php\n/**\n * @psalm-ignore-var\n */\n?>\n" . $declare(
+            " * @var string \$title\n",
+            "{{ \$title }}\n",
+        )];
+        // The composer writes `title` after the call site passes it, so only `extra` has a type to declare.
+        yield 'a key a view composer writes is left to the composer' => ['edge-composed', $declare(
+            " * @var string \$extra\n",
+            self::TEMPLATES['edge-composed'],
+        )];
+
         // The callback's own statement records the producer; the enclosing chain is declined, and
         // its scan for nested view names must not count that same call a second time as unreadable.
         foreach (['modal-arrow', 'modal-closure', 'modal-nested'] as $name) {
@@ -154,6 +166,14 @@ final class AnnotateEndToEndTest extends TestCase
         // passing another type there.
         yield 'a respelled producer blocks the template it really renders (spelled)' => ['pkg:spelled'];
         yield 'a respelled producer blocks the template it really renders (padded)' => ['pkg:padded'];
+        // A shape key `@verbatim` would pair with a closer further down the template.
+        yield 'a shape key that pairs with a Blade block closer' => ['edge-key'];
+        // The second producer is the condition of an `if`, which no statement of its own records.
+        yield 'a producer in a condition' => ['edge-cond'];
+        // `View::first()` renders whichever candidate exists, with another type than the call site that is read.
+        yield 'a View::first() candidate (the first)' => ['edge-first'];
+        yield 'a View::first() candidate (the fallback)' => ['edge-first-fallback'];
+        yield 'a view a file that does not parse names' => ['edge-parse'];
     }
 
     #[Test]
@@ -211,6 +231,18 @@ final class AnnotateEndToEndTest extends TestCase
         foreach (['spelled' => 29, 'padded' => 39] as $name => $line) {
             $this->assertSame(['site' => "{$site}/app/Renderer.php:{$line}", 'names' => ['title']], $this->unreadableFor($result, $name), $name);
         }
+    }
+
+    #[Test]
+    public function reports_the_file_it_could_not_parse_and_the_view_it_names(): void
+    {
+        $result = $this->annotateResult();
+        $site = self::fixture();
+
+        $this->assertIsArray($result['parseErrors'] ?? null, 'the parse error must reach the report');
+        $this->assertSame(["{$site}/app/Unparseable.php"], \array_keys($result['parseErrors']));
+        $this->assertSame(['site' => "{$site}/app/Unparseable.php:9", 'names' => ['title']], $this->unreadableFor($result, 'edge-parse'));
+        $this->assertSame(['meta'], $this->unknownFor($result, 'edge-key'));
     }
 
     #[Test]
