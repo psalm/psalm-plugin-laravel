@@ -431,7 +431,7 @@ final class ViewCallChain
      */
     private static function bindsViewName(string $methodName): bool
     {
-        return $methodName === 'make' || $methodName === 'view' || $methodName === 'markdown';
+        return \in_array($methodName, ['make', 'view', 'markdown'], true);
     }
 
     /**
@@ -978,6 +978,8 @@ final class ViewCallChain
      * provably what the template receives: the key is still supplied, with an unknown type.
      *
      * @param array<string, Union> $data
+     *
+     * @psalm-capabilities read-props|write-this-props|write-refs
      */
     private static function record(array &$data, string $key, Union $type, bool $mayOverwrite): void
     {

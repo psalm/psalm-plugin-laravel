@@ -221,7 +221,7 @@ final class FrameworkViewData
      */
     public static function untyped(array $passed): array
     {
-        return \array_map(static fn(): Union => Type::getMixed(), $passed);
+        return \array_map(static fn(Union $_): Union => Type::getMixed(), $passed);
     }
 
     /**
