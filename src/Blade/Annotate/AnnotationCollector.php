@@ -319,9 +319,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * Whether the file tests the variable with `isset()`/`empty()`, unsets it or writes it with a
-     * compound assignment (`??=`), anywhere. Psalm leaves no clause for `isset()` once the name was
-     * read, and keeps `mixed` through the writes, so the include cannot tell. A plain assignment makes
+     * Whether the file tests the variable with `isset()`/`empty()`, unsets it, writes it with a
+     * compound assignment (`??=`) or binds it by reference (`$alias =& $x`, either side, `[&$x]`),
+     * anywhere. Psalm leaves no clause for `isset()` once the name was read, keeps `mixed` through
+     * the writes, and a condition on an alias names the alias, so the include cannot tell. A plain assignment makes
      * the name a local, which the plan never declares. One scan per file.
      */
     private static function isTouched(StatementsSource $source, string $variable): bool
@@ -359,6 +360,8 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             $node instanceof Expr\Isset_, $node instanceof Stmt\Unset_ => \array_values($node->vars),
             $node instanceof Expr\Empty_ => [$node->expr],
             $node instanceof Expr\AssignOp => [$node->var],
+            $node instanceof Expr\AssignRef => [$node->var, $node->expr],
+            $node instanceof Node\ArrayItem && $node->byRef => [$node->value],
             default => [],
         };
     }
