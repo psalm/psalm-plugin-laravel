@@ -657,18 +657,38 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return true;
         }
 
-        if ($node instanceof Expr\StaticCall) {
-            return $method === 'resolve'
-                && $node->class instanceof Node\Name
-                && \strtolower(\ltrim($node->class->toString(), '\\')) === 'illuminate\\view\\anonymouscomponent';
-        }
-
         // The other Factory methods compiled includes and components call (`@includeFirst`,
         // `@includeWhen`, `@each`, `@component`), too common as names to match on any receiver.
-        return $node instanceof Expr\MethodCall
-            && $node->var instanceof Expr\Variable
-            && $node->var->name === '__env'
-            && \in_array($method, ['first', 'renderwhen', 'renderunless', 'rendereach', 'startcomponent', 'startcomponentfirst'], true);
+        $factoryMethod = \in_array($method, ['first', 'renderwhen', 'renderunless', 'rendereach', 'startcomponent', 'startcomponentfirst'], true);
+
+        if ($node instanceof Expr\StaticCall) {
+            if (!$node->class instanceof Node\Name) {
+                return false;
+            }
+
+            if ($method === 'resolve') {
+                return \strtolower(\ltrim($node->class->toString(), '\\')) === 'illuminate\\view\\anonymouscomponent';
+            }
+
+            // The facade (`View::first(...)`, whatever the import or alias spelling) forwards to the Factory.
+            // Psalm leaves an imported name as written and records what it resolves to on the node.
+            /** @psalm-var ?string $resolved */
+            $resolved = $node->class->getAttribute('resolvedName');
+            $class = \is_string($resolved) ? new Node\Name($resolved) : $node->class;
+
+            return $factoryMethod && \in_array(\strtolower($class->getLast()), ['view', 'factory'], true);
+        }
+
+        if (!$factoryMethod) {
+            return false;
+        }
+
+        // `$__env` is what compiled templates call; `view()` without arguments is the Factory itself.
+        return $node->var instanceof Expr\Variable && $node->var->name === '__env'
+            || $node->var instanceof Expr\FuncCall
+            && $node->var->name instanceof Node\Name
+            && $node->var->name->toLowerString() === 'view'
+            && $node->var->args === [];
     }
 
     private static function methodName(Node $call): ?string
