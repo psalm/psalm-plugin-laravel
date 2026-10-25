@@ -198,6 +198,9 @@ final class AnnotateEndToEndTest extends TestCase
 
         // The site is the including template's own line, never the compiled shadow's cache path.
         $this->assertSame(['site' => "{$site}/resources/views/scoped-host.blade.php:2", 'names' => ['text']], $this->unreadableFor($result, 'scoped'));
+        // #2079: a private helper's bare view is completed by its caller, so it is an open site, not a closed one that supplies nothing.
+        $this->assertNull($this->unknownFor($result, 'private-helper'));
+        $this->assertSame(['site' => "{$site}/app/HelperView.php:19", 'names' => ['text']], $this->unreadableFor($result, 'private-helper'));
 
         foreach (['spelled' => 29, 'padded' => 39] as $name => $line) {
             $this->assertSame(['site' => "{$site}/app/Renderer.php:{$line}", 'names' => ['title']], $this->unreadableFor($result, $name), $name);

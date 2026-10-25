@@ -61,6 +61,7 @@ trait RunsAnnotateFixture
         'arrays' => "{{ count(\$labels) }} {{ count(\$params) }}\n",
         'scoped-host' => "<p>host</p>\n@include('scoped')\n",
         'scoped' => "{{ \$text }}\n",
+        'private-helper' => "{{ \$text }}\n",
     ];
 
     /**
