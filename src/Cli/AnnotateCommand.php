@@ -338,7 +338,7 @@ final class AnnotateCommand extends Command
     }
 
     /**
-     * Forwarded tokens that would limit the run to some paths: a bare path, or `-f`'s value.
+     * Forwarded tokens that would limit the run to some paths: a bare path, `-f`'s value, or `-f=<path>`.
      *
      * Producer agreement is a whole-project claim. Under `psalm app/A.php` a competing call site in
      * `app/B.php` is never analysed, so a type two call sites disagree on is written as if they
@@ -362,9 +362,10 @@ final class AnnotateCommand extends Command
                 continue;
             }
 
-            if ($token === '-f') {
-                // Its value is not skipped: it is the path itself, and naming it in the error is
-                // more use to the caller than naming the flag alone.
+            // `-f=<path>` is the only attached spelling Psalm accepts for `-f`. For a bare `-f` the
+            // value is not skipped: it is the path itself, and naming it in the error is
+            // more use to the caller than naming the flag alone.
+            if ($token === '-f' || \str_starts_with($token, '-f=')) {
                 $offending[] = $token;
 
                 continue;

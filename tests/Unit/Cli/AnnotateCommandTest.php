@@ -86,6 +86,11 @@ final class AnnotateCommandTest extends TestCase
             ['-f', 'app/A.php'],
             $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '-f', 'app/A.php']),
         );
+        // The attached spelling Psalm accepts for a short option; the token itself names the path.
+        $this->assertSame(
+            ['-f=app/A.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '-f=app/A.php']),
+        );
         $this->assertSame(
             ['app/'],
             $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', 'app/']),
