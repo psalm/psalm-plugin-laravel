@@ -100,6 +100,72 @@ final class Renderer
         return view('split-leaf', ['member' => 'Ada']);
     }
 
+    public function guard(): View
+    {
+        return view('guard-top', ['x' => \random_int(0, 1) === 1 ? 'text' : null]);
+    }
+
+    public function nullCallWithBox(): View
+    {
+        return view('nullcall-top', ['x' => new Box('text')]);
+    }
+
+    public function nullCallWithNull(): View
+    {
+        return view('nullcall-top', ['x' => null]);
+    }
+
+    public function thisOut(): View
+    {
+        return view('thisout-top', ['x' => new Box('text')]);
+    }
+
+    public function assertion(): View
+    {
+        return view('assert-top', ['x' => \random_int(0, 1) === 1 ? 'text' : null]);
+    }
+
+    public function byReference(): View
+    {
+        return view('byref-top', ['x' => 'text']);
+    }
+
+    /** @return ProbeBox<never> */
+    private function emptyBox(): ProbeBox
+    {
+        return new ProbeBox();
+    }
+
+    public function generic(): View
+    {
+        return view('generic-top', ['x' => $this->emptyBox()]);
+    }
+
+    public function aliasedExtract(): View
+    {
+        return view('hydrate-top', ['x' => 'text']);
+    }
+
+    public function callbackExtract(): View
+    {
+        return view('cuf-top', ['x' => 'text']);
+    }
+
+    public function dynamicExtract(): View
+    {
+        return view('dyn-top', ['x' => 'text']);
+    }
+
+    public function insideAFunction(): View
+    {
+        return view('scope-top', ['x' => 'text']);
+    }
+
+    public function magicAccessor(): View
+    {
+        return view('magic-top', ['x' => new Box('text')]);
+    }
+
     private function post(): Post
     {
         return new Post();
