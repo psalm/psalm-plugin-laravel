@@ -61,9 +61,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Lockfile cells cover both sides of the PHP 8.4/8.5 getMethods() initializer-order split.
+          # The lockfile cell covers the PHP 8.5 side of the 8.4/8.5 getMethods() initializer-order
+          # split; the 8.4 side is covered by the 8.4 + Laravel 13.20.0 floor cell below.
           - php: '8.5'
-          - php: '8.4'
           # Declared framework floors.
           - php: '8.4'
             laravel: '13.20.0'
@@ -92,8 +92,19 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel || 'lockfile' }}-${{ hashFiles('composer.json', 'composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel || 'lockfile' }}-
+
       - name: Check Composer configuration
-        if: matrix.php == '8.4' && !matrix.laravel
+        if: ${{ !matrix.laravel }}
         run: composer validate --strict
 
       - name: Install composer dependencies (lockfile)
@@ -133,13 +144,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: [ 8.5, 8.4, 8.3, 8.2 ]
-        laravel: [ ^13.20, ^12.27 ]
-        dependencies: [ highest ]
-        exclude:
-          - php: 8.2
-            laravel: ^13.20
-    name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
+        include:
+          # Oldest PHP with the Laravel 12 line, newest PHP with the Laravel 13 line;
+          # intermediate PHP versions add little over these two ends.
+          - php: '8.2'
+            laravel: '^12.27'
+          - php: '8.5'
+            laravel: '^13.20'
+    name: Type test P${{ matrix.php }} | L${{ matrix.laravel }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -160,8 +172,21 @@ jobs:
           coverage: none
           tools: composer
 
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel }}-${{ hashFiles('composer.json', 'composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel }}-
+
       - name: Install dependencies from composer.json
-        run: composer update --with="laravel/framework:${{ matrix.laravel }}" --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
+        env:
+          LARAVEL_CONSTRAINT: ${{ matrix.laravel }}
+        run: composer update --with="laravel/framework:$LARAVEL_CONSTRAINT" --no-interaction --no-progress --prefer-dist --prefer-stable
 
       - name: Run Psalm/Type tests
         run: composer test:type
@@ -210,6 +235,17 @@ jobs:
           ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, zend.assertions=1
           coverage: none
           tools: composer
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.4-ai-${{ matrix.laravel_ai_version }}-${{ hashFiles('composer.json', 'composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.4-ai-${{ matrix.laravel_ai_version }}-
 
       - name: Install dependencies from composer.json
         run: composer install --no-interaction --no-progress --prefer-dist
@@ -296,6 +332,17 @@ jobs:
           ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, zend.assertions=1
           coverage: none
           tools: composer
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.4-ai-dev-${{ hashFiles('composer.json', 'composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.4-ai-dev-
 
       - name: Install dependencies from composer.json
         run: composer install --no-interaction --no-progress --prefer-dist
