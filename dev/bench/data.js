@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792958794975,
+  "lastUpdate": 1792959565364,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16480,6 +16480,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "73d6db4dff7e752280798edcc706054a6d21d9eb",
+          "message": "Bridge Blade component taint for constructors declared in traits (#2106)\n\n* fix(blade): bridge taint into templates for constructors declared in traits #2075\n\n* test(blade): cover taint bridge for a trait constructor used by an abstract parent component #2075\n\n* docs(blade): note the shared trait constructor over-report in taint through class components #2075",
+          "timestamp": "2026-10-25T21:15:47+01:00",
+          "tree_id": "11e7ab9a2deeea5029c98a9b13ca4356ab816f72",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/73d6db4dff7e752280798edcc706054a6d21d9eb"
+        },
+        "date": 1792959563547,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.55,
+            "range": "± 0.41",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1313,
             "unit": "MB"
           }
         ]
