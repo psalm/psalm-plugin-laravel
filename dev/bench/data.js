@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792938309467,
+  "lastUpdate": 1792947409047,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16265,6 +16265,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.07,
             "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5270a31341b19399c1f273bdd1a1f9af70d06b47",
+          "message": "Propagate `blade:annotate` types along `@includeIsolated` chains in one run (#2057)\n\n* fix(blade): propagate annotate types along @includeIsolated chains in one run\n\nA name the including template has not declared yet is mixed in its shadow, so an\n@includeIsolated key passing it recorded mixed and the child was typed only on the\nnext run, one level per run. Store such a key as a deferred edge to the including\ntemplate's variable and resolve it from that template's per-file plan when the\ntypes are answered, adding null for an optional variable.\n\nAn edge that cannot be typed, or closes a cycle, still observes mixed. A variable\nthe template binds itself, a parent that reads unknown names, an include under a\nclause or an isset()/empty() test of the variable, and any non-variable value\nkeep today's behaviour.\n\n* fix(blade): decline annotate include edges on tested or written names, memoize resolution\n\nAn include key passed as a bare parent variable stayed typed from the parent's\ndeclaration when the file wrote the variable in a way that keeps the type id mixed\n(??=, unset(), a reference alias or by-reference array item) or narrowed it through\na reference alias. The per-file isset()/empty() scan now covers those writes too, so\nsuch an include is left for a rerun as before.\n\nResolving include edges walked every path through a diamond of includes. Completed\nresolutions are now memoized per view and key, except those that met the cycle guard;\nthe memo is emptied whenever a producer is recorded.\n\n* test(blade): gate annotate safety counts on @includeIsolated support\n\nBelow Laravel 12.47 the fixture's includes stay text: split-leaf keeps its\nown string call site as sole producer, and opt-top, local-php and split-top\nnever read the member they are passed.\n\n* test(blade): move annotate include-chain cases to a fixture of their own\n\nThe shared Annotate fixture's counts drifted with Laravel's\ncompileIncludeIsolated() support. AnnotateIncludeChainTest gates on that\ncapability and reads one dry run and one writing run.\n\n* refactor(blade): memoize every resolved include edge, drop reference-write declines\n\nEvery pair on or fed by an include cycle observes mixed whichever member\nthe walk starts from, so the cycle-hit bookkeeping kept nothing. Reference\nbindings and by-reference array items on a view variable are left to the\nplain merge.\n\n* docs(blade): shorten the one-run annotate include notes\n\n* fix(blade): decline annotate include edges when a spread may overwrite the entry\n\n* fix(blade): decline annotate include edges on variables bound by reference",
+          "timestamp": "2026-10-25T17:53:17+01:00",
+          "tree_id": "1716f3d7aabcb6838e17afdd17bd8737907527ee",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5270a31341b19399c1f273bdd1a1f9af70d06b47"
+        },
+        "date": 1792947407723,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.51,
+            "range": "± 0.2",
             "unit": "s"
           },
           {
