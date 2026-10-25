@@ -108,7 +108,7 @@
         "test:type": [
             "Composer\\Config::disableProcessTimeout",
             "./bin/ci/check-phpt-conventions.sh",
-            "phpunit --testsuite=type"
+            "phpunit --testsuite=type --bootstrap=vendor/autoload.php"
         ],
         "test:unit": "paratest --processes=auto --testsuite=unit --display-deprecations --display-notices --display-phpunit-notices",
         "test:unit:fast": "phpunit --testsuite=unit --exclude-group=subprocess --display-deprecations --display-notices --display-phpunit-notices"
