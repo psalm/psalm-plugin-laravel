@@ -179,6 +179,15 @@ Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
     static fn(string $to): string => "queued:{$to}",
 );
 
+// laravel/ai is optional (not a root dependency): its stubs seal Tools\Request, so a registered macro
+// must still resolve (PromptInjection/ToolRequestSealedMethods.phpt).
+if (\class_exists(\Laravel\Ai\Tools\Request::class)) {
+    \Laravel\Ai\Tools\Request::macro(
+        'testToolRequestMacro',
+        static fn(string $key): bool => $key !== '',
+    );
+}
+
 // Morph-map alias for RelationCallbackParamsHandler (#1676): `whereHasMorph('reportable', ['damaged-vehicle'], ...)`
 // must resolve the alias to the model exactly as Laravel's `Relation::getMorphedModel()` does at runtime.
 // Registered as a plain string, so nothing is loaded ahead of Psalm's scan order.

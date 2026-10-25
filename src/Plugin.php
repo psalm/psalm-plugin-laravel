@@ -403,6 +403,7 @@ final class Plugin implements PluginEntryPointInterface
         // Model property handlers are registered dynamically by ModelRegistrationHandler
         // after Psalm populates its codebase (AfterCodebasePopulated event).
         require_once __DIR__ . '/Handlers/Eloquent/CastContractUserDefinedHandler.php';
+        require_once __DIR__ . '/Handlers/Magic/RedeclaredClassSealHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
@@ -425,6 +426,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\CastContractUserDefinedHandler::class);
+        $registration->registerHooksFromClass(Handlers\Magic\RedeclaredClassSealHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
         // Laravel's container and Eloquent relationship dispatch are invisible to Psalm's syntax
         // walker. Register this after ModelRegistrationHandler so relation metadata is complete
