@@ -9,12 +9,12 @@ nav_order: 7
 Plugin self-analysis must report `Psalm was able to infer types for 100% of the codebase`. The Psalm workflow fails a pull request that drops below 100%. Verify locally with:
 
 ```bash
-composer psalm -- --no-progress --no-suggestions --stats 2>&1 | grep -E "mixed\)" | grep -vE '\b0 mixed'
+composer psalm, --no-progress --no-suggestions --stats 2>&1 | grep -E "mixed\)" | grep -vE '\b0 mixed'
 ```
 
 Empty output means 100%. Any printed line names a file with mixed expressions. An empty result also appears when psalm itself failed, so confirm the run succeeded before trusting it.
 
-Psalm's coverage counter fires on mixed expressions, mostly assignments to locals. Closure and function parameters do not count. The patterns below remove the counter honestly, without suppressing anything.
+Psalm's coverage counter fires on mixed expressions, mostly assignments to locals. Closure and function parameters do not count. The patterns below remove the counter without suppressing anything.
 
 ## 1. Inline mixed-returning calls
 
@@ -63,18 +63,7 @@ Restructure the code instead. Plugin self-analysis has no baseline file, and non
 
 ## 5. String and array callables in `array_map` count one mixed
 
-On Psalm 7.0.0-rc2, `array_map('strval', $keys)` and `array_map([self::class, 'fmt'], $keys)` each count 1 mixed and report no issue. `ArrayMapReturnTypeProvider` analyzes a synthetic call on an array fetch whose offset is mixed, and suppresses `MixedArrayOffset` but not the counter. A typed closure or a first-class callable avoids it:
-
-```php
-// BAD: counts as 1 mixed ($keys is list<int|string>)
-$names = array_map('strval', $keys);
-
-// GOOD: typed closure, no counter
-$names = array_map(static fn(int|string $key): string => (string) $key, $keys);
-
-// GOOD: first-class callable, no counter
-$names = array_map(strval(...), $keys);
-```
+On Psalm 7.0.0-rc2, `array_map('strval', $keys)` and `array_map([self::class, 'fmt'], $keys)` each count 1 mixed and report no issue. `ArrayMapReturnTypeProvider` analyzes a synthetic call on an array fetch whose offset is mixed, and suppresses `MixedArrayOffset` but not the counter. Use a typed closure (`array_map(static fn(int|string $key): string => (string) $key, $keys)`) or a first-class callable (`array_map(strval(...), $keys)`), which count nothing.
 
 Worked example: the shared view names in `src/Blade/BladeBootstrapper.php` (#1854).
 
@@ -102,7 +91,7 @@ Worked example: `asCompiler()`, `asFinder()` and `asFactory()` in `src/Blade/Bla
 
 ## 7. Narrow a mixed local with `assert()` or an early exit
 
-When the local is needed, `assert()` or an early-exit guard on it removes both the count and the `MixedAssignment` issue. A ternary does not, and neither does a positive guard:
+When the local is needed, `assert()` or an early-exit guard on it removes both the count and the `MixedAssignment` issue. A ternary does not (the BAD example in section 6), and neither does a positive guard:
 
 ```php
 // GOOD: no counter
@@ -115,12 +104,7 @@ if (!$x instanceof Factory) {
     return null;
 }
 
-// BAD: counts as 1 mixed, plus MixedAssignment
-$x = $container->make('view');
-
-return $x instanceof Factory ? $x : null;
-
-// BAD: same, the positive guard narrows only inside its branch
+// BAD: counts as 1 mixed, plus MixedAssignment (the positive guard narrows only inside its branch)
 $x = $container->make('view');
 if ($x instanceof Factory) {
     return $x;
