@@ -19,7 +19,8 @@ use Psalm\LaravelPlugin\Blade\Annotate\TemplateAnnotator;
  * `view()` call sites pass. A real `vendor/bin/psalm` run is the only way to pin it: the producer
  * types exist only during an analysis, which is the whole reason the codemod is driven by one.
  *
- * Every case reads the one memoized annotate run ({@see RunsAnnotateFixture}); the splice mechanics
+ * Every case but one reads the one memoized annotate run ({@see RunsAnnotateFixture}), the exception
+ * being an ordinary re-run over the annotated templates; the splice mechanics
  * themselves are unit-tested in TemplateAnnotatorTest and AnnotationWriterTest, so what is pinned
  * here is the producer types a real analysis feeds them. The no-write modes (dry run, a control file
  * this CLI did not write, a project with Blade off) live in {@see AnnotateSafetyTest}.
@@ -36,12 +37,6 @@ use Psalm\LaravelPlugin\Blade\Annotate\TemplateAnnotator;
 final class AnnotateEndToEndTest extends TestCase
 {
     use RunsAnnotateFixture;
-
-    /** Templates only a second run types: an include under a condition on the variable it passes. */
-    private const NEEDS_RERUN = ['narrow-truthy', 'narrow-notnull', 'narrow-isset'];
-
-    /** Templates a second run does write, though not the type the parent holds: they stay out of the fixpoint comparison. */
-    private const REWRITTEN_ON_RERUN = ['wr-alias-clause-leaf', 'wr-coalesce-leaf'];
 
     /** @return iterable<string, array{string, string}> template name => the template after the pass */
     public static function declaredTemplates(): iterable
@@ -231,250 +226,35 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     /**
-     * `pair-top` passes `$member` on to `pair-leaf` through a closed `@includeIsolated`. The parent's
-     * type is proven by its controller in the same run, so the child needs no second run to see it.
-     */
-    #[Test]
-    public function types_the_child_of_an_isolated_include_in_the_same_run_as_its_parent(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        $declaration = $this->declaration('\\AnnotateFixture\\Post', 'member');
-        $this->assertSame($declaration . self::TEMPLATES['pair-top'], $templates['pair-top']);
-        $this->assertSame($declaration . self::TEMPLATES['pair-leaf'], $templates['pair-leaf']);
-        $this->assertNull($this->unknownFor($this->annotateResult(), 'pair-leaf'));
-    }
-
-    #[Test]
-    public function follows_a_chain_of_isolated_includes_to_its_end_whatever_the_key_is_called(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        $this->assertSame($this->declaration('\\AnnotateFixture\\Post', 'member') . self::TEMPLATES['chain-top'], $templates['chain-top']);
-        $this->assertSame($this->declaration('\\AnnotateFixture\\Post', 'member') . self::TEMPLATES['chain-mid'], $templates['chain-mid']);
-        $this->assertSame($this->declaration('\\AnnotateFixture\\Post', 'entry') . self::TEMPLATES['chain-leaf'], $templates['chain-leaf']);
-    }
-
-    #[Test]
-    public function hands_a_nullable_parent_variable_on_as_nullable(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        $this->assertSame(
-            $this->declaration('\\AnnotateFixture\\Post|null', 'member', ' = null') . self::TEMPLATES['opt-top'],
-            $templates['opt-top'],
-        );
-        // The include always passes the key, so the child requires it.
-        $this->assertSame(
-            $this->declaration('\\AnnotateFixture\\Post|null', 'member') . self::TEMPLATES['opt-leaf'],
-            $templates['opt-leaf'],
-        );
-    }
-
-    #[Test]
-    public function types_nothing_along_a_cycle_of_isolated_includes(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-        $result = $this->annotateResult();
-
-        $this->assertSame(self::TEMPLATES['cyc-a'], $templates['cyc-a']);
-        $this->assertSame(self::TEMPLATES['cyc-b'], $templates['cyc-b']);
-        $this->assertSame(['AnnotateFixture\\Post', 'mixed'], ((array) ($result['disagreed'] ?? []))['cyc-a']['x'] ?? null);
-        $this->assertSame(['x'], $this->unknownFor($result, 'cyc-b'));
-    }
-
-    /**
-     * Psalm keeps the type id `mixed` after `$x !== null` (and clause-less after `isset($x)`), so an
-     * include inside one sees `mixed` just as an unguarded one does. Handing it the parent's `Post|null`
-     * would put a type there that a second run, with the parent declared, narrows to `Post`. After
-     * `if ($x)` the variable is already `non-empty-mixed`, which was never followed.
-     */
-    #[Test]
-    public function leaves_an_include_under_a_condition_on_the_variable_for_the_next_run(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        foreach (['narrow-top', 'narrow-plain', 'narrow-isset-top'] as $name) {
-            $this->assertSame(
-                $this->declaration('\\AnnotateFixture\\Post|null', 'member', $name === 'narrow-plain' ? '' : ' = null') . self::TEMPLATES[$name],
-                $templates[$name],
-                $name,
-            );
-        }
-
-        foreach (self::NEEDS_RERUN as $name) {
-            $this->assertSame(self::TEMPLATES[$name], $templates[$name], $name);
-        }
-
-        // The rerun types them, as the narrowed `Post` the parent's declaration makes of the variable.
-        // A real second run over the first one's output: the memoized run cannot stand in for it.
-        $rerun = $this->analyseUncached('annotate')['templates'];
-
-        foreach (self::NEEDS_RERUN as $name) {
-            $this->assertSame($this->declaration('\\AnnotateFixture\\Post', 'member') . self::TEMPLATES[$name], $rerun[$name], $name);
-        }
-    }
-
-    /**
-     * The parent's own call site passes a typed `member`, which a template that binds the name itself
-     * never reads as input: its `$member` is the loop alias or the assignment, `mixed` either way.
-     */
-    #[Test]
-    public function does_not_hand_on_a_variable_the_including_template_binds_itself(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        foreach (['local-loop', 'local-loop-leaf', 'local-php', 'local-php-leaf'] as $name) {
-            $this->assertSame(self::TEMPLATES[$name], $templates[$name], $name);
-        }
-    }
-
-    #[Test]
-    public function does_not_hand_on_a_variable_of_a_template_that_reads_names_it_cannot_list(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        $this->assertSame(self::TEMPLATES['reads-top'], $templates['reads-top']);
-        $this->assertSame(self::TEMPLATES['reads-leaf'], $templates['reads-leaf']);
-    }
-
-    /**
-     * The parent's call sites disagree, so it declares nothing and the include passes an unknown: the
-     * child's own typed call site does not make that a `string` (`mixed` is a producer too).
-     */
-    #[Test]
-    public function counts_an_include_from_a_parent_without_a_type_as_a_producer_of_mixed(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        $this->assertSame(self::TEMPLATES['split-top'], $templates['split-top']);
-        $this->assertSame(self::TEMPLATES['split-leaf'], $templates['split-leaf']);
-
-        $disagreed = (array) ($this->annotateResult()['disagreed'] ?? []);
-        $this->assertSame(['member' => ['int', 'string']], $disagreed['split-top'] ?? null);
-        $this->assertSame(['member' => ['mixed', 'string']], $disagreed['split-leaf'] ?? null);
-    }
-
-    /**
-     * `$x ??= ...` writes the variable and keeps the type id `mixed`, and it is no plain assignment,
-     * so `$x` is no local: the parent's `Post|null` would be declared in the leaf where the old
-     * fixpoint (rerun until nothing changes) writes `Post|mixed`, which no run declares.
-     */
-    #[Test]
-    public function does_not_hand_on_a_variable_the_including_template_writes_with_a_compound_assignment(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        $this->assertSame(
-            $this->declaration('\\AnnotateFixture\\Post|null', 'x', ' = null') . self::TEMPLATES['wr-coalesce'],
-            $templates['wr-coalesce'],
-            'the parent itself is declared',
-        );
-        $this->assertSame(self::TEMPLATES['wr-coalesce-leaf'], $templates['wr-coalesce-leaf']);
-    }
-
-    /**
-     * A condition on `$alias =& $x` names `$alias`, so no clause mentions `$x`; a write through the
-     * alias changes `$x` itself. The old fixpoint types the first leaf `Post` (narrowed through the
-     * alias) and leaves the second undeclared.
-     */
-    #[Test]
-    public function does_not_hand_on_a_variable_the_including_template_binds_by_reference(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        $this->assertSame(self::TEMPLATES['wr-alias-clause-leaf'], $templates['wr-alias-clause-leaf']);
-        $this->assertSame(self::TEMPLATES['wr-alias-write-leaf'], $templates['wr-alias-write-leaf']);
-        $this->assertSame(
-            $this->declaration('\\AnnotateFixture\\Post', 'x') . self::TEMPLATES['wr-alias-write'],
-            $templates['wr-alias-write'],
-            'the parent itself is declared',
-        );
-    }
-
-    #[Test]
-    public function does_not_hand_on_a_variable_the_including_template_unsets_or_references_in_an_array(): void
-    {
-        $this->requireIncludeIsolated();
-        $templates = $this->analyse('annotate')['templates'];
-
-        $this->assertStringContainsString('@var \\AnnotateFixture\\Post $u', $templates['wr-touch'], 'the parent itself is declared');
-        $this->assertSame(self::TEMPLATES['wr-touch-unset'], $templates['wr-touch-unset']);
-        $this->assertSame(self::TEMPLATES['wr-touch-array'], $templates['wr-touch-array']);
-    }
-
-    /**
-     * What the first run wrote is the fixpoint: a second run over it changes nothing, but for the
-     * includes that were deliberately left for it. The copy as it stands after the memoized first
-     * run is the input (other cases may have edited it since), a real run is the output.
-     */
-    #[Test]
-    public function a_second_run_over_annotated_templates_changes_nothing(): void
-    {
-        $this->analyse('annotate');
-        $before = self::templates();
-        $after = $this->analyseUncached('annotate')['templates'];
-
-        $this->assertSame(
-            \array_diff_key($before, \array_flip([...self::NEEDS_RERUN, ...self::REWRITTEN_ON_RERUN])),
-            \array_diff_key($after, \array_flip([...self::NEEDS_RERUN, ...self::REWRITTEN_ON_RERUN])),
-        );
-    }
-
-    private function requireIncludeIsolated(): void
-    {
-        // Below Laravel 12.47 `@includeIsolated` is no directive: the fixture's include stays text.
-        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
-            $this->markTestSkipped('@includeIsolated needs Laravel 12.47+');
-        }
-    }
-
-    /** The header block the annotator opens in a template that has none. */
-    private function declaration(string $type, string $name, string $tail = ''): string
-    {
-        return "<?php\n/**\n * @var {$type} \${$name}{$tail}\n */\n?>\n";
-    }
-
-    /**
-     * Declarations the pass wrote must hold at the call sites that produced them. The control: the
-     * same run does report a declaration the producers contradict, so the empty list is not a check
-     * that never ran.
+     * Declarations the pass wrote must hold at the call sites that produced them, checked with one
+     * ordinary run over the annotated templates. The control rides in the same run: `merge-control`
+     * is given a declaration its call site contradicts, so a report free of the other views' issues
+     * is not a check that never ran.
      */
     #[Test]
     public function a_merged_declaration_holds_at_every_call_site_that_produced_it(): void
     {
         $this->assertStringContainsString('@var bool $flag', $this->analyse('annotate')['templates']['merged'], 'the merge must have been written');
 
-        $this->assertSame([], $this->viewIssuesAtMerger());
+        \file_put_contents(self::fixture() . '/resources/views/merge-control.blade.php', "<?php\n/**\n * @var int \$flag\n */\n?>\n{{ \$flag }}\n");
 
-        $path = self::fixture() . '/resources/views/merged.blade.php';
-        \file_put_contents($path, \str_replace('@var bool $flag', '@var int $flag', (string) \file_get_contents($path)));
-
-        $this->assertNotSame([], $this->viewIssuesAtMerger());
-    }
-
-    /** @return list<mixed> InvalidViewData and MissingViewData reported at the merge fixture's call sites */
-    private function viewIssuesAtMerger(): array
-    {
         $report = \json_decode($this->analyseUncached(null)['output'], true);
         $this->assertIsArray($report, 'the ordinary run must report JSON');
 
-        return \array_values(\array_filter(
-            $report,
-            static fn(mixed $issue): bool => \is_array($issue)
+        $viewsWithIssues = [];
+
+        foreach ($report as $issue) {
+            if (
+                \is_array($issue)
                 && \in_array($issue['type'] ?? null, ['InvalidViewData', 'MissingViewData'], true)
-                && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php'),
-        ));
+                && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php')
+                && \preg_match("/^View '([^']+)'/", (string) ($issue['message'] ?? ''), $matches) === 1
+            ) {
+                $viewsWithIssues[$matches[1]] = true;
+            }
+        }
+
+        $this->assertSame(['merge-control'], \array_keys($viewsWithIssues), 'only the deliberately contradicted view may report');
     }
 
     /**

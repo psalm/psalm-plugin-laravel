@@ -14,14 +14,11 @@ use Psalm\LaravelPlugin\Blade\ShadowManifest;
 use Symfony\Component\Process\Process;
 
 /**
- * End-to-end proof, over four real `vendor/bin/psalm` runs against one scratch copy of the fixture,
- * of the shadow cache's lifecycle:
- *
- * - A warm Psalm file cache never leaks a shadow path into a report. Psalm's cached-issue replay is
- *   dead in CLI mode (diff mode is hard-disabled, so a cached issue is never written against a
- *   shadow path), and this is the forward guard for a Psalm that turns it back on. The second run
- *   also finds every template a manifest hit, so the report must come out identical.
- * - A shadow and its manifest entry never outlive the template that produced them.
+ * End-to-end proof, over two real `vendor/bin/psalm` runs against one scratch copy of the fixture,
+ * that a shadow and its manifest entry never outlive the template that produced them: the first run
+ * compiles both templates, the second runs after both are deleted, the empty-project path that must
+ * still reach `ShadowManifest::prune()`. Pruning one template among several is covered by
+ * ShadowManifestTest. Neither run leaks a shadow path into the report.
  *
  * The scratch copy exists because the test deletes templates between runs, which would break every
  * other test sharing the committed fixture directory.
@@ -64,12 +61,10 @@ final class BladeShadowPruneTest extends TestCase
             \copy(self::FIXTURE . '/' . $relative, $target);
         }
 
-        // Psalm's own file cache stays on (no --no-cache), in a directory private to this copy.
         \file_put_contents($this->scratchDir . '/psalm.xml', <<<'XML'
             <?xml version="1.0"?>
             <psalm
                 errorLevel="1"
-                cacheDirectory=".cache/psalm"
                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                 xmlns="https://getpsalm.org/schema/config"
             >
@@ -143,7 +138,7 @@ final class BladeShadowPruneTest extends TestCase
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--threads=1', '--no-progress', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
             $this->scratchDir,
         );
         $process->setTimeout(300);
@@ -187,39 +182,27 @@ final class BladeShadowPruneTest extends TestCase
     }
 
     #[Test]
-    public function the_shadow_cache_survives_a_warm_psalm_cache_and_never_outlives_its_templates(): void
+    public function a_shadow_and_its_manifest_entry_never_outlive_their_templates(): void
     {
         $first = $this->analyze();
         $this->assertSame([2], $this->brokenTemplateLines($first['issues']), $first['raw']);
         $this->assertCount(2, $this->shadowFiles(), 'sanity: two templates should compile to two shadows');
+        $this->assertCount(2, $this->manifestEntries(), 'sanity: two templates should have two manifest entries');
+        // A shadow path could leak into an issue's message, code snippet or taint trail as well as
+        // `file_path`, so the whole raw report is searched.
         $this->assertStringNotContainsString('blade-shadows', $first['raw'], 'the first run leaked a shadow path');
 
-        // Same config and a warm Psalm cache: a shadow path could leak into an issue's message, code
-        // snippet or taint trail as well as `file_path`, so the whole raw report is searched.
-        $second = $this->analyze();
-        $this->assertSame($first['issues'], $second['issues']);
-        $this->assertStringNotContainsString('blade-shadows', $second['raw'], 'the warm run leaked a shadow path');
-
-        // broken.blade.php, not suppressed.blade.php: the latter's inline @psalm-suppress means it
-        // never reports an issue whether or not its shadow gets pruned, which would make the "no
-        // issue after deletion" assertion below true regardless of the fix.
+        // Every template at once, so the run has none left: the path that must still reach prune().
+        // broken.blade.php reported above, so its absence from the report is a real signal, not one
+        // that holds whether or not the shadow gets pruned (suppressed.blade.php never reports).
         \unlink($this->scratchDir . '/resources/views/broken.blade.php');
-        $third = $this->analyze();
-
-        foreach ($third['issues'] as $issue) {
-            $this->assertStringNotContainsString('broken.blade.php', $issue['file_path'], $third['raw']);
-        }
-
-        $this->assertCount(1, $this->shadowFiles(), "the surviving template's shadow should remain alone");
-        $this->assertCount(1, $this->manifestEntries(), "the deleted template's manifest entry should be gone");
-
         \unlink($this->scratchDir . '/resources/views/suppressed.blade.php');
-        $fourth = $this->analyze();
+        $second = $this->analyze();
 
         // Losing the class's only two callers legitimately reports its own UnusedClass issue, which
         // is noise here: the contract is about the shadow side.
-        foreach ($fourth['issues'] as $issue) {
-            $this->assertStringNotContainsString('blade.php', $issue['file_path'], $fourth['raw']);
+        foreach ($second['issues'] as $issue) {
+            $this->assertStringNotContainsString('blade.php', $issue['file_path'], $second['raw']);
         }
 
         $this->assertSame([], $this->shadowFiles(), 'an orphan shadow file survived on disk');

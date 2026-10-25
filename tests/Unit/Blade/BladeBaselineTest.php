@@ -17,8 +17,9 @@ use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
  * stores the issue's selected text per file and type, and a relocated finding selects the whole
  * template line ({@see TemplateLocation}), so that line is the entry's `<code>`.
  *
- * An empty report under `--use-baseline` is not vacuous: `findUnusedBaselineEntry` is on by
- * default, so once the flagged line changes the same run reports the entry as unused.
+ * A clean report under `--use-baseline` is not vacuous: `findUnusedBaselineEntry` is on by
+ * default, so once a flagged line changes the same run reports its entry as unused, next to the
+ * finding itself.
  */
 #[CoversClass(TemplateLocation::class)]
 #[Group('subprocess')]
@@ -29,6 +30,8 @@ final class BladeBaselineTest extends TestCase
     private const FIXTURE = __DIR__ . '/Fixtures/BladeBaseline';
 
     private const TEMPLATE = 'resources/views/profile.blade.php';
+
+    private const CHANGED_TEMPLATE = 'resources/views/account.blade.php';
 
     private const FLAGGED_LINE = '<p class="name">{{ (new \BladeBaselineFixture\Greeter())->nmae }}</p>';
 
@@ -90,8 +93,11 @@ final class BladeBaselineTest extends TestCase
     }
 
     /**
-     * One copy, three runs: write the baseline, apply it against the shadow cache that run left
-     * behind, then change the flagged line and watch the entry stop matching.
+     * One copy, two runs over two templates with the same kind of finding: write the baseline, then
+     * change the flagged line of one template only and apply it against the shadow cache the first
+     * run left behind. The changed template reports its finding again and a stale entry, while the
+     * untouched one stays silent: that silence is the baseline matching, with the changed template
+     * as the positive control that a finding would have shown.
      */
     #[Test]
     public function a_baseline_silences_a_template_finding_until_the_flagged_line_changes(): void
@@ -99,8 +105,11 @@ final class BladeBaselineTest extends TestCase
         $copy = $this->fixtureCopy();
 
         // The run that writes a baseline still reports against the previous one, here none.
-        $this->assertSame(
-            [['type' => 'UndefinedPropertyFetch', 'file' => self::TEMPLATE, 'line' => 2]],
+        $this->assertEqualsCanonicalizing(
+            [
+                ['type' => 'UndefinedPropertyFetch', 'file' => self::TEMPLATE, 'line' => 2],
+                ['type' => 'UndefinedPropertyFetch', 'file' => self::CHANGED_TEMPLATE, 'line' => 2],
+            ],
             $this->analyze($copy, ['--set-baseline=baseline.xml'], 2),
         );
 
@@ -112,17 +121,15 @@ final class BladeBaselineTest extends TestCase
             'the entry stores the whole template line, its indentation trimmed',
         );
 
-        $this->assertSame([], $this->analyze($copy, ['--use-baseline=baseline.xml'], 0), 'warm shadow cache');
-
-        $path = $copy . '/' . self::TEMPLATE;
+        $path = $copy . '/' . self::CHANGED_TEMPLATE;
         $source = (string) \file_get_contents($path);
-        $this->assertStringContainsString('class="name"', $source);
-        \file_put_contents($path, \str_replace('class="name"', 'class="name bold"', $source));
+        $this->assertStringContainsString('class="role"', $source);
+        \file_put_contents($path, \str_replace('class="role"', 'class="role bold"', $source));
 
-        $this->assertSame(
+        $this->assertEqualsCanonicalizing(
             [
-                ['type' => 'UndefinedPropertyFetch', 'file' => self::TEMPLATE, 'line' => 2],
-                ['type' => 'UnusedBaselineEntry', 'file' => self::TEMPLATE, 'line' => 0],
+                ['type' => 'UndefinedPropertyFetch', 'file' => self::CHANGED_TEMPLATE, 'line' => 2],
+                ['type' => 'UnusedBaselineEntry', 'file' => self::CHANGED_TEMPLATE, 'line' => 0],
             ],
             $this->analyze($copy, ['--use-baseline=baseline.xml'], 2),
         );

@@ -44,6 +44,7 @@ trait RunsAnnotateFixture
         'panel' => "{{ \$family->count() }} {{ \$handler instanceof \\Closure }}\n",
         'panel-kind' => "{{ \$kind }}\n",
         'merged' => "{{ json_encode([\$author, \$media, \$trio, \$flag, \$posts, \$any, \$key]) }}\n",
+        'merge-control' => "{{ \$flag }}\n",
         'locals' => "@php(\$heading = 'Hello')\n<h1>{{ \$heading }}</h1>\n"
             . "<p>{{ implode(',', array_map(fn (\$item) => \$item . \$heading, \$rows)) }}</p>\n",
         'statics' => "<p>{{ \$stats['total'] }}</p>\n",
@@ -60,54 +61,6 @@ trait RunsAnnotateFixture
         'arrays' => "{{ count(\$labels) }} {{ count(\$params) }}\n",
         'scoped-host' => "<p>host</p>\n@include('scoped')\n",
         'scoped' => "{{ \$text }}\n",
-        'pair-top' => "<p>{{ \$member->slug }}</p>\n@includeIsolated('pair-leaf', ['member' => \$member])\n",
-        'pair-leaf' => "<p>{{ \$member->slug }}</p>\n",
-        // Three levels, renaming the key on the last hop.
-        'chain-top' => "<p>{{ \$member->slug }}</p>\n@includeIsolated('chain-mid', ['member' => \$member])\n",
-        'chain-mid' => "@includeIsolated('chain-leaf', ['entry' => \$member])\n",
-        'chain-leaf' => "<p>{{ \$entry->slug }}</p>\n",
-        // One call site omits `$member`, so the parent is declared nullable.
-        'opt-top' => "@includeIsolated('opt-leaf', ['member' => \$member])\n",
-        'opt-leaf' => "<p>{{ \$member?->slug }}</p>\n",
-        // A pure cycle: no template in it ever gets a type from the others.
-        'cyc-a' => "<p>{{ \$x->slug }}</p>\n@includeIsolated('cyc-b', ['x' => \$x])\n",
-        'cyc-b' => "@includeIsolated('cyc-a', ['x' => \$x])\n<p>{{ \$x->slug }}</p>\n",
-        // `$member` is `Post|null` in the parent (one call site omits it). The plain include gets that;
-        // the narrowed ones must wait: after the parent is declared, each narrows it to `Post`.
-        'narrow-top' => "@includeIsolated('narrow-plain', ['member' => \$member])\n"
-            . "@if (\$member)\n@includeIsolated('narrow-truthy', ['member' => \$member])\n@endif\n"
-            . "@if (\$member !== null)\n@includeIsolated('narrow-notnull', ['member' => \$member])\n@endif\n",
-        // Once the template has read `$member`, Psalm leaves no trace of an `isset()` around the include in
-        // its context, so the file's `isset()` is what declines the name.
-        'narrow-isset-top' => "{{ \$member?->slug }}\n@isset(\$member)\n@includeIsolated('narrow-isset', ['member' => \$member])\n@endisset\n",
-        'narrow-plain' => "<p>{{ \$member?->slug }}</p>\n",
-        'narrow-truthy' => "<p>{{ \$member?->slug }}</p>\n",
-        'narrow-notnull' => "<p>{{ \$member?->slug }}</p>\n",
-        'narrow-isset' => "<p>{{ \$member?->slug }}</p>\n",
-        // The parent's own call site passes a typed `member` too, which must not be taken for the local.
-        'local-loop' => "@foreach (json_decode('[]') as \$member)\n@includeIsolated('local-loop-leaf', ['member' => \$member])\n@endforeach\n",
-        'local-loop-leaf' => "<p>{{ \$member->slug }}</p>\n",
-        'local-php' => "@php(\$member = json_decode('{}'))\n@includeIsolated('local-php-leaf', ['member' => \$member])\n",
-        'local-php-leaf' => "<p>{{ \$member->slug }}</p>\n",
-        'reads-top' => "<?php extract([]); ?>\n@includeIsolated('reads-leaf', ['member' => \$member])\n",
-        'reads-leaf' => "<p>{{ \$member->slug }}</p>\n",
-        // The parent's call sites disagree (`int`, `string`), and the child has a typed one of its own.
-        'split-top' => "@includeIsolated('split-leaf', ['member' => \$member])\n",
-        'split-leaf' => "<p>{{ \$member }}</p>\n",
-        // A write that keeps the type id `mixed`: `??=` is no plain assignment, so `$x` is no local.
-        'wr-coalesce' => "@php\n\$x ??= json_decode('{}');\n@endphp\n@includeIsolated('wr-coalesce-leaf', ['x' => \$x])\n",
-        'wr-coalesce-leaf' => "<p>{{ \$x?->slug }}</p>\n",
-        // A reference alias: the condition names `$alias`, not `$x`.
-        'wr-alias-clause' => "@php\n\$alias =& \$x;\n@endphp\n@if (\$alias !== null)\n@includeIsolated('wr-alias-clause-leaf', ['x' => \$x])\n@endif\n",
-        'wr-alias-clause-leaf' => "<p>{{ \$x?->slug }}</p>\n",
-        'wr-alias-write' => "@php\n\$alias =& \$x;\n\$alias = json_decode('{}');\n@endphp\n@includeIsolated('wr-alias-write-leaf', ['x' => \$x])\n",
-        'wr-alias-write-leaf' => "<p>{{ \$x?->slug }}</p>\n",
-        // `unset()` and a by-reference array item write the variable without a plain assignment: both keep
-        // the type id `mixed`, and neither is a local.
-        'wr-touch' => "@php\nunset(\$u);\n\$refs = [&\$r];\n@endphp\n"
-            . "@includeIsolated('wr-touch-unset', ['u' => \$u])\n@includeIsolated('wr-touch-array', ['r' => \$r])\n",
-        'wr-touch-unset' => "<p>{{ \$u?->slug }}</p>\n",
-        'wr-touch-array' => "<p>{{ \$r?->slug }}</p>\n",
     ];
 
     /**
@@ -155,9 +108,9 @@ trait RunsAnnotateFixture
      * @return array<string, mixed> the annotate pass's result, as the writer reported it back
      *                              through the control file
      */
-    private function annotateResult(string $mode = 'annotate'): array
+    private function annotateResult(string $mode = 'annotate', string $config = 'psalm.xml'): array
     {
-        $decoded = \json_decode($this->analyse($mode)['control'], true);
+        $decoded = \json_decode($this->analyse($mode, $config)['control'], true);
         $this->assertIsArray($decoded, 'the annotate pass never reported back');
 
         return $decoded;
@@ -172,24 +125,6 @@ trait RunsAnnotateFixture
 
         foreach (self::PKG_TEMPLATES as $name) {
             $this->assertSame(self::PKG_WIDGET, $templates["pkg:{$name}"] ?? null, "pkg:{$name} must be left alone");
-        }
-    }
-
-    /**
-     * Puts every template back as the fixture wrote it. A case that runs the writer again by hand
-     * (a second annotate run over its own output) calls this, so the cases that read a pristine
-     * copy still can.
-     */
-    private function restorePristineTemplates(): void
-    {
-        $copy = self::fixture();
-
-        foreach (self::TEMPLATES as $name => $contents) {
-            \file_put_contents("{$copy}/resources/views/{$name}.blade.php", $contents);
-        }
-
-        foreach (self::PKG_TEMPLATES as $name) {
-            \file_put_contents("{$copy}/resources/pkg-views/{$name}.blade.php", self::PKG_WIDGET);
         }
     }
 

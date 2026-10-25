@@ -14,6 +14,7 @@ nav_order: 6
 | XSS             | A03:2021 | `Response::make()` with unescaped content                     |
 | XSS (Blade templates) | A03:2021 | `{!! $userInput !!}`                                    |
 | XSS (Blade view data) | A03:2021 | `view('x', ['q' => $request->input('q')])` or `->with('q', $input)` fed into `{!! $q !!}` (`view()`, `View::make()`, `Factory::make()`, `response()->view()`; data literal, in a variable, or from `compact()`), and through a template's `@include`/`@extends` data and scope and an anonymous component's `:q="..."` props |
+| XSS (Blade class components) | A03:2021 | `<x-alert :message="request('m')" />`, `@component(Alert::class, ...)` or `new Alert($input)` fed into `{!! $message !!}` in the component's own view (a public property of a class component whose `render()` returns one literal view; a constructor that escapes the value stops the flow) |
 | Header Injection | A03:2021 | `Response::make()`, `response()`, and `new Response()` with user-controlled header values; mail sender/recipient addresses (`Mailable` `from()`, `to()`, `cc()`, `bcc()`, `replyTo()`; `MailMessage` `from()`, `cc()`, `bcc()`, `replyTo()`) |
 | SSRF            | A10:2021 | `Http::get()`, `Http::post()` with user-controlled URLs       |
 | File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
