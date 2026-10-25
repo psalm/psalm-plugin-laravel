@@ -33,13 +33,10 @@ use Illuminate\Support\Traits\Macroable;
  * them only from the stub's own `implements`/`extends` clause when a stub
  * re-declares a class, so the full declaration must be copied verbatim.
  *
- * A stub re-declaration marks the class non-user-defined, which drops Psalm's method sealing, so
- * the seal is restated: Macroable::__call() throws unless a macro is registered, and
- * registered macros are still declared by MacroHandler as pseudo-methods.
+ * A stub re-declaration marks the class non-user-defined, which drops Psalm's `sealAllMethods`
+ * default; RedeclaredClassSealHandler restores it.
  *
  * @template-implements ArrayAccess<string, mixed>
- *
- * @psalm-seal-methods
  */
 class Request implements Arrayable, ArrayAccess
 {
