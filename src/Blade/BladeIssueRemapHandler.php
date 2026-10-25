@@ -8,6 +8,7 @@ use PhpParser\Comment\Doc;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
 use Psalm\CodeLocation;
+use Psalm\Codebase;
 use Psalm\Config;
 use Psalm\DocComment;
 use Psalm\Exception\DocblockParseException;
@@ -51,10 +52,14 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
      */
     private static array $targets = [];
 
+    /** @var array<string, list<array{0: int, 1: int, 2: list<string>}>> see {@see self::suppressingNodes()} */
+    private static array $suppressingNodes = [];
+
     public static function reset(): void
     {
         self::$remapping = false;
         self::$targets = [];
+        self::$suppressingNodes = [];
     }
 
     #[\Override]
@@ -178,54 +183,84 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
     {
         $issue = $event->getIssue();
         $location = $issue->code_location;
-        try {
-            $statements = $event->getCodebase()->getStatementsForFile($issue->getFilePath());
-        } catch (\InvalidArgumentException|\UnexpectedValueException) {
-            // Unregistered or unreadable shadow: no suppressions provable, never a crash mid-emission.
-            return [];
-        }
+        $rules = [];
 
         // The event omits Psalm's suppression list. Only enclosing statements can contribute it;
         // a sibling's docblock must never become a template-wide suppression. A type issue can
         // point inside the enclosing node's own docblock, before its first code token.
-        $enclosing = (new NodeFinder())->find($statements, static fn(Node $node): bool
-            => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike || $node instanceof Node\MatchArm)
-            && ($node->getDocComment()?->getStartFilePos() ?? $node->getStartFilePos()) <= $location->raw_file_start
-            && $node->getEndFilePos() >= $location->raw_file_end);
-        $rules = [];
-        foreach ($enclosing as $node) {
+        foreach (self::suppressingNodes($event->getCodebase(), $issue->getFilePath()) as [$start, $end, $nodeRules]) {
+            if ($start <= $location->raw_file_start && $end >= $location->raw_file_end) {
+                \array_push($rules, ...$nodeRules);
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Every statement, function-like and `match` arm of a shadow that carries a suppression, as
+     * file offsets plus the rules, in the order a depth-first walk meets them. Walked once per shadow
+     * instead of once per issue: a template with many findings otherwise re-walks its whole AST each time.
+     *
+     * @return list<array{0: int, 1: int, 2: list<string>}>
+     */
+    private static function suppressingNodes(Codebase $codebase, string $shadowPath): array
+    {
+        if (isset(self::$suppressingNodes[$shadowPath])) {
+            return self::$suppressingNodes[$shadowPath];
+        }
+
+        try {
+            $statements = $codebase->getStatementsForFile($shadowPath);
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            // Unregistered or unreadable shadow: no suppressions provable, never a crash mid-emission.
+            return self::$suppressingNodes[$shadowPath] = [];
+        }
+
+        $nodes = [];
+        $candidates = (new NodeFinder())->find($statements, static fn(Node $node): bool
+            => $node instanceof Node\Stmt || $node instanceof Node\FunctionLike || $node instanceof Node\MatchArm);
+
+        foreach ($candidates as $node) {
+            $rules = [];
+
             // MatchAnalyzer suppresses these two across the arms of a `match` through a runtime list
             // the event omits (upstream gap). The subject, and a `match` used as an operand, sit
             // outside every arm and keep reporting (#1801). Residual: with no default arm Psalm
             // analyzes the arm conditions again unsuppressed and can report there, a template stays
             // silent.
             if ($node instanceof Node\MatchArm) {
-                $rules[] = 'RedundantCondition';
-                $rules[] = 'RedundantConditionGivenDocblockType';
+                $rules = ['RedundantCondition', 'RedundantConditionGivenDocblockType'];
+            } else {
+                foreach ($node->getComments() as $comment) {
+                    if (!$comment instanceof Doc) {
+                        continue;
+                    }
 
-                continue;
-            }
+                    try {
+                        $parsed = DocComment::parsePreservingLength($comment);
+                    } catch (DocblockParseException) {
+                        continue;
+                    }
 
-            foreach ($node->getComments() as $comment) {
-                if (!$comment instanceof Doc) {
-                    continue;
-                }
-
-                try {
-                    $parsed = DocComment::parsePreservingLength($comment);
-                } catch (DocblockParseException) {
-                    continue;
-                }
-
-                foreach ($parsed->tags['psalm-suppress'] ?? [] as $entry) {
-                    foreach (DocComment::parseSuppressList($entry) as $rule) {
-                        $rules[] = $rule;
+                    foreach ($parsed->tags['psalm-suppress'] ?? [] as $entry) {
+                        foreach (DocComment::parseSuppressList($entry) as $rule) {
+                            $rules[] = $rule;
+                        }
                     }
                 }
             }
+
+            if ($rules !== []) {
+                $nodes[] = [
+                    $node->getDocComment()?->getStartFilePos() ?? $node->getStartFilePos(),
+                    $node->getEndFilePos(),
+                    $rules,
+                ];
+            }
         }
 
-        return $rules;
+        return self::$suppressingNodes[$shadowPath] = $nodes;
     }
 
     /** Null for any path that is not a registered shadow with a readable template. */

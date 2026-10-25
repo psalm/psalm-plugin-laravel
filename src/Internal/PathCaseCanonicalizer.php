@@ -30,7 +30,10 @@ final class PathCaseCanonicalizer
      * be listed. Callers canonicalize once per discovered template against a handful of view roots,
      * so without this every template re-reads the same directories from the top down.
      *
-     * @var array<string, list<string>|false>
+     * Each listing is paired with the same names as a keyed set, so the exact-spelling test of a segment
+     * is a lookup, not a scan of a large directory.
+     *
+     * @var array<string, array{0: list<string>, 1: array<string, int>}|false>
      */
     private static array $entriesByDirectory = [];
 
@@ -70,7 +73,7 @@ final class PathCaseCanonicalizer
         $canonicalSegments = [];
 
         foreach ($segments as $segment) {
-            $entries = self::$entriesByDirectory[$walked] ??= @\scandir($walked);
+            $entries = self::$entriesByDirectory[$walked] ??= self::listDirectory($walked);
 
             if ($entries === false) {
                 // Cannot list this level at all: keep the ORIGINAL path, not a half-canonicalized
@@ -92,14 +95,24 @@ final class PathCaseCanonicalizer
         self::$entriesByDirectory = [];
     }
 
+    /** @return array{0: list<string>, 1: array<string, int>}|false */
+    private static function listDirectory(string $directory): array|false
+    {
+        $entries = @\scandir($directory);
+
+        return $entries === false ? false : [$entries, \array_flip($entries)];
+    }
+
     /**
-     * @param list<string> $entries
+     * @param array{0: list<string>, 1: array<string, int>} $listing
      *
      * @psalm-pure
      */
-    private static function resolveSegment(array $entries, string $segment): string
+    private static function resolveSegment(array $listing, string $segment): string
     {
-        if (\in_array($segment, $entries, true)) {
+        [$entries, $names] = $listing;
+
+        if (isset($names[$segment])) {
             return $segment;
         }
 
