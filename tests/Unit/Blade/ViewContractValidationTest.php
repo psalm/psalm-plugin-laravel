@@ -218,6 +218,23 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A `with()` whose key is not a literal, or whose array has no known keys, may replace any
+     * earlier-bound key, so the earlier type is not what the template receives and is not checked.
+     * The final case pins that only EARLIER-run contributions are widened: a literal `with()` that
+     * runs after the dynamic one still wins its key.
+     */
+    #[Test]
+    public function a_dynamic_with_call_widens_the_types_it_may_overwrite(): void
+    {
+        $issues = $this->contractIssues();
+        $reported = $this->forFile($issues, 'WithDynamicKeyOverwrite.php');
+
+        $this->assertCount(1, $reported, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertStringContainsString('passes 123', $reported[0]['message']);
+    }
+
+    /**
      * A MailMessage chain reaches `SimpleMessage::with($line)`, which appends a notification line
      * and binds no template data — so the chain's key set stays closed and the declared variable is
      * still reported as missing.

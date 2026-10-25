@@ -767,14 +767,19 @@ final class ViewCallChain
         /** @var array<string, Union> $data */
         $data = [];
 
+        // Once a contribution that may replace any key was seen (a computed key, an array of unknown
+        // shape), every key recorded after it was bound BEFORE it ran, so its type is not provably
+        // what the template receives.
+        $mayOverwrite = false;
+
         // The chain's contributions land before the binder's own data argument, because the walk ran
         // outermost-first and `??=` below lets the first contribution seen — the last one to run — win.
-        if ($carriesData && !self::mergePending($pending, $source, $data, $complete)) {
+        if ($carriesData && !self::mergePending($pending, $source, $data, $complete, $mayOverwrite)) {
             return null;
         }
 
         if ($dataArg instanceof Arg) {
-            self::mergeArrayArg($dataArg, $source, $data, $complete);
+            self::mergeArrayArg($dataArg, $source, $data, $complete, $mayOverwrite);
         }
 
         return new self($viewName, $data, $complete, [], $binder);
@@ -784,7 +789,7 @@ final class ViewCallChain
      * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      * @param array<string, Union>                             $data
      */
-    private static function mergePending(array $pending, StatementsSource $source, array &$data, bool &$complete): bool
+    private static function mergePending(array $pending, StatementsSource $source, array &$data, bool &$complete, bool &$mayOverwrite): bool
     {
         foreach ($pending as [$methodName, $args]) {
             if ($methodName === 'witherrors') {
@@ -795,7 +800,7 @@ final class ViewCallChain
                 continue;
             }
 
-            if (!self::mergeWith($args, $source, $data, $complete)) {
+            if (!self::mergeWith($args, $source, $data, $complete, $mayOverwrite)) {
                 return false;
             }
         }
@@ -810,7 +815,7 @@ final class ViewCallChain
      * @param list<Arg>            $args
      * @param array<string, Union> $data
      */
-    private static function mergeWith(array $args, StatementsSource $source, array &$data, bool &$complete): bool
+    private static function mergeWith(array $args, StatementsSource $source, array &$data, bool &$complete, bool &$mayOverwrite): bool
     {
         $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
 
@@ -821,7 +826,7 @@ final class ViewCallChain
         $merges = self::mergesArray($keyArg, $source);
 
         if ($merges === true) {
-            self::mergeArrayArg($keyArg, $source, $data, $complete);
+            self::mergeArrayArg($keyArg, $source, $data, $complete, $mayOverwrite);
 
             return true;
         }
@@ -830,6 +835,7 @@ final class ViewCallChain
             // Either branch could run, or the key names a variable we cannot read: nothing the
             // template declares is provably absent, and nothing is provably present either.
             $complete = false;
+            $mayOverwrite = true;
 
             return true;
         }
@@ -838,9 +844,9 @@ final class ViewCallChain
 
         // Walking outermost-first means the first contribution seen is the last one to run, and
         // Laravel lets the last write win.
-        $data[$keyArg->value->value] ??= $valueArg instanceof Arg
+        self::record($data, $keyArg->value->value, $valueArg instanceof Arg
             ? $source->getNodeTypeProvider()->getType($valueArg->value) ?? Type::getMixed()
-            : Type::getNull();
+            : Type::getNull(), $mayOverwrite);
 
         return true;
     }
@@ -883,10 +889,11 @@ final class ViewCallChain
      *
      * @param array<string, Union> $data
      */
-    private static function mergeArrayArg(Arg $arg, StatementsSource $source, array &$data, bool &$complete): void
+    private static function mergeArrayArg(Arg $arg, StatementsSource $source, array &$data, bool &$complete, bool &$mayOverwrite): void
     {
         if ($arg->unpack) {
             $complete = false;
+            $mayOverwrite = true;
 
             return;
         }
@@ -895,6 +902,7 @@ final class ViewCallChain
 
         if (!$atomic instanceof Atomic) {
             $complete = false;
+            $mayOverwrite = true;
 
             return;
         }
@@ -907,11 +915,16 @@ final class ViewCallChain
 
         if (!$atomic instanceof TKeyedArray) {
             $complete = false;
+            $mayOverwrite = true;
 
             return;
         }
 
-        if ($atomic->fallback_params !== null) {
+        // Applied after this array's own keys: they are what the array itself holds, and only the
+        // contributions bound before it can be replaced by a key it may carry.
+        $opensKeys = $atomic->fallback_params !== null;
+
+        if ($opensKeys) {
             // A spread, or an inferred fallback, leaves room for keys we cannot see.
             $complete = false;
         }
@@ -923,12 +936,27 @@ final class ViewCallChain
 
             if ($valueType->possibly_undefined) {
                 $complete = false;
+                $opensKeys = true;
 
                 continue;
             }
 
-            $data[$key] ??= $valueType;
+            self::record($data, $key, $valueType, $mayOverwrite);
         }
+
+        $mayOverwrite = $mayOverwrite || $opensKeys;
+    }
+
+    /**
+     * The first write seen of a key wins (the walk is outermost-first, so it is the last one to run).
+     * After a contribution that may replace any key, that write was bound earlier and is not
+     * provably what the template receives: the key is still supplied, with an unknown type.
+     *
+     * @param array<string, Union> $data
+     */
+    private static function record(array &$data, string $key, Union $type, bool $mayOverwrite): void
+    {
+        $data[$key] ??= $mayOverwrite ? Type::getMixed() : $type;
     }
 
     /**
