@@ -22,3 +22,4 @@
 <x-extra :message="request('m')" />
 <x-trait-ctor :message="request('m')" />
 <x-trait-ctor-child :message="request('m')" />
+<x-slashed :message="request('m')" />

@@ -283,7 +283,7 @@ final class PivotColumnResolver
             ) {
                 $types[$column] = Type::getMixed();
             } else {
-                $type = ColumnTypeMapper::mapBaseType(ModelMetadataRegistryBuilder::buildColumnInfo($schemaColumn));
+                $type = ColumnTypeMapper::mapRawType(ModelMetadataRegistryBuilder::buildColumnInfo($schemaColumn));
                 $types[$column] = $schemaColumn->nullable ? Type::combineUnionTypes($type, Type::getNull()) : $type;
             }
         }

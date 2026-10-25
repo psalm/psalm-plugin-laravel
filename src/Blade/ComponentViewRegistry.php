@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Illuminate\View\ViewName;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
@@ -349,7 +350,7 @@ final class ComponentViewRegistry
         }
 
         foreach ((new NodeFinder())->findInstanceOf($stmts, String_::class) as $string) {
-            $templatePath = $templates[$string->value] ?? null;
+            $templatePath = $templates[self::normalized($string->value)] ?? null;
 
             if ($templatePath !== null) {
                 $contested[$templatePath] = true;
@@ -366,7 +367,11 @@ final class ComponentViewRegistry
     {
         // `Component::resolveView()` treats a returned string naming an existing view as that view.
         if ($expr instanceof String_) {
-            return $expr->value === '' ? null : [$expr->value, [], false];
+            $name = self::normalized($expr->value);
+
+            // Unlike a Factory call, resolveView() does not normalize: a name the finder rejects for
+            // having more than one `::` renders as inline Blade, not as the view normalize() would name.
+            return $name === '' || \substr_count(\trim($expr->value), '::') > 1 ? null : [$name, [], false];
         }
 
         $viaThis = $expr instanceof Expr\MethodCall
@@ -418,7 +423,7 @@ final class ComponentViewRegistry
             }
 
             if ($position === 0) {
-                if (!$arg->value instanceof String_ || $arg->value->value === '') {
+                if (!$arg->value instanceof String_ || self::normalized($arg->value->value) === '') {
                     return null;
                 }
 
@@ -446,7 +451,13 @@ final class ComponentViewRegistry
 
         $name = $args[0];
 
-        return $name instanceof Arg && $name->value instanceof String_ ? [$name->value->value, $keys] : null;
+        return $name instanceof Arg && $name->value instanceof String_ ? [self::normalized($name->value->value), $keys] : null;
+    }
+
+    /** The key Laravel's view finder looks the name up by: `components/alert` is `components.alert`. */
+    private static function normalized(string $viewName): string
+    {
+        return \trim(ViewName::normalize($viewName));
     }
 
     /** The global `view()` helper, not a same-named function of the calling namespace. */

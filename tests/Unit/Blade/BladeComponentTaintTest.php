@@ -149,6 +149,7 @@ final class BladeComponentTaintTest extends TestCase
     public static function reachingViews(): iterable
     {
         yield 'tag, promoted constructor property' => ['resources/views/components/alert.blade.php'];
+        yield 'render() naming its view with a slash' => ['resources/views/components/slashed.blade.php'];
         yield 'tag, property declared by a parent class' => ['resources/views/components/card.blade.php'];
         yield 'new Foo($input)' => ['resources/views/components/constructed.blade.php'];
         yield 'constructor parameter stored under another property name' => ['resources/views/components/renamed.blade.php'];
