@@ -987,6 +987,18 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
+     * Whether some producer of the view was seen at all: a name only a published override's other spelling
+     * (`vendor.pkg.card` beside `pkg::card`) claims has none, and says nothing about the template.
+     */
+    public static function hasProducer(string $viewName): bool
+    {
+        $viewName = self::canonical($viewName);
+
+        return isset(self::$observed[$viewName]) || isset(self::$open[$viewName])
+            || isset(self::$alwaysSupplied[$viewName]) || isset(self::$edges[$viewName]);
+    }
+
+    /**
      * Whether a view composer or creator may write the key after (or before) the call site passes it:
      * the template then reads the composer's value, so the call site's type says nothing about it. An
      * unreadable composer may write any key. Reuses what the call-site checks consult

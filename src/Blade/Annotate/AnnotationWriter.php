@@ -142,6 +142,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $disagreeing = [];
         $disagreed = [];
         $sites = [];
+        $unrendered = [];
 
         foreach (ViewReferenceRegistry::templates() as $viewName => $templatePath) {
             // PHP stored a numeric view name (`123.blade.php` is legal) under the int it cast the
@@ -153,8 +154,17 @@ final class AnnotationWriter implements AfterAnalysisInterface
             }
 
             $sites[$templatePath] ??= AnnotationCollector::unreadableSite((string) $viewName);
+            $rendered = AnnotationCollector::hasProducer((string) $viewName);
 
             foreach (self::plan((string) $viewName, $contract) as $name => $type) {
+                // A name nothing renders (a published override's `vendor.pkg.card` beside the `pkg::card`
+                // its callers use) proves nothing about the file, so it must not veto the other name's type.
+                if (!$rendered) {
+                    $unrendered[$templatePath][$name] = null;
+
+                    continue;
+                }
+
                 $plans[$templatePath][$name] = !\array_key_exists($name, $plans[$templatePath] ?? [])
                     || $plans[$templatePath][$name] === $type ? $type : null;
 
@@ -171,6 +181,11 @@ final class AnnotationWriter implements AfterAnalysisInterface
                     $disagreed[(string) $viewName][$name] = $types;
                 }
             }
+        }
+
+        // Still planned, as unknown, when no other name of the file renders it.
+        foreach ($unrendered as $templatePath => $names) {
+            $plans[$templatePath] = ($plans[$templatePath] ?? []) + $names;
         }
 
         $result = [];
@@ -213,6 +228,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
     public static function fileVariable(string $templatePath, string $name): ?array
     {
         $found = false;
+        $agreed = false;
         $type = null;
         $optional = false;
 
@@ -223,10 +239,17 @@ final class AnnotationWriter implements AfterAnalysisInterface
                 continue;
             }
 
+            $found = true;
+
+            // As in plans(): a name nothing renders takes no part in the agreement.
+            if (!AnnotationCollector::hasProducer($viewName)) {
+                continue;
+            }
+
             $planned = AnnotationCollector::typeFor($viewName, $name);
             $planned = $planned === 'mixed' ? null : $planned;
-            $type = $found && $type !== $planned ? null : $planned;
-            $found = true;
+            $type = $agreed && $type !== $planned ? null : $planned;
+            $agreed = true;
             $optional = $optional || AnnotationCollector::isOptional($viewName, $name);
         }
 

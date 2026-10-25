@@ -219,6 +219,42 @@ final class AnnotationWriterTest extends TestCase
         $this->assertStringContainsString('@var string|null $title = null', (string) \file_get_contents($path));
     }
 
+    /**
+     * A published override is claimed under its default-root name (`vendor.pkg.page`) too, which a
+     * project that only renders `pkg::page` never uses: a name nothing renders says nothing about
+     * the file, so it must not veto what the name that is rendered proves.
+     */
+    #[Test]
+    public function a_view_name_no_producer_renders_does_not_veto_the_name_that_is_rendered(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        ViewReferenceRegistry::registerTemplate('pkg::page', 0, $path);
+        ContractRegistry::register('pkg::page', 0, new ViewDataContract([], false, ['title'], false));
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('pkg::page', ['title' => Type::getString()], true);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertStringContainsString('@var string $title', (string) \file_get_contents($path));
+    }
+
+    #[Test]
+    public function an_alias_with_an_unreadable_producer_still_vetoes_the_name_that_is_rendered(): void
+    {
+        // The unreadable producer may be the one that renders this same file under the alias.
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        ViewReferenceRegistry::registerTemplate('pkg::page', 0, $path);
+        ContractRegistry::register('pkg::page', 0, new ViewDataContract([], false, ['title'], false));
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::markUnreadable('page', '/app/A.php:3');
+        AnnotationCollector::record('pkg::page', ['title' => Type::getString()], true);
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertSame($before, \md5_file($path));
+    }
+
     #[Test]
     public function refuses_to_write_when_the_control_file_is_no_longer_valid(): void
     {
