@@ -27,3 +27,4 @@
 <x-rival/>
 <x-shared-card/>
 <x-composed/>
+<x-ctor-except/>

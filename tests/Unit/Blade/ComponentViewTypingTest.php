@@ -113,6 +113,8 @@ final class ComponentViewTypingTest extends TestCase
         yield 'also rendered by an anonymous tag' => ['shared-card.blade.php', ['$caption: mixed']];
         // A composer may overwrite what `data()` hands the view, so a key it supplies is not typed.
         yield 'a key the view composer supplies' => ['composed.blade.php', ['$count: int', '$label: mixed']];
+        // A constructor that assigns `$this->except` may drop any name at run time: the registry declines.
+        yield 'a constructor that assigns $except' => ['ctor-except.blade.php', ['$heading: mixed']];
         yield 'a returned string with three :: segments is inline Blade' => ['suffixed.blade.php', ['$title: mixed']];
     }
 

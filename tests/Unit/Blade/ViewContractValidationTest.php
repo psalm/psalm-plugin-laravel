@@ -660,6 +660,18 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A constructor that assigns `$this->except` decides the excluded names at run time, though the class
+     * never redeclares the property: its properties and methods keep the values the call passes.
+     */
+    #[Test]
+    public function a_constructor_assigned_except_leaves_properties_and_methods_untyped(): void
+    {
+        $issues = $this->contractIssues();
+
+        $this->assertSame([], $this->forFile($issues, 'ComponentCtorExcept.php'), \var_export($issues, true));
+    }
+
+    /**
      * A template parameter is replaced by its upper bound, not widened away: `T of int` still cannot
      * satisfy a declared `string`, while an unbounded `T` (see the test above) says nothing.
      */
