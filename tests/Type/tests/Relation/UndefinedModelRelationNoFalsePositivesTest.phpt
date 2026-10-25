@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm-experimental-issues.xml
+--no-progress --no-diff --config=./tests/Type/psalm-with-optin-custom-issues.xml
 --FILE--
 <?php declare(strict_types=1);
 
@@ -27,7 +27,7 @@ Customer::with(['vehicles' => function (Relation $query): void {
 }]);                                             // array (keyed/closure)
 Customer::query()->whereHas('workOrders');
 Customer::query()->has('vehicles');
-Customer::doesntHave('vehicles');
+Customer::query()->doesntHave('vehicles');
 Customer::query()->whereRelation('vehicles', 'active', 1);
 Customer::query()->whereDoesntHaveRelation('vehicles', 'active', 1);
 
