@@ -587,6 +587,24 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * Like Livewire, a class component's `data()` is merged into the view `render()` resolves only: a
+     * second view built by another method of the class still lacks `$count`.
+     */
+    #[Test]
+    public function class_component_properties_reach_only_the_view_render_returns(): void
+    {
+        $issues = $this->contractIssues();
+        $reported = $this->forFile($issues, 'ComponentForeignView.php');
+
+        $this->assertSame([self::MISSING . ' $count', self::MISSING . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
+
+        $messages = \implode("\n", \array_column($reported, 'message'));
+        $this->assertStringContainsString("View 'component-foreign-side' requires", $messages);
+        $this->assertStringContainsString("View 'component-foreign-mail' requires", $messages);
+        $this->assertStringNotContainsString("View 'component-foreign' requires", $messages);
+    }
+
+    /**
      * #2043: `parent` in a class component's property type names the class declaring the property, and a
      * trait's `self` the class using the trait, not the component the view renders for.
      */
