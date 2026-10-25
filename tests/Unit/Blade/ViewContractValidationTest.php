@@ -660,6 +660,19 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A template parameter is replaced by its upper bound, not widened away: `T of int` still cannot
+     * satisfy a declared `string`, while an unbounded `T` (see the test above) says nothing.
+     */
+    #[Test]
+    public function a_bounded_templated_component_property_is_checked_against_its_bound(): void
+    {
+        $reported = $this->forFile($this->contractIssues(), 'ComponentBoundedProperty.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $value'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString('passes int', $reported[0]['message']);
+    }
+
+    /**
      * An overridden `Component::data()` or `MailMessage::toArray()` opens the key set, and may replace
      * a key the call passes too, so no passed type is judged: the Mailable path already behaves so.
      */

@@ -13,6 +13,8 @@ use PhpParser\NodeFinder;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\Internal\Type\TemplateInferredTypeReplacer;
+use Psalm\Internal\Type\TemplateResult;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\StatementsSource;
@@ -294,11 +296,37 @@ final class ComponentRenderData
             // `<x-…>` side keeps a non-final class's late-static marker, as its types always did.
             $type = ViewClassProperties::typeOf($codebase, $storage, $name, $declaring, $property, final: !$typedOnly || $storage->final);
 
-            // A class template parameter is unbound here: nothing a call site passes can be judged against it.
-            $properties[$name] = !$type instanceof Union || $type->hasTemplate() ? Type::getMixed() : $type;
+            $properties[$name] = $type instanceof Union ? self::withoutTemplates($codebase, $declaring, $type) : Type::getMixed();
         }
 
         return $properties;
+    }
+
+    /**
+     * A class template parameter is unbound at a call site, so each is replaced by its upper bound (an
+     * unbounded one is `mixed`): nothing narrower can be claimed, but a definite mismatch with the bound
+     * still shows.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function withoutTemplates(Codebase $codebase, ClassLikeStorage $declaring, Union $type): Union
+    {
+        if (!$type->hasTemplate()) {
+            return $type;
+        }
+
+        $bounds = [];
+
+        foreach ($declaring->template_types ?? [] as $templateName => $definingClasses) {
+            foreach ($definingClasses as $definingClass => $bound) {
+                $bounds[$templateName][$definingClass] = $bound;
+            }
+        }
+
+        $replaced = TemplateInferredTypeReplacer::replace($type, new TemplateResult([], $bounds), $codebase);
+
+        // A template of another class (a method's, say) is not in the map and stays: unusable as a type.
+        return $replaced->hasTemplate() ? Type::getMixed() : $replaced;
     }
 
     /**
