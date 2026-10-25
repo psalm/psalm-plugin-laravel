@@ -63,10 +63,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Two cells run the whole suite, including the `subprocess` group (tests that fork a real
-          # vendor/bin/psalm, ~75% of unit CPU): the oldest PHP on the Laravel 12 floor and the newest PHP
-          # on the lockfile's Laravel 13. The other two set `in_process` and skip that group; they still run
-          # every in-process test against their own PHP/Laravel versions.
+          # `in_process` cells skip the `subprocess` group (tests forking a real vendor/bin/psalm, ~75% of
+          # unit CPU); the PHP 8.2 + 12.27.0 and 8.5 lockfile cells run the full suite.
           # Newest PHP + latest Laravel 13 (lockfile). Also the 8.5 side of the 8.4/8.5 getMethods()
           # initializer-order split, which is in-process (ModelMetadataRegistryTest).
           - php: '8.5'
@@ -147,10 +145,7 @@ jobs:
 
       - name: Run Unit tests (lockfile)
         if: ${{ !matrix.laravel }}
-        env:
-          EXTRA_ARGS: ${{ matrix.in_process && '--exclude-group=subprocess' || '' }}
-        # ${VAR:+"$VAR"} passes the single flag when set and no argument at all when empty.
-        run: composer test:unit -- ${EXTRA_ARGS:+"$EXTRA_ARGS"}
+        run: composer test:unit
 
       - name: Run Unit tests
         # paratest declares its own CLI options rather than proxying PHPUnit's, and only 7.19.0+ declares
