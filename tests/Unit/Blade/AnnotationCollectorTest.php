@@ -265,6 +265,38 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     /**
+     * A rendering call in a condition is no statement of its own, so only the compound statement
+     * holding it can see it: `if ($v = view(...))`, `while (...)`, a loop header, a `switch` subject.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function conditionsRenderingView(): iterable
+    {
+        $call = "view('home', ['title' => 42])";
+
+        yield 'if' => ["if (\$v = {$call}) {\n}"];
+        yield 'elseif' => ["if (\$a) {\n} elseif (\$v = {$call}) {\n}"];
+        yield 'while' => ["while (\$v = {$call}) {\n}"];
+        yield 'do while' => ["do {\n} while (\$v = {$call});"];
+        yield 'for' => ["for (\$v = {$call}; \$v; \$v = null) {\n}"];
+        yield 'foreach' => ["foreach ({$call} as \$row) {\n}"];
+        yield 'switch' => ["switch (\$v = {$call}) {\n}"];
+        yield 'case' => ["switch (\$a) {\n    case \$v = {$call}:\n}"];
+    }
+
+    #[Test]
+    #[DataProvider('conditionsRenderingView')]
+    public function marks_a_view_unreadable_when_a_condition_renders_it(string $code): void
+    {
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\n{$code}",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
      * `Factory::first()` renders whichever candidate exists, reached through the facade or the helper.
      *
      * @return iterable<string, array{string}>
