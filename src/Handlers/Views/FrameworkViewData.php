@@ -148,7 +148,8 @@ final class FrameworkViewData
             || self::overrides($storage, 'data', self::MAIL_MESSAGE)
             || self::overrides($storage, 'toarray', self::SIMPLE_MESSAGE)
         ) {
-            return [self::messageKey($markdown, $passed, true, false), false];
+            // The override may replace any passed value too, so none of them keeps its passed type.
+            return [self::messageKey($markdown, $passed, true, false) + self::untyped($passed), false];
         }
 
         $keys = [];
@@ -209,6 +210,18 @@ final class FrameworkViewData
 
         // Same for an abstract component: a concrete subclass can declare more public properties.
         return [$keys, !$storage->abstract];
+    }
+
+    /**
+     * @param array<string, Union> $passed
+     *
+     * @return array<string, Union> every passed key, typed `mixed`
+     *
+     * @psalm-pure
+     */
+    public static function untyped(array $passed): array
+    {
+        return \array_map(static fn(): Union => Type::getMixed(), $passed);
     }
 
     /**

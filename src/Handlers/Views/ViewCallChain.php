@@ -121,7 +121,9 @@ final class ViewCallChain
 
         // A component's public `render()` can be called, and its result chained, from anywhere
         // (`$component->render()->with([...])`): the data added there is not in this chain.
-        return $chain->supplying([$merged[0], false]);
+        //
+        // An unknowable key set (`data()` overridden) may replace any key the call passes, too.
+        return $chain->supplying([$merged[1] ? $merged[0] : FrameworkViewData::untyped($chain->data) + $merged[0], false]);
     }
 
     /**

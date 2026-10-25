@@ -619,6 +619,20 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * An overridden `Component::data()` or `MailMessage::toArray()` opens the key set, and may replace
+     * a key the call passes too, so no passed type is judged: the Mailable path already behaves so.
+     */
+    #[Test]
+    public function an_overridden_data_method_keeps_no_passed_type(): void
+    {
+        $issues = $this->contractIssues();
+
+        foreach (['ComponentDataOverrideTypes.php', 'MailMessageOverridePassed.php'] as $file) {
+            $this->assertSame([], $this->forFile($issues, $file), $file . \var_export($issues, true));
+        }
+    }
+
+    /**
      * #2043: `parent` in a class component's property type names the class declaring the property, and a
      * trait's `self` the class using the trait, not the component the view renders for.
      */
