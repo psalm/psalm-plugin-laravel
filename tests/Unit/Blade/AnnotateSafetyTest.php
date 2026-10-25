@@ -46,10 +46,11 @@ final class AnnotateSafetyTest extends TestCase
         $this->assertTemplatesPristine($run['templates']);
         $this->assertIsArray($result['changed'] ?? null);
         // 16 for the templates that need no include; the chains add 10 where `@includeIsolated` compiles
-        // (pair 2, chain 3, opt 2, narrow 3), and only the 5 parents that read the name themselves
-        // (pair-top, chain-top, cyc-a, narrow-top, narrow-isset-top) where it stays text. The 4 parents
-        // that write the name (wr-coalesce, wr-alias-clause, wr-alias-write, wr-touch) count either way.
-        $this->assertCount(16 + 4 + (\method_exists(BladeCompiler::class, 'compileIncludeIsolated') ? 10 : 5), $result['changed']);
+        // (pair 2, chain 3, opt 2, narrow 3). Where it stays text, only the 5 parents that read the name
+        // themselves (pair-top, chain-top, cyc-a, narrow-top, narrow-isset-top) count, plus split-leaf:
+        // with no include edge its own `string` call site is its only producer. The 4 parents that write
+        // the name (wr-coalesce, wr-alias-clause, wr-alias-write, wr-touch) count either way.
+        $this->assertCount(16 + 4 + ($this->includeIsolatedCompiles() ? 10 : 6), $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
@@ -73,7 +74,7 @@ final class AnnotateSafetyTest extends TestCase
         $this->assertIsArray($written);
         $this->assertSame($dry, $written['diff'] ?? null);
 
-        if (\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+        if ($this->includeIsolatedCompiles()) {
             $this->assertStringContainsString('+ * @var \AnnotateFixture\Post $entry', $dry);
         }
     }
@@ -91,12 +92,23 @@ final class AnnotateSafetyTest extends TestCase
      * The view-data checks follow the project's own Blade setting. The codemod switches Blade on for a
      * project that has it off, but that run must not start reporting view data: it lacks the view
      * finder an `@includeFirst` candidate is resolved through. `noteOmitted()` passes an unread key.
+     * Where `@includeIsolated` stays text, so do the reads inside it: opt-top, local-php and split-top
+     * (two call sites) then never read the `member` they are passed.
      */
     #[Test]
     public function a_run_with_blade_on_only_for_the_codemod_reports_no_view_data(): void
     {
-        $this->assertSame(['UnusedViewData'], $this->viewDataIssues($this->analyse('dry-run')['output']));
+        $this->assertSame(
+            \array_fill(0, $this->includeIsolatedCompiles() ? 1 : 5, 'UnusedViewData'),
+            $this->viewDataIssues($this->analyse('dry-run')['output']),
+        );
         $this->assertSame([], $this->viewDataIssues($this->analyse('dry-run', 'psalm-blade-off.xml')['output']));
+    }
+
+    /** Below Laravel 12.47 `@includeIsolated` is no directive: the fixture's includes stay text. */
+    private function includeIsolatedCompiles(): bool
+    {
+        return \method_exists(BladeCompiler::class, 'compileIncludeIsolated');
     }
 
     /** @return list<string> the view-data issue types a report contains */
