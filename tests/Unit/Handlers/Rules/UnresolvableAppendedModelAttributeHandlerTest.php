@@ -18,7 +18,7 @@ use Psalm\Type;
  * (ModelRegistrationHandler's `class_exists(autoload: true)` gate), and a `.phpt` model is not on the
  * autoloader. So the detection logic is split into the pure, table-testable methods exercised here; the
  * end-to-end emission (warm-up through IssueBuffer) is guarded by
- * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnresolvableAppendedModelAttributeEmissionTest} (a real Psalm
+ * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\EmissionAppTest} (a real Psalm
  * subprocess over an autoloadable fixture), and `composer test:app` guards against false positives on a
  * fresh Laravel app.
  */
