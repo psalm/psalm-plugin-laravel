@@ -182,8 +182,9 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             }
         }
 
-        // UnusedViewData judges `view()` call sites only.
-        if (!$include) {
+        // UnusedViewData judges `view()` call sites only, and not a view whose composer is opaque: it may
+        // read a passed key (`$view->getData()`) the template itself never mentions.
+        if (!$include && $composed !== null) {
             self::reportUnusedData($chain, $contract, $codeLocation, $suppressedIssues);
         }
     }

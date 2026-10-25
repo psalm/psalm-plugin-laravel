@@ -885,6 +885,16 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * An opaque composer (a closure here) may read any key the call site passed, so a key the
+     * template does not read is not provably unused.
+     */
+    #[Test]
+    public function a_view_with_an_unreadable_composer_never_reports_unused_data(): void
+    {
+        $this->assertSame([], $this->forFile($this->unusedIssues(), 'ComposedUnusedKey.php'), \var_export($this->unusedIssues(), true));
+    }
+
+    /**
      * A class composer exempts only the keys it passes: the other declared variables are still
      * judged, and a composer-supplied key is not type-checked either, since the composer runs after
      * the call site and may overwrite it. Wildcard and `Class@method` composers are unioned, creators

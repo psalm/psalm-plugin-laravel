@@ -170,7 +170,7 @@ What is read:
 * Every `$view->with('key', ...)` and `$view->with(['key' => ..., ...])` with string literal keys, chained or not, as a statement of its own.
 * `$view->name()`, `$view->getName()` and `$view->getPath()`, which only read the view: a composer may compute a value from them and pass it to `with()`.
 
-When any composer reaching a view cannot be read, the presence and type checks are skipped for the whole view, as if every key were composer-supplied (`UnusedViewData` still runs, so a key only that composer reads can be reported). A composer cannot be read when it:
+When any composer reaching a view cannot be read, the presence, type and `UnusedViewData` checks are skipped for the whole view: the presence and type checks as if every key were composer-supplied, and the unused check because the composer may read a passed key the template never mentions. A composer cannot be read when it:
 
 * is a closure, or a listener registered straight on the event dispatcher for the exact view name (`Event::listen('composing: x', ...)`);
 * passes a key that is not a string literal: a variable, `with($array)`, a spread or named arguments;
