@@ -66,6 +66,7 @@ trait RunsAnnotateFixture
         'framed-included' => "{{ \$content }}\n",
         'framed-nested' => "{{ json_encode(\$row) }}\n",
         'fragment' => "<p>fragment</p>\n",
+        'private-helper' => "{{ \$text }}\n",
     ];
 
     /**
