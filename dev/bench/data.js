@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792877521744,
+  "lastUpdate": 1792929832525,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16165,6 +16165,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9d0a599885aa37ce8416c1b28d53c1d1375f8a12",
+          "message": "Resolve `self`/`parent` in class component property types against the declaring class (#2048)\n\n* fix(blade): count Mailable, MailMessage and Livewire framework keys as supplied view data #2035\n\nMissingViewData/InvalidViewData reported keys the framework merges in at\nrender time: Mailable public properties and $message, MailMessage's\ntoArray() keys and $message, and a Livewire component's public\nproperties inside render().\n\n- Keys go into ViewCallChain::$frameworkData, so UnusedViewData is\n  untouched.\n- Mailable reads the receiver's class, not the enclosing one; a base\n  class, contract or union receiver leaves the chain incomplete.\n- A key the MailMessage call passes wins over its toArray() entry.\n- Property walk and storage lookup are shared with ComponentRenderData.\n\n* fix(blade): stop typing MailMessage keys and mailable collisions in view data #2035\n\nReview of de694adf found three new InvalidViewData false positives and\ntwo doc inaccuracies.\n\n- MailMessage's toArray() keys are mixed: the vendor docblocks are\n  coarser than the values (array, string for null defaults).\n- Mailable $message is mixed when the call's data is not fully known;\n  markdown() merges that data after the injected Message.\n- A Mailable property the call also passes by name is mixed: an\n  uninitialized typed property leaves the passed value in place.\n- An intersection receiver is declined like a union.\n- Docs: buildViewDataUsing() merges before properties, base MailMessage\n  is checked, unmodeled keys can still report Missing.\n\n* fix(blade): open the Mailable key set on overrides, resolve self/parent, add mail keys #2035\n\nExternal review of 1f914c37.\n\n- A Mailable overriding buildViewData() or additionalMessageData() has\n  an unknowable key set: incomplete chain, every key mixed.\n- `self`/`parent` in a property type resolve against the declaring\n  class, `static` against the rendered one.\n- Supply the keys Mailer::send(), Mailable::additionalMessageData() and\n  MailChannel::additionalMessageData() add (mixed: merge order differs).\n- Docs: uninitialized Livewire properties keep their declared type.\n\n* fix(blade): resolve trait property self/parent and drop passed types on open Mailables #2035\n\nExternal review of daa9e28c.\n\n- A trait's property carries the trait as declaring class: `self` and\n  `parent` resolve against the class in appearing_property_ids, `mixed`\n  when it cannot be resolved.\n- A Mailable overriding buildViewData()/additionalMessageData() may\n  replace a passed value too, so passed keys become mixed framework\n  keys; UnusedViewData still reads only the passed data.\n\n* docs(blade): state what an unknowable framework key set still checks #2035\n\n* test(blade): pin self/parent in class component property types against the declaring class #2043\n\n* fix(blade): expand self/parent in component property types against the declaring class #2043\n\n* fix(blade): keep the second type expansion pass for component method variables #2043\n\n* fix(blade): keep the passed value for component properties a userland $except excludes #2043",
+          "timestamp": "2026-10-25T13:01:25+01:00",
+          "tree_id": "f29378bb244345b9bbaa7ebdc8c80b972e329a2a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/9d0a599885aa37ce8416c1b28d53c1d1375f8a12"
+        },
+        "date": 1792929830957,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.66,
+            "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
             "unit": "MB"
           }
         ]
