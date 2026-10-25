@@ -91,8 +91,8 @@ What it leaves alone:
 
 Everything outside the inserted lines is byte for byte identical, line endings and BOM included, and the rendered output does not change. The lines go, in order of preference:
 
-1. Into the first doc comment of the `<?php` block the file opens with (top level of the block, not a function, class or closure docblock), before its closing `*/`, indented and line-ended like it, so the template keeps a single docblock.
-2. In a new `<?php /** ... */ ?>` block directly after that leading block, so a `declare(strict_types=1);` stays first (a leading block that never closes gets a plain docblock after its open tag instead).
+1. Into the first doc comment of the `<?php` block the file opens with (top level of the block, not a function, class or closure docblock), before its closing `*/`, indented and line-ended like it, so the template keeps a single docblock. A docblock carrying `@psalm-ignore-var` is skipped: Psalm drops its `@var` tags, so lines appended there would never type the template.
+2. In a new `<?php /** ... */ ?>` block directly after that leading block, so a `declare(strict_types=1);` stays first (a leading block that never closes gets a plain docblock after its open tag instead, unless the docblock ignores `@var` tags, when the template is reported as skipped).
 3. In a new `<?php /** ... */ ?>` block at the very top of the file, after any BOM.
 
 A one-line header docblock (`<?php /** Header. */ ?>`) is opened out, so the diff modifies that line.

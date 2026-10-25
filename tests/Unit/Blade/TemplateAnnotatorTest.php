@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\Annotate\TemplateAnnotator;
@@ -107,6 +108,52 @@ final class TemplateAnnotatorTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertSame("<?php\n/**\n * @var string \$title\n */\ndeclare(strict_types=1);\n", $result);
+    }
+
+    /**
+     * Psalm drops every `@var` of a docblock carrying `@psalm-ignore-var`, so a declaration appended to
+     * it would never type the template, and (the name now counting as declared) no rerun would repair it.
+     *
+     * @return iterable<string, array{string}> the template header
+     */
+    public static function ignoringHeaders(): iterable
+    {
+        yield 'psalm tag' => ["<?php\n/**\n * Header.\n * @psalm-ignore-var\n */\n?>\n"];
+        yield 'bare tag' => ["<?php\n/**\n * @ignore-var\n */\n?>\n"];
+        yield 'one line' => ["<?php /** @psalm-ignore-var */ ?>\n"];
+    }
+
+    #[Test]
+    #[DataProvider('ignoringHeaders')]
+    public function adds_a_block_after_a_header_docblock_psalm_ignores_the_var_tags_of(string $header): void
+    {
+        $source = $header . "<p>{{ \$title }}</p>\n";
+
+        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
+
+        $this->assertSame($header . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result);
+        $this->assertNull(TemplateAnnotator::annotate((string) $result, ['title' => 'string']), 'the new block is read back, so a rerun is a no-op');
+    }
+
+    #[Test]
+    public function still_appends_to_a_header_docblock_carrying_a_longer_tag_that_starts_like_ignore_var(): void
+    {
+        $source = "<?php\n/**\n * @psalm-ignore-variable-method\n */\n?>\n<p>{{ \$title }}</p>\n";
+
+        $this->assertSame(
+            "<?php\n/**\n * @psalm-ignore-variable-method\n * @var string \$title\n */\n?>\n<p>{{ \$title }}</p>\n",
+            TemplateAnnotator::annotate($source, ['title' => 'string']),
+        );
+    }
+
+    #[Test]
+    public function refuses_a_leading_block_that_never_closes_when_its_docblock_is_ignored(): void
+    {
+        // A docblock before this one would replace the ignoring one on the next statement, and a new
+        // `<?php` block would land before a `declare`: there is no placement that keeps both meanings.
+        $this->expectException(\RuntimeException::class);
+
+        TemplateAnnotator::annotate("<?php\n/** @psalm-ignore-var */\ndeclare(strict_types=1);\n", ['title' => 'string']);
     }
 
     #[Test]
