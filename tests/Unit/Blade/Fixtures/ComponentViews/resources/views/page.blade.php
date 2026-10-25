@@ -20,3 +20,6 @@
 <x-toolbar/>
 <x-owned/>
 <x-snapshot/>
+<x-linked/>
+@include('components/linked', ['title' => 42])
+<x-suffixed/>
