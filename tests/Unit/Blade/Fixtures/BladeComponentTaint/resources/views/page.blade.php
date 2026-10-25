@@ -21,3 +21,4 @@
 <x-holder :slot="request('s')">Safe</x-holder>
 <x-extra :message="request('m')" />
 <x-trait-ctor :message="request('m')" />
+<x-trait-ctor-child :message="request('m')" />
