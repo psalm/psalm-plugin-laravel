@@ -34,6 +34,13 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # PHPUnit --filter regex over psalm-tester data-set names (phpt paths relative to
+  # tests/Type/tests): the single list of laravel/ai-dependent phpts, used by the
+  # laravel/ai type-test jobs. type_tests_laravel_ai fails if a phpt that needs
+  # laravel/ai is not matched.
+  LARAVEL_AI_PHPT_FILTER: 'PromptInjection/|Collection/TextResponseCollectionTypesTest'
+
 jobs:
 
   phpt_conventions:
@@ -224,7 +231,8 @@ jobs:
   #
   # What this catches: laravel/ai failing to install; a stubbed class being
   # renamed/removed (every PromptInjection phpt SKIPIFs on class presence, so
-  # all-skipped trips the guard below); the plugin's own regressions; and, via
+  # all-skipped trips the guard below); regressions in the laravel/ai-dependent
+  # phpts (see LARAVEL_AI_PHPT_FILTER); and, via
   # bin/ci/check-laravel-ai-stub-parity.php, a stubbed method's parameter count,
   # parameter names, or native parameter/return types drifting on a laravel/ai
   # release. That last one is otherwise invisible: a registered stub overrides the
@@ -232,6 +240,11 @@ jobs:
   # compares the two. That script's own checks are pinned by
   # tests/Unit/Ci/LaravelAiStubParityCheckerTest.php, because a gap in the guard
   # looks exactly like a clean run.
+  #
+  # Only the laravel/ai-dependent phpts run here (the full suite runs in type_tests).
+  # Trade-off: non-ai phpts are no longer run with laravel/ai installed, so an
+  # interaction where installed laravel/ai stubs change unrelated phpt results
+  # would go unnoticed.
   type_tests_laravel_ai:
     name: Type test (laravel/ai ${{ matrix.laravel_ai_version }})
     runs-on: ubuntu-latest
@@ -309,11 +322,21 @@ jobs:
         # Psalm.
         run: php bin/ci/check-laravel-ai-stub-parity.php
 
-      - name: Run Psalm/Type tests
-        run: composer test:type -- --log-junit=/tmp/type-tests-junit.xml --no-progress
+      - name: Check every laravel/ai phpt is selected by the filter
+        run: |
+          unmatched="$(grep -rlE -e 'LaravelAiCapability' -e 'Laravel.Ai.' --include='*.phpt' tests/Type/tests \
+            | grep -vE "$LARAVEL_AI_PHPT_FILTER" || true)"
+          if [ -n "$unmatched" ]; then
+            echo "::error::laravel/ai phpts not matched by LARAVEL_AI_PHPT_FILTER ('$LARAVEL_AI_PHPT_FILTER'); extend the filter in tests.yml:"
+            echo "$unmatched"
+            exit 1
+          fi
+
+      - name: Run laravel/ai Psalm/Type tests
+        run: composer test:type -- --filter "$LARAVEL_AI_PHPT_FILTER" --log-junit=/tmp/type-tests-junit.xml --no-progress
 
       - name: Report type-test failure against the selected laravel/ai constraint
-        # The type-test suite failed under this leg's resolved laravel/ai release.
+        # The laravel/ai phpts failed under this leg's resolved laravel/ai release.
         # This may be a plugin regression, or a stubbed class renamed/removed
         # upstream (the SKIPIF guard below would also catch that). A stubbed method's
         # native signature drifting is covered separately by the parity check above,
@@ -322,10 +345,10 @@ jobs:
         # diff for the exact failing issue/class/line.
         if: failure()
         run: |
-          echo "::error::Type-test suite failed against laravel/ai constraint" \
+          echo "::error::laravel/ai type tests failed against laravel/ai constraint" \
             "'${{ matrix.laravel_ai_version }}'. See the psalm-tester diff above for the exact failure." \
             "Reproduce locally with:" \
-            "composer require --dev 'laravel/ai:${{ matrix.laravel_ai_version }}' && composer test:type"
+            "composer require --dev 'laravel/ai:${{ matrix.laravel_ai_version }}' && composer test:type -- --filter '$LARAVEL_AI_PHPT_FILTER'"
 
       - name: Verify the PromptInjection phpt suite actually ran
         # Every PromptInjection phpt carries a --taint-analysis ARGS section and a
@@ -392,8 +415,8 @@ jobs:
       - name: Check laravel/ai stub-vs-vendor signature parity
         run: php bin/ci/check-laravel-ai-stub-parity.php
 
-      - name: Run Psalm/Type tests
-        run: composer test:type -- --log-junit=/tmp/type-tests-laravel-ai-1.x-dev-junit.xml --no-progress
+      - name: Run laravel/ai Psalm/Type tests
+        run: composer test:type -- --filter "$LARAVEL_AI_PHPT_FILTER" --log-junit=/tmp/type-tests-laravel-ai-1.x-dev-junit.xml --no-progress
 
       - name: Verify the PromptInjection phpt suite actually ran
         run: php bin/ci/assert-tests-ran.php /tmp/type-tests-laravel-ai-1.x-dev-junit.xml PromptInjection
