@@ -59,6 +59,8 @@ final class ShadowCompiler
                 : CompileFailureReason::fromThrowable($templatePath, $throwable);
         } finally {
             \restore_error_handler();
+            // `$path` is untyped and null on a fresh compiler; only setPath()'s docblock says string.
+            /** @psalm-suppress PossiblyNullArgument */
             $this->compiler->setPath($previousPath);
         }
 
