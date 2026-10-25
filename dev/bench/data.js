@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792961240628,
+  "lastUpdate": 1792961575765,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16685,6 +16685,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.23,
             "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1314,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "063339f39c3a96865f07d580243d353aa0d37ee4",
+          "message": "fix(stubs): resolve closure defaults of getOrPut() and queued() to the closure result (#2114)\n\nLaravel documents these defaults as `T|(\\Closure(): T)`. A closure argument binds the single template to the Closure itself, so `Closure(): X` leaks into the result of Collection::getOrPut(), Cookie::queued() and CookieJar::queued(), and into the receiver of getOrPut() via @psalm-this-out.\n\nSplit each into a value template and a closure-return template, and resolve them with a conditional on the argument: a closure contributes what it returns, any other default contributes itself. The conditional is a guard chain, `scalar|array|null`, then `callable`, then `\\Closure`. Psalm cannot decide `\\Closure` against interfaces, iterables or templates bounded by them, so a bare `\\Closure` test leaks the unbound closure-return template as mixed for those values. The guards first rule out non-callable values. Iterable, Traversable and interface guards were rejected because they also catch real closures.\n\nResidual gap: an unbounded template argument resolves to the bare template although it may hold a Closure. Pinned in GetOrPutClosureDefaultKnownLimitation.phpt.\n\nAlso add the CookieJar::queued() stub, which the facade stub mirrored without an instance counterpart.\n\nFixes #2070",
+          "timestamp": "2026-10-25T21:49:32+01:00",
+          "tree_id": "bf9878f8c3a45995af2a4847134247c8f09d2269",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/063339f39c3a96865f07d580243d353aa0d37ee4"
+        },
+        "date": 1792961574421,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.32,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
