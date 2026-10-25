@@ -29,6 +29,8 @@ final class TemplateLocationTest extends TestCase
         $location = TemplateLocation::atLine('/app/view.blade.php', 'view.blade.php', $source, 2);
 
         $this->assertNotNull($location);
+        // Line 1 is Raw's fallback for a source it counts no newline in, so only line 2 proves the count.
+        $this->assertSame(2, $location->raw_line_number);
         $this->assertSame(
             'second',
             \substr($source, $location->raw_file_start, $location->raw_file_end - $location->raw_file_start + 1),

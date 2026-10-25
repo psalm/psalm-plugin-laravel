@@ -26,7 +26,9 @@ final class TemplateLocation
             return null;
         }
 
-        return new Raw($source, $templatePath, $templateName, $bounds[0], $bounds[1]);
+        // Raw numbers its line by counting `\n` before the offset. Turning a bare CR into an LF keeps
+        // every byte offset and puts a bare-CR template's findings on their own line, not on line 1.
+        return new Raw(\preg_replace('/\r(?!\n)/', "\n", $source) ?? $source, $templatePath, $templateName, $bounds[0], $bounds[1]);
     }
 
     /**
