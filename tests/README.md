@@ -7,6 +7,12 @@ There are 3 types of tests:
 
 `composer test:unit` runs everything (via `paratest --processes=auto`); `composer test:unit:fast` excludes the subprocess group for a local loop that finishes in seconds.
 
+Rules for the shared runs, their cost, and where they execute:
+
+- **Positive control.** Every shared (memoized) Psalm run asserts at least one known finding before any test asserts silence, and each test filters findings by its own file or scenario directory. A silence assertion on a shared run passes vacuously if analysis never reached the code. `BladeTemplatesTest` asserts a `PossiblyInvalidArgument` from `php-e.blade.php` in its shared run, and `ContainerNarrowedMethodResolutionTest` filters by its entry file.
+- **Scheduling and budget.** Paratest schedules per class, so the slowest class bounds the wall time of `composer test:unit`. Keep a forking class at no more than 2 Psalm runs and roughly 15 seconds. One Psalm boot costs about 5 to 6 seconds of CPU whatever the fixture's size, so split work across classes only when a class would exceed that budget.
+- **CI coverage.** The `subprocess` group runs only on the PHP 8.2 with Laravel 12.27.0 and PHP 8.5 lockfile unit cells; the `in_process` cells in `.github/workflows/tests.yml` skip it. Behavior that depends on the Laravel or PHP version must be covered by a phpt or an in-process test, otherwise it is checked on those two cells only.
+
 ## What a unit test is for
 
 Keep a unit test only when it guards a behavior that no phpt type test and no other unit test already covers. Keep one case per distinct branch of the code under test, not one per literal: a data provider with many rows that all take the same path should shrink to the rows that differ. Do not add:

@@ -185,6 +185,22 @@ Registration order is preserved (relationship > factory > accessor > column).
 
 **How to evaluate:** Run the plugin benchmark (`/psalm-plugin-benchmark`) before and after significant handler changes. Time and memory should remain within ~5% of the without-plugin baseline.
 
+### Test and CI speedups: measured, rejected, and where the time goes
+
+**Decision:** Cut test time by running fewer Psalm boots (shared memoized runs, few phpt `--ARGS--` groups), not by caching or fewer phpts. Do not retry the speedups below without new evidence.
+
+**Why:** A Psalm and plugin boot costs about 5.5s of CPU: about 4.1s Psalm itself and about 1.4s plugin, mostly stub registration and the vendor classes the stubs pull in. A phpt inside an existing run costs about 10ms, so deleting phpts saves almost nothing.
+
+**Rejected (measured):**
+- **Composer download cache in GitHub Actions.** Saved about 2s per job (median install 11s before, 7s plus 2s of cache steps after, 40 runs). There is no `composer.lock`, so dependency resolution still runs. Removed in #2062.
+- **Shared `opcache.file_cache` across forked Psalm runs in the unit suite.** User CPU dropped about 8%, but sys CPU reading the roughly 120 MB cache offset it. Psalm's restarter also forces `opcache.validate_timestamps=0`, so any cache that outlives a run serves stale plugin code. Closed #2061.
+- **One shared writable Psalm cache directory for concurrent test runs.** It crashes: a reader sees a truncated `.hash` file and `Psalm\Internal\Cache` (line 217) throws a `substr_compare()` `ValueError`. A per-run copy of a pre-warmed cache is safe and saves about 2.7s CPU per boot, tracked as alies-dev/psalm-tester#23, but it is not adopted for simplicity.
+- **Skipping `IndirectMethodReferenceHandler`'s relation scan when dead-code detection will not run.** Only partial runs could skip it, and they persist the reference graph, so skipping risks a false `UnusedMethod` from a cached graph (language server). The saving is about 0.15 to 0.2s per run, constant in model count. Not done.
+
+**Measurement rule:** Compare A and B interleaved on an otherwise idle machine. Heavy parallel load inflated sys time and invalidated one result.
+
+**See:** [#2062](https://github.com/psalm/psalm-plugin-laravel/pull/2062), [#2061](https://github.com/psalm/psalm-plugin-laravel/pull/2061), [alies-dev/psalm-tester#23](https://github.com/alies-dev/psalm-tester/issues/23), `tests/README.md`.
+
 ## Upstream Workarounds
 
 ### Work around Psalm bugs only when there's no upstream fix path
