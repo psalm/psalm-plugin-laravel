@@ -269,6 +269,10 @@ if [[ "$need_install" == 1 ]]; then
     echo "[$APP] installing dependencies" >&2
     (
         cd "$APP_SRC"
+        # A reused source still carries the previous install's composer edits,
+        # including a path repo pointing at a deleted temp dir that breaks any
+        # composer command in before_install. Start from the pinned files.
+        git checkout --quiet HEAD -- $(git ls-files composer.json composer.lock)
         if [[ -n "$BEFORE_INSTALL" ]]; then
             echo "[$APP] before_install: $BEFORE_INSTALL" >&2
             eval "$BEFORE_INSTALL"
