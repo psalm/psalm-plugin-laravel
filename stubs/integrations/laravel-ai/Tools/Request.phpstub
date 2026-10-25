@@ -27,13 +27,19 @@ use Illuminate\Support\Traits\Macroable;
  * stay accurate against the real class.
  *
  * Re-declaration copies the real `implements`/`use` clauses verbatim so Psalm
- * does not strip the trait methods (`input()`, `query()`, `has()`, `filled()`,
- * `when()`, etc.) when merging this stub with the reflected class. Psalm's
+ * does not strip the trait methods (`has()`, `filled()`, `string()`, `when()`,
+ * etc.) when merging this stub with the reflected class. Psalm's
  * class-like scanner resets a class's implemented interfaces and re-derives
  * them only from the stub's own `implements`/`extends` clause when a stub
  * re-declares a class, so the full declaration must be copied verbatim.
  *
+ * A stub re-declaration marks the class non-user-defined, which drops Psalm's method sealing, so
+ * the seal is restated: Macroable::__call() throws unless a macro is registered, and
+ * registered macros are still declared by MacroHandler as pseudo-methods.
+ *
  * @template-implements ArrayAccess<string, mixed>
+ *
+ * @psalm-seal-methods
  */
 class Request implements Arrayable, ArrayAccess
 {
