@@ -146,12 +146,9 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @psalm-mutation-free
      *
-     * @template TValueDefault
-     * @template TValueClosureReturn
-     *
      * @param  string|int  $key
-     * @param  TValueDefault|(\Closure(): TValueClosureReturn)  $default
-     * @return ($default is \Closure ? mixed|TValueClosureReturn : mixed|TValueDefault)
+     * @param  mixed  $default
+     * @return mixed
      *
      * @psalm-flow ($default) -> return
      */

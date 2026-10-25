@@ -45,12 +45,12 @@ final class ShadowManifestTest extends TestCase
     public function prune_retires_superseded_metadata_without_unlinking_a_readers_generation(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);
-        $old = $manifest->store('/a.blade.php', 'old', new ShadowResult('<?php echo 1;', [1 => 1], null), $this->emptyContract());
+        $old = $manifest->store('/a.blade.php', 'old', new ShadowResult('<?php echo 1;', [1 => 1]), $this->emptyContract());
         $manifest->flush();
         $reader = new ShadowManifest($this->shadowDir);
         $reader->load();
 
-        $new = $manifest->store('/a.blade.php', 'new', new ShadowResult('<?php echo 2;', [1 => 2], null), $this->emptyContract());
+        $new = $manifest->store('/a.blade.php', 'new', new ShadowResult('<?php echo 2;', [1 => 2]), $this->emptyContract());
         $manifest->prune(['/a.blade.php']);
         $manifest->flush();
 
@@ -69,8 +69,8 @@ final class ShadowManifestTest extends TestCase
         $b = new ShadowManifest($this->shadowDir);
         $a->load();
         $b->load();
-        $old = $a->store('/race.blade.php', 'old', new ShadowResult('<?php strlen([]);', [1 => 1], null), $this->emptyContract());
-        $new = $b->store('/race.blade.php', 'new', new ShadowResult("<?php strlen('ok');", [1 => 2], null), $this->emptyContract());
+        $old = $a->store('/race.blade.php', 'old', new ShadowResult('<?php strlen([]);', [1 => 1]), $this->emptyContract());
+        $new = $b->store('/race.blade.php', 'new', new ShadowResult("<?php strlen('ok');", [1 => 2]), $this->emptyContract());
         $b->flush();
         $a->flush();
 
@@ -101,7 +101,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
+        $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1]), $this->emptyContract());
         $manifest->flush();
 
         $reloaded = new ShadowManifest($this->shadowDir);
@@ -124,7 +124,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir, 'env-a');
         $manifest->load();
 
-        $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
+        $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php ?>', [1 => 1]), $this->emptyContract());
         $manifest->flush();
 
         $reloaded = new ShadowManifest($this->shadowDir, 'env-b');
@@ -139,7 +139,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
+        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source v1', new ShadowResult('<?php ?>', [1 => 1]), $this->emptyContract());
         $manifest->flush();
 
         \unlink($shadowPath);
@@ -159,7 +159,7 @@ final class ShadowManifestTest extends TestCase
         $shadowPath = $manifest->store(
             '/app/views/foo.blade.php',
             'source',
-            new ShadowResult('<?php ?>', [1 => 0, 2 => 4], null, [4 => ['UndefinedPropertyFetch']]),
+            new ShadowResult('<?php ?>', [1 => 0, 2 => 4], [4 => ['UndefinedPropertyFetch']]),
             $this->emptyContract(),
         );
         $manifest->flush();
@@ -201,7 +201,7 @@ final class ShadowManifestTest extends TestCase
         $shadowPath = $manifest->store(
             '/app/views/foo.blade.php',
             'source',
-            new ShadowResult('<?php ?>', [], null),
+            new ShadowResult('<?php ?>', []),
             new ViewDataContract(
                 [
                     'user' => new ContractVar('user', '\App\Models\User', 3, false),
@@ -237,7 +237,7 @@ final class ShadowManifestTest extends TestCase
         $shadowPath = $manifest->store(
             '/app/views/foo.blade.php',
             'source',
-            new ShadowResult('<?php ?>', [], null),
+            new ShadowResult('<?php ?>', []),
             new ViewDataContract([], false, ['name', 'title'], false),
             [['partial'], false],
         );
@@ -266,7 +266,7 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', [], null), $this->emptyContract());
+        $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', []), $this->emptyContract());
         $manifest->flush();
 
         $reloaded = new ShadowManifest($this->shadowDir);
@@ -305,7 +305,7 @@ final class ShadowManifestTest extends TestCase
         $thrown = null;
 
         try {
-            $manifest->store($templatePath, 'source', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
+            $manifest->store($templatePath, 'source', new ShadowResult('<?php ?>', [1 => 1]), $this->emptyContract());
         } catch (\RuntimeException $runtimeException) {
             $thrown = $runtimeException;
         } finally {
@@ -327,8 +327,8 @@ final class ShadowManifestTest extends TestCase
         $manifest = new ShadowManifest($this->shadowDir);
         $manifest->load();
 
-        $shadowA = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', [], null), $this->emptyContract());
-        $shadowB = $manifest->store('/b.blade.php', 'b', new ShadowResult('<?php ?>', [], null), $this->emptyContract());
+        $shadowA = $manifest->store('/a.blade.php', 'a', new ShadowResult('<?php ?>', []), $this->emptyContract());
+        $shadowB = $manifest->store('/b.blade.php', 'b', new ShadowResult('<?php ?>', []), $this->emptyContract());
         $manifest->flush();
 
         $manifest->prune(['/a.blade.php']);
