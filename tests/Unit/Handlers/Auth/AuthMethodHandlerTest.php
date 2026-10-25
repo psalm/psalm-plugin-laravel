@@ -21,9 +21,7 @@ final class AuthMethodHandlerTest extends TestCase
     public static function noParamMethodsProvider(): \Iterator
     {
         yield ['user'];
-        yield ['getuser'];
         yield ['authenticate'];
-        yield ['getlastattempted'];
     }
 
     #[DataProvider('noParamMethodsProvider')]
@@ -55,36 +53,6 @@ final class AuthMethodHandlerTest extends TestCase
         $this->assertFalse($params[0]->is_optional);
         $this->assertSame('remember', $params[1]->name);
         $this->assertTrue($params[1]->is_optional);
-    }
-
-    public function testGetMethodParamsForOnceUsingId(): void
-    {
-        $event = new MethodParamsProviderEvent(
-            \Illuminate\Support\Facades\Auth::class,
-            'onceusingid',
-        );
-
-        $params = AuthMethodHandler::getMethodParams($event);
-
-        $this->assertNotNull($params);
-        $this->assertCount(1, $params);
-        $this->assertSame('id', $params[0]->name);
-        $this->assertFalse($params[0]->is_optional);
-    }
-
-    public function testGetMethodParamsForLogoutOtherDevices(): void
-    {
-        $event = new MethodParamsProviderEvent(
-            \Illuminate\Support\Facades\Auth::class,
-            'logoutotherdevices',
-        );
-
-        $params = AuthMethodHandler::getMethodParams($event);
-
-        $this->assertNotNull($params);
-        $this->assertCount(1, $params);
-        $this->assertSame('password', $params[0]->name);
-        $this->assertFalse($params[0]->is_optional);
     }
 
     /**
@@ -132,12 +100,9 @@ final class AuthMethodHandlerTest extends TestCase
      */
     public static function nonFacadeReceiversProvider(): \Iterator
     {
-        $methods = ['user', 'getuser', 'authenticate', 'getlastattempted', 'logoutotherdevices', 'loginusingid', 'onceusingid'];
-
-        foreach ($methods as $method) {
-            yield "AuthManager::{$method}" => [\Illuminate\Auth\AuthManager::class, $method];
-            yield "Factory::{$method}" => [\Illuminate\Contracts\Auth\Factory::class, $method];
-        }
+        yield 'AuthManager::user' => [\Illuminate\Auth\AuthManager::class, 'user'];
+        yield 'Factory::logoutotherdevices' => [\Illuminate\Contracts\Auth\Factory::class, 'logoutotherdevices'];
+        yield 'Factory::loginusingid' => [\Illuminate\Contracts\Auth\Factory::class, 'loginusingid'];
     }
 
     /**

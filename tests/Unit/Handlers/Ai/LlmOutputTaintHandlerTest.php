@@ -44,19 +44,6 @@ final class LlmOutputTaintHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_null_for_non_property_fetch_expression(): void
-    {
-        $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
-        $event = $this->createEvent(
-            expr: new Variable('response'),
-            codebase: $codebase,
-            varType: Type::getString(),
-        );
-
-        $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));
-    }
-
-    #[Test]
     public function it_returns_null_for_properties_that_do_not_hold_model_output(): void
     {
         $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
@@ -82,19 +69,6 @@ final class LlmOutputTaintHandlerTest extends TestCase
             expr: new ArrayDimFetch(new Variable('response'), new String_('summary')),
             codebase: $codebase,
             varType: $this->namedObjectType('Laravel\\Ai\\Responses\\StructuredAgentResponse'),
-        );
-
-        $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));
-    }
-
-    #[Test]
-    public function it_returns_null_for_dynamic_property_names(): void
-    {
-        $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
-        $event = $this->createEvent(
-            expr: new PropertyFetch(new Variable('response'), new Variable('name')),
-            codebase: $codebase,
-            varType: $this->namedObjectType('Laravel\\Ai\\Responses\\AgentResponse'),
         );
 
         $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));

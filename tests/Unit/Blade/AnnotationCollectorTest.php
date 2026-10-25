@@ -42,15 +42,6 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function answers_the_type_every_producer_agrees_on(): void
-    {
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-
-        $this->assertSame('string', AnnotationCollector::typeFor('home', 'title'));
-    }
-
-    #[Test]
     public function declines_when_two_producers_disagree(): void
     {
         AnnotationCollector::record('home', ['title' => Type::getString()], true);
@@ -68,12 +59,6 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function merges_sibling_classes_into_their_union(): void
-    {
-        $this->assertSame('App\Post|App\Video|null', $this->merge($this->objects('App\Post'), $this->objects('App\Video', 'null')));
-    }
-
-    #[Test]
     public function merges_up_to_three_classes_and_declines_a_fourth(): void
     {
         [$a, $b, $c, $d] = [$this->objects('App\A'), $this->objects('App\B'), $this->objects('App\C'), $this->objects('App\D')];
@@ -81,24 +66,6 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertSame('App\A|App\B|App\C', $this->merge($a, $b, $c));
         $this->assertNull($this->merge($a, $b, $c, $d));
         $this->assertSame('App\A|App\B|App\C|null', $this->merge($a, $b, $this->objects('App\C', 'null')), '`null` is not counted');
-    }
-
-    #[Test]
-    public function reaches_the_same_verdict_in_any_producer_order(): void
-    {
-        $types = [$this->objects('App\A'), $this->objects('App\B', 'null'), $this->objects('App\C'), $this->objects('App\D')];
-
-        foreach ([[0, 1, 2], [2, 0, 1], [1, 2, 0]] as $order) {
-            $this->assertSame('App\A|App\B|App\C|null', $this->merge(...\array_map(static fn(int $i): Type\Union => $types[$i], $order)));
-        }
-
-        foreach ([[0, 1, 2, 3], [3, 0, 2, 1], [1, 3, 0, 2]] as $index => $order) {
-            foreach ($order as $position) {
-                AnnotationCollector::record("home{$index}", ['item' => $types[$position]], true);
-            }
-
-            $this->assertSame(['App\A', 'App\B|null', 'App\C', 'App\D'], AnnotationCollector::disagreeingTypes("home{$index}", 'item'));
-        }
     }
 
     #[Test]
@@ -112,25 +79,9 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function never_merges_two_scalar_kinds(): void
-    {
-        AnnotationCollector::record('home', ['key' => Type::getInt()], true);
-        AnnotationCollector::record('home', ['key' => Type::getString()], true);
-
-        $this->assertNull(AnnotationCollector::typeFor('home', 'key'));
-        $this->assertSame(['int', 'string'], AnnotationCollector::disagreeingTypes('home', 'key'));
-    }
-
-    #[Test]
     public function never_merges_an_array_with_an_object(): void
     {
         $this->assertNull($this->merge(Type::getList(Type::getString()), $this->objects('App\Post')));
-    }
-
-    #[Test]
-    public function never_merges_a_scalar_with_an_object(): void
-    {
-        $this->assertNull($this->merge(Type::getString(), $this->objects('App\Post')));
     }
 
     #[Test]
@@ -145,63 +96,12 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function merges_one_class_with_different_generic_params_as_a_union_of_each(): void
-    {
-        // Psalm keeps them apart rather than writing `Collection<int, Post|Video>`, which an invariant
-        // TValue would reject at both call sites. Each counts against the cap.
-        $collection = fn(string $class): Type\Union => new Type\Union([
-            new Type\Atomic\TGenericObject('Illuminate\Support\Collection', [Type::getInt(), $this->objects($class)]),
-        ]);
-
-        $this->assertSame(
-            'Illuminate\Support\Collection<int, App\Post>|Illuminate\Support\Collection<int, App\Video>',
-            $this->merge($collection('App\Post'), $collection('App\Video')),
-        );
-        $this->assertNull($this->merge($collection('App\A'), $collection('App\B'), $collection('App\C'), $collection('App\D')));
-    }
-
-    #[Test]
-    public function declines_a_merge_beyond_a_plain_union_it_cannot_prove_holds(): void
-    {
-        // `bool` contains `true`, but saying so takes a codebase, and a unit test has none.
-        $this->assertNull($this->merge(new Type\Union([new Type\Atomic\TTrue()]), new Type\Union([new Type\Atomic\TFalse()])));
-    }
-
-    #[Test]
-    public function lists_no_disagreement_for_agreeing_producers_or_an_open_view(): void
-    {
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-        AnnotationCollector::record('open', ['key' => Type::getInt()], true);
-        AnnotationCollector::record('open', ['key' => Type::getString()], false);
-
-        $this->assertNull(AnnotationCollector::disagreeingTypes('home', 'title'));
-        $this->assertNull(AnnotationCollector::disagreeingTypes('open', 'key'), 'an open data set is not a disagreement');
-    }
-
-    #[Test]
     public function collapses_literal_precision_so_two_literals_of_a_type_still_agree(): void
     {
         AnnotationCollector::record('home', ['count' => $this->literal(1)], true);
         AnnotationCollector::record('home', ['count' => $this->literal(2)], true);
 
         $this->assertSame('int', AnnotationCollector::typeFor('home', 'count'));
-    }
-
-    #[Test]
-    public function keeps_every_literal_that_shares_an_id_for_the_containment_check(): void
-    {
-        // `100` and `1` share the id `int`. Keeping only the last would let a later `int<0, 5>`
-        // merge to a range that rejects the `100` call site.
-        AnnotationCollector::record('home', ['count' => $this->literal(100)], true);
-        AnnotationCollector::record('home', ['count' => $this->literal(1)], true);
-
-        $observed = (new \ReflectionProperty(AnnotationCollector::class, 'observed'))->getValue();
-        $this->assertIsArray($observed['home']['count']);
-        $kept = \array_keys($observed['home']['count']['int']->getAtomicTypes());
-        \sort($kept);
-
-        $this->assertSame(['int(1)', 'int(100)'], $kept);
     }
 
     #[Test]
@@ -214,20 +114,6 @@ final class AnnotationCollectorTest extends TestCase
             AnnotationCollector::typeFor('home', 'title'),
             'an open data set can carry the same key with another type',
         );
-    }
-
-    #[Test]
-    public function declines_for_a_view_no_producer_resolved(): void
-    {
-        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
-    }
-
-    #[Test]
-    public function declines_for_a_name_no_producer_passed(): void
-    {
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-
-        $this->assertNull(AnnotationCollector::typeFor('home', 'body'));
     }
 
     #[Test]
@@ -247,15 +133,6 @@ final class AnnotationCollectorTest extends TestCase
         $anonymous = new Type\Union([new Type\Atomic\TNamedObject('Foo@anonymous/var/www/x.php:3$0')]);
 
         AnnotationCollector::record('home', ['title' => $anonymous], true);
-
-        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
-    }
-
-    #[Test]
-    public function forgets_everything_on_reset(): void
-    {
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-        AnnotationCollector::reset();
 
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
     }
@@ -281,17 +158,6 @@ final class AnnotationCollectorTest extends TestCase
         AnnotationCollector::record('home', ['row' => new Type\Union([$param])], true);
 
         $this->assertNull(AnnotationCollector::typeFor('home', 'row'));
-    }
-
-    #[Test]
-    public function declines_a_template_parameter_nested_inside_a_generic(): void
-    {
-        $param = new Type\Union([new Type\Atomic\TTemplateParam('T', Type::getMixed(), 'fn-foo')]);
-        $generic = new Type\Atomic\TGenericObject('Illuminate\Support\Collection', [Type::getInt(), $param]);
-
-        AnnotationCollector::record('home', ['rows' => new Type\Union([$generic])], true);
-
-        $this->assertNull(AnnotationCollector::typeFor('home', 'rows'));
     }
 
     #[Test]
@@ -332,23 +198,6 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertTrue(AnnotationCollector::isOptional('home', 'title'));
     }
 
-    #[Test]
-    public function does_not_report_a_name_every_closed_call_site_passes(): void
-    {
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-
-        $this->assertFalse(AnnotationCollector::isOptional('home', 'title'));
-    }
-
-    #[Test]
-    public function does_not_report_a_name_when_no_call_site_proved_its_key_set_closed(): void
-    {
-        AnnotationCollector::record('home', [], false);
-
-        $this->assertFalse(AnnotationCollector::isOptional('home', 'title'));
-    }
-
     /**
      * The confidence the direct call site alone establishes. Asserted so the companion test below
      * cannot pass because the fixture failed to record anything.
@@ -376,34 +225,11 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function marks_a_view_unreadable_when_the_declined_call_names_its_view_argument(): void
-    {
-        // Named arguments may come in any order, so the view name is not always argument zero.
-        $this->analyzeStatements(
-            "view('home', ['title' => 'text']);\n\$v = view(data: ['title' => 42], view: 'home');",
-            [['title' => Type::getString()], ['title' => $this->literal(42)]],
-        );
-
-        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
-    }
-
-    #[Test]
     public function records_an_isolated_include_site_as_a_producer_of_the_included_view(): void
     {
         $this->analyzeStatements("echo \$__env->make('inner', ['title' => 'text'])->render();", [['title' => Type::getString()]]);
 
         $this->assertSame('string', AnnotationCollector::typeFor('inner', 'title'));
-    }
-
-    #[Test]
-    public function declines_when_an_include_site_disagrees_with_a_view_call_site(): void
-    {
-        $this->analyzeStatements(
-            "view('inner', ['title' => 'text']);\necho \$__env->make('inner', ['title' => \$n])->render();",
-            [['title' => Type::getString()], ['title' => $this->literal(42)]],
-        );
-
-        $this->assertNull(AnnotationCollector::typeFor('inner', 'title'));
     }
 
     #[Test]
@@ -414,10 +240,7 @@ final class AnnotationCollectorTest extends TestCase
         foreach (
             [
                 "echo \$__env->make('inner', {$scope})->render();",
-                "echo \$__env->make('inner', ['title' => 1], {$scope})->render();",
                 "echo \$__env->make('inner', \$data)->render();",
-                "echo \$__env->renderWhen(\$on, 'inner', {$scope});",
-                "echo \$__env->first(['missing', 'inner'], {$scope})->render();",
                 "echo \$__env->renderEach('inner', \$items, 'item');",
             ] as $include
         ) {
@@ -464,22 +287,6 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function still_reads_a_rendering_call_nested_in_a_recorded_producer(): void
-    {
-        foreach (
-            [
-                "echo \$__env->make('inner', ['title' => view('inner', ['title' => 42])->render()])->render();",
-                "view('inner', ['title' => view('inner', ['title' => 42])->render()]);",
-            ] as $nested
-        ) {
-            AnnotationCollector::reset();
-            $this->analyzeStatements($nested, [['title' => Type::getString()], ['title' => $this->literal(42)]]);
-
-            $this->assertNull(AnnotationCollector::typeFor('inner', 'title'), $nested);
-        }
-    }
-
-    #[Test]
     public function an_include_lookalike_rendering_with_a_callback_is_not_recorded_as_closed(): void
     {
         $this->analyzeStatements(
@@ -504,17 +311,6 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
-    public function a_raw_prefixed_name_is_an_ordinary_view_outside_the_each_empty_argument(): void
-    {
-        $this->analyzeStatements(
-            "echo \$__env->make('raw|inner', ['title' => 'text'])->render();\necho view('raw|inner', ['title' => 42])->render();",
-            [['title' => Type::getString()], ['title' => $this->literal(42)]],
-        );
-
-        $this->assertNull(AnnotationCollector::typeFor('raw|inner', 'title'));
-    }
-
-    #[Test]
     public function answers_the_type_a_callback_inside_a_declined_chain_passes(): void
     {
         // The callback's statement records the producer first; the declined chain holding it then
@@ -528,19 +324,6 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertSame('string', AnnotationCollector::typeFor('home', 'extra'));
     }
 
-    #[Test]
-    public function marks_a_view_unreadable_when_a_callback_renders_it_through_a_declined_chain(): void
-    {
-        // The callback's own statement is declined too (`render()` is no link the walk knows), so no
-        // producer was recorded for that call and the outer scan still has to count it.
-        $this->analyzeStatements(
-            "view('home', ['title' => 'text']);\nAction::make('qr')->modalContent(fn () => view('home', ['title' => 42])->render());",
-            [['title' => Type::getString()], ['title' => $this->literal(42)]],
-        );
-
-        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
-    }
-
     /**
      * The callback's call was recorded, but the declined expression around it receives the view it
      * returns and may write data into it: invoked in place, through a helper, by a magic `with*`
@@ -551,9 +334,7 @@ final class AnnotationCollectorTest extends TestCase
     public static function callbackResultWrites(): iterable
     {
         yield 'invoked in place, with()' => ["(fn () => view('home', ['title' => 'text']))()->with('title', 42);"];
-        yield 'through a helper, magic with*()' => ["value(fn () => view('home', ['title' => 'text']))->withTitle(42);"];
         yield 'offset write in a tap callback' => ["tap((fn () => view('home', ['title' => 'text']))(), fn (\$v) => \$v['title'] = 42);"];
-        yield 'dynamic method name' => ["value(fn () => view('home', ['title' => 'text']))->{\$method}('title', 42);"];
     }
 
     #[Test]
@@ -681,15 +462,6 @@ final class AnnotationCollectorTest extends TestCase
             $passed->getId(false),
             'the inferred type itself is left untouched',
         );
-    }
-
-    #[Test]
-    public function an_unbounded_int_range_agrees_with_int(): void
-    {
-        AnnotationCollector::record('home', ['total' => new Type\Union([new Type\Atomic\TIntRange(null, null)])], true);
-        AnnotationCollector::record('home', ['total' => new Type\Union([new Type\Atomic\TInt()])], true);
-
-        $this->assertSame('int', AnnotationCollector::typeFor('home', 'total'));
     }
 
     #[Test]

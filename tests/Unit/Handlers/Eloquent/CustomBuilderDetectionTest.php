@@ -11,20 +11,14 @@ use App\Models\Customer;
 use App\Models\Mechanic;
 use App\Models\Vehicle;
 use App\Models\WorkOrder;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Handlers\Eloquent\CustomBuilderMethodHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CustomTypeDetector;
-use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests custom builder detection in CustomTypeDetector.
- *
  * Priority matches Laravel's Model::newEloquentBuilder():
  * 1. newEloquentBuilder() override (bypasses everything when present)
  * 2. #[UseEloquentBuilder] attribute (checked first in base method)
@@ -33,138 +27,34 @@ use Psalm\Progress\VoidProgress;
 #[CoversClass(CustomTypeDetector::class)]
 final class CustomBuilderDetectionTest extends TestCase
 {
-    #[\Override]
-    protected function tearDown(): void
+    #[Test]
+    public function it_resolves_the_custom_builder_from_each_declaration_form(): void
     {
-        // Reset static state to prevent leaking between tests.
-        // All maps and caches must be cleared together — they are interdependent.
-        (new \ReflectionProperty(ModelMethodHandler::class, 'customBuilderMap'))->setValue(null, []);
-        (new \ReflectionProperty(ModelMethodHandler::class, 'unresolvedCache'))->setValue(null, []);
-        (new \ReflectionProperty(CustomBuilderMethodHandler::class, 'builderToModelMap'))->setValue(null, []);
-        (new \ReflectionProperty(CustomBuilderMethodHandler::class, 'traitBuilderMethods'))->setValue(null, []);
+        $codebase = $this->createCodebase();
+
+        $this->assertSame(WorkOrderBuilder::class, CustomTypeDetector::resolveCustomBuilderClass($codebase, WorkOrder::class));
+        $this->assertSame(VehicleBuilder::class, CustomTypeDetector::resolveCustomBuilderClass($codebase, Vehicle::class));
+        $this->assertSame(MechanicBuilder::class, CustomTypeDetector::resolveCustomBuilderClass($codebase, Mechanic::class));
     }
 
     #[Test]
-    public function it_registers_custom_builder_for_model_with_attribute(): void
+    public function it_resolves_nothing_for_inherited_members_or_an_unloadable_class(): void
     {
-        $this->resolveAndRegisterBuilder(WorkOrder::class);
+        $codebase = $this->createCodebase();
 
-        $this->assertSame(WorkOrderBuilder::class, $this->getRegisteredBuilder(WorkOrder::class));
+        // Customer only inherits newEloquentBuilder() and $builder from Model: not overrides.
+        $this->assertNull(CustomTypeDetector::resolveCustomBuilderClass($codebase, Customer::class));
+        // The ReflectionException must be caught rather than thrown.
+        $this->assertNull(CustomTypeDetector::resolveCustomBuilderClass($codebase, 'NonExistent\\FakeModelClass'));
     }
 
-    #[Test]
-    public function it_does_not_register_builder_for_model_without_attribute(): void
-    {
-        $this->resolveAndRegisterBuilder(Customer::class);
-
-        $this->assertNull($this->getRegisteredBuilder(Customer::class));
-    }
-
-    #[Test]
-    public function it_registers_custom_builder_for_model_with_new_eloquent_builder_override(): void
-    {
-        $this->resolveAndRegisterBuilder(Vehicle::class);
-
-        $this->assertSame(VehicleBuilder::class, $this->getRegisteredBuilder(Vehicle::class));
-    }
-
-    #[Test]
-    public function it_registers_custom_builder_for_model_with_static_builder_property(): void
-    {
-        $this->resolveAndRegisterBuilder(Mechanic::class);
-
-        $this->assertSame(MechanicBuilder::class, $this->getRegisteredBuilder(Mechanic::class));
-    }
-
-    #[Test]
-    public function it_handles_non_existent_class_gracefully(): void
-    {
-        // Should not throw — the ReflectionException is caught and logged.
-        $this->resolveAndRegisterBuilder('NonExistent\\FakeModelClass');
-
-        $this->assertEmpty($this->getCustomBuilderMap());
-    }
-
-    #[Test]
-    public function it_returns_null_for_inherited_new_eloquent_builder(): void
-    {
-        // Customer inherits newEloquentBuilder from Model — not an override, so no custom builder.
-        $result = $this->callResolveBuilderFromMethodOverride(Customer::class);
-
-        $this->assertNull($result);
-    }
-
-    #[Test]
-    public function it_resolves_builder_from_static_property_directly(): void
-    {
-        $result = $this->callResolveBuilderFromStaticProperty(Mechanic::class);
-
-        $this->assertSame(MechanicBuilder::class, $result);
-    }
-
-    #[Test]
-    public function it_returns_null_for_inherited_static_builder_property(): void
-    {
-        // Customer inherits $builder from Model — not an override.
-        $result = $this->callResolveBuilderFromStaticProperty(Customer::class);
-
-        $this->assertNull($result);
-    }
-
-    /**
-     * Call resolveBuilderFromMethodOverride directly via reflection.
-     */
-    private function callResolveBuilderFromMethodOverride(string $className): ?string
-    {
-        $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveBuilderFromMethodOverride');
-
-        return $method->invoke(null, $reflection);
-    }
-
-    /**
-     * Call resolveBuilderFromStaticProperty directly via reflection.
-     */
-    private function callResolveBuilderFromStaticProperty(string $className): ?string
-    {
-        $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveBuilderFromStaticProperty');
-
-        return $method->invoke(null, $reflection);
-    }
-
-    /**
-     * Resolve a model's custom builder and register it — the resolve→registerCustomBuilder sink
-     * registerHandlersForModel() uses on the warm-up-failure fallback (the warm path reads the
-     * already-resolved class off the registry; resolution itself is what this asserts).
-     */
-    private function resolveAndRegisterBuilder(string $className): void
+    private function createCodebase(): Codebase
     {
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
 
         $progressRef = new \ReflectionProperty(Codebase::class, 'progress');
         $progressRef->setValue($codebase, new VoidProgress());
 
-        $builderClass = CustomTypeDetector::resolveCustomBuilderClass($codebase, $className);
-        if ($builderClass !== null) {
-            ModelMethodHandler::registerCustomBuilder($className, $builderClass);
-        }
-    }
-
-    /**
-     * Read the private $customBuilderMap via reflection.
-     *
-     * @return array<class-string<Model>, class-string<Builder>>
-     */
-    private function getCustomBuilderMap(): array
-    {
-        $ref = new \ReflectionProperty(ModelMethodHandler::class, 'customBuilderMap');
-
-        return $ref->getValue();
-    }
-
-    private function getRegisteredBuilder(string $modelClass): ?string
-    {
-        return $this->getCustomBuilderMap()[$modelClass] ?? null;
+        return $codebase;
     }
 }

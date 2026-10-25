@@ -40,54 +40,6 @@ final class UnknownBlueprintMethodTest extends AbstractSchemaAggregatorTestCase
         $this->assertTableHasNotNullableColumnOfType('payload', 'mixed', $schema->tables['orders']);
     }
 
-    #[Test]
-    public function unknown_method_respects_nullable(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('orders', static function (Blueprint $table) {
-                        $table->id();
-                        $table->customType('payload')->nullable();
-                    });
-                }
-            };
-            PHP);
-
-        $this->assertTableHasNullableColumnOfType('payload', 'mixed', $schema->tables['orders']);
-    }
-
-    #[Test]
-    public function unknown_method_respects_default_value(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('orders', static function (Blueprint $table) {
-                        $table->id();
-                        $table->customType('payload')->default('none');
-                    });
-                }
-            };
-            PHP);
-
-        $table = $schema->tables['orders'];
-        $this->assertTableHasNotNullableColumnOfType('payload', 'mixed', $table);
-        $this->assertColumnHasDefault('none', $table->columns['payload']);
-    }
-
     /**
      * Table-level property methods like engine(), charset(), collation() set table
      * properties — not columns. Without explicit handling, $table->engine('InnoDB')

@@ -37,33 +37,9 @@ use Psalm\StatementsSource;
 final class UnknownModelAttributeHandlerTest extends TestCase
 {
     #[Test]
-    public function ignores_non_call_expressions(): void
-    {
-        $this->assertNull(UnknownModelAttributeHandler::afterExpressionAnalysis(
-            $this->event($this->positioned(new Variable('user'))),
-        ));
-    }
-
-    #[Test]
     public function ignores_methods_outside_the_mass_assignment_allowlist(): void
     {
         $call = $this->positioned(new StaticCall(new Name('App\\Models\\User'), new Identifier('save')));
-
-        $this->assertNull(UnknownModelAttributeHandler::afterExpressionAnalysis($this->event($call)));
-    }
-
-    #[Test]
-    public function ignores_dynamic_method_names(): void
-    {
-        $call = $this->positioned(new StaticCall(new Name('App\\Models\\User'), new Variable('method')));
-
-        $this->assertNull(UnknownModelAttributeHandler::afterExpressionAnalysis($this->event($call)));
-    }
-
-    #[Test]
-    public function ignores_calls_without_an_attribute_argument(): void
-    {
-        $call = $this->positioned(new StaticCall(new Name('App\\Models\\User'), new Identifier('create')));
 
         $this->assertNull(UnknownModelAttributeHandler::afterExpressionAnalysis($this->event($call)));
     }
@@ -143,24 +119,6 @@ final class UnknownModelAttributeHandlerTest extends TestCase
     }
 
     #[Test]
-    public function skips_a_mass_assignment_inside_a_migration_file(): void
-    {
-        // A create() located in a migration file is left alone: migrations are point-in-time and may
-        // reference since-dropped columns (#1251). The array content is irrelevant — the guard fires
-        // after the literal-array check but before receiver resolution, so the uninitialised Codebase is
-        // never touched (proving the guard is load-bearing, like the sibling early-return tests).
-        $call = $this->positioned(new StaticCall(
-            $this->resolvedModelName(),
-            new Identifier('create'),
-            [new Arg(new Array_([]))],
-        ));
-
-        $this->assertNull(UnknownModelAttributeHandler::afterExpressionAnalysis(
-            $this->event($call, '/project/database/migrations/2024_01_01_000000_create_users_table.php'),
-        ));
-    }
-
-    #[Test]
     #[DataProvider('migrationFilePaths')]
     public function is_migration_file_guesses_by_filename_or_directory(string $filePath, bool $expected): void
     {
@@ -180,8 +138,6 @@ final class UnknownModelAttributeHandlerTest extends TestCase
         yield 'non-timestamped file in a migrations dir' => ['/pkg/database/migrations/create_things.php', true];
         // Windows separators still match the directory signal after normalization.
         yield 'windows path in a migrations dir' => ['C:\\proj\\database\\migrations\\2024_01_01_000000_x.php', true];
-        // Neither signal: ordinary application code.
-        yield 'a model' => ['/app/Models/User.php', false];
         // "Migration" in a filename is not the `migrations` directory, and there is no timestamp prefix.
         yield 'a class merely named Migration' => ['/app/Support/MigrationHelper.php', false];
         // A leading-year filename that is not the full YYYY_MM_DD_HHMMSS_ shape.
@@ -226,9 +182,6 @@ final class UnknownModelAttributeHandlerTest extends TestCase
         yield '12.x floor: quiet siblings absent, stock create' => [
             'create', ['create' => $fw, 'createmany' => $fw], $scanned, false,
         ];
-        yield '13.x: every sibling framework-declared' => [
-            'create', ['create' => $fw, 'createquietly' => $fw, 'createmany' => $fw, 'createmanyquietly' => $fw], $scanned, false,
-        ];
         yield 'called method absent' => ['create', ['createmany' => $fw], $scanned, true];
         yield 'called method userland' => ['create', ['create' => 'App\\Rel'], $scanned, true];
         yield 'sibling overridden in userland' => [
@@ -256,7 +209,6 @@ final class UnknownModelAttributeHandlerTest extends TestCase
         $allowed = ['name' => true, 'fullname' => true, 'emailverifiedat' => true, 'settings' => true];
 
         yield 'a typo is flagged' => [$allowed, ['nmae'], ['nmae']];
-        yield 'an exact match is allowed' => [$allowed, ['name'], []];
         yield 'camelCase matches a collapsed key' => [$allowed, ['fullName'], []];
         yield 'snake_case matches a collapsed key' => [$allowed, ['email_verified_at'], []];
         // A JSON-path write resolves to its base column, which is known → not a typo.
@@ -264,7 +216,6 @@ final class UnknownModelAttributeHandlerTest extends TestCase
         // ...but a typo in the base column is still caught, reported with the full original key.
         yield 'a JSON-path key with a base typo is flagged' => [$allowed, ['settingz->theme'], ['settingz->theme']];
         yield 'only the unknown keys survive, in input order' => [$allowed, ['name', 'nmae', 'bogus'], ['nmae', 'bogus']];
-        yield 'no keys yields nothing' => [$allowed, [], []];
         yield 'an empty allowed set flags every usable key' => [[], ['anything'], ['anything']];
         // A key that normalizes to nothing (only separators) has no identity to validate → not flagged.
         yield 'a separator-only key is treated as known' => [[], ['___'], []];

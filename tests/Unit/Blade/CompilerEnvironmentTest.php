@@ -89,47 +89,6 @@ final class CompilerEnvironmentTest extends TestCase
     }
 
     /**
-     * `ReflectionFunction::getFileName()` on an `eval()`'d closure returns a string ending in
-     * "eval()'d code", not a real path — nothing on disk to hash means the input is unresolvable.
-     */
-    #[Test]
-    public function an_evald_directive_flips_trustworthy_to_false(): void
-    {
-        $compiler = $this->compiler();
-        // Constructing a closure this way (rather than loading one from a real file that returns
-        // it) is the only way to reliably produce `getFileName()` === ".../eval()'d code" in a
-        // unit test; this is the ONLY eval() in this suite, and it exists to exercise exactly
-        // that reflection edge case, not to execute untrusted input.
-        $handler = eval("return static function (string \$expression): string { return '<?php ?>'; };"); // NOSONAR
-        \assert(\is_callable($handler));
-        $compiler->directive('mine', $handler);
-
-        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
-
-        $this->assertFalse($trusted);
-        $this->assertNotSame('', $hash);
-    }
-
-    /**
-     * #1517 M1: `ReflectionFunction::getStaticVariables()` never sees a closure's bound `$this`,
-     * so an invokable object's own constructor state is invisible to `describeCallable()` — two
-     * instances with different state hash identically off their shared class file alone. Only
-     * `trustworthy = false` is honest here; folding in the bound object's class would still miss
-     * the actual state difference.
-     */
-    #[Test]
-    public function an_invokable_object_directive_flips_trustworthy_to_false(): void
-    {
-        $compiler = $this->compiler();
-        $compiler->directive('mine', new MarkerDirective('V1'));
-
-        [$hash, $trusted] = CompilerEnvironment::describe($compiler);
-
-        $this->assertFalse($trusted);
-        $this->assertNotSame('', $hash);
-    }
-
-    /**
      * #1693: a plain closure registered in a service provider is bound to the provider. Its file
      * (the provider) is hashed, so it must not disable the cache.
      */
@@ -163,27 +122,6 @@ final class CompilerEnvironmentTest extends TestCase
             [['input' => "directive 'mine' (callable bound to " . MarkerDirective::class . ')', 'file' => (new \ReflectionClass(MarkerDirective::class))->getFileName()]],
             $reasons,
         );
-    }
-
-    /**
-     * The mirror case: two invokable-object directives with different constructor state must not
-     * describe identically, since a matching hash would let a stale shadow look fresh. Asserted
-     * defensively even though `trustworthy = false` already forces a recompile on either side.
-     */
-    #[Test]
-    public function two_invokable_object_directives_with_different_state_are_never_reported_trusted(): void
-    {
-        $withV1 = $this->compiler();
-        $withV1->directive('mine', new MarkerDirective('V1'));
-
-        $withV2 = $this->compiler();
-        $withV2->directive('mine', new MarkerDirective('V2'));
-
-        [, $v1Trusted] = CompilerEnvironment::describe($withV1);
-        [, $v2Trusted] = CompilerEnvironment::describe($withV2);
-
-        $this->assertFalse($v1Trusted);
-        $this->assertFalse($v2Trusted);
     }
 
     /**

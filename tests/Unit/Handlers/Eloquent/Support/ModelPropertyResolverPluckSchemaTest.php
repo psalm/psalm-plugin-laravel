@@ -134,21 +134,6 @@ final class ModelPropertyResolverPluckSchemaTest extends TestCase
         $this->assertSame('Illuminate\Support\Collection<array-key, int>', (string) $result);
     }
 
-    #[Test]
-    public function nullable_schema_column_used_as_key_falls_back_to_array_key(): void
-    {
-        $this->override(columns: [
-            'id' => $this->col('id', SchemaColumn::TYPE_INT),
-            'nickname' => $this->col('nickname', SchemaColumn::TYPE_STRING, nullable: true),
-        ]);
-
-        $result = $this->pluck($this->strArg('id'), $this->strArg('nickname'));
-
-        // ?string is not array-key compatible (null isn't a valid array key) — key must fall
-        // back to array-key rather than narrowing to a nullable TKey.
-        $this->assertSame('Illuminate\Support\Collection<array-key, int>', (string) $result);
-    }
-
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------

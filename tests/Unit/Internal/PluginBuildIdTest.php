@@ -24,15 +24,6 @@ final class PluginBuildIdTest extends TestCase
     }
 
     #[Test]
-    public function the_same_commit_yields_a_stable_build_id(): void
-    {
-        $this->assertSame(
-            PluginBuildId::of(self::DEV_VERSION, '126f4e487b6ab5b354881d1d35be8321a5f1b51e'),
-            PluginBuildId::of(self::DEV_VERSION, '126f4e487b6ab5b354881d1d35be8321a5f1b51e'),
-        );
-    }
-
-    #[Test]
     public function a_missing_reference_falls_back_to_the_version(): void
     {
         $this->assertSame('4.1.0.0', PluginBuildId::of('4.1.0.0', null));

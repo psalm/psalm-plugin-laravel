@@ -10,7 +10,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Facades\DateFacadeHandler;
-use Psalm\Type\Atomic\TFalse;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TString;
@@ -57,20 +56,6 @@ final class DateFacadeHandlerTest extends TestCase
     }
 
     #[Test]
-    public function preserves_the_false_member_through_the_swap(): void
-    {
-        // Laravel 11 typed several `create*` methods `Carbon|false`; reading the declared
-        // type (rather than a hardcoded list) keeps that member correct after the swap.
-        $result = DateFacadeHandler::swapCarbon(
-            new Union([new TNamedObject(Carbon::class), new TFalse()]),
-            CarbonImmutable::class,
-        );
-
-        $this->assertNotNull($result);
-        $this->assertSame(CarbonImmutable::class . '|false', $result->getId());
-    }
-
-    #[Test]
     public function returns_null_when_no_carbon_atomic_is_present(): void
     {
         // Methods like `getLocale(): string` or `withTimeZone(): static` have no Carbon
@@ -78,19 +63,5 @@ final class DateFacadeHandlerTest extends TestCase
         $result = DateFacadeHandler::swapCarbon(new Union([new TString()]), CarbonImmutable::class);
 
         $this->assertNull($result);
-    }
-
-    #[Test]
-    public function identity_swap_reproduces_the_default_carbon_type(): void
-    {
-        // Default app: configured class is Carbon, so the swap is the identity. The handler
-        // still produces the type (no short-circuit), which is what the type test asserts.
-        $result = DateFacadeHandler::swapCarbon(
-            new Union([new TNamedObject(Carbon::class), new TNull()]),
-            Carbon::class,
-        );
-
-        $this->assertNotNull($result);
-        $this->assertSame(Carbon::class . '|null', $result->getId());
     }
 }

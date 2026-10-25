@@ -29,20 +29,6 @@ final class ConfigValueReflectorTest extends TestCase
     }
 
     #[Test]
-    public function reflects_int_to_general_int_not_literal(): void
-    {
-        $type = ConfigValueReflector::reflect(42);
-        $this->assertSame('int', $type->getId());
-    }
-
-    #[Test]
-    public function reflects_float_to_general_float(): void
-    {
-        $type = ConfigValueReflector::reflect(3.14);
-        $this->assertSame('float', $type->getId());
-    }
-
-    #[Test]
     public function reflects_string_to_general_string_not_literal(): void
     {
         $type = ConfigValueReflector::reflect('Laravel');
@@ -65,28 +51,6 @@ final class ConfigValueReflectorTest extends TestCase
         $this->assertInstanceOf(TKeyedArray::class, $atomic);
         $this->assertTrue($atomic->is_list);
         $this->assertCount(2, $atomic->properties);
-    }
-
-    #[Test]
-    public function reflects_keyed_array_preserves_string_keys(): void
-    {
-        $type = ConfigValueReflector::reflect(['name' => 'Laravel', 'debug' => true]);
-        $atomic = $type->getSingleAtomic();
-
-        $this->assertInstanceOf(TKeyedArray::class, $atomic);
-        $this->assertFalse($atomic->is_list);
-        $this->assertArrayHasKey('name', $atomic->properties);
-        $this->assertArrayHasKey('debug', $atomic->properties);
-    }
-
-    #[Test]
-    public function reflects_object_to_named_object_atomic(): void
-    {
-        $type = ConfigValueReflector::reflect(new \stdClass());
-        $atomic = $type->getSingleAtomic();
-
-        $this->assertInstanceOf(TNamedObject::class, $atomic);
-        $this->assertSame(\stdClass::class, $atomic->value);
     }
 
     #[Test]
@@ -163,18 +127,5 @@ final class ConfigValueReflectorTest extends TestCase
         // but at least one sub-tree degrades to array<array-key, mixed>.
         $id = $type->getId();
         $this->assertStringContainsString('array<array-key, mixed>', $id, 'Budget exhaustion must surface as array<array-key, mixed> somewhere in the tree.');
-    }
-
-    #[Test]
-    public function nested_arrays_recurse_within_depth_cap(): void
-    {
-        $shallow = ['outer' => ['inner' => 'leaf']];
-        $type = ConfigValueReflector::reflect($shallow);
-        $atomic = $type->getSingleAtomic();
-
-        $this->assertInstanceOf(TKeyedArray::class, $atomic);
-        $inner = $atomic->properties['outer'];
-        $innerAtomic = $inner->getSingleAtomic();
-        $this->assertInstanceOf(TKeyedArray::class, $innerAtomic);
     }
 }

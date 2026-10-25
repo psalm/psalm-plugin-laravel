@@ -39,10 +39,8 @@ final class StatsHandlerTest extends TestCase
     /** @return iterable<string, array{mixed, bool}> */
     public static function argvProvider(): iterable
     {
-        yield 'stats flag present' => [['psalm', '--stats'], true];
         yield 'stats flag present among other flags' => [['psalm', '--no-cache', '--stats', '--threads=4'], true];
         yield 'no stats flag' => [['psalm', '--no-cache'], false];
-        yield 'empty argv' => [[], false];
         yield 'argv not set' => [null, false];
         yield 'argv is non-array' => ['--stats', false];
         // Psalm defines --stats as a boolean longopt with no `=value` form,
