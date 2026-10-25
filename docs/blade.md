@@ -28,7 +28,7 @@ A template variable you have not declared is `mixed`. Psalm's `Mixed*` issues ar
 ## Onboarding
 
 1. Enable `<blade />` and run Psalm.
-2. Run `vendor/bin/psalm-laravel blade:annotate` (`--dry-run` to preview the diff). It writes `@var` declarations from the types your `view()` calls and `@include` directives pass. Disagreeing call sites are merged when one type covers them (`?User`, `bool`, `Post|Video`); the pairs it could not merge are printed for you to declare by hand, and so is each call site it could not read. Templates using `@props` or `@aware` are skipped.
+2. Run `vendor/bin/psalm-laravel blade:annotate` (`--dry-run` to preview the diff). It writes `@var` declarations from the types your `view()` calls and `@include` directives pass, following `@includeIsolated` chains in the same run. Disagreeing call sites are merged when one type covers them (`?User`, `bool`, `Post|Video`); the pairs it could not merge are printed for you to declare by hand, and so is each call site it could not read. Templates using `@props` or `@aware` are skipped. One run is enough; a value passed as an expression, or narrowed before the include, may type more on a rerun ([details](contributing/blade.md#annotating-templates)).
 3. Triage the new findings: fix, suppress, or [baseline](#suppressing-and-baselining) them.
 
 ## What is checked
