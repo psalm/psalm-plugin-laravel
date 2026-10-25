@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792960994850,
+  "lastUpdate": 1792961240628,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16655,6 +16655,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c4a871713da6d941f0bd9b6489250366e2018414",
+          "message": "Respect trait alias visibility in the `MissingViewData` helper skip (#2115)\n\n* fix(blade): skip MissingViewData for views returned by non-public helpers #2079\n\n* docs(blade): document the non-public helper skip for MissingViewData #2079\n\n* fix(blade): respect trait alias visibility for the helper open set #2079\n\n* docs(blade): describe the helper open set by call site and trait visibility #2079",
+          "timestamp": "2026-10-25T21:43:52+01:00",
+          "tree_id": "ae784c2513928e9e1833943dc27867e86d01d8d5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c4a871713da6d941f0bd9b6489250366e2018414"
+        },
+        "date": 1792961238937,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.23,
+            "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1314,
             "unit": "MB"
           }
         ]
