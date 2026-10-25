@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792933655085,
+  "lastUpdate": 1792938309467,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16235,6 +16235,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b97a9a8acd05eb94dab887acbe65ffcdac9d1911",
+          "message": "Carry taint from class component properties into their Blade views (#2047)\n\n* test(blade): pin taint from class component properties into their views\n\nA value given to a class component's constructor (through a tag, a container\nmake() or new) must reach the echo in the component's own view. Covers a\npromoted and a plain public property, an inherited property, a warm cache and\nforked workers, with negatives for an escaped echo, a literal attribute, a\nnon-public property, a class with no view mapping and a non-component\nlook-alike.\n\n* feat(blade): carry taint from class component properties into their views\n\nConnects the literal data of Foo::resolve() (what <x-foo> compiles to) and of\n$container->make(Foo::class, ...) to the public property nodes of a Component\nsubclass, and reads those nodes at the prelude of the view the component's\nrender() returns. new Foo($input) already reaches the node through Psalm.\n\n* docs(blade): document taint from class component properties into their views\n\n* test(blade): pin constructor data flow, trait, except and receiver edge cases of component taint\n\nAdds the shapes a review found wrong: a constructor that escapes or replaces\nits argument, a parameter stored under another property name, a trait\nproperty shared by unrelated components, a literal $except, a public method\nshadowing a property, @component(Foo::class, ...), a userland make(), and\nliteral spreads inside the data array. Also pins the accepted over-reports\nand negatives for a non-container make(), named and spread arguments, a\nstatic property and an ignored name.\n\n* fix(blade): bind component data to constructor parameters and narrow the property sink\n\nConnect each literal resolve()/make() entry to the declaring constructor's\nparameter node instead of writing the property node, so constructor\nescaping or replacement is honored and a parameter stored under another\nproperty name reaches the view. Follow Foo::class::resolve() (the\n@component shape), flatten literal array spreads, and follow make() only\nwhile it is Laravel's own. The sink reads the consuming class's node for a\ntrait property and skips a literal $except name and a name a public method\nshadows.\n\n* docs(blade): describe constructor binding, sink narrowing and the accepted over-reports of component taint\n\n* refactor(blade): read component $except via shared exceptedNames()\n\nDrops literalExcept(), a copy of the $except default reader that came in with #2048.\n\n* test(blade): pin $slot and non-literal render() data for component property taint\n\n* fix(blade): expose component properties to the view whatever data render() passes\n\n* fix(blade): never carry a $slot property's taint, the rendered slot replaces it\n\n* refactor(blade): fold component property taint into ViewTaintBridge\n\nTemplate-only Foo::resolve() source next to the anonymous component one, and\nthe property read joins the existing prelude sink. Drops the container make()\nsource and the same-named public method precedence.\n\n* test(blade): trim component property taint fixtures to one case per rule\n\n* docs(blade): shrink class component taint docs to one mechanism section\n\n* test(blade): share two Psalm runs across component property taint cases\n\nCold single-process run feeds every per-view case; a warm, forked run\nstraight after it must match its findings and journeys, replacing the\nseparate warm-cache sequence and the extra BladeThreadParityTest cell.\nDrop rows that repeat a covered branch (plain-property tag, plain-property\nnew, trait via new, replacing constructor) with their fixtures.",
+          "timestamp": "2026-10-25T15:21:51+01:00",
+          "tree_id": "5b7bc3eb1eac30435a7e6dff813b51671e7b24e5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b97a9a8acd05eb94dab887acbe65ffcdac9d1911"
+        },
+        "date": 1792938307634,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.07,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
