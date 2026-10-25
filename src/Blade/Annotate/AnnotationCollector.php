@@ -107,16 +107,15 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     private static array $touched = [];
 
     /**
-     * What {@see self::observations()} answered for a pair whose resolution never met the cycle
-     * guard, so a diamond of includes resolves each pair once instead of once per path. Emptied
-     * whenever a producer is recorded: the answers read what the producers passed.
+     * What {@see self::observations()} answered per pair, so a diamond of includes resolves each pair
+     * once instead of once per path. Emptied whenever a producer is recorded.
+     *
+     * Keeping an answer the cycle guard took part in is safe: every pair on a cycle, and every pair
+     * fed by one, ends up with a `mixed` observation whichever member the walk started from.
      *
      * @var array<string, array<string, Union>|false|null>
      */
     private static array $resolved = [];
-
-    /** How often the cycle guard answered, so a caller can tell whether its subtree met it. */
-    private static int $cycleHits = 0;
 
     /**
      * Whether the statement hook ran at all in THIS process. Psalm forks its analysis workers once
@@ -151,7 +150,6 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         self::$resolving = [];
         self::$touched = [];
         self::$resolved = [];
-        self::$cycleHits = 0;
         self::$analyzed = false;
         self::$recorded = null;
     }
@@ -267,14 +265,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      * The keys of an `@includeIsolated` whose value is a bare variable of the including template that
      * Psalm saw as exactly `mixed`, with where to ask for its real type once that template is planned.
      *
-     * Declined, so the key keeps being observed as `mixed`: a name the template binds for itself or
-     * reads unknowably is no input to type (a planned type never exists for one, see
-     * {@see AnnotationWriter::fileVariable()}), a name a condition around the include narrows, and a
-     * name the file tests or writes in a way that keeps `mixed` (see {@see self::isTouched()}).
-     * Psalm keeps the type id `mixed` through `$x !== null` and `isset($x)` (`if ($x)` is already
-     * `non-empty-mixed`), so the parent's planned type (`Member|null` when a call site omits it) would
-     * be declared where a second run, with the parent typed, narrows it to `Member`. A value that is
-     * any other expression (`$m->team`, `$x ?? null`) is never followed either.
+     * Psalm keeps the type id `mixed` through `$x !== null` and `isset($x)`, so a variable a clause in
+     * force or the file itself narrows is declined: the parent's `Member|null` would be declared where
+     * a second run narrows it to `Member`. Locals and unknown reads are declined later, by the plan
+     * ({@see AnnotationWriter::fileVariable()}). Any other expression (`$m->team`) is never followed.
      *
      * @return array<string, array{0: string, 1: string}> key => including template path, variable name
      */
@@ -323,16 +317,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * Whether the file tests or writes the variable, anywhere: `isset()`, `empty()`, `unset()`, a
-     * compound assignment (`??=`, `.=`), a reference binding (`$alias =& $x`, either side), or a by
-     * reference array item (`[&$x]`).
-     *
-     * Psalm leaves no clause for an `isset()`, and it keeps `mixed` through a compound assignment,
-     * a reference write and an `unset()`; a condition on a reference alias names the alias, never the
-     * variable. So neither the exact-`mixed` check nor {@see self::hasClause()} can tell that the
-     * parent's declared type is not what reaches the include, and a file that touches the name at all
-     * is declined, which only costs a rerun. A plain assignment is not listed: it makes the name a
-     * local, which the plan never declares. One scan per file.
+     * Whether the file tests the variable with `isset()`/`empty()`, unsets it or writes it with a
+     * compound assignment (`??=`), anywhere. Psalm leaves no clause for `isset()` once the name was
+     * read, and keeps `mixed` through the writes, so the include cannot tell. A plain assignment makes
+     * the name a local, which the plan never declares. One scan per file.
      */
     private static function isTouched(StatementsSource $source, string $variable): bool
     {
@@ -369,8 +357,6 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             $node instanceof Expr\Isset_, $node instanceof Stmt\Unset_ => \array_values($node->vars),
             $node instanceof Expr\Empty_ => [$node->expr],
             $node instanceof Expr\AssignOp => [$node->var],
-            $node instanceof Expr\AssignRef => [$node->var, $node->expr],
-            $node instanceof Node\ArrayItem && $node->byRef => [$node->value],
             default => [],
         };
     }
@@ -724,13 +710,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         if (isset(self::$resolving[$pair])) {
-            ++self::$cycleHits;
-
             return self::observe([], Type::getMixed());
         }
 
         self::$resolving[$pair] = true;
-        $hitsBefore = self::$cycleHits;
 
         try {
             foreach ($edges as [$templatePath, $variable]) {
@@ -740,11 +723,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             unset(self::$resolving[$pair]);
         }
 
-        // A result that met the cycle guard anywhere below it stood in for a pair still being
-        // resolved higher up, so it depends on where the walk started: never kept.
-        if (self::$cycleHits === $hitsBefore) {
-            self::$resolved[$pair] = $seen;
-        }
+        self::$resolved[$pair] = $seen;
 
         return $seen;
     }
