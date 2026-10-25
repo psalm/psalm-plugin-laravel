@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792968340678,
+  "lastUpdate": 1792969500531,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16795,6 +16795,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1314,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2236d0e0c4201f259233167ec049af4bef2ae54d",
+          "message": "Keep `blade:annotate` from writing declarations that composers, `first()` or conditions contradict (#2122)\n\n* fix(blade): leave keys a view composer writes undeclared in blade:annotate #2083\n\nThe template reads the composer's value, not the call site's. Reuses ContractRegistry::composedKeys(), the set the call-site checks already skip; an unreadable composer leaves every key of the view undeclared.\n\n* fix(blade): treat View::first() and view()->first() as unreadable producers in blade:annotate #2083\n\nFactory::first() renders whichever candidate exists. The facade (matched by the name Psalm resolves, not its spelling) and the argument-less view() helper now count as Factory receivers alongside $__env, so a candidate view is no longer declared from the call sites that are read.\n\n* fix(blade): read rendering calls in conditions as unreadable producers in blade:annotate #2083\n\nAn if/elseif test, a loop header, or a switch subject or case value that renders a view is no statement of its own, so the chain walk never met it and a disagreeing call site went unseen. The compound statement now hands its own conditions to the nested-render scan.\n\n* test(blade): cover the blade:annotate edge cases end to end #2083\n\nA fixture run per case: a producer in a condition, View::first(), and a composer-written key.",
+          "timestamp": "2026-10-26T00:01:26+01:00",
+          "tree_id": "ca39c25e63b8d211a293edf87449a51812205a47",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2236d0e0c4201f259233167ec049af4bef2ae54d"
+        },
+        "date": 1792969499155,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.13,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1313,
             "unit": "MB"
           }
         ]
