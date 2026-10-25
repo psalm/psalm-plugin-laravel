@@ -158,10 +158,16 @@ final class PreludeBuilder
         // `str_contains()` would also match `$attributesFoo`/`$slots_count`, a longer identifier
         // rather than a mention of the ambient name itself, which would misclassify a plain page as
         // a component view and widen the relocator's drop gate on it (#1525 review).
-        if (\preg_match('/(?<!@)@props\s*\(/i', $source) === 1) {
+        // `@php` bodies and raw PHP tags are blanked for the directive tests only: `@props(` in a PHP
+        // string literal is never compiled, while a `$attributes` mention there is a real one.
+        $live = \preg_match('/(?<!@)@(?:props|aware)\s*\(/i', $source) === 1
+            ? MarkerPrePass::blankRanges($source, MarkerPrePass::maskedRanges($source))
+            : $source;
+
+        if (\preg_match('/(?<!@)@props\s*\(/i', $live) === 1) {
             $attributes = '?' . self::COMPONENT_ATTRIBUTES_TYPE;
             $directive = true;
-        } elseif (\preg_match('/(?<!@)@aware\s*\(/i', $source) === 1) {
+        } elseif (\preg_match('/(?<!@)@aware\s*\(/i', $live) === 1) {
             $attributes = self::COMPONENT_ATTRIBUTES_TYPE;
             $directive = true;
         } elseif (\preg_match('/\$attributes\b/', $source) === 1) {

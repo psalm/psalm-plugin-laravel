@@ -110,6 +110,25 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
     }
 
+    /** @return iterable<string, array{string}> */
+    public static function propsTextInsidePhp(): iterable
+    {
+        yield 'raw php tag' => ["<?php \$doc = \"@props(['a'])\"; ?>\n{{ \$attributes->merge([]) }}"];
+        yield 'php directive block' => ["@php\n\$doc = '@props([\\'a\\'])';\n@endphp\n{{ \$attributes->merge([]) }}"];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('propsTextInsidePhp')]
+    public function props_text_inside_a_php_string_is_not_a_live_directive(string $source): void
+    {
+        // Only a compiled `@props` emits `$attributes ??= ...`; text in a PHP literal never does,
+        // so typing the bag nullable off it invents a PossiblyNullReference on valid code.
+        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', $source);
+
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
+        $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
+    }
+
     #[Test]
     public function a_commented_out_ambient_mention_does_not_classify_a_plain_page(): void
     {
