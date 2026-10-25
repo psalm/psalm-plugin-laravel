@@ -399,7 +399,9 @@ final class ViewCallChain
             $methodName = $node->name->toLowerString();
 
             if ($node instanceof Expr\StaticCall) {
-                return self::fromBinder(self::roleOfStaticClass($node->class), null, $methodName, $args, $source, $pending, $trimName);
+                return self::bindsViewName($methodName)
+                    ? self::fromBinder(self::roleOfStaticClass($node->class), null, $methodName, $args, $source, $pending, $trimName)
+                    : null;
             }
 
             // Collected rather than folded in here: whether these carry template data at all depends
@@ -411,8 +413,25 @@ final class ViewCallChain
                 continue;
             }
 
+            // Cheapest bail first: resolving the receiver's ancestry costs a storage walk per call.
+            if (!self::bindsViewName($methodName)) {
+                return null;
+            }
+
             return self::fromBinder(self::roleOfReceiver($node->var, $source, $methodName), self::receiverClass($node->var, $source), $methodName, $args, $source, $pending, $trimName);
         }
+    }
+
+    /**
+     * The only method names {@see self::fromBinder()} binds a view with, whatever the receiver.
+     *
+     * @param lowercase-string $methodName
+     *
+     * @psalm-pure
+     */
+    private static function bindsViewName(string $methodName): bool
+    {
+        return $methodName === 'make' || $methodName === 'view' || $methodName === 'markdown';
     }
 
     /**
