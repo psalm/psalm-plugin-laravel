@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792949298363,
+  "lastUpdate": 1792949743688,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16340,6 +16340,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "33a5ce54289ea99cfd54c80b93e9b0a96f20048a",
+          "message": "Check `MailMessage::text()` and array `MailMessage::view()` in `MissingView` (#1692)\n\n* feat(views): check MailMessage::text() and array views in MissingView\n\nFixes #1681\n\n* fix(views): use ArgUtil::byNameOrPosition() after merging 4.x\n\n4.x replaced the private argByNameOrPosition() helper with Internal\\Arg::byNameOrPosition().",
+          "timestamp": "2026-10-25T18:32:30+01:00",
+          "tree_id": "30cbc47f92517ef20f6540adeaecf5e9a78ce1de",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/33a5ce54289ea99cfd54c80b93e9b0a96f20048a"
+        },
+        "date": 1792949741470,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.13,
+            "range": "± 1.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
             "unit": "MB"
           }
         ]
