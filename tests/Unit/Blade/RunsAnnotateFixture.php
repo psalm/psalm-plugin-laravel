@@ -67,7 +67,21 @@ trait RunsAnnotateFixture
         'framed-nested' => "{{ json_encode(\$row) }}\n",
         'fragment' => "<p>fragment</p>\n",
         'private-helper' => "{{ \$text }}\n",
+        'edge-key' => "{{ json_encode(\$meta) }}\n",
+        'edge-ignored' => "<?php\n/**\n * @psalm-ignore-var\n */\n?>\n{{ \$title }}\n",
+        'edge-cond' => "{{ \$title }}\n",
+        'edge-first' => "{{ \$title }}\n",
+        'edge-first-fallback' => "{{ \$title }}\n",
+        'edge-composed' => "{{ \$title }} {{ \$extra }}\n",
+        'edge-parse' => "{{ \$title }}\n",
     ];
+
+    /**
+     * Written into the copy's `app/` only, never committed: a file that does not parse would break every
+     * tool that reads the repository. It names `edge-parse` with a valid-looking call, so only the parse
+     * error itself can keep that view from being declared.
+     */
+    private const UNPARSEABLE = "<?php\n\nnamespace AnnotateFixture;\n\nfinal class Unparseable\n{\n    public function edge()\n    {\n        return view('edge-parse', [\n            'title' => 1,\n";
 
     /**
      * Under `resources/pkg-views`, a `loadViewsFrom()` hint root outside vendor/ that the fixture's
@@ -211,6 +225,8 @@ trait RunsAnnotateFixture
         foreach (self::TEMPLATES as $name => $contents) {
             \file_put_contents("{$copy}/resources/views/{$name}.blade.php", $contents);
         }
+
+        \file_put_contents("{$copy}/app/Unparseable.php", self::UNPARSEABLE);
 
         foreach (self::PKG_TEMPLATES as $name) {
             \file_put_contents("{$copy}/resources/pkg-views/{$name}.blade.php", self::PKG_WIDGET);
