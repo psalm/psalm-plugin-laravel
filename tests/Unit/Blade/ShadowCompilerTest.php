@@ -169,6 +169,20 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
+    public function suppression_above_extends_binds_to_the_extends_footer_not_the_next_compiled_statement(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "{{-- @psalm-suppress UndefinedVariable --}}\n@extends('layout')\n@section('content')\n{{ \$foo }}\n@endsection\n",
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame([2 => ['UndefinedVariable']], $result->suppressions);
+        $this->assertStringNotContainsString('/** @psalm-suppress UndefinedVariable */ $__env->startSection', $result->contents);
+        $this->assertStringContainsString('/** @psalm-suppress UndefinedVariable */ echo $__env->make(\'layout\'', $result->contents);
+    }
+
+    #[Test]
     public function extends_footer_marker_does_not_claim_the_last_line_of_a_source_without_trailing_newline(): void
     {
         $result = $this->compiler->compile('view.blade.php', "@extends('layout')\n{{ MissingClass::run() }}");
