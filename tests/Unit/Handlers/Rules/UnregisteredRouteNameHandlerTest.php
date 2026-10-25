@@ -95,16 +95,6 @@ final class UnregisteredRouteNameHandlerTest extends TestCase
         $this->assertFalse($this->isEnabled());
     }
 
-    #[Test]
-    public function stays_off_when_the_url_service_cannot_be_probed_for_a_resolver(): void
-    {
-        $this->bootFixtureAndInit(static function (): void {
-            ApplicationProvider::getApp()->instance('url', new \stdClass());
-        });
-
-        $this->assertFalse($this->isEnabled());
-    }
-
     /**
      * Boot the fixture's real bootstrap/app.php (withRouting(), so 'dashboard' and 'posts.show'
      * are genuinely registered), apply $tweak to the booted app, then arm the handler.

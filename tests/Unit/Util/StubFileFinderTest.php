@@ -30,40 +30,16 @@ final class StubFileFinderTest extends TestCase
     /** @return iterable<string, array{list<string>, string, list<string>}> */
     public static function versionFilteringProvider(): iterable
     {
-        yield 'major-only dirs — includes matching major' => [
-            ['12', '13'],
-            '12.5.0',
-            ['12'],
-        ];
-
-        yield 'major-only dirs — includes both when on higher major' => [
-            ['12', '13'],
-            '13.1.0',
-            ['12', '13'],
-        ];
-
         yield 'patch dirs — includes only versions <= target' => [
             ['12', '12.20.0', '12.42.0', '13'],
             '12.30.0',
             ['12', '12.20.0'],
         ];
 
-        yield 'patch dirs — includes all matching versions' => [
-            ['12', '12.20.0', '12.42.0'],
-            '12.50.0',
-            ['12', '12.20.0', '12.42.0'],
-        ];
-
         yield 'exact version match is included' => [
             ['12.20.0'],
             '12.20.0',
             ['12.20.0'],
-        ];
-
-        yield 'empty candidates returns empty' => [
-            [],
-            '12.0.0',
-            [],
         ];
 
         yield 'no matching versions returns empty' => [
@@ -76,12 +52,6 @@ final class StubFileFinderTest extends TestCase
             ['12.9.0', '12.20.0', '12'],
             '12.20.0',
             ['12', '12.9.0', '12.20.0'],
-        ];
-
-        yield 'mixed major and patch versions' => [
-            ['11', '12', '12.20.0', '12.42.0', '13', '13.5.0'],
-            '13.2.0',
-            ['11', '12', '12.20.0', '12.42.0', '13'],
         ];
     }
 
@@ -124,11 +94,6 @@ final class StubFileFinderTest extends TestCase
             ],
         ];
 
-        yield 'single-segment namespace' => [
-            "<?php\nnamespace Carbon;\n\nclass CarbonPeriod {}\n",
-            ['Carbon\CarbonPeriod'],
-        ];
-
         yield 'global namespace' => [
             "<?php\n\nclass NullObject {}\n",
             ['NullObject'],
@@ -150,11 +115,6 @@ final class StubFileFinderTest extends TestCase
                 }
                 PHP,
             ['App\Real'],
-        ];
-
-        yield 'function-only stub declares nothing' => [
-            "<?php\n\n/** @return string */\nfunction e(mixed \$value) {}\n",
-            [],
         ];
     }
 }

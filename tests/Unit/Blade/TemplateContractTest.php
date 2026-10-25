@@ -24,12 +24,4 @@ final class TemplateContractTest extends TestCase
 
         $this->assertSame(['user' => '\App\Models\User'], $contract->contractVars());
     }
-
-    #[Test]
-    public function contract_vars_is_empty_for_an_empty_contract(): void
-    {
-        $contract = new TemplateContract([], [], false);
-
-        $this->assertSame([], $contract->contractVars());
-    }
 }

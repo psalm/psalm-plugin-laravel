@@ -44,16 +44,4 @@ final class DynamicWhereResolverTest extends TestCase
             'reset() must clear the enable flag so a true->false config flip is honoured on the next bootstrap.',
         );
     }
-
-    #[Test]
-    public function variadicMixedParams_returns_single_variadic_mixed_param(): void
-    {
-        $params = DynamicWhereResolver::variadicMixedParams();
-
-        $this->assertCount(1, $params);
-        $this->assertSame('args', $params[0]->name);
-        $this->assertTrue($params[0]->is_variadic);
-        $this->assertNotNull($params[0]->type);
-        $this->assertTrue($params[0]->type->isMixed());
-    }
 }

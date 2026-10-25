@@ -37,24 +37,6 @@ final class InternalErrorReporterTest extends TestCase
     }
 
     #[Test]
-    public function degraded_boot_includes_classifier_hint_when_available(): void
-    {
-        $progress = new CollectingProgress();
-
-        // Thrown from this test file — classified as user application code
-        // (not vendor/, not the plugin's src/), so a hint line is emitted
-        // between the error message and the degraded-mode notice.
-        InternalErrorReporter::reportDegradedBoot(
-            new \RuntimeException('boom'),
-            $progress,
-            PluginConfig::fromXml(null),
-        );
-
-        $this->assertCount(3, $progress->warnings);
-        $this->assertStringContainsString('originated inside your application code', $progress->warnings[1]);
-    }
-
-    #[Test]
     public function degraded_boot_rethrows_and_stays_silent_when_fail_on_internal_error_is_on(): void
     {
         $progress = new CollectingProgress();

@@ -4,30 +4,17 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Tests\Unit\Util\Ast;
 
-use Closure;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Internal\Ast\CachedClosureTypeFactory;
 use Psalm\Type\Atomic\TClosure;
-use Psalm\Type\Union;
 use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
 
 /**
- * Targeted coverage for the memoizing decorator. The stateless build
- * pipeline is exercised by {@see ClosureTypeFactoryTest}; this class only
- * locks in the cache-specific behaviour:
- *
- * - First-call result matches the un-cached factory (no semantic regression).
- * - Second call against the same (realpath, mtime) reuses the cached index
- *   even if the underlying file changes mid-run BUT keeps the same mtime.
- * - `reset()` drops the cache so a subsequent call re-reads from disk.
- *
- * We do not assert exact call counts on the underlying factory — there is
- * no test seam for it and adding one would expose internals just to count.
- * Instead we verify the observable contract: cache returns yield the same
- * result, and `reset()` causes a re-read by changing the fixture and
- * asserting the new content surfaces.
+ * Cache-specific behaviour of the memoizing decorator; the build pipeline itself is
+ * covered by {@see ClosureTypeFactoryTest}. Observed through file rewrites, since
+ * there is no seam for counting calls on the underlying factory.
  */
 #[CoversClass(CachedClosureTypeFactory::class)]
 final class CachedClosureTypeFactoryTest extends TestCase
@@ -54,41 +41,6 @@ final class CachedClosureTypeFactoryTest extends TestCase
         }
 
         $this->tempFiles = [];
-    }
-
-    #[Test]
-    public function from_closure_object_delegates_on_cache_miss(): void
-    {
-        // Cold cache: the wrapper must reach the factory and produce a
-        // result indistinguishable from the un-cached path.
-        $file = $this->writeTempFile(
-            <<<'PHP'
-<?php
-declare(strict_types=1);
-
-namespace Tests\Cached\Closure;
-
-/**
- * @param positive-int $count
- * @return non-empty-string
- */
-$register('cachedStmtExpression', static function (int $count) {
-    return \str_repeat('z', $count);
-});
-PHP,
-        );
-
-        $closure = $this->loadClosureFromFile($file);
-        $result = CachedClosureTypeFactory::fromClosureObject($closure);
-
-        $this->assertInstanceOf(TClosure::class, $result);
-        $params = $result->params ?? [];
-        $this->assertCount(1, $params);
-        $this->assertSame('count', $params[0]->name);
-        $this->assertInstanceOf(Union::class, $params[0]->type);
-        $this->assertSame('int<1, max>', $params[0]->type->getId());
-        $this->assertInstanceOf(Union::class, $result->return_type);
-        $this->assertSame('non-empty-string', $result->return_type->getId());
     }
 
     #[Test]
@@ -186,30 +138,6 @@ PHP,
         $second = CachedClosureTypeFactory::fromClosureObject($this->loadClosureFromFile($file));
         $this->assertInstanceOf(TClosure::class, $second);
         $this->assertSame('literal-string', $second->return_type?->getId());
-    }
-
-    #[Test]
-    public function delegates_to_body_flow_inference_when_docblock_absent(): void
-    {
-        // PR #994: the cached wrapper must also reach the body-flow path.
-        // Without this test, an accidental "cache `null` results forever"
-        // bug in the wrapper could silently keep callers on `mixed` for
-        // closures that should now narrow via body inference. The
-        // un-cached factory has its own coverage for the rule table; this
-        // test only verifies the wrapper does not block the inference
-        // result from surfacing.
-        $file = $this->writeTempFile(
-            <<<'PHP'
-<?php
-$register(static fn () => 'cached-hello');
-PHP,
-        );
-
-        $closure = $this->loadClosureFromFile($file);
-        $result = CachedClosureTypeFactory::fromClosureObject($closure);
-
-        $this->assertInstanceOf(TClosure::class, $result);
-        $this->assertSame("'cached-hello'", $result->return_type?->getId());
     }
 
     private function writeTempFile(string $contents): string

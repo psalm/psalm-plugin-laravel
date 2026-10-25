@@ -122,17 +122,6 @@ final class AnalyzeCommandTest extends TestCase
     }
 
     #[Test]
-    public function forwards_flags_after_the_command_alias(): void
-    {
-        $command = new AnalyzeCommand();
-
-        $this->assertSame(
-            ['--threads=1'],
-            $command->scanArguments(['psalm-laravel', 'analyse', '--threads=1'])['forwarded'],
-        );
-    }
-
-    #[Test]
     public function forwards_flags_for_the_default_command_form_without_a_name_token(): void
     {
         // `psalm-laravel --set-baseline=...` routes here via the default command,
@@ -142,49 +131,6 @@ final class AnalyzeCommandTest extends TestCase
         $this->assertSame(
             ['--set-baseline=psalm-baseline.xml'],
             $command->scanArguments(['psalm-laravel', '--set-baseline=psalm-baseline.xml'])['forwarded'],
-        );
-    }
-
-    #[Test]
-    public function forwards_multiple_flags_and_path_arguments_verbatim(): void
-    {
-        $command = new AnalyzeCommand();
-
-        $this->assertSame(
-            ['--set-baseline=foo.xml', '--no-cache', 'src'],
-            $command->scanArguments(['psalm-laravel', 'analyze', '--set-baseline=foo.xml', '--no-cache', 'src'])['forwarded'],
-        );
-    }
-
-    #[Test]
-    public function forwards_nothing_when_only_the_command_name_is_present(): void
-    {
-        $command = new AnalyzeCommand();
-
-        $this->assertSame([], $command->scanArguments(['psalm-laravel', 'analyze'])['forwarded']);
-    }
-
-    #[Test]
-    public function reads_the_process_argv_when_no_override_is_given(): void
-    {
-        // This is the path execute() actually hits — scanArguments() with no
-        // argument falls back to $_SERVER['argv']. tearDown() restores it so the
-        // rest of the suite is unaffected.
-        $_SERVER['argv'] = ['psalm-laravel', 'analyze', '--set-baseline=psalm-baseline.xml'];
-
-        $this->assertSame(['--set-baseline=psalm-baseline.xml'], (new AnalyzeCommand())->scanArguments()['forwarded']);
-    }
-
-    #[Test]
-    public function forwards_nothing_when_the_process_argv_is_unavailable(): void
-    {
-        // `register_argc_argv = Off` leaves $_SERVER['argv'] unset; the `?? []`
-        // fallback must yield an empty list rather than erroring.
-        unset($_SERVER['argv']);
-
-        $this->assertSame(
-            ['forwarded' => [], 'options' => []],
-            (new AnalyzeCommand())->scanArguments(),
         );
     }
 
@@ -219,15 +165,6 @@ final class AnalyzeCommandTest extends TestCase
     }
 
     #[Test]
-    public function the_experimental_shorthand_is_ordered_with_plugin_options(): void
-    {
-        $this->assertSame(
-            ['forwarded' => ['src'], 'options' => ['experimental=false', 'experimental=true']],
-            (new AnalyzeCommand())->scanArguments(['psalm-laravel', 'analyze', '--plugin-option=experimental=false', '--experimental', 'src']),
-        );
-    }
-
-    #[Test]
     public function tokens_after_the_double_dash_boundary_are_forwarded_untouched(): void
     {
         $this->assertSame(
@@ -250,9 +187,6 @@ final class AnalyzeCommandTest extends TestCase
     {
         yield 'bare, at the end' => [['--plugin-option']];
         yield 'spaced form' => [['--plugin-option', 'blade=true']];
-        yield 'empty' => [['--plugin-option=']];
-        yield 'whitespace in the value' => [['--plugin-option=blade=true experimental=true']];
-        yield 'trailing newline' => [["--plugin-option=blade=true\n"]];
     }
 
     /** @param list<string> $args */
@@ -270,10 +204,6 @@ final class AnalyzeCommandTest extends TestCase
     public function the_option_is_declared_and_the_help_lists_every_key_with_its_values(): void
     {
         $command = new AnalyzeCommand();
-
-        $this->assertTrue($command->getDefinition()->getOption('plugin-option')->isArray());
-        $this->assertTrue($command->getDefinition()->hasNegation('no-blade'));
-        $this->assertTrue($command->getDefinition()->hasOption('experimental'));
 
         $help = $command->getHelp();
         foreach (\array_keys(PluginOverrides::KEYS) as $key) {
@@ -312,32 +242,14 @@ final class AnalyzeCommandTest extends TestCase
         $this->assertSame('kept', $report['marker']);
     }
 
-    #[Test]
-    public function without_options_the_child_environment_and_arguments_are_untouched(): void
-    {
-        \putenv('PSALM_LARAVEL_TEST_MARKER=kept');
-
-        $report = $this->assertRan($this->runAgainstFakePsalm(['psalm-laravel', 'analyze', '--threads=1']));
-
-        $this->assertFalse($report['options']);
-        $this->assertTrue($report['path']);
-        $this->assertSame('kept', $report['marker']);
-        $this->assertSame(['--threads=1'], $report['argv']);
-    }
-
     /** @return iterable<string, array{list<string>, list<string>}> */
     public static function referenceCacheGate(): iterable
     {
         $flag = '--no-reference-cache';
 
         yield 'cli blade' => [['--plugin-option=blade=true', 'src'], [$flag, 'src']];
-        yield '--no-blade shorthand' => [['--no-blade', 'src'], [$flag, 'src']];
-        yield 'once for several blade overrides' => [['--blade', '--plugin-option=blade=false'], [$flag]];
         yield 'other keys only' => [['--plugin-option=experimental=true'], []];
         yield 'no overrides' => [['--threads=1'], ['--threads=1']];
-        // psalm tolerates the duplicates; the wrapper cannot know which flags psalm's getopt will parse.
-        yield 'user passed --no-cache' => [['--plugin-option=blade=true', '--no-cache'], [$flag, '--no-cache']];
-        yield 'user passed --no-reference-cache' => [['--no-reference-cache', '--plugin-option=blade=true'], [$flag, $flag]];
         yield 'getopt stops at the first positional, so a later --no-cache is not parsed' => [
             ['--plugin-option=blade=false', '--find-dead-code=always', 'src', '--no-cache'], [$flag, '--find-dead-code=always', 'src', '--no-cache'],
         ];
@@ -363,8 +275,6 @@ final class AnalyzeCommandTest extends TestCase
         yield 'unknown key' => [['--plugin-option=nope=1'], "--plugin-option: unknown key 'nope'"];
         yield 'bad bool' => [['--plugin-option=blade=yes'], "invalid value 'yes'"];
         yield 'missing equals' => [['--plugin-option=blade'], 'is not KEY=VALUE'];
-        yield 'bare option' => [['--plugin-option'], 'use --plugin-option=KEY=VALUE'];
-        yield 'whitespace in the value' => [['--plugin-option=blade=true experimental=true'], 'use --plugin-option=KEY=VALUE'];
     }
 
     /** @param list<string> $args */

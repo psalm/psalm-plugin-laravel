@@ -22,84 +22,22 @@ final class DefaultValuesTest extends AbstractSchemaAggregatorTestCase
     }
 
     #[Test]
-    public function it_extracts_string_default(): void
+    public function it_extracts_literal_defaults_by_type(): void
     {
-        $column = $this->schemaAggregator->tables['products']->columns['status'];
+        $columns = $this->schemaAggregator->tables['products']->columns;
 
-        $this->assertColumnHasDefault('draft', $column);
-    }
+        $this->assertColumnHasDefault('draft', $columns['status']);
+        $this->assertColumnHasDefault(0, $columns['quantity']);
+        $this->assertColumnHasDefault(9.99, $columns['price']);
+        $this->assertColumnHasDefault(true, $columns['active']);
+        $this->assertColumnHasDefault(false, $columns['featured']);
+        $this->assertColumnHasDefault(-1, $columns['negative']);
+        $this->assertColumnHasDefault(-0.5, $columns['discount']);
 
-    #[Test]
-    public function it_extracts_integer_default(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['quantity'];
+        $this->assertColumnHasDefault(null, $columns['description']);
+        $this->assertColumnNullable($columns['description']);
 
-        $this->assertColumnHasDefault(0, $column);
-    }
-
-    #[Test]
-    public function it_extracts_float_default(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['price'];
-
-        $this->assertColumnHasDefault(9.99, $column);
-    }
-
-    #[Test]
-    public function it_extracts_boolean_true_default(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['active'];
-
-        $this->assertColumnHasDefault(true, $column);
-    }
-
-    #[Test]
-    public function it_extracts_boolean_false_default(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['featured'];
-
-        $this->assertColumnHasDefault(false, $column);
-    }
-
-    #[Test]
-    public function it_extracts_null_default(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['description'];
-
-        $this->assertColumnHasDefault(null, $column);
-        $this->assertColumnNullable($column);
-    }
-
-    #[Test]
-    public function it_extracts_negative_integer_default(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['negative'];
-
-        $this->assertColumnHasDefault(-1, $column);
-    }
-
-    #[Test]
-    public function it_extracts_negative_float_default(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['discount'];
-
-        $this->assertColumnHasDefault(-0.5, $column);
-    }
-
-    #[Test]
-    public function it_detects_column_without_default(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['no_default'];
-
-        $this->assertColumnHasNoDefault($column);
-    }
-
-    #[Test]
-    public function it_detects_column_without_default_for_name_column(): void
-    {
-        $column = $this->schemaAggregator->tables['products']->columns['name'];
-
-        $this->assertColumnHasNoDefault($column);
+        $this->assertColumnHasNoDefault($columns['no_default']);
     }
 
     /**

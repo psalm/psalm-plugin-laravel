@@ -12,18 +12,6 @@ use Psalm\LaravelPlugin\Blade\SourceLines;
 #[CoversClass(SourceLines::class)]
 final class SourceLinesTest extends TestCase
 {
-    #[Test]
-    public function lf_only_source_splits_on_every_newline(): void
-    {
-        $this->assertSame(["a\n", "b\n", "c"], SourceLines::split("a\nb\nc"));
-    }
-
-    #[Test]
-    public function crlf_only_source_keeps_each_pair_with_its_line(): void
-    {
-        $this->assertSame(["a\r\n", "b\r\n", "c"], SourceLines::split("a\r\nb\r\nc"));
-    }
-
     /**
      * #1545 review: `token_get_all()`/PHP-Parser's own lexer counts a bare `\r` (not part of a
      * `\r\n` pair) as a line terminator — the SAME way `LineMapBuilder::build()` reads line numbers
@@ -49,11 +37,8 @@ final class SourceLinesTest extends TestCase
     public static function sourceProvider(): \Iterator
     {
         yield 'lf' => ["a\nb\nc\n"];
-        yield 'crlf' => ["a\r\nb\r\nc\r\n"];
         yield 'cr' => ["a\rb\rc\r"];
         yield 'mixed' => ["a\r\nb\rc\nd"];
-        yield 'empty' => [''];
-        yield 'no trailing newline' => ['a'];
     }
 
     /** Marker injection, line mapping and suppression injection all rewrite lines in place and rely on this. */

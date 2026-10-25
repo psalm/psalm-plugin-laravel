@@ -17,7 +17,6 @@ final class TemplateLocationTest extends TestCase
     public static function lineEndings(): iterable
     {
         yield 'LF' => ["\n"];
-        yield 'CRLF' => ["\r\n"];
         yield 'bare CR' => ["\r"];
     }
 

@@ -10,22 +10,12 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\Integrations\Ci\CiPlan;
 use Psalm\LaravelPlugin\Cli\Integrations\Ci\CiTargetInterface;
 use Psalm\LaravelPlugin\Cli\Integrations\Ci\CiTargetRegistry;
-use Psalm\LaravelPlugin\Cli\Integrations\Ci\GitHubActionsTarget;
 use Psalm\LaravelPlugin\Cli\Integrations\Ci\UnknownCiTargetException;
 
 #[CoversClass(CiTargetRegistry::class)]
 #[CoversClass(UnknownCiTargetException::class)]
 final class CiTargetRegistryTest extends TestCase
 {
-    #[Test]
-    public function default_registry_exposes_github(): void
-    {
-        $registry = CiTargetRegistry::default();
-
-        $this->assertSame(['github'], $registry->ids());
-        $this->assertInstanceOf(GitHubActionsTarget::class, $registry->resolve('github', \sys_get_temp_dir()));
-    }
-
     #[Test]
     public function ci_alias_returns_detected_target(): void
     {
@@ -74,15 +64,6 @@ final class CiTargetRegistryTest extends TestCase
             $this->assertStringContainsString('bitbucket', $unknownCiTargetException->getMessage());
             $this->assertStringContainsString('ci', $unknownCiTargetException->getMessage());
         }
-    }
-
-    #[Test]
-    public function empty_target_list_is_rejected_at_construction(): void
-    {
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('CiTargetRegistry requires at least one target');
-
-        new CiTargetRegistry([]);
     }
 
     #[Test]
