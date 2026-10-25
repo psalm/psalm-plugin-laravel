@@ -71,6 +71,9 @@ final class ComponentViewRegistry
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
+    /** @var array<string, array<string, list<string>>> shadow path => variable name => property ids */
+    private static array $propertyIds = [];
+
     /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
     private static array $declaredFunctions = [];
 
@@ -94,15 +97,29 @@ final class ComponentViewRegistry
         return self::$seeds[$shadowPath] ?? null;
     }
 
+    /**
+     * The property nodes a class component's own view reads its variables from (taint only; see
+     * {@see ViewTaintBridge}).
+     *
+     * @return array<string, list<string>> variable name => property ids
+     */
+    public static function propertyIdsFor(string $shadowPath): array
+    {
+        return self::$propertyIds[$shadowPath] ?? [];
+    }
+
     public static function build(Codebase $codebase): void
     {
         self::$seeds = [];
+        self::$propertyIds = [];
         // Not skipped without a single `<x-…>` tag: a class's own view still needs its `@props`
         // defaults undone below, whichever way it is rendered.
         $templates = ViewReferenceRegistry::templates();
 
         /** @var array<string, array<string, array{0: ClassLikeStorage, 1: array<array-key, true>}>> $byTemplate template path => class => [storage, render() keys] */
         $byTemplate = [];
+        /** @var array<string, list<ClassLikeStorage>> $exposing template path => every class whose render() names it */
+        $exposing = [];
         /** @var array<string, true> $contested template path => true */
         $contested = [];
 
@@ -114,7 +131,7 @@ final class ComponentViewRegistry
             }
         }
 
-        /** @var array<string, array{0: string, 1: array<array-key, true>, 2: bool}|null> $views declaring class => [view name, render() keys, calls $this->view()] */
+        /** @var array<string, array{0: string, 1: array<array-key, true>|null, 2: bool}|null> $views declaring class => [view name, render() keys, calls $this->view()] */
         $views = [];
         /** @var array<string, true> $claimed template path => true, every view a component's render() may name */
         $claimed = [];
@@ -164,6 +181,16 @@ final class ComponentViewRegistry
                 continue;
             }
 
+            // Taint needs only the view: the public properties reach it whatever render() passes.
+            $exposing[$templatePath][] = $storage;
+
+            // Unknown render() keys may shadow any property, so typing would guess.
+            if ($view[1] === null) {
+                $contested[$templatePath] = true;
+
+                continue;
+            }
+
             $byTemplate[$templatePath][\strtolower($storage->name)] = [$storage, $view[1]];
         }
 
@@ -200,6 +227,25 @@ final class ComponentViewRegistry
             }
         }
 
+        // Taint, not typing: every class whose `render()` names the view hands it its public properties,
+        // contested or not, so two classes sharing a view each contribute theirs. `componentData()`
+        // overwrites the slot names with the rendered slot, so a property of that name never arrives.
+        foreach ($exposing as $templatePath => $classes) {
+            $shadowPath = $shadowPaths[$templatePath] ?? null;
+
+            if ($shadowPath === null) {
+                continue;
+            }
+
+            foreach ($classes as $storage) {
+                foreach (ComponentRenderData::exposedPropertyIds($codebase, $storage) as $name => $id) {
+                    if (!isset(self::SLOT_OWNED[$name])) {
+                        self::$propertyIds[$shadowPath][$name][] = $id;
+                    }
+                }
+            }
+        }
+
         foreach ($byTemplate as $templatePath => $claims) {
             $shadowPath = $shadowPaths[$templatePath] ?? null;
 
@@ -231,6 +277,7 @@ final class ComponentViewRegistry
         self::$namedSlots = [];
         self::$renderedByName = [];
         self::$seeds = [];
+        self::$propertyIds = [];
         self::$declaredFunctions = [];
     }
 
@@ -283,7 +330,7 @@ final class ComponentViewRegistry
      * @param array<array-key, string> $templates view name => template path
      * @param array<string, true>      $contested template path => true, appended to
      *
-     * @return array{0: string, 1: array<array-key, true>, 2: bool}|null
+     * @return array{0: string, 1: array<array-key, true>|null, 2: bool}|null
      */
     private static function renderedView(Codebase $codebase, MethodIdentifier $render, array $templates, array &$contested): ?array
     {
@@ -313,7 +360,7 @@ final class ComponentViewRegistry
     }
 
     /**
-     * @return array{0: string, 1: array<array-key, true>, 2: bool}|null
+     * @return array{0: string, 1: array<array-key, true>|null, 2: bool}|null
      */
     private static function viewOf(Codebase $codebase, Expr $expr): ?array
     {
@@ -346,9 +393,10 @@ final class ComponentViewRegistry
     }
 
     /**
-     * Name, data, and merge-data arguments, positional and literal only.
+     * Name, data, and merge-data arguments, positional only. The keys are null when a data argument
+     * is not a literal array: the view is still known, its data is not.
      *
-     * @return array{0: string, 1: array<array-key, true>}|null
+     * @return array{0: string, 1: array<array-key, true>|null}|null
      */
     private static function viewArgs(Expr\CallLike $call): ?array
     {
@@ -378,15 +426,21 @@ final class ComponentViewRegistry
             }
 
             if (!$arg->value instanceof Expr\Array_) {
-                return null;
+                $keys = null;
+
+                continue;
             }
 
             foreach ($arg->value->items as $item) {
                 if ($item === null || $item->unpack || !$item->key instanceof String_) {
-                    return null;
+                    $keys = null;
+
+                    continue 2;
                 }
 
-                $keys[$item->key->value] = true;
+                if ($keys !== null) {
+                    $keys[$item->key->value] = true;
+                }
             }
         }
 

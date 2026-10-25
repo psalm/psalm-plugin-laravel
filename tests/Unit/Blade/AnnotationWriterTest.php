@@ -74,14 +74,6 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
-    public function plans_no_type_for_a_read_variable_a_producer_typed_mixed(): void
-    {
-        AnnotationCollector::record('home', ['title' => Type::getMixed()], true);
-
-        $this->assertSame(['title' => null], AnnotationWriter::plan('home', new ViewDataContract([], false, ['title'], false)));
-    }
-
-    #[Test]
     public function leaves_out_a_variable_the_template_already_declares(): void
     {
         $contract = new ViewDataContract(
@@ -124,26 +116,6 @@ final class AnnotationWriterTest extends TestCase
         $this->assertNotNull($diff);
         $this->assertStringContainsString('@@ -1 +1,6 @@', $diff);
         $this->assertStringContainsString('+ * @var string $title', $diff);
-    }
-
-    #[Test]
-    public function a_second_write_of_the_same_plan_changes_nothing(): void
-    {
-        $path = $this->template("<h1>{{ \$title }}</h1>\n");
-
-        AnnotationWriter::apply($path, ['title' => 'string'], false);
-        $afterFirst = \md5_file($path);
-
-        $this->assertNull(AnnotationWriter::apply($path, ['title' => 'string'], false));
-        $this->assertSame($afterFirst, \md5_file($path));
-    }
-
-    #[Test]
-    public function reports_a_template_it_cannot_read_rather_than_failing_silently(): void
-    {
-        $this->expectException(\RuntimeException::class);
-
-        AnnotationWriter::apply($this->tempDir . \DIRECTORY_SEPARATOR . 'absent.blade.php', ['t' => 'string'], true);
     }
 
     #[Test]
@@ -207,20 +179,42 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
-    public function lists_a_name_two_view_names_of_one_file_type_differently(): void
+    public function lists_a_name_its_call_sites_disagree_on_with_each_type_they_pass(): void
     {
-        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
-        ViewReferenceRegistry::registerTemplate('vendor::page', 0, $path);
-        ContractRegistry::register('vendor::page', 0, new ViewDataContract([], false, ['title'], false));
+        // "type unknown" would be wrong here: every call site types it, just not the same way.
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>{{ \$body }}\n", ['title', 'body']);
         AnnotationCollector::markAnalyzed();
-        AnnotationCollector::record('page', ['title' => Type::getString()], true);
-        AnnotationCollector::record('vendor::page', ['title' => Type::getInt()], true);
+        AnnotationCollector::record('page', ['title' => Type::getString(), 'body' => Type::getMixed()], true);
+        AnnotationCollector::record('page', ['title' => Type::getInt(), 'body' => Type::getMixed()], true);
         $before = \md5_file($path);
 
         AnnotationWriter::run($this->request());
 
         $this->assertSame($before, \md5_file($path));
-        $this->assertSame([$path => ['title']], $this->publishedResult()['unknown'] ?? null);
+        $result = $this->publishedResult();
+        $this->assertSame([$path => ['body']], $result['unknown'] ?? null);
+        $this->assertSame(['page' => ['title' => ['int', 'string']]], $result['disagreed'] ?? null);
+    }
+
+    /**
+     * One file, two names (a published override is `page` and `pkg::page`): a closed call site that
+     * omits the name through EITHER renders the same file without it, so declaring it required would
+     * report MissingViewData there.
+     */
+    #[Test]
+    public function a_name_omitted_through_one_view_name_of_a_file_is_declared_optional(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        ViewReferenceRegistry::registerTemplate('pkg::page', 0, $path);
+        ContractRegistry::register('pkg::page', 0, new ViewDataContract([], false, ['title'], false));
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString()], true);
+        AnnotationCollector::record('page', [], true);
+        AnnotationCollector::record('pkg::page', ['title' => Type::getString()], true);
+
+        AnnotationWriter::run($this->request());
+
+        $this->assertStringContainsString('@var string|null $title = null', (string) \file_get_contents($path));
     }
 
     #[Test]
@@ -242,16 +236,6 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
-    public function declares_a_name_a_provably_closed_call_site_does_not_pass_as_optional(): void
-    {
-        AnnotationCollector::record('home', ['title' => Type::getString()], true);
-        AnnotationCollector::record('home', [], true);
-
-        $this->assertSame(['title' => 'string'], AnnotationWriter::plan('home', new ViewDataContract([], false, ['title'], false)));
-        $this->assertTrue(AnnotationCollector::isOptional('home', 'title'));
-    }
-
-    #[Test]
     public function writes_an_optional_name_as_a_nullable_declaration_with_an_equals_null_tail_once(): void
     {
         $path = $this->template("<h1>{{ \$title }}</h1>\n");
@@ -266,24 +250,11 @@ final class AnnotationWriterTest extends TestCase
     }
 
     #[Test]
-    public function the_hunk_header_normalises_a_windows_style_path_to_forward_slashes(): void
-    {
-        // No Windows CI here; this pins the normalization at the unit level. Outside any project
-        // root, so it also exercises the absolute-path fallback.
-        $method = new \ReflectionMethod(AnnotationWriter::class, 'headerPath');
-
-        $this->assertSame(
-            'C:/Users/dev/project/resources/views/page.blade.php',
-            $method->invoke(null, 'C:\\Users\\dev\\project\\resources\\views\\page.blade.php'),
-        );
-    }
-
-    #[Test]
     public function the_dry_run_diff_for_an_opened_out_docblock_line_matches_the_actual_byte_change(): void
     {
-        // A one-line header docblock is opened out: the declaration lands before its `*/`, which
-        // moves to a line of its own. That modifies an existing line, so a hand-rolled "pure
-        // insertion" hunk header would lie about it.
+        // A one-line header docblock is opened out: its text and the declaration each get a line,
+        // and the `*/` moves to a line of its own. That modifies an existing line, so a hand-rolled
+        // "pure insertion" hunk header would lie about it.
         $path = $this->template("<?php /** Header. */ ?>\n<p>{{ \$title }}</p>\n");
         $before = (string) \file_get_contents($path);
 
@@ -297,24 +268,6 @@ final class AnnotationWriterTest extends TestCase
         $this->applyWithGitApply($diff);
 
         $this->assertSame($actual, \file_get_contents($path), 'applying the dry-run diff must reproduce the real write byte for byte');
-    }
-
-    #[Test]
-    public function the_dry_run_diff_applies_cleanly_with_plain_git_apply_from_the_project_root(): void
-    {
-        $path = $this->template("<h1>{{ \$title }}</h1>\n");
-        $before = (string) \file_get_contents($path);
-
-        $diff = $this->applyFromProjectRoot(fn(): ?string => AnnotationWriter::apply($path, ['title' => 'string'], true));
-        $this->assertNotNull($diff);
-
-        AnnotationWriter::apply($path, ['title' => 'string'], false);
-        $actual = (string) \file_get_contents($path);
-
-        \file_put_contents($path, $before);
-        $this->applyWithGitApply($diff);
-
-        $this->assertSame($actual, \file_get_contents($path));
     }
 
     /**

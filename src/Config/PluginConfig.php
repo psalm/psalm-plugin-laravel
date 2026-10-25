@@ -16,6 +16,8 @@ use Psalm\Config;
  */
 final readonly class PluginConfig
 {
+    private const BLADE_ATTRIBUTES = ['value', 'cacheDir', 'reportUndeclaredVariables'];
+
     /**
      * @param list<string> $configDirectories
      *
@@ -54,14 +56,8 @@ final readonly class PluginConfig
         public bool $bladeEnabled,
         /** Directory the compiled Blade shadow files live in. Absolute, or relative to the working directory. */
         public string $bladeCacheDir,
-        /** Opt-in checking of `view()` call sites against template contracts (`<blade validateViewData="true" />`). */
-        public bool $bladeValidateViewData,
-        /** Opt-in reporting of a data key the rendered template never reads (`<blade reportUnusedViewData="true" />`). */
-        public bool $bladeReportUnusedViewData,
         /** Opt-in: a contract template's undeclared reads are left undefined for Psalm to report (`<blade reportUndeclaredVariables="true" />`). */
         public bool $bladeReportUndeclaredVariables,
-        /** Opt back in to the `MixedIssue` family inside templates, suppressed by default (`<blade reportMixedIssues="true" />`). */
-        public bool $bladeReportMixedIssues,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -104,10 +100,7 @@ final readonly class PluginConfig
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
         $xmlBladeEnabled = self::xmlBladeEnabled($config);
-        $bladeValidateViewData = self::xmlBoolAttr($config?->blade, 'blade validateViewData', false, 'validateViewData');
-        $bladeReportUnusedViewData = self::xmlBoolAttr($config?->blade, 'blade reportUnusedViewData', false, 'reportUnusedViewData');
         $bladeReportUndeclaredVariables = self::xmlBoolAttr($config?->blade, 'blade reportUndeclaredVariables', false, 'reportUndeclaredVariables');
-        $bladeReportMixedIssues = self::xmlBoolAttr($config?->blade, 'blade reportMixedIssues', false, 'reportMixedIssues');
         $cachePath = self::resolveCachePath();
 
         return new self(
@@ -124,13 +117,9 @@ final readonly class PluginConfig
             findOctaneIncompatibleBinding: $overrides->bool('findOctaneIncompatibleBinding') ?? $findOctaneIncompatibleBinding,
             findPromptInjection: $overrides->bool('findPromptInjection') ?? $findPromptInjection,
             cachePath: $cachePath,
-            // Sub-settings below never reach this switch: only `blade` itself enables the Blade pass.
             bladeEnabled: $overrides->bool('blade') ?? $xmlBladeEnabled,
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
-            bladeValidateViewData: $overrides->bool('blade.validateViewData') ?? $bladeValidateViewData,
-            bladeReportUnusedViewData: $overrides->bool('blade.reportUnusedViewData') ?? $bladeReportUnusedViewData,
             bladeReportUndeclaredVariables: $overrides->bool('blade.reportUndeclaredVariables') ?? $bladeReportUndeclaredVariables,
-            bladeReportMixedIssues: $overrides->bool('blade.reportMixedIssues') ?? $bladeReportMixedIssues,
             experimental: $experimental,
             failOnInternalError: $overrides->bool('failOnInternalError') ?? $failOnInternalError,
         );
@@ -284,6 +273,19 @@ final readonly class PluginConfig
         // A missing child still reads as an empty SimpleXMLElement proxy; isset() is what tells them apart.
         if (!$blade instanceof \SimpleXMLElement || !isset($config->blade)) {
             return false;
+        }
+
+        // Rejected like an unknown `--plugin-option` key, so a typo or a dropped attribute never silently does nothing.
+        // Only the first element is read, but a typo on a repeat must not slip through either.
+        /** @psalm-var \SimpleXMLElement $element */
+        foreach ($config->blade as $element) {
+            foreach ($element->attributes() ?? [] as $name => $_) {
+                if (!\in_array($name, self::BLADE_ATTRIBUTES, true)) {
+                    $supported = \implode(', ', self::BLADE_ATTRIBUTES);
+
+                    throw new \InvalidArgumentException("<blade>: unknown attribute '{$name}'. Supported attributes: {$supported}.");
+                }
+            }
         }
 
         return self::xmlBoolAttr($blade, 'blade', true);

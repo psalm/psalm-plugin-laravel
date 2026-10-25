@@ -61,7 +61,7 @@ use Psalm\Type\Union;
  * TValue, TCollection>` (Laravel 13.31+ shape, which the stubs declare for every version), are
  * read only by the `Enumerable<TKey, TValue>` fallback: TValue at index 1, the key from the
  * TCollection at index 2 (`array-key` when that is not a generic Enumerable, or when the proxy
- * comes from a Laravel 12.20-13.30 trait annotation that still declares only `<TKey, TValue>`).
+ * comes from a Laravel 12.27-13.30 trait annotation that still declares only `<TKey, TValue>`).
  *
  * Property access on the proxy ($collection->map->name) is NOT yet supported —
  * Psalm's PropertyTypeProviderEvent doesn't expose template type parameters.

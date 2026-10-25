@@ -8,7 +8,7 @@ use Psalm\CodeLocation\Raw;
 use Psalm\Config;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Issues\BladeCompileFailure;
+use Psalm\LaravelPlugin\Issues\BladeCompileError;
 
 /**
  * Registers Blade shadows with the running Psalm analysis.
@@ -100,7 +100,7 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
         // Nothing to suppress from: the template never compiled, so `<issueHandlers>` is the only
         // way to silence it.
         IssueBuffer::accepts(
-            new BladeCompileFailure("Blade template could not be compiled and is not analyzed: {$message}", $location),
+            new BladeCompileError("Template not analyzed: {$message}", $location),
             [],
         );
     }

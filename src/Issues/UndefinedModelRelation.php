@@ -15,4 +15,7 @@ use Psalm\Issue\PluginIssue;
 final class UndefinedModelRelation extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UndefinedModelRelation/';
+
+    // Level 6 mirrors Psalm's UndefinedMethod: a relation name is a method name that resolves to nothing.
+    public const ERROR_LEVEL = 6;
 }

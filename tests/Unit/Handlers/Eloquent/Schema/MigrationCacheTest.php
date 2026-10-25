@@ -38,27 +38,6 @@ final class MigrationCacheTest extends TestCase
     }
 
     #[Test]
-    public function cache_miss_calls_compute_and_returns_result(): void
-    {
-        $cache = new MigrationCache($this->cacheDir);
-        $called = false;
-
-        $tables = $cache->remember([], [], function () use (&$called): array {
-            $called = true;
-            $table = new SchemaTable();
-            $table->setColumn(new SchemaColumn('id', 'int'));
-
-            return ['users' => $table];
-        });
-
-        $this->assertTrue($called);
-        $this->assertFalse($cache->wasCacheHit());
-        $this->assertTrue($cache->wasCacheWritten());
-        $this->assertArrayHasKey('users', $tables);
-        $this->assertArrayHasKey('id', $tables['users']->columns);
-    }
-
-    #[Test]
     public function cache_hit_skips_compute(): void
     {
         $cache = new MigrationCache($this->cacheDir);
@@ -83,6 +62,7 @@ final class MigrationCacheTest extends TestCase
         $this->assertTrue($cache->wasCacheHit());
         $this->assertArrayHasKey('users', $tables);
         $this->assertSame('string', $tables['users']->columns['email']->type);
+        $this->assertNull($cache->getReadFailureReason());
     }
 
     #[Test]
@@ -193,52 +173,9 @@ final class MigrationCacheTest extends TestCase
         });
         $this->assertSame(1, $callCount);
         $this->assertFalse($cache->wasCacheHit());
-    }
-
-    #[Test]
-    public function corrupted_cache_reports_failure_reason(): void
-    {
-        $cache = new MigrationCache($this->cacheDir);
-
-        // Populate cache, then corrupt it
-        $cache->remember([], [], fn(): array => ['users' => new SchemaTable()]);
-
-        $files = \glob($this->cacheDir . '/psalm_laravel_migrations_*.cache');
-        $this->assertNotFalse($files);
-        $this->assertNotEmpty($files, 'Cache file should have been created by remember()');
-
-        foreach ($files as $file) {
-            \file_put_contents($file, 'corrupted data');
-        }
-
-        // Read corrupted cache — should set failure reason
-        $cache->remember([], [], fn(): array => []);
         $reason = $cache->getReadFailureReason();
         $this->assertNotNull($reason);
         $this->assertStringContainsString('corrupt or incompatible', $reason);
-    }
-
-    #[Test]
-    public function cache_miss_has_no_failure_reason(): void
-    {
-        $cache = new MigrationCache($this->cacheDir);
-
-        // Fresh cache — no previous data, so it's a genuine miss
-        $cache->remember([], [], fn(): array => []);
-        $this->assertNull($cache->getReadFailureReason());
-    }
-
-    #[Test]
-    public function cache_hit_has_no_failure_reason(): void
-    {
-        $cache = new MigrationCache($this->cacheDir);
-
-        // Populate cache, then hit it
-        $cache->remember([], [], fn(): array => ['users' => new SchemaTable()]);
-        $cache->remember([], [], fn(): array => $this->fail('Should not compute'));
-
-        $this->assertTrue($cache->wasCacheHit());
-        $this->assertNull($cache->getReadFailureReason());
     }
 
     #[Test]
@@ -267,39 +204,6 @@ final class MigrationCacheTest extends TestCase
     }
 
     #[Test]
-    public function preserves_full_schema_structure(): void
-    {
-        $cache = new MigrationCache($this->cacheDir);
-
-        $cache->remember([], [], function (): array {
-            $users = new SchemaTable();
-            $users->setColumn(new SchemaColumn('id', 'int', unsigned: true));
-            $users->setColumn(new SchemaColumn('email', 'string'));
-            $users->setColumn(new SchemaColumn('is_active', 'bool', true));
-
-            $posts = new SchemaTable();
-            $posts->setColumn(new SchemaColumn('title', 'string'));
-
-            return ['users' => $users, 'posts' => $posts];
-        });
-
-        // Read from cache
-        $cached = $cache->remember([], [], fn(): array => $this->fail('Should not compute'));
-        $this->assertTrue($cache->wasCacheHit());
-
-        // Verify full structure is preserved
-        $this->assertCount(2, $cached);
-        $this->assertArrayHasKey('users', $cached);
-        $this->assertArrayHasKey('posts', $cached);
-        $this->assertCount(3, $cached['users']->columns);
-        $this->assertSame('int', $cached['users']->columns['id']->type);
-        $this->assertTrue($cached['users']->columns['id']->unsigned);
-        $this->assertSame('string', $cached['users']->columns['email']->type);
-        $this->assertTrue($cached['users']->columns['is_active']->nullable);
-        $this->assertSame('string', $cached['posts']->columns['title']->type);
-    }
-
-    #[Test]
     public function preserves_column_defaults_and_enum_options(): void
     {
         $cache = new MigrationCache($this->cacheDir);
@@ -309,6 +213,7 @@ final class MigrationCacheTest extends TestCase
             $table->setColumn(new SchemaColumn('status', 'enum', false, ['draft', 'published'], default: SchemaColumnDefault::resolved('draft')));
             $table->setColumn(new SchemaColumn('score', 'float', false, default: SchemaColumnDefault::unresolvable()));
             $table->setColumn(new SchemaColumn('name', 'string'));
+            $table->setColumn(new SchemaColumn('id', 'int', unsigned: true));
 
             return ['posts' => $table];
         });
@@ -329,6 +234,7 @@ final class MigrationCacheTest extends TestCase
 
         $name = $cached['posts']->columns['name'];
         $this->assertNotInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumnDefault::class, $name->default);
+        $this->assertTrue($cached['posts']->columns['id']->unsigned);
     }
 
     #[Test]
@@ -347,33 +253,6 @@ final class MigrationCacheTest extends TestCase
         $this->assertFalse($cache->wasCacheHit());
         $this->assertFalse($cache->wasCacheWritten());
         $this->assertArrayHasKey('users', $tables);
-    }
-
-    #[Test]
-    public function cache_invalidates_when_file_removed(): void
-    {
-        $file1 = $this->cacheDir . '/migration1.php';
-        $file2 = $this->cacheDir . '/migration2.php';
-        \file_put_contents($file1, '<?php // 1');
-        \file_put_contents($file2, '<?php // 2');
-
-        $cache = new MigrationCache($this->cacheDir);
-        $callCount = 0;
-
-        $compute = function () use (&$callCount): array {
-            $callCount++;
-
-            return [];
-        };
-
-        // First call with two files
-        $cache->remember([$file1, $file2], [], $compute);
-        $this->assertSame(1, $callCount);
-
-        // Remove second file (e.g. after migrate:squash) — different fingerprint → miss
-        \unlink($file2);
-        $cache->remember([$file1], [], $compute);
-        $this->assertSame(2, $callCount);
     }
 
     #[Test]

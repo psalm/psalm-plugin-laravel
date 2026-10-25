@@ -255,10 +255,9 @@ final class WhereColumnTaintHandler implements
             return null;
         }
 
-        // Gate on the taint run via the Codebase property (declared `?TaintFlowGraph`, so this is its
-        // null-check). Do NOT gate on the statements-analyzer's `data_flow_graph`: taint + unused-var
-        // runs wrap THAT in a CombinedFlowGraph, so an instanceof gate there silently disables the fix.
-        if (!$event->getCodebase()->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
+        // Gate on the Codebase graph. Do NOT gate on the statements-analyzer's `data_flow_graph`: taint +
+        // unused-var runs wrap THAT in a CombinedFlowGraph, so an instanceof gate there silently disables the fix.
+        if ($event->getCodebase()->taint_flow_graph === null) {
             return null;
         }
 

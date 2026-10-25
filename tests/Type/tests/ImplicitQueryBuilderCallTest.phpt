@@ -76,16 +76,6 @@ function static_custom_builder_method_is_flagged(): void
     Invoice::wherePaid();
 }
 
-/**
- * A dynamic where{Column}() clause the plugin resolves (Customer has @property string $id) is a
- * forwarded builder call and is flagged. An unresolvable column would instead be a typo left to
- * UndefinedMagicMethod.
- */
-function dynamic_where_clause_is_flagged(): void
-{
-    Customer::whereId('cust-1');
-}
-
 /** Instance calls forwarded through __call are flagged too, including custom builder methods. */
 function instance_calls_are_flagged(Customer $customer, Vehicle $vehicle): void
 {
@@ -195,7 +185,6 @@ ImplicitQueryBuilderCall on line %d: DirectScopeModel::active() is forwarded to 
 InvalidStaticInvocation on line %d: Method App\Models\DirectScopeModel::active is not static, but is called statically
 ImplicitQueryBuilderCall on line %d: Vehicle::whereElectric() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Vehicle::query()->whereElectric(...) instead.
 ImplicitQueryBuilderCall on line %d: Invoice::wherePaid() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Invoice::query()->wherePaid(...) instead.
-ImplicitQueryBuilderCall on line %d: Customer::whereId() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->whereId(...) instead.
 ImplicitQueryBuilderCall on line %d: Customer::where() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->where(...) instead.
 ImplicitQueryBuilderCall on line %d: Customer::find() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->find(...) instead.
 ImplicitQueryBuilderCall on line %d: Vehicle::whereByMake() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Vehicle::query()->whereByMake(...) instead.

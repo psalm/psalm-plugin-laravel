@@ -26,10 +26,10 @@ final class ModelInstancePreparer
      * {@see ModelMetadataRegistryBuilder::computeCasts()}, so an `$appends` entry it backs looks unbacked and
      * false-positives {@see \Psalm\LaravelPlugin\Handlers\Rules\UnresolvableAppendedModelAttributeHandler}.
      *
-     * ONE walk over `getMethods()`: that order IS Laravel's initializer order (12.22+) and is PHP-dependent
+     * ONE walk over `getMethods()`: that order IS Laravel's initializer order and is PHP-dependent
      * (8.4 ranks Model's inherited concern inits first, 8.5 the class's own trait inits), so executing in it
-     * matches runtime under either. Discovery mirrors bootTraits(): conventional name or `#[Initialize]`
-     * (gated — the framework ignores the tag below 12.22), neither filtering isStatic.
+     * matches runtime under either. Discovery mirrors bootTraits(): conventional name or `#[Initialize]`,
+     * neither filtering isStatic.
      *
      * Framework and user initializers are INVOKED alike, so each does whatever the INSTALLED Laravel does —
      * version-correct by construction, with no hand-written mirror to drift when a release moves one. Exactly
@@ -51,7 +51,6 @@ final class ModelInstancePreparer
             $conventional['initialize' . \class_basename($trait)] = true;
         }
 
-        $honorInitializeAttribute = \class_exists(Initialize::class);
         // Root from Model's OWN file, never a hardcoded `/vendor/…` substring — survives custom vendor dirs,
         // path-repo symlinks and split illuminate/* packages. Trailing '/' stops `Illuminate\DatabaseExtra`.
         $eloquentRoot = \str_replace('\\', '/', \dirname((string) (new \ReflectionClass(Model::class))->getFileName(), 2));
@@ -60,8 +59,7 @@ final class ModelInstancePreparer
         foreach ($reflection->getMethods() as $method) {
             $name = $method->getName();
             // isset() first: getAttributes() is reached only for non-conventional methods.
-            $isInitializer = isset($conventional[$name])
-                || ($honorInitializeAttribute && $method->getAttributes(Initialize::class) !== []);
+            $isInitializer = isset($conventional[$name]) || $method->getAttributes(Initialize::class) !== [];
             if (isset($invoked[$name]) || !$isInitializer) {
                 continue;
             }
@@ -90,7 +88,7 @@ final class ModelInstancePreparer
         // they carry. Runs after initializeTraits at runtime, so last here too. The method is Laravel 13.0;
         // the 12.x floor has no such phase at all, which is what the guard is for (12.x reaching the call
         // would route it through Model::__call() to the query builder). Not every attribute it reads is 13.0
-        // — `#[WithoutIncrementing]` is 13.2 — but `^13.3` puts the whole set below the floor.
+        // — `#[WithoutIncrementing]` is 13.2 — but the whole set is below the 13.x floor.
         if (\method_exists($instance, 'initializeModelAttributes')) {
             $instance->initializeModelAttributes();
         }
@@ -114,10 +112,9 @@ final class ModelInstancePreparer
      *  - `$dateFormat`, which nothing stores.
      *  - `mergeAppends()`, called below.
      *
-     * The normalizer is CALLED, never copied: it is version-split inside the supported range — 12.20–12.25
-     * has no `is_object` branch, 12.26+ adds one throwing `InvalidArgumentException` on a non-Stringable
-     * object cast — so a copy would carry a gate that calling tracks for free. The `is_array` branch this
-     * exists for is byte-identical across `illuminate/database: ^12.20 || ^13.3`, so it needs no gate.
+     * The normalizer is CALLED, never copied: its `is_object` branch throws `InvalidArgumentException` on a
+     * non-Stringable object cast — so a copy would need to track that behavior, while calling tracks it for
+     * free.
      *
      * Built from `$instance`, never `Model::class`: `ReflectionMethod::invoke()` dispatches NON-virtually and
      * does not complain about a foreign receiver, so a `Model::class` handle would silently run the
@@ -126,8 +123,8 @@ final class ModelInstancePreparer
      * paired with — `getCasts()` — would bake the implicit key cast permanently into the property and defeat
      * computeCasts()'s setIncrementing() suppression.
      *
-     * `#[Appends]` is Laravel 13.0+; below it classAttribute() matches nothing and that half no-ops — so
-     * `mergeAppends()`, absent on 12.20–12.24, is never called and cannot crash warm-up.
+     * `#[Appends]` is Laravel 13.0+; on 12.x classAttribute() returns null, so mergeAppends()
+     * is not called.
      *
      * @param \ReflectionClass<Model> $reflection
      */
@@ -141,7 +138,7 @@ final class ModelInstancePreparer
             // either to a local would count against the plugin's 100% type-coverage target.
             $declaredCasts->setValue($instance, $normalize->invoke($instance, $declaredCasts->getValue($instance)));
         } catch (\InvalidArgumentException) {
-            // 12.26+ raises this for a non-Stringable object cast. Runtime normalizes the MERGED map and
+            // The normalizer raises this for a non-Stringable object cast. Runtime normalizes the MERGED map and
             // `casts()` wins on collisions, so a declared object cast that `casts()` overrides never reaches
             // the throw at construction. Seeing the declared half alone, this cannot tell that model from an
             // unconstructable one — so leave `$casts` raw and defer to computeCasts(), which holds the
@@ -159,7 +156,7 @@ final class ModelInstancePreparer
      * Mirrors {@see Model}::resolveClassAttribute(): first ancestor's first instance, no cross-ancestor merge.
      *
      * Name-matches an attribute whose class may be absent, and throws on `newInstance()` if so. The
-     * `illuminate/database: ^12.20 || ^13.3` floor is what keeps that unreachable — only a model naming a
+     * supported `illuminate/database` range is what keeps that unreachable — only a model naming a
      * class its own framework lacks reaches it, code Laravel fatals on too, since `Error` escapes
      * resolveClassAttribute()'s `catch (Exception)`. Re-check this if the floor ever widens.
      *

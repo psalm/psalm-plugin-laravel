@@ -34,6 +34,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # PHPUnit --filter regex over psalm-tester data-set names (phpt paths relative to
+  # tests/Type/tests): the laravel/ai-dependent phpts, run by the laravel/ai jobs.
+  LARAVEL_AI_PHPT_FILTER: 'PromptInjection/|Collection/TextResponseCollectionTypesTest'
+
 jobs:
 
   phpt_conventions:
@@ -54,24 +59,29 @@ jobs:
         run: bash bin/ci/check-phpt-conventions.sh
 
   unit_tests:
-    name: Unit test P${{ matrix.php }} | L${{ matrix.laravel || 'lockfile' }}
+    name: Unit test P${{ matrix.php }} | L${{ matrix.laravel || 'lockfile' }}${{ matrix.in_process && ' | in-process' || '' }}
     runs-on: ubuntu-latest
     strategy:
       # Version-split fixtures fail per-cell by design; keep every cell's verdict visible.
       fail-fast: false
       matrix:
         include:
-          # Lockfile cells cover both sides of the PHP 8.4/8.5 getMethods() initializer-order split.
+          # `in_process` cells skip the `subprocess` group (tests forking a real vendor/bin/psalm, ~75% of
+          # unit CPU); the PHP 8.2 + 12.27.0 and 8.5 lockfile cells run the full suite.
+          # Newest PHP + latest Laravel 13 (lockfile). Also the 8.5 side of the 8.4/8.5 getMethods()
+          # initializer-order split, which is in-process (ModelMetadataRegistryTest).
           - php: '8.5'
+          # Declared Laravel 13 floor, on the middle PHP. Covers the 8.4 side of the getMethods() split in-process.
           - php: '8.4'
-          # Declared framework floors.
-          - php: '8.4'
-            laravel: '13.3.0'
+            laravel: '13.20.0'
+            in_process: true
+          # Oldest PHP + declared Laravel 12 floor.
           - php: '8.2'
-            laravel: '12.20.0'
+            laravel: '12.27.0'
           # Highest 12.x: the enum $connection path is live since 12.28.
           - php: '8.2'
-            laravel: '^12.20'
+            laravel: '^12.27'
+            in_process: true
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -93,7 +103,7 @@ jobs:
           tools: composer:v2
 
       - name: Check Composer configuration
-        if: matrix.php == '8.4' && !matrix.laravel
+        if: ${{ !matrix.laravel }}
         run: composer validate --strict
 
       - name: Install composer dependencies (lockfile)
@@ -125,7 +135,10 @@ jobs:
         # paratest declares its own CLI options rather than proxying PHPUnit's, and only 7.19.0+ declares
         # --display-phpunit-notices. Constraint installs may resolve PHPUnit 11 (Testbench 10), which pins paratest 7.8.x.
         if: matrix.laravel
-        run: vendor/bin/paratest --processes=auto --testsuite=unit --display-deprecations --display-notices
+        env:
+          EXTRA_ARGS: ${{ matrix.in_process && '--exclude-group=subprocess' || '' }}
+        # ${VAR:+"$VAR"} passes the single flag when set and no argument at all when empty.
+        run: vendor/bin/paratest --processes=auto --testsuite=unit --display-deprecations --display-notices ${EXTRA_ARGS:+"$EXTRA_ARGS"}
 
 
   type_tests:
@@ -133,13 +146,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: [ 8.5, 8.4, 8.3, 8.2 ]
-        laravel: [ ^13.3, ^12.20 ]
-        dependencies: [ highest ]
-        exclude:
-          - php: 8.2
-            laravel: ^13.3
-    name: Type test P${{ matrix.php }} | L${{ matrix.laravel }} | ${{ matrix.dependencies == 'highest' && '↑' || '↓' }}
+        include:
+          # Oldest PHP with the Laravel 12 line, newest PHP with the Laravel 13 line;
+          # intermediate PHP versions add little over these two ends.
+          - php: '8.2'
+            laravel: '^12.27'
+          - php: '8.5'
+            laravel: '^13.20'
+    name: Type test P${{ matrix.php }} | L${{ matrix.laravel }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -161,7 +175,9 @@ jobs:
           tools: composer
 
       - name: Install dependencies from composer.json
-        run: composer update --with="laravel/framework:${{ matrix.laravel }}" --no-interaction --no-progress --prefer-dist --prefer-stable ${{ matrix.dependencies == 'lowest' && '--prefer-lowest' || '' }}
+        env:
+          LARAVEL_CONSTRAINT: ${{ matrix.laravel }}
+        run: composer update --with="laravel/framework:$LARAVEL_CONSTRAINT" --no-interaction --no-progress --prefer-dist --prefer-stable
 
       - name: Run Psalm/Type tests
         run: composer test:type
@@ -174,7 +190,8 @@ jobs:
   #
   # What this catches: laravel/ai failing to install; a stubbed class being
   # renamed/removed (every PromptInjection phpt SKIPIFs on class presence, so
-  # all-skipped trips the guard below); the plugin's own regressions; and, via
+  # all-skipped trips the guard below); regressions in the laravel/ai-dependent
+  # phpts (see LARAVEL_AI_PHPT_FILTER); and, via
   # bin/ci/check-laravel-ai-stub-parity.php, a stubbed method's parameter count,
   # parameter names, or native parameter/return types drifting on a laravel/ai
   # release. That last one is otherwise invisible: a registered stub overrides the
@@ -182,6 +199,11 @@ jobs:
   # compares the two. That script's own checks are pinned by
   # tests/Unit/Ci/LaravelAiStubParityCheckerTest.php, because a gap in the guard
   # looks exactly like a clean run.
+  #
+  # Only the laravel/ai-dependent phpts run here (the full suite runs in type_tests).
+  # Trade-off: non-ai phpts are no longer run with laravel/ai installed, so an
+  # interaction where installed laravel/ai stubs change unrelated phpt results
+  # would go unnoticed.
   type_tests_laravel_ai:
     name: Type test (laravel/ai ${{ matrix.laravel_ai_version }})
     runs-on: ubuntu-latest
@@ -241,11 +263,11 @@ jobs:
         # Psalm.
         run: php bin/ci/check-laravel-ai-stub-parity.php
 
-      - name: Run Psalm/Type tests
-        run: composer test:type -- --log-junit=/tmp/type-tests-junit.xml --no-progress
+      - name: Run laravel/ai Psalm/Type tests
+        run: composer test:type -- --filter "$LARAVEL_AI_PHPT_FILTER" --log-junit=/tmp/type-tests-junit.xml --no-progress
 
       - name: Report type-test failure against the selected laravel/ai constraint
-        # The type-test suite failed under this leg's resolved laravel/ai release.
+        # The laravel/ai phpts failed under this leg's resolved laravel/ai release.
         # This may be a plugin regression, or a stubbed class renamed/removed
         # upstream (the SKIPIF guard below would also catch that). A stubbed method's
         # native signature drifting is covered separately by the parity check above,
@@ -254,10 +276,10 @@ jobs:
         # diff for the exact failing issue/class/line.
         if: failure()
         run: |
-          echo "::error::Type-test suite failed against laravel/ai constraint" \
+          echo "::error::laravel/ai type tests failed against laravel/ai constraint" \
             "'${{ matrix.laravel_ai_version }}'. See the psalm-tester diff above for the exact failure." \
             "Reproduce locally with:" \
-            "composer require --dev 'laravel/ai:${{ matrix.laravel_ai_version }}' && composer test:type"
+            "composer require --dev 'laravel/ai:${{ matrix.laravel_ai_version }}' && composer test:type -- --filter '$LARAVEL_AI_PHPT_FILTER'"
 
       - name: Verify the PromptInjection phpt suite actually ran
         # Every PromptInjection phpt carries a --taint-analysis ARGS section and a
@@ -306,8 +328,8 @@ jobs:
       - name: Check laravel/ai stub-vs-vendor signature parity
         run: php bin/ci/check-laravel-ai-stub-parity.php
 
-      - name: Run Psalm/Type tests
-        run: composer test:type -- --log-junit=/tmp/type-tests-laravel-ai-1.x-dev-junit.xml --no-progress
+      - name: Run laravel/ai Psalm/Type tests
+        run: composer test:type -- --filter "$LARAVEL_AI_PHPT_FILTER" --log-junit=/tmp/type-tests-laravel-ai-1.x-dev-junit.xml --no-progress
 
       - name: Verify the PromptInjection phpt suite actually ran
         run: php bin/ci/assert-tests-ran.php /tmp/type-tests-laravel-ai-1.x-dev-junit.xml PromptInjection

@@ -1,7 +1,5 @@
---CONFLICTS--
-psalm-1418-TaintedHeaderResponseFactoryMakeNotSuppressedByAttachmentExemption
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --no-cache --threads=1
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 
@@ -14,9 +12,7 @@ use Illuminate\Routing\ResponseFactory;
  * and must never suppress TaintedHeader on a genuinely tainted header VALUE in the same literal
  * array. The content is ALSO tainted here so the exemption actually runs and suppresses the html
  * finding: only then does this prove the header sink survives it rather than merely proving the
- * header sink fires when the html sink was never in play. The unique CONFLICTS key runs this file
- * in its own batch: co-batched calls into this sink family meet at one shared sink node and
- * later-arriving flows are pruned.
+ * header sink fires when the html sink was never in play.
  */
 function makeExportWithTaintedCustomHeader(Request $request, ResponseFactory $response): void
 {

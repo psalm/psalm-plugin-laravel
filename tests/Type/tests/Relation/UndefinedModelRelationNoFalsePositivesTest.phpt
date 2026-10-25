@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm-experimental-issues.xml
+--no-progress --no-diff --config=./tests/Type/psalm-with-optin-custom-issues.xml
 --FILE--
 <?php declare(strict_types=1);
 
@@ -27,9 +27,21 @@ Customer::with(['vehicles' => function (Relation $query): void {
 }]);                                             // array (keyed/closure)
 Customer::query()->whereHas('workOrders');
 Customer::query()->has('vehicles');
-Customer::doesntHave('vehicles');
+Customer::query()->doesntHave('vehicles');
 Customer::query()->whereRelation('vehicles', 'active', 1);
 Customer::query()->whereDoesntHaveRelation('vehicles', 'active', 1);
+
+// ':columns' IS parsed by Laravel for list entries, plain strings and nested-array keys;
+// a keyed closure WITHOUT columns is the ordinary valid form.
+Customer::with(['vehicles:id,name']);
+Customer::with(['vehicles:id' => ['workOrders']]);
+Customer::with(['vehicles' => fn (Relation $query) => $query]);
+// Model::with() is static and list-only (func_get_args()): a closure second argument is NOT the
+// Builder::with($relations, $callback) pairing, so the string keeps its ':columns' parsing.
+Customer::with('vehicles:id');
+Customer::with('vehicles:id', fn (Relation $query) => $query);
+// withWhereHas() keeps Laravel's own ':columns' strip (Str::before($relation, ':')), unlike has()/whereHas().
+Customer::query()->withWhereHas('vehicles:id');
 
 // morphTo intermediate: the target model is polymorphic, so deeper segments must NOT
 // be flagged (defer). Both DamageReport::reportable() (@phpstan-return) and
@@ -54,6 +66,18 @@ function valid_relations_on_instance(Customer $c): void
         $query->whereNotNull('id');
     }]);
     $c->vehicles()->with('workOrders');          // relation receiver, valid
+}
+
+// Builder::with('rel:cols', $callback): a callback not PROVEN to be a Closure (nullable) may
+// leave the string in the parsed list form, so the ':columns' stays stripped.
+function nullable_callback(?\Closure $callback): void
+{
+    Customer::query()->with('vehicles:id', $callback);
+}
+
+function model_instance_with(Customer $c): void
+{
+    $c->with('vehicles:id', fn (Relation $query) => $query);
 }
 
 // Dynamic relation name — not statically known, must defer.

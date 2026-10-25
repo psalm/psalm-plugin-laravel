@@ -11,8 +11,7 @@ use Illuminate\Database\Eloquent\Attributes\Table;
  * `#[Table(timestamps: true)]`. Runtime resolves the parent's attribute first and disables timestamps, so
  * the child's own argument loses.
  *
- * Pins that precedence is decided ACROSS the hierarchy, not per class — which
- * {@see TimestampsAttributePrecedenceModel} cannot show, carrying both attributes on one class.
+ * Pins that precedence is decided ACROSS the hierarchy, not per class.
  *
  * The ancestor walk itself is Laravel's: the replay invokes the real `initializeHasTimestamps()`, whose
  * `resolveClassAttribute()` climbs the parents. So what is at stake here is the registry's read of the

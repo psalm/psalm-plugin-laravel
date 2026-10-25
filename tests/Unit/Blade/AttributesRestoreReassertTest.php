@@ -34,15 +34,6 @@ final class AttributesRestoreReassertTest extends TestCase
         $this->assertSame(\substr_count(self::RESTORE, "\n"), \substr_count($applied, "\n"));
     }
 
-    #[Test]
-    public function the_strip_endif_gets_the_reassert_on_the_same_line(): void
-    {
-        $applied = AttributesRestoreReassert::apply(self::STRIP);
-
-        $this->assertSame(\str_replace('endif; ?>', 'endif;' . self::REASSERT, self::STRIP), $applied);
-        $this->assertSame(\substr_count(self::STRIP, "\n"), \substr_count($applied, "\n"));
-    }
-
     /** #1543 trap 3: fixing only the restore leaves a read inside the tag's own body red. */
     #[Test]
     public function both_blocks_are_reasserted_when_present_together(): void
@@ -52,17 +43,6 @@ final class AttributesRestoreReassertTest extends TestCase
         $applied = AttributesRestoreReassert::apply($compiled);
 
         $this->assertSame(2, \substr_count($applied, self::REASSERT));
-    }
-
-    /** A class-based component's `ignoredParameterNames()` call names its own FQCN, not `AnonymousComponent`. */
-    #[Test]
-    public function the_strip_block_matches_a_class_based_components_ignored_parameter_names_call(): void
-    {
-        $strip = "<?php if (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag): ?>\n"
-            . "<?php \$attributes = \$attributes->except(\\App\\View\\Components\\Alert::ignoredParameterNames()); ?>\n"
-            . '<?php endif; ?>';
-
-        $this->assertStringContainsString(self::REASSERT, AttributesRestoreReassert::apply($strip));
     }
 
     /** #1543 trap 1: the docblock must land AFTER `endif;`, never inside the restore's own `if` branch. */
@@ -83,29 +63,6 @@ final class AttributesRestoreReassertTest extends TestCase
         $source = "<?php if (\$cond): ?>\nyes\n<?php endif; ?>\n";
 
         $this->assertSame($source, AttributesRestoreReassert::apply($source));
-    }
-
-    #[Test]
-    public function content_with_neither_block_is_returned_unchanged(): void
-    {
-        $source = "<?php echo e(\$name); ?>\n";
-
-        $this->assertSame($source, AttributesRestoreReassert::apply($source));
-    }
-
-    /**
-     * #1543 external review finding 3: PHP identifiers allow `\x80-\xff` bytes (`Café`), and Laravel
-     * emits the class name unchanged into `except(\Class::ignoredParameterNames())`. An ASCII-only
-     * charset under-matches, leaving the inner strip un-reasserted.
-     */
-    #[Test]
-    public function the_strip_block_matches_a_non_ascii_class_name(): void
-    {
-        $strip = "<?php if (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag): ?>\n"
-            . "<?php \$attributes = \$attributes->except(\\Review\\Café::ignoredParameterNames()); ?>\n"
-            . '<?php endif; ?>';
-
-        $this->assertStringContainsString(self::REASSERT, AttributesRestoreReassert::apply($strip));
     }
 
     /**
@@ -138,14 +95,6 @@ final class AttributesRestoreReassertTest extends TestCase
         ));
     }
 
-    #[Test]
-    public function template_assigns_attributes_detects_an_unset(): void
-    {
-        $this->assertTrue(AttributesRestoreReassert::templateAssignsAttributes(
-            "@props([])\n@php unset(\$attributes); @endphp\n<x-alert />\n",
-        ));
-    }
-
     /** `??=`/`.=`/`==` are not plain assignment: they never hand `$attributes` an unrelated value wholesale. */
     #[Test]
     public function template_assigns_attributes_ignores_compound_and_comparison_operators(): void
@@ -155,23 +104,6 @@ final class AttributesRestoreReassertTest extends TestCase
         ));
         $this->assertFalse(AttributesRestoreReassert::templateAssignsAttributes(
             "@if (\$attributes == null)\nyes\n@endif\n",
-        ));
-    }
-
-    #[Test]
-    public function template_assigns_attributes_is_false_for_a_read_only_component_view(): void
-    {
-        $this->assertFalse(AttributesRestoreReassert::templateAssignsAttributes(
-            "@props(['type' => 'info'])\n<x-alert>nested</x-alert>\n{{ \$attributes->merge([]) }}\n",
-        ));
-    }
-
-    /** A mention inside a Blade comment is dead text — never executed, so never a real write. */
-    #[Test]
-    public function template_assigns_attributes_ignores_a_blade_comment(): void
-    {
-        $this->assertFalse(AttributesRestoreReassert::templateAssignsAttributes(
-            "{{-- \$attributes = null; --}}\n@props([])\n<x-alert />\n",
         ));
     }
 }

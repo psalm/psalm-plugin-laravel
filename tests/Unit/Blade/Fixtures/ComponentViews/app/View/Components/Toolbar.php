@@ -10,6 +10,13 @@ use Illuminate\View\Component;
 /** Not final: a `static` return must reach the view as the class, not `Toolbar&static`. */
 class Toolbar extends Component
 {
+    use ToolbarHelpers;
+
+    public function fresh(): static
+    {
+        return $this;
+    }
+
     public function withTone(string $tone): static
     {
         return $this;

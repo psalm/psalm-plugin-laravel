@@ -1,5 +1,7 @@
+--CONFLICTS--
+taint-SafeResponseFactoryContentTypeDenylist
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1 --no-file-cache --no-reflection-cache
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 
@@ -8,8 +10,8 @@ use Illuminate\Routing\ResponseFactory;
 
 /**
  * #1416 widening 4. A literal `Content-Type` naming a media type never sniffed as HTML proves the
- * exemption on its own, with no `Content-Disposition` at all. The unique ARGS line runs this file
- * in its own batch.
+ * exemption on its own, with no `Content-Disposition` at all. The unique CONFLICTS key runs this
+ * file in its own Psalm run.
  */
 function makeCsvReportWithoutDisposition(Request $request, ResponseFactory $response): void
 {

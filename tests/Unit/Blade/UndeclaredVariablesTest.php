@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\ShadowManifest;
+use Symfony\Component\Process\Process;
 
 /**
  * End-to-end proof of `<blade reportUndeclaredVariables="true" />` (#1827). The decision depends on
@@ -25,10 +26,52 @@ final class UndeclaredVariablesTest extends TestCase
 
     private const FIXTURE = __DIR__ . '/Fixtures/UndeclaredVariables';
 
-    /** @return list<string> */
-    private function arguments(string $config): array
+    private const EXPECTED = [
+        'typo.blade.php:3:UndefinedGlobalVariable:$titel',
+        'typo.blade.php:4:UndefinedVariable:$insideArrow',
+    ];
+
+    /** @var list<array{output: string, errorOutput: string, shadows: string}>|null */
+    private static ?array $journey = null;
+
+    protected static function resetFixtureAnalyses(): void
     {
-        return ['-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
+        self::$journey = null;
+    }
+
+    /**
+     * One run per step of a flag-toggling journey, sharing the shadow cache the way repeated runs of a
+     * real project do: cold with the flag on, off over the on cache, on again over the off cache, then
+     * warm. Every case below reads one step, so the class pays four Psalm boots rather than one per case.
+     *
+     * @return list<array{output: string, errorOutput: string, shadows: string}>
+     */
+    private function journey(): array
+    {
+        if (self::$journey !== null) {
+            return self::$journey;
+        }
+
+        $shadowDir = $this->startFixtureRun(self::FIXTURE);
+        $steps = [];
+
+        foreach (['psalm.xml', 'psalm-off.xml', 'psalm.xml', 'psalm.xml'] as $index => $config) {
+            $process = new Process(
+                [\PHP_BINARY, $this->psalmBinary(), '-c', $config, '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
+                self::FIXTURE,
+            );
+            $process->setTimeout(300);
+            // Not mustRun(): the fixture reports issues on purpose.
+            $process->run();
+
+            $steps[] = [
+                'output' => $process->getOutput(),
+                'errorOutput' => $process->getErrorOutput(),
+                'shadows' => $this->snapshotShadows($shadowDir, "undeclared-journey-{$index}"),
+            ];
+        }
+
+        return self::$journey = $steps;
     }
 
     /**
@@ -55,30 +98,12 @@ final class UndeclaredVariablesTest extends TestCase
         return $reported;
     }
 
-    /** @param list<string> $configs each step runs against the shadow cache its predecessor left */
-    private function warmRun(array $configs): array
-    {
-        $sets = \array_map(fn(string $config): array => $this->arguments($config), $configs);
-        \assert($sets !== []);
-
-        return $this->undefinedVariables($this->analyzeFixtureSequence(self::FIXTURE, $sets));
-    }
-
-    /** @return list<string> */
-    private function coldRun(string $config): array
-    {
-        return $this->undefinedVariables($this->analyzeFixture(self::FIXTURE, $this->arguments($config)));
-    }
-
     #[Test]
     public function a_typo_and_an_arrow_function_read_are_reported_on_their_template_lines(): void
     {
         // Every other fixture template is silent: the whole list is the two reads in typo.blade.php,
         // so each decline family and the `use ($captured)` clause are pinned by this one assertion.
-        $this->assertSame([
-            'typo.blade.php:3:UndefinedGlobalVariable:$titel',
-            'typo.blade.php:4:UndefinedVariable:$insideArrow',
-        ], $this->coldRun('psalm.xml'));
+        $this->assertSame(self::EXPECTED, $this->undefinedVariables($this->journey()[0]));
     }
 
     /**
@@ -90,7 +115,7 @@ final class UndeclaredVariablesTest extends TestCase
     #[Test]
     public function a_view_a_component_registration_can_render_keeps_its_net(): void
     {
-        $shadows = $this->shadowsOf($this->analyzeFixture(self::FIXTURE, $this->arguments('psalm.xml'))['shadows']);
+        $shadows = $this->shadowsOf($this->journey()[0]['shadows']);
 
         foreach (['undeclaredNamespaced', 'undeclaredPathed', 'undeclaredAliased'] as $name) {
             $this->assertStringContainsString("@var mixed \${$name}", $shadows);
@@ -98,35 +123,33 @@ final class UndeclaredVariablesTest extends TestCase
     }
 
     #[Test]
-    public function with_the_flag_off_nothing_is_reported_and_the_net_still_declares_the_name(): void
-    {
-        $run = $this->analyzeFixture(self::FIXTURE, $this->arguments('psalm-off.xml'));
-
-        $this->assertSame([], $this->undefinedVariables($run));
-        $this->assertStringContainsString('@var mixed $titel', $this->shadowsOf($run['shadows']));
-    }
-
-    #[Test]
     public function with_the_flag_on_the_net_leaves_the_name_out(): void
     {
-        $shadows = $this->shadowsOf($this->analyzeFixture(self::FIXTURE, $this->arguments('psalm.xml'))['shadows']);
+        $shadows = $this->shadowsOf($this->journey()[0]['shadows']);
 
         $this->assertStringNotContainsString('@var mixed $titel', $shadows);
         // A `use` clause's name stays declared: an undefined one makes Psalm stop analysing the file.
         $this->assertStringContainsString('@var mixed $captured', $shadows);
     }
 
+    /** Over the cache the flag-on run left: nothing reported, and the net declares the name again. */
     #[Test]
-    public function a_warm_second_run_reports_the_same(): void
+    public function turning_the_flag_off_invalidates_the_cached_shadows(): void
     {
-        $this->assertSame($this->coldRun('psalm.xml'), $this->warmRun(['psalm.xml', 'psalm.xml']));
+        $this->assertSame([], $this->undefinedVariables($this->journey()[1]));
+        $this->assertStringContainsString('@var mixed $titel', $this->shadowsOf($this->journey()[1]['shadows']));
     }
 
     #[Test]
-    public function toggling_the_flag_invalidates_the_cached_shadows(): void
+    public function turning_the_flag_on_invalidates_the_cached_shadows(): void
     {
-        $this->assertSame($this->coldRun('psalm.xml'), $this->warmRun(['psalm-off.xml', 'psalm.xml']));
-        $this->assertSame([], $this->warmRun(['psalm.xml', 'psalm-off.xml']));
+        $this->assertSame(self::EXPECTED, $this->undefinedVariables($this->journey()[2]));
+    }
+
+    #[Test]
+    public function a_warm_second_run_reports_the_same(): void
+    {
+        $this->assertSame(self::EXPECTED, $this->undefinedVariables($this->journey()[3]));
     }
 
     private function shadowsOf(string $directory): string

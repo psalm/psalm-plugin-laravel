@@ -16,7 +16,7 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
- * The list mirrors EnumeratesValues::$proxies at the 12.20 floor — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the lowest supported 12.x — do not edit without checking that array.
  * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
  * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
@@ -92,7 +92,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TGetDefault
      * @template TGetClosureReturn
      *
-     * @param  TKey  $key
+     * @param  TKey|null  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
      * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
      *
@@ -160,12 +160,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * @psalm-mutation-free
      *
-     * Unused method template: workaround for vimeo/psalm#11837, a conditional return in a stub
-     * that re-declares a reflected method otherwise collapses to its first branch.
-     *
      * `$preserveKeys = true` keeps the source keys; any other number result is re-indexed.
-     *
-     * @template TUnused
      *
      * @param  (callable(self<TKey, TValue>): int)|int|null  $number
      * @param  bool  $preserveKeys
@@ -405,31 +400,110 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Chunk the collection into chunks with a callback.
      *
-     * @param  callable(TValue, TKey, static<TKey, TValue>): bool  $callback
+     * The chunk is a plain `Collection` (built by `LazyCollection::chunkWhile()`); it becomes `static`
+     * only after the callback ran. Laravel's `static<TKey, TValue>` leaves an untyped closure param
+     * as an unresolved `static`, which the check then rejects.
+     *
+     * @param  callable(TValue, TKey, \Illuminate\Support\Collection<TKey, TValue>): bool  $callback
      * @return static<int, static<TKey, TValue>>
      */
     public function chunkWhile(callable $callback) {}
 
     /**
+     * Laravel's `callable($this)` gives an untyped closure param the unresolved `static` (the
+     * enclosing class inside a class body), so every untyped closure was rejected. The callbacks
+     * below name the class with its templates instead. These stubs reach `Collection` itself only:
+     * a subclass keeps the `EnumeratesValues` declaration (vimeo/psalm#12158).
+     *
+     * @param  callable(\Illuminate\Support\Collection<TKey, TValue>): mixed  $callback
+     * @return $this
+     */
+    public function tap(callable $callback) {}
+
+    /**
+     * @template TPipeReturnType
+     *
+     * @param  callable(\Illuminate\Support\Collection<TKey, TValue>): TPipeReturnType  $callback
+     * @return TPipeReturnType
+     */
+    public function pipe(callable $callback) {}
+
+    /**
+     * The whenEmpty() family runs `when($condition, $callback, $default)`, which passes the condition
+     * as the second argument and returns `$callback(...) ?? $this`. The callable return is
+     * `T|null` so a null or void callback leaves only `$this`.
+     *
+     * @template TWhenEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
+     */
+    public function whenEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TWhenNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
+     */
+    public function whenNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
+     */
+    public function unlessEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
+     */
+    public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
      * Get the sum of the given values.
      *
-     * At runtime, the accumulator starts at 0 and uses the + operator,
-     * so the result is always int|float (non-numeric values throw TypeError).
-     *
-     * When called without arguments, the return type narrows based on TValue:
-     * - Collection<_, int>::sum() → int (matches array_sum behavior for int arrays)
-     * - Collection<_, float>::sum() → float
+     * At runtime, the accumulator starts at int 0 and adds with the + operator, so the result is
+     * always int|float (a non-numeric string throws TypeError, a numeric string is added as a number)
+     * and an empty collection yields int 0 whatever the item type. Only an int source narrows:
+     * - Collection<_, int>::sum() → int
+     * - Collection<_, float>::sum() → int|float (empty collection)
      * - Otherwise → int|float
      *
-     * @template TCallbackReturn of int|float
+     * The callback is called with the item only on every 12.x release; 13.x also passes the key
+     * (`stubs/13/`).
      *
-     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @template TCallbackReturn of int|float|numeric-string
+     *
+     * @param  (callable(TValue): TCallbackReturn)|string|null  $callback
      * @return ($callback is null
-     *  ? (TValue is int ? int : (TValue is float ? float : int|float))
-     *  : ($callback is string ? int|float : TCallbackReturn)
+     *  ? (TValue is int ? int : int|float)
+     *  : ($callback is string ? int|float : (TCallbackReturn is int ? int : int|float))
      * )
      */
     public function sum($callback = null) {}
+
+    /**
+     * Pad collection to the specified length with a value.
+     *
+     * array_pad() keeps string keys and renumbers int keys, so the key type is `TKey|int`
+     * (Laravel's docblock declares `int`).
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return static<TKey|int, TValue|TPadValue>
+     */
+    public function pad($size, $value) {}
 
     /**
      * Determine if an item exists in the collection by key.
@@ -442,6 +516,42 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-variadic
      */
     public function has($key) {}
+
+    /**
+     * Determine if any of the keys exist in the collection.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  TKey|array<array-key, TKey>  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function hasAny($key) {}
+
+    /**
+     * Get all items except for those with the specified keys.
+     *
+     * Accepts an array/Enumerable of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \Illuminate\Support\Enumerable<array-key, TKey>|array<array-key, TKey>|string  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function except($keys) {}
+
+    /**
+     * Get the items with the specified keys.
+     *
+     * Accepts an array/Enumerable of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \Illuminate\Support\Enumerable<array-key, TKey>|array<array-key, TKey>|string|null  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function only($keys) {}
 
     /**
      * Determine if an item is not contained in the collection.

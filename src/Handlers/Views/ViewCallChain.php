@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use Illuminate\View\ViewName;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
@@ -44,7 +45,8 @@ use Psalm\Type\Union;
  *
  * The ARGUMENTS are not the whole data set, though: a chain inside an `Illuminate\View\Component`
  * subclass also receives whatever `Component::data()` merges in, which {@see ComponentRenderData}
- * resolves from the analyzed class and which lands in `$frameworkData` rather than `$data`.
+ * resolves from the analyzed class and which lands in `$frameworkData` rather than `$data`. So do
+ * the keys a Mailable, a MailMessage and a Livewire `render()` receive: {@see FrameworkViewData}.
  *
  * @internal
  */
@@ -57,6 +59,8 @@ final class ViewCallChain
      *                                            but were never PASSED — {@see ComponentRenderData}
      * @param bool                 $complete      every contribution was proven, so a name absent
      *                                            from both sets is provably not supplied
+     * @param string|null          $binder        the {@see ViewNameSignatures} role of the receiver
+     *                                            that bound the view name; null for the `view()` helper
      *
      * @psalm-mutation-free
      */
@@ -65,6 +69,7 @@ final class ViewCallChain
         public readonly array $data,
         public readonly bool $complete,
         public readonly array $frameworkData = [],
+        public readonly ?string $binder = null,
     ) {}
 
     /**
@@ -81,9 +86,9 @@ final class ViewCallChain
         return $this->frameworkData + $this->data;
     }
 
-    public static function from(Expr $expr, StatementsSource $source): ?self
+    public static function from(Expr $expr, StatementsSource $source, bool $trimName = false): ?self
     {
-        $chain = self::walk($expr, $source);
+        $chain = self::walk($expr, $source, $trimName);
 
         if (!$chain instanceof self) {
             return null;
@@ -92,14 +97,213 @@ final class ViewCallChain
         $merged = ComponentRenderData::forSource($source);
 
         if ($merged === null) {
-            return $chain;
+            // Livewire merges the component's properties into the view its `render()` returns: a
+            // `view()` or factory view. A mail view built on the side in `render()` gets none of them.
+            $returnsView = $chain->binder === null || $chain->binder === ViewNameSignatures::ROLE_VIEW_FACTORY;
+
+            return $chain->supplying($returnsView && self::isInRenderMethod($source) ? FrameworkViewData::forLivewire($source) : null);
         }
 
         // A component's public `render()` can be called, and its result chained, from anywhere
         // (`$component->render()->with([...])`): the data added there is not in this chain.
-        $complete = $chain->complete && $merged[1] && !self::isInRenderMethod($source);
+        $merged[1] = $merged[1] && !self::isInRenderMethod($source);
 
-        return new self($chain->viewName, $chain->data, $complete, $merged[0]);
+        return $chain->supplying($merged);
+    }
+
+    /**
+     * @param array{0: array<string, Union>, 1: bool}|null $supplied framework keys, and whether they
+     *        are all of them; they win a name the chain already carries as framework data
+     *
+     * @psalm-capabilities read-props
+     */
+    private function supplying(?array $supplied): self
+    {
+        if ($supplied === null) {
+            return $this;
+        }
+
+        return new self($this->viewName, $this->data, $this->complete && $supplied[1], $supplied[0] + $this->frameworkData, $this->binder);
+    }
+
+    /**
+     * The `key => value expression` pairs THIS call passes itself, never the rest of its chain: the
+     * literal `$data` (and, for the helper and a view factory, `$mergeData`) array of a binder, or the
+     * key and value of a `with()` link. Whatever is not written out literally (a variable array, a
+     * computed key, a spread of anything but an array literal) is skipped.
+     *
+     * Within the arrays the last write of a key wins, the way PHP builds the array, and `$data` wins
+     * `$mergeData` as `Factory::make()` merges them. A non-literal spread or key after an entry keeps
+     * it: it may or may not overwrite, and a taint write must never be dropped on a guess.
+     *
+     * Callers resolve the chain with {@see self::from()} first: this reads positions only, so it says
+     * nothing about whether the call binds a view at all. `$binder` is that chain's role.
+     *
+     * @return list<array{0: string, 1: Expr}>
+     */
+    public static function ownEntries(Expr\CallLike $call, ?string $binder): array
+    {
+        $args = self::args($call);
+
+        if ($args === null) {
+            return [];
+        }
+
+        if (!self::isWith($call)) {
+            return self::literalEntries(self::dataArgs($call, $args, $binder));
+        }
+
+        $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
+
+        if (!$keyArg instanceof Arg) {
+            return [];
+        }
+
+        if ($keyArg->value instanceof Expr\Array_) {
+            return self::literalEntries([$keyArg]);
+        }
+
+        $valueArg = ArgUtil::byNameOrPosition($args, 1, 'value');
+
+        return $keyArg->value instanceof String_ && $valueArg instanceof Arg ? [[$keyArg->value->value, $valueArg->value]] : [];
+    }
+
+    /**
+     * The data arrays THIS call passes that are not written out literally (a variable, `compact()`,
+     * a call result): what {@see self::ownEntries()} cannot split into keys. A `with()` key that may
+     * be an array is one too; a string key (literal or not) never is.
+     *
+     * @return list<Expr>
+     */
+    public static function ownArrays(Expr\CallLike $call, ?string $binder, StatementsSource $source): array
+    {
+        $args = self::args($call);
+
+        if ($args === null) {
+            return [];
+        }
+
+        if (self::isWith($call)) {
+            $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
+            $isLiteral = $keyArg instanceof Arg && ($keyArg->value instanceof Expr\Array_ || $keyArg->value instanceof String_);
+
+            return $keyArg instanceof Arg && !$isLiteral && self::mergesArray($keyArg, $source) !== false ? [$keyArg->value] : [];
+        }
+
+        $arrays = [];
+
+        foreach (self::dataArgs($call, $args, $binder) as $arg) {
+            if ($arg instanceof Arg && !$arg->value instanceof Expr\Array_) {
+                $arrays[] = $arg->value;
+            }
+        }
+
+        return $arrays;
+    }
+
+    /**
+     * The `key => value expression` pairs of one array literal, the last write of a key winning.
+     *
+     * @return list<array{0: string, 1: Expr}>
+     *
+     * @psalm-capabilities read-props
+     */
+    public static function arrayEntries(Expr\Array_ $array): array
+    {
+        return self::entriesOf(self::collectLiteralKeys($array, []));
+    }
+
+    private static function isWith(Expr\CallLike $call): bool
+    {
+        return ($call instanceof Expr\MethodCall || $call instanceof Expr\NullsafeMethodCall || $call instanceof Expr\StaticCall)
+            && $call->name instanceof Identifier
+            && $call->name->toLowerString() === 'with';
+    }
+
+    /**
+     * The data arguments of a binder in the order PHP merges them (a later array wins a shared key):
+     * `$mergeData`, then `$data`. `response()->view($view, $data, $status, $headers)` has no
+     * `$mergeData`: position 2 is the status. A compiled `@includeWhen`/`@includeUnless` puts its
+     * condition first, which shifts both.
+     *
+     * @param list<Arg> $args
+     * @return list<Arg|null>
+     */
+    private static function dataArgs(Expr\CallLike $call, array $args, ?string $binder): array
+    {
+        $shift = $call instanceof Expr\MethodCall && $call->name instanceof Identifier
+            && \in_array($call->name->toLowerString(), ['renderwhen', 'renderunless'], true) ? 1 : 0;
+        $mergeData = $call instanceof Expr\FuncCall || $binder === ViewNameSignatures::ROLE_VIEW_FACTORY
+            ? ArgUtil::byNameOrPosition($args, 2 + $shift, 'mergedata')
+            : null;
+
+        return [$mergeData, ArgUtil::byNameOrPosition($args, 1 + $shift, 'data')];
+    }
+
+    /**
+     * @param list<Arg|null> $arrays in the order PHP merges them: a later array wins a shared key
+     * @return list<array{0: string, 1: Expr}>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function literalEntries(array $arrays): array
+    {
+        $latest = [];
+
+        foreach ($arrays as $arg) {
+            if ($arg instanceof Arg && $arg->value instanceof Expr\Array_) {
+                $latest = self::collectLiteralKeys($arg->value, $latest);
+            }
+        }
+
+        return self::entriesOf($latest);
+    }
+
+    /**
+     * @param array<array-key, Expr> $latest
+     * @return list<array{0: string, 1: Expr}>
+     *
+     * @psalm-pure
+     */
+    private static function entriesOf(array $latest): array
+    {
+        $entries = [];
+
+        foreach ($latest as $key => $value) {
+            // A numeric string key reads back as an int.
+            $entries[] = [(string) $key, $value];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * @param array<array-key, Expr> $latest
+     * @return array<array-key, Expr>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function collectLiteralKeys(Expr\Array_ $array, array $latest): array
+    {
+        foreach ($array->items as $item) {
+            if ($item === null) {
+                continue;
+            }
+
+            if ($item->unpack) {
+                if ($item->value instanceof Expr\Array_) {
+                    $latest = self::collectLiteralKeys($item->value, $latest);
+                }
+
+                continue;
+            }
+
+            if ($item->key instanceof String_) {
+                $latest[$item->key->value] = $item->value;
+            }
+        }
+
+        return $latest;
     }
 
     /**
@@ -112,7 +316,7 @@ final class ViewCallChain
         return $analyzer instanceof FunctionLikeAnalyzer && \strtolower((string) $analyzer->getMethodName()) === 'render';
     }
 
-    private static function walk(Expr $expr, StatementsSource $source): ?self
+    private static function walk(Expr $expr, StatementsSource $source, bool $trimName): ?self
     {
         /** @var list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending */
         $pending = [];
@@ -122,7 +326,7 @@ final class ViewCallChain
         // closer to the receiver.
         while (true) {
             if ($node instanceof Expr\FuncCall) {
-                return self::fromHelperCall($node, $source, $pending);
+                return self::fromHelperCall($node, $source, $pending, $trimName);
             }
 
             if (!$node instanceof Expr\MethodCall
@@ -145,7 +349,7 @@ final class ViewCallChain
             $methodName = $node->name->toLowerString();
 
             if ($node instanceof Expr\StaticCall) {
-                return self::fromBinder(self::roleOfStaticClass($node->class), $methodName, $args, $source, $pending);
+                return self::fromBinder(self::roleOfStaticClass($node->class), null, $methodName, $args, $source, $pending, $trimName);
             }
 
             // Collected rather than folded in here: whether these carry template data at all depends
@@ -157,16 +361,16 @@ final class ViewCallChain
                 continue;
             }
 
-            return self::fromBinder(self::roleOfReceiver($node->var, $source), $methodName, $args, $source, $pending);
+            return self::fromBinder(self::roleOfReceiver($node->var, $source, $methodName), self::receiverClass($node->var, $source), $methodName, $args, $source, $pending, $trimName);
         }
     }
 
     /**
      * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      */
-    private static function fromHelperCall(Expr\FuncCall $call, StatementsSource $source, array $pending): ?self
+    private static function fromHelperCall(Expr\FuncCall $call, StatementsSource $source, array $pending, bool $trimName): ?self
     {
-        if (!$call->name instanceof Name || $call->name->toLowerString() !== 'view') {
+        if (!self::isLaravelViewHelper($call, $source)) {
             return null;
         }
 
@@ -180,7 +384,38 @@ final class ViewCallChain
         // so anything supplied there that we cannot read leaves the key set open.
         $complete = !ArgUtil::byNameOrPosition($args, 2, 'mergedata') instanceof Arg;
 
-        return self::build($args, $source, $pending, true, $complete);
+        return self::build(self::viewArg($args), ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, true, $complete, null, $trimName);
+    }
+
+    /**
+     * Whether a `view(...)` call reaches Laravel's global helper the way PHP resolves it: a `use function`
+     * import or a same-named function in the current namespace wins over the global fallback, and
+     * Psalm may not have seen a project function declared in a file this one never requires.
+     */
+    private static function isLaravelViewHelper(Expr\FuncCall $call, StatementsSource $source): bool
+    {
+        $name = $call->name;
+
+        if (!$name instanceof Name || $name->toLowerString() !== 'view') {
+            return false;
+        }
+
+        if ($name->isFullyQualified()) {
+            return true;
+        }
+
+        if (!$name->isUnqualified() || isset($source->getAliases()->functions['view'])) {
+            return false;
+        }
+
+        $namespace = $source->getNamespace();
+
+        if ($namespace === null || $namespace === '') {
+            return true;
+        }
+
+        return $source instanceof StatementsAnalyzer
+            && !$source->getCodebase()->functions->functionExists($source, \strtolower($namespace . '\\view'));
     }
 
     /**
@@ -189,10 +424,12 @@ final class ViewCallChain
      */
     private static function fromBinder(
         ?string $role,
+        ?string $receiverClass,
         string $methodName,
         array $args,
         StatementsSource $source,
         array $pending,
+        bool $trimName,
     ): ?self {
         $binds = match ($role) {
             ViewNameSignatures::ROLE_VIEW_FACTORY => $methodName === 'make',
@@ -210,35 +447,276 @@ final class ViewCallChain
         // `SimpleMessage::with($line)`, which is what a MailMessage chain's `with()` reaches, appends
         // an intro/outro line to the notification body and never touches the template's data.
         $carriesData = $role !== ViewNameSignatures::ROLE_MAIL_MESSAGE;
+        $view = self::viewArg($args);
 
-        return self::build($args, $source, $pending, $carriesData, $complete);
+        // `Markdown::render()`/`renderText()` swap the `mail` namespace for the markdown component
+        // paths before rendering, so the boot-time `mail` hint the registry knows never renders here.
+        if ($methodName === 'markdown' && $view instanceof String_ && \str_starts_with($view->value, 'mail::')) {
+            return null;
+        }
+
+        $chain = self::build($view, ArgUtil::byNameOrPosition($args, 1, 'data'), $source, $pending, $carriesData, $complete, $role, $trimName);
+
+        $markdown = $methodName === 'markdown';
+
+        return match ($role) {
+            ViewNameSignatures::ROLE_MAILABLE => $chain?->supplying(FrameworkViewData::forMailable($receiverClass, $chain->data, $chain->complete, $markdown, $source)),
+            ViewNameSignatures::ROLE_MAIL_MESSAGE => $chain?->supplying(
+                FrameworkViewData::forMailMessage($receiverClass, $chain->data, $chain->complete, $markdown, $source),
+            ),
+            default => $chain,
+        };
+    }
+
+    /**
+     * The `$__env` Factory call a compiled include reduces to, or null for any other call:
+     * `make($view, $data, $mergeData)` (`@include`, `@includeIf`, `@extends`, `@includeIsolated`),
+     * `renderWhen`/`renderUnless($condition, $view, $data, $mergeData)`, and
+     * `first($views, $data, $mergeData)` (`@includeFirst`, `@extendsFirst`).
+     *
+     * Only a literal data array is read: without one, Blade puts the including scope in the `$data`
+     * slot. The exception is `@includeIsolated('view')`, whose lone-name `make('view')` passes no
+     * data at all.
+     *
+     * `first()` is checked against the first candidate that exists, which is the one
+     * `Factory::first()` renders. Existence is read from disk at analysis time, so its key set is
+     * never treated as closed: only the passed keys are type-checked.
+     */
+    public static function fromInclude(Expr\MethodCall $call, StatementsSource $source): ?self
+    {
+        $target = self::includeTarget($call, $source);
+
+        if ($target === null) {
+            return null;
+        }
+
+        [$name, $at, $args, $methodName] = $target;
+
+        $dataArg = ArgUtil::byNameOrPosition($args, $at + 1, 'data');
+        $literalData = $dataArg instanceof Arg && $dataArg->value instanceof Expr\Array_;
+        $isolatedWithoutData = !$dataArg instanceof Arg && $methodName === 'make' && \count($args) === 1;
+
+        if (!$literalData && !$isolatedWithoutData) {
+            return null;
+        }
+
+        $complete = $methodName !== 'first' && !ArgUtil::byNameOrPosition($args, $at + 2, 'mergedata') instanceof Arg;
+
+        return self::build($name, $dataArg, $source, [], true, $complete);
+    }
+
+    /**
+     * The views a compiled include may render, whatever shape its data takes. {@see self::fromInclude()}
+     * refuses a non-literal data argument because it type-checks keys; a taint write follows any of
+     * them, so it asks only for names. The data positions are {@see self::ownEntries()}'s.
+     *
+     * `first()` yields every literal candidate up to the first one known to exist: a candidate of
+     * unknowable existence (namespaced) may be the one rendered, so it is included, and one provably
+     * absent is skipped. A sound over-approximation, unlike the single view type-checking needs.
+     *
+     * @return list<string>
+     */
+    public static function includedViews(Expr\MethodCall $call, StatementsSource $source): array
+    {
+        $include = self::includeCall($call, $source);
+
+        if ($include === null) {
+            return [];
+        }
+
+        [$args, $methodName] = $include;
+
+        $names = match ($methodName) {
+            'make' => [self::viewArg($args)],
+            'renderwhen', 'renderunless' => [ArgUtil::byNameOrPosition($args, 1, 'view')?->value],
+            'first' => self::mayBeRendered(self::literalCandidates(ArgUtil::byNameOrPosition($args, 0, 'views'))),
+            default => [],
+        };
+
+        $views = [];
+
+        foreach ($names as $name) {
+            $view = self::build($name, null, $source, [], true, true, null, true)?->viewName;
+
+            if ($view !== null) {
+                $views[] = $view;
+            }
+        }
+
+        return $views;
+    }
+
+    /**
+     * The candidates of an `Factory::first()` that could be the rendered one: in order, up to and
+     * including the first known to exist, leaving out those provably absent.
+     *
+     * @param list<String_> $candidates
+     * @return list<String_>
+     */
+    private static function mayBeRendered(array $candidates): array
+    {
+        $possible = [];
+
+        foreach ($candidates as $candidate) {
+            $exists = MissingViewHandler::viewExists($candidate->value);
+
+            if ($exists === false) {
+                continue;
+            }
+
+            $possible[] = $candidate;
+
+            if ($exists === true) {
+                break;
+            }
+        }
+
+        return $possible;
+    }
+
+    /**
+     * The arguments and lower-cased method of a call on a view factory, or null for any other receiver.
+     *
+     * @return array{0: list<Arg>, 1: string}|null
+     */
+    private static function includeCall(Expr\MethodCall $call, StatementsSource $source): ?array
+    {
+        $args = self::args($call);
+
+        if ($args === null || !$call->name instanceof Identifier) {
+            return null;
+        }
+
+        $methodName = $call->name->toLowerString();
+
+        // Resolved only now: the receiver's role depends on which method is called on it.
+        return self::roleOfReceiver($call->var, $source, $methodName) === ViewNameSignatures::ROLE_VIEW_FACTORY ? [$args, $methodName] : null;
+    }
+
+    /**
+     * @return array{0: ?Expr, 1: int, 2: list<Arg>, 3: string}|null the view name expression, the
+     *                                                              argument position before `$data`, the
+     *                                                              arguments and the lower-cased method
+     */
+    private static function includeTarget(Expr\MethodCall $call, StatementsSource $source): ?array
+    {
+        $include = self::includeCall($call, $source);
+
+        if ($include === null) {
+            return null;
+        }
+
+        [$args, $methodName] = $include;
+
+        [$name, $at] = match ($methodName) {
+            'make' => [self::viewArg($args), 0],
+            'renderwhen', 'renderunless' => [ArgUtil::byNameOrPosition($args, 1, 'view')?->value, 1],
+            'first' => [self::firstExistingCandidate(ArgUtil::byNameOrPosition($args, 0, 'views')), 0],
+            default => [null, 0],
+        };
+
+        return [$name, $at, $args, $methodName];
+    }
+
+    /**
+     * @param list<Arg> $args
+     */
+    private static function viewArg(array $args): ?Expr
+    {
+        return ArgUtil::byNameOrPosition($args, 0, 'view')?->value;
+    }
+
+    /**
+     * The first candidate of a literal list that exists on disk, walking past the ones provably
+     * absent, as `Arr::first()` does. The whole list must be plain string literals first: a key
+     * anywhere can overwrite an earlier element, and `FileViewFinder::find()` trims a name, so
+     * `' inc.card '` may render `inc.card` while this lookup misses it. A candidate of unknowable
+     * existence (namespaced) before the first one found declines too.
+     */
+    private static function firstExistingCandidate(?Arg $views): ?String_
+    {
+        $candidates = self::literalCandidates($views);
+
+        foreach ($candidates as $candidate) {
+            $exists = MissingViewHandler::viewExists($candidate->value);
+
+            if ($exists !== false) {
+                return $exists === true ? $candidate : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The candidates of a list made only of plain, already trimmed string literals; empty for any
+     * other list. A key anywhere can overwrite an earlier element, and `FileViewFinder::find()` trims
+     * a name, so `' inc.card '` may render `inc.card` while a lookup of the padded name misses it.
+     *
+     * @return list<String_>
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function literalCandidates(?Arg $views): array
+    {
+        if (!$views instanceof Arg || !$views->value instanceof Expr\Array_) {
+            return [];
+        }
+
+        $candidates = [];
+
+        foreach ($views->value->items as $item) {
+            if ($item === null
+                || $item->key instanceof Expr
+                || !$item->value instanceof String_
+                || $item->value->value !== \trim($item->value->value)
+            ) {
+                return [];
+            }
+
+            $candidates[] = $item->value;
+        }
+
+        return $candidates;
     }
 
     /**
      * Every binder this class recognizes takes `($view, $data)` in that order. `Router::view()` is
      * the exception that puts the name at position 1, which is why it is not in the table above.
      *
-     * @param list<Arg>                                        $args
      * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      */
     private static function build(
-        array $args,
+        ?Expr $name,
+        ?Arg $dataArg,
         StatementsSource $source,
         array $pending,
         bool $carriesData,
         bool $complete,
+        ?string $binder = null,
+        bool $trimName = false,
     ): ?self {
-        $nameArg = ArgUtil::byNameOrPosition($args, 0, 'view');
-
-        if (!$nameArg instanceof Arg || !$nameArg->value instanceof String_) {
+        if (!$name instanceof String_) {
             return null;
         }
 
-        $viewName = $nameArg->value->value;
+        // `Factory::make()` normalizes `/` to `.` before resolving. A spelling whose literal would
+        // look up another file's key than the one Laravel renders declines: surrounding whitespace
+        // (the finder trims) and a second `::` (normalize() keeps only the first two segments).
+        // The taint bridge opts in to the trim instead, because it keys writes by the name Laravel
+        // really resolves, which is the trimmed one.
+        //
+        // A namespaced `pkg::name` needs nothing more: the compile pass registers a hint-root template
+        // under exactly that qualified name, and only when the finder resolves the name to it
+        // ({@see \Psalm\LaravelPlugin\Blade\BladeBootstrapper}). An unknown hint, a vendor/ hint
+        // root, or an uncompiled template has no registry entry, and every consumer declines then.
+        $viewName = ViewName::normalize($name->value);
 
-        // A namespaced name resolves through package-registered roots the compile pass does not
-        // own, so its contract is never in the registry and guessing would be wrong.
-        if ($viewName === '' || \str_contains($viewName, '::')) {
+        if ($trimName) {
+            $viewName = \trim($viewName);
+        }
+
+        if ($viewName === '' || $viewName !== \trim($viewName) || \substr_count($name->value, '::') > 1) {
             return null;
         }
 
@@ -251,13 +729,11 @@ final class ViewCallChain
             return null;
         }
 
-        $dataArg = ArgUtil::byNameOrPosition($args, 1, 'data');
-
         if ($dataArg instanceof Arg) {
             self::mergeArrayArg($dataArg, $source, $data, $complete);
         }
 
-        return new self($viewName, $data, $complete);
+        return new self($viewName, $data, $complete, [], $binder);
     }
 
     /**
@@ -431,8 +907,12 @@ final class ViewCallChain
     /**
      * The role of a receiver expression, following its class hierarchy: a `Mailable` at a call site
      * is almost always a userland subclass, and {@see ViewNameSignatures} keys on exact names.
+     *
+     * A subclass counts only while the called method is still the one a Laravel class declares. An
+     * override can bind any view, or none: `parent::make('other', $data)` renders `other`, and a
+     * response factory's `view()` may return an object whose `with()` ignores the data.
      */
-    private static function roleOfReceiver(Expr $receiver, StatementsSource $source): ?string
+    private static function roleOfReceiver(Expr $receiver, StatementsSource $source, string $method): ?string
     {
         $atomic = self::soleAtomic($receiver, $source);
 
@@ -455,12 +935,27 @@ final class ViewCallChain
         foreach ([...\array_keys($storage->parent_classes), ...\array_keys($storage->class_implements)] as $ancestor) {
             $role = ViewNameSignatures::resolveRole($ancestor);
 
-            if ($role !== null) {
-                return $role;
+            if ($role === null) {
+                continue;
             }
+
+            $declaring = $storage->declaring_method_ids[$method] ?? null;
+
+            return $declaring !== null && ViewNameSignatures::resolveRole($declaring->fq_class_name) === $role ? $role : null;
         }
 
         return null;
+    }
+
+    /**
+     * The one class the receiver is typed as, or null for a union, an intersection or an unknown type.
+     */
+    private static function receiverClass(Expr $receiver, StatementsSource $source): ?string
+    {
+        $atomic = self::soleAtomic($receiver, $source);
+
+        // An intersection is not provably one class.
+        return $atomic instanceof TNamedObject && $atomic->extra_types === [] ? $atomic->value : null;
     }
 
     private static function roleOfStaticClass(Name|Expr $class): ?string

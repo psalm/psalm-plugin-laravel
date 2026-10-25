@@ -18,6 +18,14 @@ return RectorConfig::configure()
         \Rector\PHPUnit\CodeQuality\Rector\FuncCall\AssertFuncCallToPHPUnitAssertRector::class => ['tests/*'], //  Rewrites `assert($x instanceof Foo)` inside test classes to `Assert::assertInstanceOf(...)`,  the two are not equivalent
         \Rector\PHPUnit\CodeQuality\Rector\MethodCall\AssertEmptyNullableObjectToAssertInstanceofRector::class => ['tests/*'],
         \Rector\DeadCode\Rector\ClassMethod\RemoveParentDelegatingClassMethodRector::class => ['tests/*'], // GetKeyOverrideModel
+        // Rewrites `=== null` on a Psalm-typed nullable into `instanceof` a Psalm\Internal class, which silently
+        // evaluates false (disabling the handler) once Psalm renames that class.
+        \Rector\CodeQuality\Rector\Identical\FlipTypeControlToUseExclusiveTypeRector::class => [
+            'src/Handlers/Ai/LlmOutputTaintHandler.php',
+            'src/Handlers/Eloquent/WhereColumnTaintHandler.php',
+            'src/Handlers/Rules/TimingUnsafeComparisonHandler.php',
+            'src/Handlers/Taint/NamedArgumentTaintHandler.php',
+        ],
     ])
     ->withPhpVersion(PhpVersion::PHP_82)
     ->withDowngradeSets(php82: true)

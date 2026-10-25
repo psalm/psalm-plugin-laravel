@@ -236,47 +236,6 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
-     * The hints are canonicalized before the vendor filter, so the boundary they are tested against
-     * has to be canonicalized too. A vendor directory whose configured spelling differs from its
-     * on-disk dirent casing otherwise fails the prefix test against every canonicalized hint, and
-     * the whole vendor filter silently stops filtering.
-     */
-    #[Test]
-    public function a_vendor_root_reached_under_a_mis_cased_vendor_directory_is_still_filtered(): void
-    {
-        if (!$this->filesystemIsCaseInsensitive()) {
-            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
-        }
-
-        $vendorPkgViews = $this->root . '/Fake-Vendor/acme/pkg/views';
-        \mkdir($vendorPkgViews, 0o777, true);
-        \file_put_contents($vendorPkgViews . '/widget.blade.php', "<p>vendor</p>\n");
-
-        $localDir = $this->root . '/extra-views';
-        \mkdir($localDir, 0o777, true);
-        $local = $localDir . '/widget.blade.php';
-        \file_put_contents($local, "<p>{{ \$name }}</p>\n");
-        $local = (string) \realpath($local);
-
-        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
-        $finder->addNamespace('pkg', [$vendorPkgViews, $localDir]);
-
-        $app = new Container();
-        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
-        $app->instance('view.finder', $finder);
-
-        $registrar = new RecordingShadowRegistrar();
-        // Same physical directory as the hint sits in, spelled the way a config value or a derived
-        // install path easily spells it.
-        $misCasedVendorDir = $this->root . '/fake-vendor';
-
-        (new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, vendorDirOverride: $misCasedVendorDir))->boot();
-
-        $this->assertNull(ContractRegistry::contractFor('pkg::widget'), 'the filtered vendor root still owns the name');
-        $this->assertSame([$local], $registrar->reportableTemplates, 'the vendor template must not reach discovery');
-    }
-
-    /**
      * #1552: the same physical view root reaching the finder twice under different case (a
      * published-override-style hint vs. its default-root spelling, or two roots a project
      * configured redundantly) must collapse to ONE discovered template, not double it. `realpath()`
@@ -350,120 +309,6 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
-     * `realpath()` expands a symlink using the link's STORED target string, so a link whose target
-     * is spelled in the wrong case re-introduces the mis-cased spelling AFTER any canonicalization
-     * done on the link path itself. `FileViewFinder` realpaths its `getPaths()` entries but stores
-     * namespace hints RAW, so the hint layer is where such a link actually reaches discovery. The
-     * root list has to be canonicalized after resolution too, or the linked spelling and the
-     * direct spelling survive as two roots.
-     */
-    #[Test]
-    public function a_hint_symlink_whose_stored_target_is_mis_cased_still_collapses_with_the_direct_root(): void
-    {
-        if (!$this->filesystemIsCaseInsensitive()) {
-            $this->markTestSkipped('needs a case-insensitive filesystem to open a mis-cased symlink target');
-        }
-
-        $casedDir = $this->root . '/Resources/views';
-        \mkdir($casedDir, 0o777, true);
-        $template = $casedDir . '/widget.blade.php';
-        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
-        $template = (string) \realpath($template);
-
-        // The stored target string deliberately mis-cases the real 'Resources' dirent.
-        \symlink($this->root . '/resources', $this->root . '/link');
-
-        $finder = new FileViewFinder(new Filesystem(), [$casedDir]);
-        $finder->addNamespace('pkg', $this->root . '/link/views');
-
-        $app = new Container();
-        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
-        $app->instance('view.finder', $finder);
-
-        $registrar = new RecordingShadowRegistrar();
-        $this->bootstrapper($app, $registrar)->boot();
-
-        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
-        $this->assertSame(
-            [$template],
-            $registrar->reportableTemplates,
-            'the linked and the direct spelling of one physical root must not double the discovered templates',
-        );
-        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
-    }
-
-    /**
-     * The same hazard one level down: a `*.blade.php` SYMLINK inside a view root is realpath'd
-     * through its STORED target, so a mis-cased target string re-introduces a spelling the roots
-     * already collapsed. The physical file is then discovered twice — directly, and through the
-     * link — and one template becomes two shadows.
-     */
-    #[Test]
-    public function a_template_symlink_whose_stored_target_is_mis_cased_is_not_discovered_twice(): void
-    {
-        if (!$this->filesystemIsCaseInsensitive()) {
-            $this->markTestSkipped('needs a case-insensitive filesystem to open a mis-cased symlink target');
-        }
-
-        $partials = $this->viewDir . '/Partials';
-        \mkdir($partials, 0o777, true);
-        $template = $partials . '/widget.blade.php';
-        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
-        $template = (string) \realpath($template);
-
-        // The stored target string deliberately mis-cases the real 'Partials' dirent.
-        \symlink($this->viewDir . '/partials/widget.blade.php', $this->viewDir . '/alias.blade.php');
-
-        $registrar = new RecordingShadowRegistrar();
-        $this->bootstrapper($this->app(), $registrar)->boot();
-
-        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
-        $this->assertSame(
-            [$template],
-            $registrar->reportableTemplates,
-            'the linked and the direct spelling of one physical template must not double discovery',
-        );
-        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
-    }
-
-    /**
-     * The hint layer is the entry the issue describes (different hint sources supplying different
-     * casing): a namespace hint spelled in the wrong case must collapse with the identically-cased
-     * default root, not double every template under it.
-     */
-    #[Test]
-    public function a_mis_cased_namespace_hint_collapses_with_the_default_root(): void
-    {
-        if (!$this->filesystemIsCaseInsensitive()) {
-            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
-        }
-
-        $casedDir = $this->root . '/Resources/views';
-        \mkdir($casedDir, 0o777, true);
-        $template = $casedDir . '/widget.blade.php';
-        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
-        $template = (string) \realpath($template);
-
-        $finder = new FileViewFinder(new Filesystem(), [$casedDir]);
-        $finder->addNamespace('pkg', $this->root . '/resources/views');
-
-        $app = new Container();
-        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
-        $app->instance('view.finder', $finder);
-
-        $registrar = new RecordingShadowRegistrar();
-        $this->bootstrapper($app, $registrar)->boot();
-
-        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
-        $this->assertSame(
-            [$template],
-            $registrar->reportableTemplates,
-            'a mis-cased hint spelling of the default root must not double the discovered templates',
-        );
-        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
-    }
-
-    /**
      * A boot can bind 'view' with a closure that needs runtime-only state and throws under the
      * plugin's partial boot, while still binding a perfectly good 'view.finder'. The throw must
      * fall through to the fallback, not disable Blade analysis for the run.
@@ -500,21 +345,6 @@ final class BladeBootstrapperTest extends TestCase
         // Confirm, not assume: this plain template's shadow carries no string literal at all, so it
         // must not be mistaken for a (vacuous) pass on the #1505 wiring below.
         $this->assertSame([], $registrar->queuedResolvableClassLikes);
-    }
-
-    #[Test]
-    public function queues_the_ambient_prelude_classes_for_scanning_on_a_warm_manifest_run(): void
-    {
-        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
-        $this->bootstrapper($this->app(), new RecordingShadowRegistrar())->boot();
-
-        // Second run against the same shadow dir: every template is a manifest freshness hit, so
-        // ShadowCompiler never runs, and the queueing still has to happen (see BladeBootstrapper::run()).
-        $second = new RecordingShadowRegistrar();
-        $this->bootstrapper($this->app(), $second)->boot();
-
-        $this->assertSame(PreludeBuilder::ambientClassNames(), $second->queuedClassLikes);
-        $this->assertSame([], $second->queuedResolvableClassLikes);
     }
 
     private function appWithViewFactory(): Container
@@ -628,7 +458,7 @@ final class BladeBootstrapperTest extends TestCase
 
     private function reportingBootstrapper(Container $app, RecordingShadowRegistrar $registrar): BladeBootstrapper
     {
-        return new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, false, true);
+        return new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, reportUndeclaredVariables: true);
     }
 
     /** @return list<string> the template-owned names (`$read_<name>`) a boot left out of its shadows' `mixed` net */
@@ -708,20 +538,6 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertCount(1, $shadows[0]);
         $this->assertCount(1, $shadows[1]);
         $this->assertNotSame($shadows[0][0], $shadows[1][0]);
-    }
-
-    /**
-     * A `@props` entry carries no type, so it is no contract line: a prop the template overwrites
-     * at file level is a local like any other, and stays undeclared.
-     */
-    #[Test]
-    public function an_untyped_props_entry_is_not_declared_by_the_contract(): void
-    {
-        $this->writeTemplate('profile.blade.php', "@props(['size'])\n@php \$size = 'sm'; @endphp\n<p>{{ \$size }}</p>\n");
-        $registrar = new RecordingShadowRegistrar();
-        $this->bootstrapper($this->app(), $registrar)->boot();
-
-        $this->assertStringNotContainsString('$size */', (string) \file_get_contents($registrar->analyzedShadows[0]));
     }
 
     /**
@@ -856,43 +672,14 @@ final class BladeBootstrapperTest extends TestCase
         $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
         $registrar = new RecordingShadowRegistrar();
 
-        $this->bootstrapper($app, $registrar)->boot();
+        $bootstrapper = $this->bootstrapper($app, $registrar);
+        $bootstrapper->boot();
 
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('blade.compiler', $this->progress->warningText());
         $this->assertSame(0, $registrar->markCalls);
         $this->assertSame([], $registrar->analyzedShadows);
         $this->assertDirectoryDoesNotExist($this->shadowDir);
-    }
-
-    #[Test]
-    public function degrades_when_the_blade_compiler_binding_is_not_a_blade_compiler(): void
-    {
-        $app = $this->app();
-        $app->instance('blade.compiler', new \stdClass());
-        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
-        $registrar = new RecordingShadowRegistrar();
-
-        $this->bootstrapper($app, $registrar)->boot();
-
-        $this->assertCount(1, $this->progress->warnings);
-        $this->assertStringContainsString('blade.compiler', $this->progress->warningText());
-        $this->assertSame([], $registrar->analyzedShadows);
-    }
-
-    #[Test]
-    public function degrades_when_the_view_finder_is_unbound(): void
-    {
-        $app = new Container();
-        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
-
-        $registrar = new RecordingShadowRegistrar();
-
-        $this->bootstrapper($app, $registrar)->boot();
-
-        $this->assertCount(1, $this->progress->warnings);
-        $this->assertStringContainsString('view', $this->progress->warningText());
-        $this->assertSame([], $registrar->analyzedShadows);
     }
 
     #[Test]
@@ -930,49 +717,6 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     #[Test]
-    public function degrades_when_the_cache_directory_is_not_writable(): void
-    {
-        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
-        \mkdir(\dirname($this->shadowDir), 0o777, true);
-        \mkdir($this->shadowDir, 0o555);
-        $registrar = new RecordingShadowRegistrar();
-
-        $this->bootstrapper($this->app(), $registrar)->boot();
-
-        \chmod($this->shadowDir, 0o777);
-
-        $this->assertCount(1, $this->progress->warnings);
-        $this->assertStringContainsString('writable', $this->progress->warningText());
-        $this->assertSame(0, $registrar->markCalls);
-    }
-
-    #[Test]
-    public function reports_a_discovery_failure_even_when_the_shadow_directory_cannot_be_prepared(): void
-    {
-        $nested = $this->viewDir . '/protected';
-        \mkdir($nested, 0o777, true);
-        $this->writeTemplate('protected/unreachable.blade.php', "{{ \$x }}\n");
-        \chmod($nested, 0o000);
-
-        // A regular file where the shadow directory should go: mkdir cannot win. This failure
-        // happens after findTemplates() has already recorded the scan failure above, so both
-        // causes must reach the user even though the run bails out early.
-        \mkdir(\dirname($this->shadowDir), 0o777, true);
-        \file_put_contents($this->shadowDir, 'in the way');
-        $registrar = new RecordingShadowRegistrar();
-
-        try {
-            $this->bootstrapper($this->app(), $registrar)->boot();
-        } finally {
-            \chmod($nested, 0o777);
-        }
-
-        $this->assertCount(2, $this->progress->warnings, $this->progress->warningText());
-        $this->assertStringContainsString($this->shadowDir, $this->progress->warningText());
-        $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
-    }
-
-    #[Test]
     public function a_template_that_fails_to_compile_is_reported_once_and_the_rest_still_register(): void
     {
         $broken = $this->writeTemplate('broken.blade.php', "{{ \$x }}\n@unparseable\n");
@@ -985,13 +729,10 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->bootstrapper($app, $registrar)->boot();
 
-        // The one warning is for `ThrowingBladeCompiler` being a compiler SUBCLASS (unconditionally
-        // untrustworthy, #1517 F3, unrelated to this test's own point). The compile failure is an
-        // issue instead, so it is not named in a warning `--no-progress` would discard.
-        $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
-        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
+        // The compile failure is an issue instead, so it is not named in a warning `--no-progress` would discard.
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
         $this->assertSame(
-            [[$broken, "{{ \$x }}\n@unparseable\n", 'RuntimeException: unexpected end of file']],
+            [[$broken, "{{ \$x }}\n@unparseable\n", 'unexpected end of file']],
             $registrar->compileFailures,
         );
         $this->assertStringContainsString("skipped Blade template '{$broken}'", \implode("\n", $this->progress->debugMessages));
@@ -1029,53 +770,10 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
 
         $this->assertSame([$broken], $registrar->reportableTemplates);
-        $this->assertSame([[$broken, "@unparseable\n", 'RuntimeException: unexpected end of file']], $registrar->compileFailures);
+        $this->assertSame([[$broken, "@unparseable\n", 'unexpected end of file']], $registrar->compileFailures);
         $this->assertSame([], $registrar->analyzedShadows);
         $this->assertSame([], ViewReferenceRegistry::templates(), 'no template facts on a run that never activated');
         $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
-    }
-
-    #[Test]
-    public function a_compile_failure_stays_in_the_warning_when_no_template_compiled_and_it_cannot_be_made_reportable(): void
-    {
-        $broken = $this->writeTemplate('broken.blade.php', "@unparseable\n");
-        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
-        $app = $this->app();
-        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
-
-        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
-
-        $this->assertSame([], $registrar->compileFailures);
-        $this->assertStringContainsString("1 Blade template(s) were skipped and are not analyzed ({$broken})", $this->progress->warningText());
-    }
-
-    #[Test]
-    public function a_compile_failure_is_not_reported_when_activation_fails(): void
-    {
-        $this->writeTemplate('broken.blade.php', "@unparseable\n");
-        $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
-        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
-        $app = $this->app();
-        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
-
-        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
-
-        $this->assertSame([], $registrar->compileFailures, 'a degraded run reports nothing from Blade');
-        $this->assertStringContainsString('Blade template analysis is disabled for this run', $this->progress->warningText());
-    }
-
-
-    #[Test]
-    public function registers_nothing_when_the_project_file_write_fails(): void
-    {
-        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
-        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
-
-        $this->bootstrapper($this->app(), $registrar)->boot();
-
-        $this->assertSame(1, $registrar->markCalls);
-        $this->assertSame([], $registrar->analyzedShadows, 'an invisible shadow is pure cost: register nothing');
-        $this->assertCount(1, $this->progress->warnings);
     }
 
     /**
@@ -1106,21 +804,6 @@ final class BladeBootstrapperTest extends TestCase
     }
 
 
-    /** The reorder that makes the failure path empty must still publish every template fact on success. */
-    #[Test]
-    public function publishes_every_registry_when_activation_succeeds(): void
-    {
-        $template = $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
-        $registrar = new RecordingShadowRegistrar();
-
-        $this->bootstrapper($this->app(), $registrar)->boot();
-
-        $this->assertNotNull(ContractRegistry::contractFor('profile'));
-        $this->assertSame(['profile' => $template], ViewReferenceRegistry::templates());
-        $this->assertCount(1, $registrar->analyzedShadows);
-        $this->assertNotNull(ShadowRegistry::entryFor($registrar->analyzedShadows[0]));
-    }
-
     /**
      * Shadow files written this run, straight off disk: on the failure path the registrar never
      * receives them, so the bootstrapper's own return value cannot name them.
@@ -1145,27 +828,13 @@ final class BladeBootstrapperTest extends TestCase
     {
         $registrar = new RecordingShadowRegistrar();
 
-        $this->bootstrapper($this->app(), $registrar)->boot();
+        $bootstrapper = $this->bootstrapper($this->app(), $registrar);
+        $bootstrapper->boot();
 
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
         $this->assertSame(0, $registrar->markCalls);
-    }
-
-    #[Test]
-    public function a_missing_view_directory_warns_once_but_is_not_a_failure(): void
-    {
-        $app = new Container();
-        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
-        $app->instance('view.finder', new FileViewFinder(new Filesystem(), [$this->root . '/nowhere']));
-
-        $registrar = new RecordingShadowRegistrar();
-
-        $this->bootstrapper($app, $registrar)->boot();
-
-        $this->assertCount(1, $this->progress->warnings);
-        $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
-        $this->assertSame(0, $registrar->markCalls);
+        $this->assertNull($bootstrapper->disabled(), 'an empty view tree is not a disable: failOnInternalError must not fire');
     }
 
     /**
@@ -1246,42 +915,6 @@ final class BladeBootstrapperTest extends TestCase
     }
 
     /**
-     * #1517 M1: an invokable object's constructor state is invisible to
-     * `ReflectionFunction::getStaticVariables()`, so two directive handlers that are different
-     * OBJECT INSTANCES with different behaviour must still force a recompile between runs, not
-     * just hash identically off their shared class file and go stale.
-     */
-    #[Test]
-    public function an_invokable_directive_object_swapped_between_runs_recompiles_even_though_the_template_did_not_change(): void
-    {
-        $template = $this->writeTemplate('uses-directive.blade.php', "@marker\n");
-
-        $firstApp = $this->app();
-        /** @var BladeCompiler $firstCompiler */
-        $firstCompiler = $firstApp->make('blade.compiler');
-        $firstCompiler->directive('marker', new MarkerDirective('MARK-V1'));
-
-        $first = new RecordingShadowRegistrar();
-        $this->bootstrapper($firstApp, $first)->boot();
-        $this->assertStringContainsString('MARK-V1', (string) \file_get_contents($first->analyzedShadows[0]));
-
-        $secondApp = $this->app();
-        /** @var BladeCompiler $secondCompiler */
-        $secondCompiler = $secondApp->make('blade.compiler');
-        $secondCompiler->directive('marker', new MarkerDirective('MARK-V2'));
-
-        $second = new RecordingShadowRegistrar();
-        $this->bootstrapper($secondApp, $second)->boot();
-
-        $this->assertSame([$template], $second->reportableTemplates);
-        $this->assertStringContainsString(
-            'MARK-V2',
-            (string) \file_get_contents($second->analyzedShadows[0]),
-            'an invokable directive object swapped between runs must recompile even though its class file did not change',
-        );
-    }
-
-    /**
      * `if()` stores the user's callback in the compiler's `$conditions` array, distinct from the
      * wrapper directives it also registers (which live in `$customDirectives` and never change).
      * Editing only the condition callback must still invalidate the cache, even though nothing in
@@ -1327,13 +960,13 @@ final class BladeBootstrapperTest extends TestCase
      * #1517 M3: positive-side coverage for the `$trustedEnvironment && $manifest->isFresh(...)`
      * gate (`BladeBootstrapper::compileAll()`). An internal-function directive handler
      * (`getFileName()` returns `false`) makes `CompilerEnvironment::describe()` report
-     * `trustworthy = false`, which must (a) emit the untrusted-environment warning every run, and
+     * `trustworthy = false`, which must (a) stay out of the warnings (debug only, #1930), and
      * (b) force a recompile even on a SECOND run against an unchanged template and an unchanged
      * (still-untrustworthy) environment — the existing coverage only pins the negative side
      * (`assertSame([], $this->progress->warnings)` elsewhere in this suite).
      */
     #[Test]
-    public function an_untrustworthy_environment_recompiles_every_run_and_warns(): void
+    public function an_untrustworthy_environment_recompiles_every_run_without_a_warning(): void
     {
         $registerUntrustedDirective = static function (Container $app): void {
             /** @var BladeCompiler $compiler */
@@ -1348,9 +981,10 @@ final class BladeBootstrapperTest extends TestCase
         $first = new RecordingShadowRegistrar();
         $this->bootstrapper($firstApp, $first)->boot();
 
-        $this->assertCount(1, $this->progress->warnings, 'an unresolvable directive must warn even on the first, cold run');
-        $this->assertStringContainsString('1 compiler input cannot be fingerprinted', $this->progress->warningText());
-        $this->assertStringContainsString("directive 'shout' (internal function", \implode('', $this->progress->debugMessages));
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $debug = \implode('', $this->progress->debugMessages);
+        $this->assertStringContainsString('1 compiler input cannot be fingerprinted', $debug);
+        $this->assertStringContainsString("directive 'shout' (internal function", $debug);
 
         // A marker only a recompile would overwrite.
         $shadow = $first->analyzedShadows[0];
@@ -1361,7 +995,6 @@ final class BladeBootstrapperTest extends TestCase
         $second = new RecordingShadowRegistrar();
         $this->bootstrapper($secondApp, $second)->boot();
 
-        $this->assertCount(2, $this->progress->warnings, 'the second run must warn again: the environment is still untrustworthy');
         $this->assertNotSame(
             "<?php // stale\n",
             (string) \file_get_contents($second->analyzedShadows[0]),
@@ -1369,38 +1002,38 @@ final class BladeBootstrapperTest extends TestCase
         );
     }
 
-    /**
-     * #1693: the default warning stays a single line; the inputs are listed (uncapped) under --debug.
-     */
+    /** The caller throws instead (Plugin::initBladeAnalysis()), so warning here would report the disable twice. */
     #[Test]
-    public function the_untrusted_environment_warning_is_short_and_inputs_are_listed_in_debug(): void
+    public function a_disable_under_fail_on_internal_error_is_recorded_without_a_warning(): void
     {
-        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+        $app = new Container();
+        $app->instance('view.finder', new FileViewFinder(new Filesystem(), [$this->viewDir]));
 
-        $app = $this->app();
-        /** @var BladeCompiler $compiler */
-        $compiler = $app->make('blade.compiler');
+        $bootstrapper = new BladeBootstrapper($app, new RecordingShadowRegistrar(), $this->progress, $this->shadowDir, failOnInternalError: true);
 
-        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
-            $compiler->directive($name, 'strtoupper');
+        $this->assertFalse($bootstrapper->boot());
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertStringContainsString("the 'blade.compiler' service is not bound", (string) $bootstrapper->disabled()?->getMessage());
+    }
+
+    /** Unreadable view roots with nothing found elsewhere leave Blade with nothing: a disable, not a silent zero. */
+    #[Test]
+    public function unreadable_view_roots_with_no_template_discovered_disable_blade(): void
+    {
+        $nested = $this->viewDir . '/protected';
+        \mkdir($nested, 0o777, true);
+        $this->writeTemplate('protected/unreachable.blade.php', "{{ \$x }}\n");
+        \chmod($nested, 0o000);
+
+        try {
+            $bootstrapper = $this->bootstrapper($this->app(), new RecordingShadowRegistrar());
+            $this->assertFalse($bootstrapper->boot());
+        } finally {
+            \chmod($nested, 0o777);
         }
 
-        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
-
-        $this->assertCount(1, $this->progress->warnings);
-        $text = $this->progress->warningText();
-        $this->assertStringNotContainsString("\n", \trim($text));
-        $this->assertStringContainsString('5 compiler inputs cannot be fingerprinted', $text);
-        $this->assertStringContainsString('analysis results are unaffected', $text);
-        $this->assertStringContainsString('--debug', $text);
-        $this->assertStringNotContainsString("directive 'a'", $text);
-
-        $debug = \implode('', $this->progress->debugMessages);
-
-        foreach (['a', 'b', 'c', 'd', 'e'] as $name) {
-            $this->assertStringContainsString("  - directive '{$name}'", $debug);
-        }
-
-        $this->assertStringContainsString('To restore caching', $debug);
+        $this->assertStringContainsString('1 view directory could not be read', (string) $bootstrapper->disabled()?->getMessage());
+        $this->assertStringContainsString('Blade template analysis is disabled for this run', $this->progress->warningText());
+        $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
     }
 }

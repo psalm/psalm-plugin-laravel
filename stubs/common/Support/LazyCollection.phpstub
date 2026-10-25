@@ -14,7 +14,7 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
- * The list mirrors EnumeratesValues::$proxies at the 12.20 floor — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the lowest supported 12.x — do not edit without checking that array.
  * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
  * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
@@ -82,9 +82,9 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @template TMakeKey of array-key
      * @template TMakeValue
      *
-     * `...$args` is claimed unconditionally: it's real since Laravel 13.3.0 (now the 13.x floor
-     * - see composer.json), and on the 12.x floor (12.20+) PHP silently ignores excess call-site
-     * arguments beyond the native parameter list, so the wider claim is harmless there too.
+     * `...$args` is claimed unconditionally: it's real on every supported 13.x (since 13.3.0), and
+     * on 12.x PHP silently ignores excess call-site arguments beyond the native
+     * parameter list, so the wider claim is harmless there too.
      *
      * Known limitation: a bare (non-closure) `Generator` passed directly - e.g. `make($generator)` -
      * type-checks clean here via the `iterable<TMakeKey, TMakeValue>` branch, but Laravel's runtime
@@ -127,12 +127,7 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * parameter (it forwards func_get_args() to Collection::random) — matched
      * here against Laravel source.
      *
-     * Unused method template: workaround for vimeo/psalm#11837, a conditional return in a stub
-     * that re-declares a reflected method otherwise collapses to its first branch.
-     *
      * `$preserveKeys = true` keeps the source keys; any other number result is re-indexed.
-     *
-     * @template TUnused
      *
      * @param  int|null  $number
      * @param  bool  $preserveKeys
@@ -194,4 +189,72 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * Pad collection to the specified length with a value.
+     *
+     * The generator re-yields every item under its own key, so string keys are kept (a negative
+     * size delegates to Collection::pad(), which keeps them too); the appended values take int keys.
+     * Laravel's docblock declares `int`.
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return static<TKey|int, TValue|TPadValue>
+     */
+    public function pad($size, $value) {}
+
+    /**
+     * Callback params name the class with its templates instead of Laravel's `callable($this)`;
+     * see `Illuminate\Support\Collection::tap()` in the Collection stub.
+     *
+     * @param  callable(\Illuminate\Support\LazyCollection<TKey, TValue>): mixed  $callback
+     * @return $this
+     */
+    public function tap(callable $callback) {}
+
+    /**
+     * @template TPipeReturnType
+     *
+     * @param  callable(\Illuminate\Support\LazyCollection<TKey, TValue>): TPipeReturnType  $callback
+     * @return TPipeReturnType
+     */
+    public function pipe(callable $callback) {}
+
+    /**
+     * @template TWhenEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
+     */
+    public function whenEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TWhenNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
+     */
+    public function whenNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
+     */
+    public function unlessEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
+     */
+    public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
 }

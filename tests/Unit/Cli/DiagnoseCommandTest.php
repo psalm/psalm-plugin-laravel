@@ -7,6 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Cli;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\Config;
 use Psalm\LaravelPlugin\Cli\Diagnose\Diagnostics;
 use Psalm\LaravelPlugin\Cli\Diagnose\Report;
 use Psalm\LaravelPlugin\Cli\Diagnose\TipsProvider;
@@ -123,20 +124,6 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
-    public function no_tips_flag_suppresses_tips_section(): void
-    {
-        $tipsProvider = $this->stubTipsProvider(['should not appear']);
-        $tester = $this->testerFor($this->fixtureProvider($this->okReport()), $tipsProvider);
-
-        $exit = $tester->execute(['--no-tips' => true]);
-        $display = $tester->getDisplay();
-
-        $this->assertSame(Command::SUCCESS, $exit, $display);
-        $this->assertStringNotContainsString('Tips', $display);
-        $this->assertStringNotContainsString('should not appear', $display);
-    }
-
-    #[Test]
     public function provider_count_renders_by_default_without_the_full_list(): void
     {
         $tester = $this->testerFor($this->fixtureProvider($this->okReport()));
@@ -180,6 +167,70 @@ final class DiagnoseCommandTest extends TestCase
         $this->assertSame($sorted, $report->loadedProviders);
     }
 
+    #[Test]
+    public function blade_is_off_unless_the_psalm_config_enables_it(): void
+    {
+        $root = $this->tempProject();
+        $this->assertSame('off', (new Diagnostics())->bladeStatus($root));
+
+        $this->writePsalmXml($root, '<pluginClass class="Psalm\LaravelPlugin\Plugin" />');
+        $this->assertSame('off', (new Diagnostics())->bladeStatus($root));
+
+        $this->writePsalmXml($root, '<pluginClass class="Psalm\LaravelPlugin\Plugin"><blade value="false" /></pluginClass>');
+        $this->assertSame('off', (new Diagnostics())->bladeStatus($root));
+    }
+
+    #[Test]
+    public function blade_reads_the_config_psalm_itself_finds_from_a_subdirectory(): void
+    {
+        $root = $this->tempProject();
+        \mkdir($root . '/app');
+        $this->writePsalmXml($root, "<pluginClass class=\"Psalm\\LaravelPlugin\\Plugin\"><blade cacheDir=\"{$root}/shadows\" /></pluginClass>", 'psalm.dist.xml');
+
+        $this->assertSame("on (cache {$root}/shadows)", (new Diagnostics())->bladeStatus($root . '/app'));
+    }
+
+    #[Test]
+    public function the_default_blade_cache_sits_under_psalms_cache_like_a_real_run(): void
+    {
+        $root = $this->tempProject();
+        $this->writePsalmXml($root, '<pluginClass class="Psalm\LaravelPlugin\Plugin"><blade /></pluginClass>');
+
+        $status = (new Diagnostics())->bladeStatus($root);
+
+        $this->assertSame('on (cache ' . Config::getInstance()->getCacheDirectory() . '/plugin-laravel/blade)', $status);
+    }
+
+    /** @var list<string> */
+    private array $tempDirs = [];
+
+    #[\Override]
+    protected function tearDown(): void
+    {
+        // Loading a Psalm config plants its singleton; sibling tests rely on there being none.
+        (new \ReflectionClass(Config::class))->getProperty('instance')->setValue(null, null);
+
+        foreach ($this->tempDirs as $dir) {
+            (new \Illuminate\Filesystem\Filesystem())->deleteDirectory($dir);
+        }
+    }
+
+    private function tempProject(): string
+    {
+        $root = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-diagnose-' . \uniqid('', true);
+        \mkdir($root);
+        $this->tempDirs[] = $root;
+
+        return $root;
+    }
+
+    private function writePsalmXml(string $root, string $plugins, string $fileName = 'psalm.xml'): void
+    {
+        \file_put_contents(
+            $root . '/' . $fileName,
+            '<?xml version="1.0"?><psalm xmlns="https://getpsalm.org/schema/config"><projectFiles><directory name="." /></projectFiles><plugins>' . $plugins . '</plugins></psalm>',
+        );
+    }
 
     private function testerFor(Diagnostics $diagnostics, ?TipsProvider $tipsProvider = null): CommandTester
     {

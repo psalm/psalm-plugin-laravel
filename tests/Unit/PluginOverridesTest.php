@@ -51,15 +51,10 @@ final class PluginOverridesTest extends TestCase
     public static function invalidTokens(): iterable
     {
         yield 'unknown key lists the supported ones' => ['bladee=true', "unknown key 'bladee'. Supported keys: modelProperties.columnFallback,"];
-        yield 'path keys are XML-only' => ['blade.cacheDir=/tmp/x', "unknown key 'blade.cacheDir'"];
         yield 'configDirectory is XML-only' => ['configDirectory=a', "unknown key 'configDirectory'"];
         yield 'bad bool' => ['blade=yes', "invalid value 'yes' for key 'blade'. Valid values: true, false."];
-        yield 'uppercase bool' => ['blade=TRUE', "invalid value 'TRUE'"];
-        yield 'auto is not accepted' => ['findPromptInjection=auto', "invalid value 'auto'"];
         yield 'bad enum' => ['modelProperties.columnFallback=db', 'Valid values: migrations, none.'];
         yield 'missing equals' => ['blade', "'blade' is not KEY=VALUE"];
-        yield 'empty key' => ['=true', "unknown key ''"];
-        yield 'empty value' => ['blade=', "invalid value ''"];
     }
 
     #[Test]

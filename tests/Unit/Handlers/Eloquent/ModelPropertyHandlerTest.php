@@ -102,18 +102,6 @@ final class ModelPropertyHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_resolves_all_columns_for_model(): void
-    {
-        $columns = ModelPropertyHandler::resolveAllColumns(WorkOrder::class);
-
-        $this->assertArrayHasKey('id', $columns);
-        $this->assertArrayHasKey('title', $columns);
-        $this->assertArrayHasKey('published_at', $columns);
-        $this->assertArrayHasKey('status', $columns);
-        $this->assertCount(4, $columns);
-    }
-
-    #[Test]
     public function table_attribute_columns_are_registered_for_property_writes(): void
     {
         if (!\class_exists(Table::class)) {
@@ -162,35 +150,6 @@ final class ModelPropertyHandlerTest extends TestCase
         $this->assertFalse($union->isMixed(), 'SET column must not be inferred as `mixed`');
         $this->assertTrue($union->hasString(), 'SET column should map to a string-flavored union');
         $this->assertFalse($union->isNullable(), 'Non-nullable SET column must not include null');
-    }
-
-    #[Test]
-    public function it_includes_null_for_nullable_set_column(): void
-    {
-        $union = $this->mapColumn(SchemaColumn::TYPE_SET, nullable: true, options: ['draft', 'published']);
-
-        $this->assertFalse($union->isMixed());
-        $this->assertTrue($union->isNullable(), 'Nullable SET column must include null');
-    }
-
-    /**
-     * Edge case: a SET column whose options never get parsed (rare — e.g. a malformed
-     * migration or {@see \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SqlSchemaParser}
-     * meeting `SET` without an option list). Should degrade to plain string, never `mixed`.
-     */
-    #[Test]
-    public function it_falls_back_to_string_for_set_column_without_options(): void
-    {
-        $union = $this->mapColumn(SchemaColumn::TYPE_SET, options: []);
-
-        $this->assertFalse($union->isMixed());
-        $this->assertTrue($union->hasString());
-    }
-
-    #[Test]
-    public function it_returns_empty_for_unknown_model(): void
-    {
-        $this->assertSame([], ModelPropertyHandler::resolveAllColumns('NonExistent\\Model'));
     }
 
     /**

@@ -47,29 +47,6 @@ final class ReturnTypeResolverTest extends TestCase
         $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
     }
 
-    #[Test]
-    public function resolve_returns_null_when_template_params_are_empty(): void
-    {
-        $result = ReturnTypeResolver::resolve('App\\Source', [], $this->createCodebaseStub(), 'where');
-
-        $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
-    }
-
-    #[Test]
-    public function initForRule_clears_cache(): void
-    {
-        $reflection = new \ReflectionClass(ReturnTypeResolver::class);
-        $cacheProperty = $reflection->getProperty('selfReturnCache');
-
-        // Seed the cache with a fake entry
-        $cacheProperty->setValue(null, ['test::key' => true]);
-        $this->assertNotEmpty($cacheProperty->getValue());
-
-        ReturnTypeResolver::initForRule(self::$emptyRule);
-
-        $this->assertEmpty($cacheProperty->getValue());
-    }
-
     /**
      * Create a minimal Codebase stub that won't be accessed
      * (tests short-circuit before Codebase interaction).

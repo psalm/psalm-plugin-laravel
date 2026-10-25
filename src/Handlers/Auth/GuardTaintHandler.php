@@ -59,7 +59,8 @@ final class GuardTaintHandler implements AfterClassLikeVisitInterface
             $method = self::resolveMethod($event, $storage, 'gettokenforrequest');
 
             if ($method instanceof \Psalm\Storage\MethodStorage) {
-                $method->taint_source_types |= TaintKind::ALL_INPUT;
+                // Not ALL_INPUT: also the custom taints psalm.xml aliases into `input`.
+                $method->taint_source_types |= $event->getCodebase()->getInputTaints();
             }
         } elseif (\strcasecmp($storage->name, SessionGuard::class) === 0) {
             $method = self::resolveMethod($event, $storage, 'hashpasswordforcookie');

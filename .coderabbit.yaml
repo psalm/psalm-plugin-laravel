@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# Repository rules come from AGENTS.md and .github/skills/code-review/SKILL.md,
-# which CodeRabbit auto-discovers; keep them there, not here.
+# Repository rules live in AGENTS.md, which CodeRabbit auto-discovers, and in
+# .github/skills/code-review/SKILL.md, which is not a default guideline pattern and is
+# wired in via knowledge_base.code_guidelines.filePatterns below. Keep rules there, not here.
 language: en-US
 
 reviews:
@@ -69,6 +70,13 @@ reviews:
       enabled: false
     languagetool:
       enabled: false
+
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      # Object form: a plain string entry would scope the rules to .github/skills/code-review/ only.
+      - files: ".github/skills/code-review/SKILL.md"
+        applyTo: "**"
 
 chat:
   art: false

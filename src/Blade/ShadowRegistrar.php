@@ -74,11 +74,11 @@ interface ShadowRegistrar
     public function queueFilesForScanning(array $paths): void;
 
     /**
-     * Reports a template the compiler threw on, at its line 1, as `BladeCompileFailure`. Only called
+     * Reports a template the compiler threw on, at its line 1, as `BladeCompileError`. Only called
      * after {@see self::markTemplatesReportable()} succeeded for it.
      *
      * @param string $source  the template source the compiler was given
-     * @param string $message the compiler's exception class and message
+     * @param string $message the compiler's cause, on one line
      *
      * @psalm-impure
      */

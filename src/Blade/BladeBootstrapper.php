@@ -12,6 +12,7 @@ use Illuminate\View\FileViewFinder;
 use Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer;
 use Psalm\LaravelPlugin\Internal\VendorDirectory;
 use Psalm\Progress\Progress;
+use Psalm\Progress\VoidProgress;
 
 /**
  * Compiles every Blade template of the analyzed application into a shadow PHP file and hands both
@@ -21,7 +22,7 @@ use Psalm\Progress\Progress;
  * `Config::initializePlugins()` is on the stack, before Psalm starts scanning.
  *
  * Nothing here throws. Every failure disables Blade analysis for the run with one warning naming
- * the cause, because an opt-in extra is never worth failing an analysis over.
+ * the cause, recorded in {@see disabled()} so the caller can escalate it under `failOnInternalError`.
  *
  * @internal
  */
@@ -38,12 +39,14 @@ final class BladeBootstrapper
         private readonly ShadowRegistrar $registrar,
         private readonly Progress $output,
         private readonly string $shadowDir,
-        /** Opt-in for UnusedViewData: gates two extra AST walks per template. */
+        /** UnusedViewData's read sets: two extra AST walks per template. The plugin always collects them. */
         private readonly bool $collectDataIncludes = false,
+        /** The caller escalates a disable, so the warning is left to that one report. */
+        private readonly bool $failOnInternalError = false,
         /** Opt-in (#1827): a contract template's undeclared reads stay out of the prelude's `mixed` net. */
         private readonly bool $reportUndeclaredVariables = false,
         /**
-         * Test seam: vendor dir for the hint-root filter. Null derives it from
+         * Test seam: vendor dir for the hint-root filter and the project root of listed inputs. Null derives it from
          * laravel/framework's install path (the plugin's own vendor, in a unit test).
          */
         private readonly ?string $vendorDirOverride = null,
@@ -51,15 +54,6 @@ final class BladeBootstrapper
 
     /** Kept for name-ownership checks against namespaces that lost a root to the vendor filter. */
     private ?FileViewFinder $finder = null;
-
-    /**
-     * Namespaces with a hint root dropped by the vendor filter: root order no longer mirrors
-     * Laravel's resolution there (the dropped root still wins), so each survivor is verified
-     * against the finder. @see templateOwnsName()
-     *
-     * @var array<string, true>
-     */
-    private array $vendorShadowedNamespaces = [];
 
     /**
      * Buffered, not written to the registries directly: a degraded run must leave them empty
@@ -110,13 +104,21 @@ final class BladeBootstrapper
     /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
     private array $compileFailures = [];
 
+    private ?BladeDisabledException $disabled = null;
+
+    /** Why boot() disabled Blade analysis, chaining the crash behind it; null when it activated or merely found nothing to analyze. */
+    public function disabled(): ?BladeDisabledException
+    {
+        return $this->disabled;
+    }
+
     /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
     public function boot(): bool
     {
         try {
             return $this->run();
         } catch (\Throwable $throwable) {
-            $this->degrade($throwable::class . ': ' . $throwable->getMessage());
+            $this->degrade($throwable::class . ': ' . $throwable->getMessage(), $throwable);
 
             return false;
         }
@@ -145,8 +147,8 @@ final class BladeBootstrapper
         $templates = $this->findTemplates($roots, $failures);
 
         if ($templates === [] && $failures === []) {
-            // Not a failure (an API-only app is normal), but worth surfacing under --no-progress:
-            // the shape of #1497, a real view tree that discovered nothing.
+            // Not a failure (an API-only app is normal), but the shape of #1497, a real view tree
+            // that discovered nothing. Unlike a disable, VoidProgress (--no-progress) drops it.
             $this->output->warning(
                 'Laravel plugin: Blade template analysis is enabled, but no Blade templates were discovered.',
             );
@@ -169,26 +171,7 @@ final class BladeBootstrapper
         [$environmentHash, $trustedEnvironment, $untrustedInputs] = CompilerEnvironment::describe($compiler);
 
         if (!$trustedEnvironment) {
-            $count = \count($untrustedInputs);
-
-            // Psalm has no verbose level: the full list goes to --debug so the default warning stays one line.
-            $this->output->warning(
-                'Laravel plugin: Blade shadow cache skipped for this run ('
-                . ($count === 0
-                    ? 'the compiler environment cannot be fingerprinted'
-                    : ($count === 1 ? '1 compiler input cannot' : "{$count} compiler inputs cannot") . ' be fingerprinted')
-                . '): every template is recompiled. Slower only; analysis results are unaffected.'
-                . ($count === 0 ? '' : ' Run with --debug to list the inputs.'),
-            );
-
-            if ($count > 0) {
-                $this->output->debug(
-                    "Laravel plugin: Blade compiler inputs that cannot be fingerprinted:\n"
-                    . \implode('', \array_map(static fn(string $input): string => "  - {$input}\n", $untrustedInputs))
-                    . "To restore caching, declare such callbacks `static fn` / `static function` that capture no objects, "
-                    . "or register a static method (`[Foo::class, 'bar']`).\n",
-                );
-            }
+            $this->reportUntrustedEnvironment($untrustedInputs);
         }
 
         $manifest = new ShadowManifest($shadowDir, $environmentHash);
@@ -218,6 +201,16 @@ final class BladeBootstrapper
             }
 
             $this->reportFailures($failures, $reported ? $this->compileFailures : []);
+
+            // Unreadable view roots and nothing found elsewhere: the user asked for Blade and got none of it.
+            if ($templates === [] && $failures !== []) {
+                $this->degrade(
+                    'no Blade template was discovered and ' . \count($failures) . ' view director'
+                    . (\count($failures) === 1 ? 'y' : 'ies') . ' could not be read ('
+                    . \implode(', ', \array_slice(\array_keys($failures), 0, self::FAILURES_TO_NAME))
+                    . (\count($failures) > self::FAILURES_TO_NAME ? ', ...' : '') . ')',
+                );
+            }
 
             return false;
         }
@@ -412,14 +405,14 @@ final class BladeBootstrapper
                     }
                 }
             } catch (\Throwable $throwable) {
-                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+                $this->skipUncompiled(CompileFailureReason::fromThrowable($template, $throwable), $source, $roots, $failures);
 
                 continue;
             }
 
             $shadow = $compiler->compile($template, $source, $propTypes, $provided);
 
-            if ($shadow instanceof BladeCompileError) {
+            if ($shadow instanceof CompileFailureReason) {
                 $this->skipUncompiled($shadow, $source, $roots, $failures);
 
                 continue;
@@ -435,7 +428,7 @@ final class BladeBootstrapper
                 // from "collected nothing".
                 $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
             } catch (\Throwable $throwable) {
-                $this->skipUncompiled(BladeCompileError::fromThrowable($template, $throwable), $source, $roots, $failures);
+                $this->skipUncompiled(CompileFailureReason::fromThrowable($template, $throwable), $source, $roots, $failures);
 
                 continue;
             }
@@ -455,12 +448,12 @@ final class BladeBootstrapper
     }
 
     /**
-     * Skips a template this pass could not compile; it is reported as a `BladeCompileFailure`.
+     * Skips a template this pass could not compile; it is reported as a `BladeCompileError`.
      *
      * @param list<array{0: string, 1: string|null}> $roots
      * @param array<string, string>                  $failures
      */
-    private function skipUncompiled(BladeCompileError $error, string $source, array $roots, array &$failures): void
+    private function skipUncompiled(CompileFailureReason $error, string $source, array $roots, array &$failures): void
     {
         $failures[$error->templatePath] = $error->message;
         $this->compileFailures[$error->templatePath] = [$source, $error->message];
@@ -784,7 +777,7 @@ final class BladeBootstrapper
         try {
             $compiler = $this->asCompiler($this->app->make('blade.compiler'));
         } catch (\Throwable $throwable) {
-            $this->degrade("resolving the 'blade.compiler' service threw: " . $throwable->getMessage());
+            $this->degrade("resolving the 'blade.compiler' service threw: " . $throwable->getMessage(), $throwable);
 
             return null;
         }
@@ -839,8 +832,6 @@ final class BladeBootstrapper
                 $hint = PathCaseCanonicalizer::canonicalize($hint);
 
                 if ($vendorDir !== null && $this->isUnderVendorDirectory($hint, $vendorDir)) {
-                    $this->vendorShadowedNamespaces[$namespace] = true;
-
                     continue;
                 }
 
@@ -854,20 +845,24 @@ final class BladeBootstrapper
     }
 
     /**
-     * Whether Laravel would actually resolve `$viewName` to `$templatePath`. Only checked for a
-     * namespace that lost a hint root to the vendor filter: the dropped root can still own the
-     * name there. A finder failure keeps the claim (fail open).
+     * Whether Laravel would actually resolve the namespaced `$viewName` to `$templatePath`. Hint
+     * root order alone does not say: a vendor root dropped by the filter, or an earlier root's
+     * non-Blade file (`widget.php`), can win the name. A name the finder cannot resolve is not
+     * owned; any other finder failure keeps the claim (fail open).
+     *
+     * Default-root names are not asked: root order decides between Blade files there, and a
+     * non-Blade file shadowing a later root's template is a known residual.
      */
     private function templateOwnsName(string $viewName, string $templatePath): bool
     {
-        $namespace = \strstr($viewName, '::', true);
-
-        if ($namespace === false || !isset($this->vendorShadowedNamespaces[$namespace]) || !$this->finder instanceof FileViewFinder) {
+        if (!\str_contains($viewName, '::') || !$this->finder instanceof FileViewFinder) {
             return true;
         }
 
         try {
             $winner = \realpath($this->finder->find($viewName));
+        } catch (\InvalidArgumentException) {
+            return false;
         } catch (\Throwable) {
             return true;
         }
@@ -1058,7 +1053,7 @@ final class BladeBootstrapper
      *
      * @param array<string, string> $failures
      * @param array<string, array{0: string, 1: string}> $reportedAsIssues templates left out of the
-     *        warning, because each is reported as a `BladeCompileFailure` instead
+     *        warning, because each is reported as a `BladeCompileError` instead
      */
     private function reportFailures(array $failures, array $reportedAsIssues = []): void
     {
@@ -1082,8 +1077,67 @@ final class BladeBootstrapper
         );
     }
 
-    private function degrade(string $cause): void
+    /**
+     * Debug only: the cost is about a second of recompiling per run and results are unaffected, and on
+     * most apps every input is a vendor package's (Livewire) that the user cannot change anyway.
+     *
+     * @param list<array{input: string, file: ?string}> $inputs
+     */
+    private function reportUntrustedEnvironment(array $inputs): void
     {
-        $this->output->warning('Laravel plugin: Blade template analysis is disabled for this run, because ' . $cause . '.');
+        $vendorDir = $this->vendorDirectory();
+        $count = \count($inputs);
+        $message = 'Laravel plugin: Blade shadow cache skipped for this run ('
+            . ($count === 0
+                ? 'the compiler environment cannot be fingerprinted'
+                : ($count === 1 ? '1 compiler input cannot' : "{$count} compiler inputs cannot") . ' be fingerprinted')
+            . '): every template is recompiled. Slower only; analysis results are unaffected.';
+
+        foreach ($inputs as ['input' => $input, 'file' => $file]) {
+            $message .= "\n  - {$input}" . ($file === null ? '' : ' in ' . self::displayPath($file, $vendorDir === null ? null : \dirname($vendorDir)));
+        }
+
+        if ($count > 0) {
+            $message .= "\nA callback in your own code restores caching when declared `static fn` / `static function` capturing no objects, "
+                . "or registered as a static method (`[Foo::class, 'bar']`).";
+        }
+
+        $this->output->debug($message . "\n");
+    }
+
+    /**
+     * Relative to the project root, so a path reads `vendor/livewire/...` and `app/...` like Psalm's own
+     * issue paths. A file outside the project, or an unknown root, keeps the path it came with.
+     */
+    public static function displayPath(string $file, ?string $projectRoot): string
+    {
+        if ($projectRoot === null) {
+            return $file;
+        }
+
+        $resolved = \realpath($file);
+        $canonical = PathCaseCanonicalizer::canonicalize($resolved === false ? $file : $resolved);
+        $root = \rtrim($projectRoot, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
+
+        return \str_starts_with($canonical, $root) ? \substr($canonical, \strlen($root)) : $file;
+    }
+
+    private function degrade(string $cause, ?\Throwable $previous = null): void
+    {
+        $this->disabled = new BladeDisabledException('Blade template analysis is disabled for this run, because ' . $cause . '.', 0, $previous);
+
+        if ($this->failOnInternalError) {
+            return;
+        }
+
+        $message = 'Laravel plugin: ' . $this->disabled->getMessage();
+        $this->output->warning($message);
+
+        // Blade is opt-in, so a silent disable hides a feature the user asked for; VoidProgress
+        // (--no-progress, CI) drops warnings. Silenced: Psalm turns the notice of a write to a closed
+        // STDERR into an exception, which would skip registering the whole plugin.
+        if ($this->output instanceof VoidProgress && \defined('STDERR')) {
+            @\fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
+        }
     }
 }

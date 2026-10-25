@@ -40,9 +40,13 @@ function key_by_on_eloquent_collection(EloquentCollection $items): void
     $_bool = $items->keyBy('active');
     /** @psalm-check-type-exact $_bool = EloquentCollection<int, CollectionGroupingModel>&static */
 
-    // The Laravel 12.20 floor stringifies enum objects in keyBy(), so this must not narrow.
+    // Laravel resolves an enum key through enum_value(), so an int-backed column narrows like groupBy().
     $_enum = $items->keyBy('kind');
-    /** @psalm-check-type-exact $_enum = EloquentCollection<array-key, CollectionGroupingModel>&static */
+    /** @psalm-check-type-exact $_enum = EloquentCollection<int, CollectionGroupingModel>&static */
+
+    // A string-backed enum would key by string, which the handler does not model, so it declines.
+    $_stringEnum = $items->keyBy('label');
+    /** @psalm-check-type-exact $_stringEnum = EloquentCollection<array-key, CollectionGroupingModel>&static */
 }
 
 function group_by_on_eloquent_collection(): void

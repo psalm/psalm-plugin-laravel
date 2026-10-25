@@ -1,0 +1,35 @@
+<?php
+
+namespace Illuminate\Support;
+
+use Countable;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
+use IteratorAggregate;
+use JsonSerializable;
+
+/**
+ * Laravel 13 (from 13.2.0) calls the `sum()` callback with `($item, $key)`; every
+ * 12.x release passes the item only. Only `sum()` is declared: the rest merges from `common`.
+ *
+ * @template TKey of array-key
+ * @template-covariant TValue
+ *
+ * @extends \Illuminate\Contracts\Support\Arrayable<TKey, TValue>
+ * @extends \IteratorAggregate<TKey, TValue>
+ */
+interface Enumerable extends Arrayable, Countable, IteratorAggregate, Jsonable, JsonSerializable
+{
+    /**
+     * Same contract as the `common` declaration, with the key passed to the callback.
+     *
+     * @template TCallbackReturn of int|float|numeric-string
+     *
+     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @return ($callback is null
+     *  ? (TValue is int ? int : int|float)
+     *  : ($callback is string ? int|float : (TCallbackReturn is int ? int : int|float))
+     * )
+     */
+    public function sum($callback = null);
+}

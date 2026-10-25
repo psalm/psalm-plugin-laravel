@@ -13,7 +13,7 @@ use Illuminate\Support\Manager;
  * plain `string|null` and passing an enum is a genuine `InvalidArgument`, not
  * something our handler should silently narrow through. Split out of
  * ManagerDriverCreatorUnionTest.phpt because that file must also pass on the
- * Laravel 12.20 / 13.3 floor, where this call itself is a type error (#1392).
+ * Laravel 12.x cells, where this call itself is a type error (#1392).
  * The enum name is not statically resolvable, so the call falls back to the
  * creator union (#1738).
  */

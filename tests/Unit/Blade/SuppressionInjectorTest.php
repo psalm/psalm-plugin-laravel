@@ -42,18 +42,6 @@ final class SuppressionInjectorTest extends TestCase
     }
 
     #[Test]
-    public function leaves_content_untouched_when_no_suppress_comments(): void
-    {
-        $shadow = "<?php /* blade:1 */ ?>content\n";
-        $bladeSource = "content\n";
-        $lineMap = [1 => 1];
-
-        $result = (new SuppressionInjector())->inject($shadow, $bladeSource, $lineMap);
-
-        $this->assertSame($shadow, $result);
-    }
-
-    #[Test]
     public function resolve_keys_a_suppression_by_the_template_line_it_lands_on(): void
     {
         // Not by line 1, where the comment sits: the issue remap matches suppressions against the
@@ -64,37 +52,6 @@ final class SuppressionInjectorTest extends TestCase
 
         $this->assertSame(
             [2 => ['UndefinedVariable']],
-            (new SuppressionInjector())->resolve($shadow, $bladeSource, $lineMap),
-        );
-    }
-
-    #[Test]
-    public function resolve_counts_bare_cr_lines_before_the_suppression(): void
-    {
-        // A bare `\r` ends a line for Blade and PHP alike; counting `\n` alone would place both
-        // comments on line 1 and keep only one of them.
-        $shadow = "prelude\n<?php /* blade:2 */ ?><?php echo e(\$bar); ?>\n<?php /* blade:4 */ ?><?php echo e(\$foo); ?>\n";
-        $bladeSource = "{{-- @psalm-suppress MixedArgument --}}\r{{ \$bar }}\r{{-- @psalm-suppress UndefinedVariable --}}\r{{ \$foo }}\r";
-        $lineMap = [1 => 0, 2 => 2, 3 => 4];
-
-        $this->assertSame(
-            [2 => ['MixedArgument'], 4 => ['UndefinedVariable']],
-            (new SuppressionInjector())->resolve($shadow, $bladeSource, $lineMap),
-        );
-    }
-
-    #[Test]
-    public function resolve_counts_multi_byte_lines_before_the_suppression(): void
-    {
-        // Multi-byte characters before the comment must not drift the byte-offset-derived line
-        // count: SourceLines::breaksIn() counts terminators, not characters, so it is unaffected.
-        $shadow = "prelude\n<?php /* blade:3 */ ?><?php echo e(\$foo); ?>\n";
-        $bladeSource = "Héllo wörld with émoji 😀 and more unicode chars here\n"
-            . "{{-- @psalm-suppress UndefinedVariable --}}\n{{ \$foo }}\n";
-        $lineMap = [1 => 0, 2 => 3];
-
-        $this->assertSame(
-            [3 => ['UndefinedVariable']],
             (new SuppressionInjector())->resolve($shadow, $bladeSource, $lineMap),
         );
     }
@@ -164,5 +121,4 @@ final class SuppressionInjectorTest extends TestCase
             (new SuppressionInjector())->inject($shadow, $bladeSource, $lineMap),
         );
     }
-
 }

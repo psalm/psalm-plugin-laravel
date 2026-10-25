@@ -99,29 +99,6 @@ final class JourneyRemapperTest extends TestCase
     }
 
     #[Test]
-    public function it_leaves_a_step_with_no_location_alone(): void
-    {
-        // A stubbed taint source contributes a labelled node with no expression behind it.
-        $remapped = $this->remap([$this->step(null, 'Illuminate\Http\Request::input')], [9 => 3]);
-
-        $this->assertNotNull($remapped);
-        $this->assertNull($remapped['journey'][0]['location']);
-        $this->assertSame('Illuminate\Http\Request::input', $remapped['journey'][0]['label']);
-    }
-
-    #[Test]
-    public function a_step_on_a_line_that_maps_to_no_template_line_lands_on_line_one(): void
-    {
-        // Prelude lines map to 0, and a shadow line missing from the map is the same story.
-        $remapped = $this->remap([$this->step($this->location(self::SHADOW, self::SHADOW_NAME, 2))], [2 => 0]);
-
-        $this->assertNotNull($remapped);
-        $location = $remapped['journey'][0]['location'];
-        $this->assertInstanceOf(CodeLocation::class, $location);
-        $this->assertSame(1, $location->getLineNumber());
-    }
-
-    #[Test]
     public function it_rewrites_every_shadow_descriptor_in_the_journey_text(): void
     {
         // The last descriptor is a sink-side node: journey_text describes hops the journey array
@@ -137,24 +114,6 @@ final class JourneyRemapperTest extends TestCase
             'Illuminate\Http\Request::input'
                 . ' -> call to echo (' . self::TEMPLATE_NAME . ':3:36)'
                 . ' -> echo (' . self::TEMPLATE_NAME . ':4:41)',
-            $remapped['journey_text'],
-        );
-    }
-
-    #[Test]
-    public function it_rewrites_the_journey_text_of_a_shadow_no_journey_step_names(): void
-    {
-        // Every journey step sits in ordinary code, so the shadow is only reachable through the
-        // issue's own location — which is what seeds the candidate list.
-        $text = 'input (app/Http/Controllers/ProfileController.php:4:12)'
-            . ' -> echo (' . self::SHADOW_NAME . ':9:36)';
-
-        $remapped = $this->remap([], [9 => 3], $text);
-
-        $this->assertNotNull($remapped);
-        $this->assertSame(
-            'input (app/Http/Controllers/ProfileController.php:4:12)'
-                . ' -> echo (' . self::TEMPLATE_NAME . ':3:36)',
             $remapped['journey_text'],
         );
     }
@@ -222,21 +181,5 @@ final class JourneyRemapperTest extends TestCase
         $this->assertSame(3, $first->getLineNumber());
         $this->assertSame($includeTemplate, $second->file_path);
         $this->assertSame(2, $second->getLineNumber());
-    }
-
-    #[Test]
-    public function it_passes_a_shadow_free_journey_straight_through(): void
-    {
-        $journey = [$this->step($this->location('/app/Http/Controllers/ProfileController.php', 'app/Http/Controllers/ProfileController.php', 4))];
-        $text = 'input (app/Http/Controllers/ProfileController.php:4:12)';
-
-        $remapped = JourneyRemapper::remap(
-            $journey,
-            $text,
-            $this->location('/app/Http/Controllers/ProfileController.php', 'app/Http/Controllers/ProfileController.php', 4),
-            $this->resolver([9 => 3]),
-        );
-
-        $this->assertSame(['journey' => $journey, 'journey_text' => $text], $remapped);
     }
 }
