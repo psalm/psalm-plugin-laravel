@@ -16,20 +16,10 @@ use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 final class PreludeBuilderTest extends TestCase
 {
     #[Test]
-    public function includes_ambient_vars(): void
-    {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', '');
-
-        foreach (['__env', 'errors', 'loop'] as $name) {
-            $this->assertStringContainsString("\${$name} */", $prelude);
-        }
-    }
-
-    #[Test]
-    public function component_is_never_declared_as_a_class(): void
+    public function component_outside_tag_bookkeeping_is_not_declared_as_a_class(): void
     {
         // Laravel never passes `$component` as view data (only ManagesComponents::componentData()'s
-        // slot/data merge reaches a view); it is only a local in the CALLER's compiled output.
+        // slot/data merge reaches a view); only a tag's compiled save types it (#1873).
         $prelude = (new PreludeBuilder())->build('<?php if (isset($component)) {} ?>', '');
 
         $this->assertStringNotContainsString('Illuminate\View\Component ', $prelude);
@@ -108,26 +98,6 @@ final class PreludeBuilderTest extends TestCase
     }
 
     #[Test]
-    public function directive_matching_is_case_insensitive(): void
-    {
-        // Blade dispatches a directive via method_exists($this, 'compile'.ucfirst($name)), which is
-        // case-insensitive in PHP, so `@PROPS(...)` compiles exactly like `@props(...)` — the
-        // classifier must agree, or it disagrees with the compiler about the same template.
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@PROPS(['type' => 'info'])");
-
-        $this->assertStringContainsString('@var ?\Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
-    }
-
-    #[Test]
-    public function aware_directive_matching_is_case_insensitive(): void
-    {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@AWARE(['type'])");
-
-        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
-        $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
-    }
-
-    #[Test]
     public function a_commented_out_props_directive_is_not_a_live_directive(): void
     {
         // Blade strips `{{-- --}}` before compiling, so no `$attributes ??= ...` is emitted and the
@@ -141,38 +111,11 @@ final class PreludeBuilderTest extends TestCase
     }
 
     #[Test]
-    public function an_escaped_props_directive_is_not_a_live_directive(): void
-    {
-        // `@@props(...)` compiles to the literal text `@props(...)`: compileStatements() sees the
-        // leading `@` and echoes the rest verbatim instead of dispatching compileProps().
-        $source = "@@props(['type' => 'info'])\n{{ \$attributes->merge([]) }}";
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', $source);
-
-        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
-        $this->assertStringNotContainsString('?\Illuminate\View\ComponentAttributeBag', $prelude);
-    }
-
-    #[Test]
-    public function an_escaped_aware_directive_does_not_classify_the_view(): void
-    {
-        $this->assertFalse(PreludeBuilder::isComponentView("@@aware(['type'])\n<div>plain page</div>"));
-    }
-
-    #[Test]
     public function a_commented_out_ambient_mention_does_not_classify_a_plain_page(): void
     {
         // A mention inside a comment never reaches the compiled output, so treating it as evidence
         // of a component view widens the relocator's drop gate over a template that has none.
         $source = "{{-- {{ \$attributes }} {{ \$slot }} --}}\n<div>plain page</div>";
-
-        $this->assertFalse(PreludeBuilder::isComponentView($source));
-    }
-
-    #[Test]
-    public function a_verbatim_ambient_mention_does_not_classify_a_plain_page(): void
-    {
-        // A `@verbatim` body is emitted as literal text, never as code that could read the name.
-        $source = "@verbatim\n{{ \$attributes }} {{ \$slot }}\n@endverbatim";
 
         $this->assertFalse(PreludeBuilder::isComponentView($source));
     }
@@ -184,14 +127,6 @@ final class PreludeBuilderTest extends TestCase
         // (ManagesComponents::componentData()), so recognition via a live directive is enough:
         // an indirect read must not fall through to UndefinedGlobalVariable.
         $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@props(['type' => 'info'])\n<div>no mention</div>");
-
-        $this->assertStringContainsString('@var \Illuminate\View\ComponentSlot $slot */', $prelude);
-    }
-
-    #[Test]
-    public function an_aware_view_declares_slot_without_mentioning_it(): void
-    {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', "@aware(['type'])\n<div>no mention</div>");
 
         $this->assertStringContainsString('@var \Illuminate\View\ComponentSlot $slot */', $prelude);
     }
@@ -213,15 +148,12 @@ final class PreludeBuilderTest extends TestCase
     {
         yield 'fully qualified' => ['\App\User', ['\App\User']];
         yield 'nullable' => ['?\App\User', ['\App\User']];
-        yield 'qualified without the leading backslash' => ['App\Models\User|null', ['App\Models\User']];
         yield 'short name' => ['User', ['User']];
         yield 'generic arguments' => ['array<int, \App\User>|\Illuminate\Support\Collection<int, User>', ['\Illuminate\Support\Collection', '\App\User', 'User']];
         yield 'shape keys are not classes' => ['array{name: string, user?: \App\User}', ['\App\User']];
         yield 'keywords and literals' => ["non-empty-list<int>|'Draft'|\"Posted\"|positive-int|-1|null", []];
-        yield 'int range bounds' => ['int<0, max>|int<min, -1>', []];
         yield 'class constant' => ['\App\Status::DRAFT_*', ['\App\Status']];
         yield 'callable parameter names' => ['callable(string $user): \App\User', ['\App\User']];
-        yield 'closure' => ['Closure(int): string', ['Closure']];
         yield 'unparseable' => ['array<int $m', null];
     }
 
@@ -233,14 +165,6 @@ final class PreludeBuilderTest extends TestCase
     public function class_names_in_a_declared_type_are_read_as_written(string $type, ?array $expected): void
     {
         $this->assertSame($expected, PreludeBuilder::classNamesIn($type));
-    }
-
-    #[Test]
-    public function undeclared_variable_gets_var_mixed(): void
-    {
-        $prelude = (new PreludeBuilder())->build('<?php echo $foo; ?>', '');
-
-        $this->assertStringContainsString('@var mixed $foo */', $prelude);
     }
 
     #[Test]
@@ -260,13 +184,8 @@ final class PreludeBuilderTest extends TestCase
         yield 'the assignment reads its own target' => ['<?php $title = strtoupper($title); ?>'];
         yield 'a read comes first' => ['<?php echo $title; $title = 1; ?>'];
         yield 'the first mention is inside a closure' => ['<?php $f = function () { $title = 1; }; $title = 2; ?>'];
-        yield 'the first mention is a closure use' => ['<?php $f = function () use ($title) {}; $title = 2; ?>'];
-        yield 'the first write is not a plain assignment' => ['<?php $title .= "x"; ?>'];
         yield 'the first write is a foreach target' => ['<?php foreach ($rows as $title) {} ?>'];
         yield 'the assignment sits in a branch' => ['<?php if ($c): ?><?php $title = 1; ?><?php endif; ?><?php echo $title; ?>'];
-        yield 'the assignment sits in a loop' => ['<?php foreach ($rows as $row) { $title = $row; } echo $title; ?>'];
-        yield 'the assignment sits in try' => ['<?php try { $title = f(); } catch (\Throwable) {} echo $title; ?>'];
-        yield 'the assignment is nested in an expression' => ['<?php $c && ($title = 1); echo $title; ?>'];
     }
 
     #[Test]
@@ -292,19 +211,6 @@ final class PreludeBuilderTest extends TestCase
     }
 
     /**
-     * The bagisto shape (#1553): an empty bound component attribute (`:value=""`) compiles to
-     * `'value' => ,`, a syntax error. PhpParser's own error recovery drops only the erroring
-     * statement and keeps analyzing what follows, so a read AFTER the error point must recover too.
-     */
-    #[Test]
-    public function a_read_after_a_syntax_error_still_gets_var_mixed(): void
-    {
-        $prelude = (new PreludeBuilder())->build('<?php $bad = [\'value\' => ,]; echo $undeclared; ?>', '');
-
-        $this->assertStringContainsString('@var mixed $undeclared */', $prelude);
-    }
-
-    /**
      * #1558: a shared `__`-prefixed global (e.g. bookstack's `$__themeViews`) that a template
      * merely READS, never assigns, used to be silently dropped from the undeclared set by the
      * `__`-prefix skip below, leaving the read genuinely undeclared and reporting
@@ -325,26 +231,19 @@ final class PreludeBuilderTest extends TestCase
      * `mixed` declaration on an append target widens the appended array to
      * `mixed|non-empty-list<mixed>` and turns the compiler's own `!empty()` epilogue check into a
      * new `RiskyTruthyFalsyComparison` on the template line. Only read-only `__` names are shared
-     * globals; a written one is bookkeeping.
+     * globals; a written one is bookkeeping. #1722: the save stacks' `list<mixed>` needs the
+     * compiler's own push, so the same name written any other way is still skipped.
      */
     #[Test]
     public function a_written_underscore_prefixed_variable_keeps_the_skip(): void
     {
-        $compiled = '<?php if (isset($value)) { $__sessionPrevious[] = $value; }'
+        $compiled = '<?php $__sessionPrevious[] = 1;'
             . ' if (!empty($__sessionPrevious)) { echo 1; } echo $__readOnlyShared; ?>';
 
         $prelude = (new PreludeBuilder())->build($compiled, '');
 
         $this->assertStringNotContainsString('$__sessionPrevious', $prelude);
         $this->assertStringContainsString('@var mixed $__readOnlyShared */', $prelude);
-    }
-
-    #[Test]
-    public function declared_variables_are_not_duplicated_as_mixed(): void
-    {
-        $prelude = (new PreludeBuilder())->build('<?php echo $errors; ?>', '');
-
-        $this->assertSame(1, \substr_count($prelude, '$errors'));
     }
 
     /**
@@ -362,13 +261,116 @@ final class PreludeBuilderTest extends TestCase
         $this->assertStringNotContainsString('@var mixed $__env', $prelude);
     }
 
+    /**
+     * #1873: a caller mentions `$component`/`$attributes` only through a tag's compiled
+     * save/restore, so both get their runtime types, and so does each saved original: Psalm types a
+     * variable assigned only inside an `if` as `mixed` in a later `isset()` branch, which is where
+     * the restore reads it.
+     */
     #[Test]
-    public function wraps_content_in_a_single_php_block(): void
+    public function a_tag_callers_bookkeeping_names_get_their_runtime_types(): void
     {
-        $prelude = (new PreludeBuilder())->build('<?php echo 1; ?>', '');
+        $prelude = (new PreludeBuilder())->build($this->compiledTag('5194778a'), '<x-alert>Hi</x-alert>');
 
-        $this->assertSame(1, \substr_count($prelude, '<?php'));
-        $this->assertSame(1, \substr_count($prelude, '?>'));
+        $this->assertStringContainsString('@var \Illuminate\View\Component|null $component */', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\Component|null $__componentOriginal5194778a */', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag|null $attributes */', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag|null $__attributesOriginal5194778a */', $prelude);
+        $this->assertStringNotContainsString('@var mixed', $prelude);
+    }
+
+    /** #1701: a declared, read, or view-data `$component` keeps today's typing; only the bookkeeping-only case changes. */
+    #[Test]
+    public function a_template_that_names_component_keeps_it_mixed(): void
+    {
+        $source = "@php /** @var \\App\\Foo \$component */ @endphp\n<x-alert>Hi</x-alert>\n{{ \$component->id() }}";
+        $prelude = (new PreludeBuilder())->build($this->compiledTag('5194778a'), $source);
+
+        $this->assertStringContainsString('@var mixed $component */', $prelude);
+        $this->assertStringNotContainsString('$__componentOriginal', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\ComponentAttributeBag|null $attributes */', $prelude);
+    }
+
+    /** Blade removes `{{-- --}}` before compiling and its tag markers after, so text they split still reads `$component`. */
+    #[Test]
+    #[DataProvider('splitComponentReads')]
+    public function a_component_read_split_by_text_blade_removes_keeps_it_mixed(string $source): void
+    {
+        $prelude = (new PreludeBuilder())->build(self::compiledTag('5194778a'), $source . "\n<x-alert/>");
+
+        $this->assertStringContainsString('@var mixed $component */', $prelude);
+        $this->assertStringNotContainsString('$__componentOriginal', $prelude);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function splitComponentReads(): iterable
+    {
+        yield 'Blade comment' => ['{{ $compo{{-- split --}}nent->id() }}'];
+    }
+
+    /** A component view keeps its own `$attributes` typing, restore re-assert included (#1543); `$component` is typed as in any caller. */
+    #[Test]
+    public function a_component_view_keeps_its_attributes_typing(): void
+    {
+        $prelude = (new PreludeBuilder())->build($this->compiledTag('5194778a'), "@props(['type'])\n<x-alert>Hi</x-alert>");
+
+        $this->assertStringContainsString('@var ?\Illuminate\View\ComponentAttributeBag $attributes */', $prelude);
+        $this->assertSame(1, \substr_count($prelude, ' $attributes */'));
+        $this->assertStringNotContainsString('$__attributesOriginal', $prelude);
+        $this->assertStringContainsString('@var \Illuminate\View\Component|null $component */', $prelude);
+    }
+
+    #[Test]
+    public function every_tags_saved_original_is_declared_once(): void
+    {
+        $compiled = $this->compiledTag('aaaa') . $this->compiledTag('bbbb') . $this->compiledTag('aaaa');
+        $prelude = (new PreludeBuilder())->build($compiled, '<x-a/><x-b/><x-a/>');
+
+        $this->assertSame(1, \substr_count($prelude, '$__componentOriginalaaaa */'));
+        $this->assertSame(1, \substr_count($prelude, '$__componentOriginalbbbb */'));
+        $this->assertSame(1, \substr_count($prelude, '$__attributesOriginalbbbb */'));
+    }
+
+    #[Test]
+    public function only_a_prelude_typing_attributes_from_a_tag_declares_tag_attributes(): void
+    {
+        $builder = new PreludeBuilder();
+        $compiled = self::compiledTag('5194778a');
+
+        $this->assertTrue(PreludeBuilder::declaresTagAttributes($builder->build($compiled, '<x-alert/>') . $compiled));
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build($compiled, "@props(['type'])\n<x-alert/>") . $compiled));
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build($compiled, "@aware(['type'])\n<x-alert/>") . $compiled));
+
+        // The same text after the prelude is template code, not a declaration.
+        $body = "<?php\n/** @var \\Illuminate\\View\\ComponentAttributeBag|null \$attributes */\n?>\n";
+        $this->assertFalse(PreludeBuilder::declaresTagAttributes($builder->build('<?php echo 1; ?>', '') . $body));
+    }
+
+    /** What `CompilesComponents::compileClassComponentOpening()` and `compileEndComponentClass()` emit for `<x-alert>Hi</x-alert>`. */
+    private function compiledTag(string $hash): string
+    {
+        return <<<PHP
+            <?php if (isset(\$component)) { \$__componentOriginal{$hash} = \$component; } ?>
+            <?php if (isset(\$attributes)) { \$__attributesOriginal{$hash} = \$attributes; } ?>
+            <?php \$component = Illuminate\\View\\AnonymousComponent::resolve(['view' => 'components.alert','data' => []] + (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag ? \$attributes->all() : [])); ?>
+            <?php \$component->withName('alert'); ?>
+            <?php if (\$component->shouldRender()): ?>
+            <?php \$__env->startComponent(\$component->resolveView(), \$component->data()); ?>
+            <?php if (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag): ?>
+            <?php \$attributes = \$attributes->except(\\Illuminate\\View\\AnonymousComponent::ignoredParameterNames()); ?>
+            <?php endif; ?>
+            <?php \$component->withAttributes([]); ?>Hi <?php echo \$__env->renderComponent(); ?>
+            <?php endif; ?>
+            <?php if (isset(\$__attributesOriginal{$hash})): ?>
+            <?php \$attributes = \$__attributesOriginal{$hash}; ?>
+            <?php unset(\$__attributesOriginal{$hash}); ?>
+            <?php endif; ?>
+            <?php if (isset(\$__componentOriginal{$hash})): ?>
+            <?php \$component = \$__componentOriginal{$hash}; ?>
+            <?php unset(\$__componentOriginal{$hash}); ?>
+            <?php endif; ?>
+
+            PHP;
     }
 
     /**

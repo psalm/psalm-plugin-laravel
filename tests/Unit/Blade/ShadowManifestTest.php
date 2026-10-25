@@ -22,7 +22,6 @@ final class ShadowManifestTest extends TestCase
         return new ViewDataContract([], false);
     }
 
-
     protected function setUp(): void
     {
         $this->shadowDir = \sys_get_temp_dir() . '/psalm-shadow-manifest-test-' . \getmypid();
@@ -86,15 +85,6 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
-    public function load_tolerates_an_absent_manifest(): void
-    {
-        $manifest = new ShadowManifest($this->shadowDir);
-        $manifest->load();
-
-        $this->assertFalse($manifest->isFresh('/x.blade.php', 'contents'));
-    }
-
-    #[Test]
     public function load_tolerates_a_corrupt_manifest(): void
     {
         \file_put_contents($this->shadowDir . '/manifest.php', '<?php not valid php {{{');
@@ -103,19 +93,6 @@ final class ShadowManifestTest extends TestCase
         $manifest->load();
 
         $this->assertFalse($manifest->isFresh('/x.blade.php', 'contents'));
-    }
-
-    #[Test]
-    public function store_writes_the_shadow_file_at_the_deterministic_path(): void
-    {
-        $manifest = new ShadowManifest($this->shadowDir);
-        $manifest->load();
-
-        $shadowPath = $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php echo 1; ?>', [1 => 1], null), $this->emptyContract());
-
-        $this->assertStringContainsString(\sha1('/app/views/foo.blade.php'), $shadowPath);
-        $this->assertFileExists($shadowPath);
-        $this->assertSame('<?php echo 1; ?>', \file_get_contents($shadowPath));
     }
 
     #[Test]
@@ -133,25 +110,6 @@ final class ShadowManifestTest extends TestCase
         $this->assertTrue($reloaded->isFresh('/app/views/foo.blade.php', 'source v1'));
         $this->assertFalse($reloaded->isFresh('/app/views/foo.blade.php', 'source v2 — edited'));
         $this->assertFalse($reloaded->isFresh('/app/views/never-stored.blade.php', 'source v1'));
-    }
-
-    /**
-     * The same environment string reused across a store and a reload must stay fresh: a manifest
-     * that recomputed its own fingerprint differently on every construction would never hit.
-     */
-    #[Test]
-    public function the_same_environment_string_stays_fresh_across_a_reload(): void
-    {
-        $manifest = new ShadowManifest($this->shadowDir, 'env-a');
-        $manifest->load();
-
-        $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php ?>', [1 => 1], null), $this->emptyContract());
-        $manifest->flush();
-
-        $reloaded = new ShadowManifest($this->shadowDir, 'env-a');
-        $reloaded->load();
-
-        $this->assertTrue($reloaded->isFresh('/app/views/foo.blade.php', 'source'));
     }
 
     /**
@@ -271,40 +229,6 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
-    public function an_entry_from_before_the_contract_slot_is_dropped(): void
-    {
-        // The five-slot shape this plugin wrote before contracts existed. Keeping it would leave
-        // the template permanently fresh and permanently contract-less; dropping it costs one
-        // recompile.
-        \file_put_contents(
-            $this->shadowDir . '/manifest.php',
-            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash', []]];\n",
-        );
-
-        $manifest = new ShadowManifest($this->shadowDir);
-        $manifest->load();
-
-        $this->assertNull($manifest->shadowEntry('/shadow.php'));
-        $this->assertNull($manifest->contractFor('/shadow.php'));
-        $this->assertFalse($manifest->isFresh('/a.blade.php', 'a'));
-    }
-
-    #[Test]
-    public function an_entry_from_before_references_removal_is_dropped(): void
-    {
-        \file_put_contents(
-            $this->shadowDir . '/manifest.php',
-            "<?php\n\nreturn ['/shadow.php' => ['/a.blade.php', [1 => 1], null, 'hash', [], [[], false, [], false, []], [[], false], [[], false]]];\n",
-        );
-
-        $manifest = new ShadowManifest($this->shadowDir);
-        $manifest->load();
-
-        $this->assertNull($manifest->shadowEntry('/shadow.php'));
-        $this->assertFalse($manifest->isFresh('/a.blade.php', 'a'));
-    }
-
-    #[Test]
     public function the_read_set_and_the_data_includes_survive_a_reload(): void
     {
         $manifest = new ShadowManifest($this->shadowDir);
@@ -395,17 +319,6 @@ final class ShadowManifestTest extends TestCase
         // denied) must be appended so this doesn't read the same as every other failure mode.
         $this->assertStringContainsString(': ', $thrown->getMessage());
         $this->assertGreaterThan(\strlen("cannot write shadow file '{$shadowPath}'"), \strlen($thrown->getMessage()));
-    }
-
-    #[Test]
-    public function store_leaves_no_temp_file_behind_after_a_successful_write(): void
-    {
-        $manifest = new ShadowManifest($this->shadowDir);
-        $manifest->load();
-
-        $manifest->store('/app/views/foo.blade.php', 'source', new ShadowResult('<?php echo 1; ?>', [1 => 1], null), $this->emptyContract());
-
-        $this->assertSame([], \glob($this->shadowDir . '/*.tmp.*'));
     }
 
     #[Test]

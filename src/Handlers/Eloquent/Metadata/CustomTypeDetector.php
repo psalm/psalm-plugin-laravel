@@ -123,7 +123,8 @@ final class CustomTypeDetector
      * (including overrides in an intermediate base model) with a PHP native return type.
      *
      * @return class-string|null
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function resolveBuilderFromMethodOverride(\ReflectionClass $reflection): ?string
     {
@@ -292,7 +293,8 @@ final class CustomTypeDetector
      * that is a concrete class (not EloquentCollection itself).
      *
      * @return class-string|null
-     * @psalm-mutation-free
+     *
+     * @psalm-pure
      */
     private static function resolveCollectionFromMethodOverride(\ReflectionClass $reflection): ?string
     {

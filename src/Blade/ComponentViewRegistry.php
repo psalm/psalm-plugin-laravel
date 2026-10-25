@@ -17,6 +17,7 @@ use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Views\ComponentRenderData;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
@@ -41,6 +42,9 @@ use Psalm\Type\Union;
  * Then each guaranteed key is seeded, except a key `render()` itself passes (path A and B disagree
  * on it), a literal named-slot name (a caller's slot overrides the key), an ambient or
  * slot-owned name, and a name the template declares itself.
+ *
+ * Every view any component's `render()` may name, seeded or not, also gets each `@props` entry the
+ * prelude typed from its literal default reset to `mixed`.
  *
  * Static because Psalm instantiates event handlers itself and hands them no plugin state.
  *
@@ -67,6 +71,9 @@ final class ComponentViewRegistry
     /** @var array<string, non-empty-array<string, Union>> shadow path => variable name => type */
     private static array $seeds = [];
 
+    /** @var array<string, array<string, list<string>>> shadow path => variable name => property ids */
+    private static array $propertyIds = [];
+
     /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
     private static array $declaredFunctions = [];
 
@@ -90,18 +97,29 @@ final class ComponentViewRegistry
         return self::$seeds[$shadowPath] ?? null;
     }
 
+    /**
+     * The property nodes a class component's own view reads its variables from (taint only; see
+     * {@see ViewTaintBridge}).
+     *
+     * @return array<string, list<string>> variable name => property ids
+     */
+    public static function propertyIdsFor(string $shadowPath): array
+    {
+        return self::$propertyIds[$shadowPath] ?? [];
+    }
+
     public static function build(Codebase $codebase): void
     {
         self::$seeds = [];
-
-        if (self::$tagRendered === []) {
-            return;
-        }
-
+        self::$propertyIds = [];
+        // Not skipped without a single `<x-…>` tag: a class's own view still needs its `@props`
+        // defaults undone below, whichever way it is rendered.
         $templates = ViewReferenceRegistry::templates();
 
         /** @var array<string, array<string, array{0: ClassLikeStorage, 1: array<array-key, true>}>> $byTemplate template path => class => [storage, render() keys] */
         $byTemplate = [];
+        /** @var array<string, list<ClassLikeStorage>> $exposing template path => every class whose render() names it */
+        $exposing = [];
         /** @var array<string, true> $contested template path => true */
         $contested = [];
 
@@ -113,8 +131,12 @@ final class ComponentViewRegistry
             }
         }
 
-        /** @var array<string, array{0: string, 1: array<array-key, true>, 2: bool}|null> $views declaring class => [view name, render() keys, calls $this->view()] */
+        /** @var array<string, array{0: string, 1: array<array-key, true>|null, 2: bool}|null> $views declaring class => [view name, render() keys, calls $this->view()] */
         $views = [];
+        /** @var array<string, true> $claimed template path => true, every view a component's render() may name */
+        $claimed = [];
+        /** @var array<string, true> $rivals template path => true, spelled by a render() outside the recognised shape */
+        $rivals = [];
 
         foreach (ClassLikeStorageProvider::getAll() as $storage) {
             if ($storage->abstract || !isset($storage->parent_classes[self::COMPONENT])) {
@@ -140,7 +162,7 @@ final class ComponentViewRegistry
             }
 
             if (!\array_key_exists($declaring, $views)) {
-                $views[$declaring] = self::renderedView($codebase, $render, $templates, $contested);
+                $views[$declaring] = self::renderedView($codebase, $render, $templates, $rivals);
             }
 
             $view = $views[$declaring];
@@ -150,6 +172,8 @@ final class ComponentViewRegistry
                 continue;
             }
 
+            $claimed[$templatePath] = true;
+
             // An inherited `$this->view()` runs the CONCRETE class's view(), which may be overridden.
             if ($view[2] && !self::componentOwnsView($storage)) {
                 $contested[$templatePath] = true;
@@ -157,8 +181,21 @@ final class ComponentViewRegistry
                 continue;
             }
 
+            // Taint needs only the view: the public properties reach it whatever render() passes.
+            $exposing[$templatePath][] = $storage;
+
+            // Unknown render() keys may shadow any property, so typing would guess.
+            if ($view[1] === null) {
+                $contested[$templatePath] = true;
+
+                continue;
+            }
+
             $byTemplate[$templatePath][\strtolower($storage->name)] = [$storage, $view[1]];
         }
+
+        $contested += $rivals;
+        $claimed += $rivals;
 
         $shadowPaths = [];
 
@@ -171,6 +208,43 @@ final class ComponentViewRegistry
         }
 
         $parser = new ContractParser();
+
+        foreach (\array_keys($claimed) as $templatePath) {
+            $shadowPath = $shadowPaths[$templatePath] ?? null;
+            $source = $shadowPath === null ? null : ShadowRegistry::templateSource($templatePath);
+            $defaults = [];
+
+            // `data()` and `render()`'s own data reach a class's view before `@props` falls back to a
+            // default, so no literal default may type it (#1828); seeding `mixed` undoes the prelude's.
+            foreach ($source === null ? [] : $parser->parseDeclarations($source)->vars as $name => $var) {
+                if ($var->defaultType !== null) {
+                    $defaults[$name] = Type::getMixed();
+                }
+            }
+
+            if ($shadowPath !== null && $defaults !== []) {
+                self::$seeds[$shadowPath] = $defaults;
+            }
+        }
+
+        // Taint, not typing: every class whose `render()` names the view hands it its public properties,
+        // contested or not, so two classes sharing a view each contribute theirs. `componentData()`
+        // overwrites the slot names with the rendered slot, so a property of that name never arrives.
+        foreach ($exposing as $templatePath => $classes) {
+            $shadowPath = $shadowPaths[$templatePath] ?? null;
+
+            if ($shadowPath === null) {
+                continue;
+            }
+
+            foreach ($classes as $storage) {
+                foreach (ComponentRenderData::exposedPropertyIds($codebase, $storage) as $name => $id) {
+                    if (!isset(self::SLOT_OWNED[$name])) {
+                        self::$propertyIds[$shadowPath][$name][] = $id;
+                    }
+                }
+            }
+        }
 
         foreach ($byTemplate as $templatePath => $claims) {
             $shadowPath = $shadowPaths[$templatePath] ?? null;
@@ -189,6 +263,8 @@ final class ComponentViewRegistry
 
             $vars = self::seedVariables($codebase, $storage, $renderKeys, $templatePath, $parser);
 
+            $vars += self::$seeds[$shadowPath] ?? [];
+
             if ($vars !== []) {
                 self::$seeds[$shadowPath] = $vars;
             }
@@ -201,6 +277,7 @@ final class ComponentViewRegistry
         self::$namedSlots = [];
         self::$renderedByName = [];
         self::$seeds = [];
+        self::$propertyIds = [];
         self::$declaredFunctions = [];
     }
 
@@ -253,7 +330,7 @@ final class ComponentViewRegistry
      * @param array<array-key, string> $templates view name => template path
      * @param array<string, true>      $contested template path => true, appended to
      *
-     * @return array{0: string, 1: array<array-key, true>, 2: bool}|null
+     * @return array{0: string, 1: array<array-key, true>|null, 2: bool}|null
      */
     private static function renderedView(Codebase $codebase, MethodIdentifier $render, array $templates, array &$contested): ?array
     {
@@ -283,7 +360,7 @@ final class ComponentViewRegistry
     }
 
     /**
-     * @return array{0: string, 1: array<array-key, true>, 2: bool}|null
+     * @return array{0: string, 1: array<array-key, true>|null, 2: bool}|null
      */
     private static function viewOf(Codebase $codebase, Expr $expr): ?array
     {
@@ -316,9 +393,10 @@ final class ComponentViewRegistry
     }
 
     /**
-     * Name, data, and merge-data arguments, positional and literal only.
+     * Name, data, and merge-data arguments, positional only. The keys are null when a data argument
+     * is not a literal array: the view is still known, its data is not.
      *
-     * @return array{0: string, 1: array<array-key, true>}|null
+     * @return array{0: string, 1: array<array-key, true>|null}|null
      */
     private static function viewArgs(Expr\CallLike $call): ?array
     {
@@ -348,15 +426,21 @@ final class ComponentViewRegistry
             }
 
             if (!$arg->value instanceof Expr\Array_) {
-                return null;
+                $keys = null;
+
+                continue;
             }
 
             foreach ($arg->value->items as $item) {
                 if ($item === null || $item->unpack || !$item->key instanceof String_) {
-                    return null;
+                    $keys = null;
+
+                    continue 2;
                 }
 
-                $keys[$item->key->value] = true;
+                if ($keys !== null) {
+                    $keys[$item->key->value] = true;
+                }
             }
         }
 

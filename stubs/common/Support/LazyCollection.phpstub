@@ -14,41 +14,44 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
- * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the lowest supported 12.x — do not edit without checking that array.
+ * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
+ * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
+ * `@property-read` keeps `static` unparameterized (`LazyCollection&static`), losing TKey/TValue.
  *
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $average
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $avg
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $contains
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $doesntContain
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $each
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $every
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $filter
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $first
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $flatMap
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $groupBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasMany
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasSole
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $keyBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $last
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $map
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $max
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $min
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $partition
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $percentage
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $reject
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipUntil
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipWhile
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $some
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortByDesc
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sum
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeUntil
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeWhile
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $unique
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $unless
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $until
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $when
+ * @property-read HigherOrderCollectionProxy<'average', TValue, LazyCollection<TKey, TValue>> $average
+ * @property-read HigherOrderCollectionProxy<'avg', TValue, LazyCollection<TKey, TValue>> $avg
+ * @property-read HigherOrderCollectionProxy<'contains', TValue, LazyCollection<TKey, TValue>> $contains
+ * @property-read HigherOrderCollectionProxy<'doesntContain', TValue, LazyCollection<TKey, TValue>> $doesntContain
+ * @property-read HigherOrderCollectionProxy<'each', TValue, LazyCollection<TKey, TValue>> $each
+ * @property-read HigherOrderCollectionProxy<'every', TValue, LazyCollection<TKey, TValue>> $every
+ * @property-read HigherOrderCollectionProxy<'filter', TValue, LazyCollection<TKey, TValue>> $filter
+ * @property-read HigherOrderCollectionProxy<'first', TValue, LazyCollection<TKey, TValue>> $first
+ * @property-read HigherOrderCollectionProxy<'flatMap', TValue, LazyCollection<TKey, TValue>> $flatMap
+ * @property-read HigherOrderCollectionProxy<'groupBy', TValue, LazyCollection<TKey, TValue>> $groupBy
+ * @property-read HigherOrderCollectionProxy<'hasMany', TValue, LazyCollection<TKey, TValue>> $hasMany
+ * @property-read HigherOrderCollectionProxy<'hasSole', TValue, LazyCollection<TKey, TValue>> $hasSole
+ * @property-read HigherOrderCollectionProxy<'keyBy', TValue, LazyCollection<TKey, TValue>> $keyBy
+ * @property-read HigherOrderCollectionProxy<'last', TValue, LazyCollection<TKey, TValue>> $last
+ * @property-read HigherOrderCollectionProxy<'map', TValue, LazyCollection<TKey, TValue>> $map
+ * @property-read HigherOrderCollectionProxy<'max', TValue, LazyCollection<TKey, TValue>> $max
+ * @property-read HigherOrderCollectionProxy<'min', TValue, LazyCollection<TKey, TValue>> $min
+ * @property-read HigherOrderCollectionProxy<'partition', TValue, LazyCollection<TKey, TValue>> $partition
+ * @property-read HigherOrderCollectionProxy<'percentage', TValue, LazyCollection<TKey, TValue>> $percentage
+ * @property-read HigherOrderCollectionProxy<'reject', TValue, LazyCollection<TKey, TValue>> $reject
+ * @property-read HigherOrderCollectionProxy<'skipUntil', TValue, LazyCollection<TKey, TValue>> $skipUntil
+ * @property-read HigherOrderCollectionProxy<'skipWhile', TValue, LazyCollection<TKey, TValue>> $skipWhile
+ * @property-read HigherOrderCollectionProxy<'some', TValue, LazyCollection<TKey, TValue>> $some
+ * @property-read HigherOrderCollectionProxy<'sortBy', TValue, LazyCollection<TKey, TValue>> $sortBy
+ * @property-read HigherOrderCollectionProxy<'sortByDesc', TValue, LazyCollection<TKey, TValue>> $sortByDesc
+ * @property-read HigherOrderCollectionProxy<'sum', TValue, LazyCollection<TKey, TValue>> $sum
+ * @property-read HigherOrderCollectionProxy<'takeUntil', TValue, LazyCollection<TKey, TValue>> $takeUntil
+ * @property-read HigherOrderCollectionProxy<'takeWhile', TValue, LazyCollection<TKey, TValue>> $takeWhile
+ * @property-read HigherOrderCollectionProxy<'unique', TValue, LazyCollection<TKey, TValue>> $unique
+ * @property-read HigherOrderCollectionProxy<'unless', TValue, LazyCollection<TKey, TValue>> $unless
+ * @property-read HigherOrderCollectionProxy<'until', TValue, LazyCollection<TKey, TValue>> $until
+ * @property-read HigherOrderCollectionProxy<'when', TValue, LazyCollection<TKey, TValue>> $when
  */
 class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
 {
@@ -79,9 +82,9 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @template TMakeKey of array-key
      * @template TMakeValue
      *
-     * `...$args` is claimed unconditionally: it's real since Laravel 13.3.0 (now the 13.x floor
-     * - see composer.json), and on the 12.x floor (12.20+) PHP silently ignores excess call-site
-     * arguments beyond the native parameter list, so the wider claim is harmless there too.
+     * `...$args` is claimed unconditionally: it's real on every supported 13.x (since 13.3.0), and
+     * on 12.x PHP silently ignores excess call-site arguments beyond the native
+     * parameter list, so the wider claim is harmless there too.
      *
      * Known limitation: a bare (non-closure) `Generator` passed directly - e.g. `make($generator)` -
      * type-checks clean here via the `iterable<TMakeKey, TMakeValue>` branch, but Laravel's runtime
@@ -95,6 +98,24 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     public static function make($items = [], ...$args) {}
 
     /**
+     * A closure default only runs when the key is missing, so its result joins `TValue`; Laravel's
+     * single default template binds to the Closure itself when one is passed. A null key returns
+     * null early without evaluating the default (unlike `Collection::get()`, which looks up `''`).
+     *
+     * @psalm-mutation-free
+     *
+     * @template TGetDefault
+     * @template TGetClosureReturn
+     *
+     * @param  TKey|null  $key
+     * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
+     * @return ($key is null ? null : ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue)))
+     *
+     * @psalm-flow ($default) -> return
+     */
+    public function get($key, $default = null) {}
+
+    /**
      * Get one or a specified number of items randomly from the collection.
      *
      * No argument → a single random element (TValue). With $number → a
@@ -106,9 +127,11 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * parameter (it forwards func_get_args() to Collection::random) — matched
      * here against Laravel source.
      *
+     * `$preserveKeys = true` keeps the source keys; any other number result is re-indexed.
+     *
      * @param  int|null  $number
      * @param  bool  $preserveKeys
-     * @return ($number is null ? TValue : static<int, TValue>)
+     * @return ($number is null ? TValue : ($preserveKeys is true ? static<TKey, TValue> : static<int, TValue>))
      *
      * @throws \InvalidArgumentException
      */
@@ -139,6 +162,21 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     public function hasAny($key) {}
 
     /**
+     * Zip the collection together with one or more arrays.
+     *
+     * Accepts variadic iterables via func_get_args(). Iterates until every input is exhausted,
+     * so an exhausted iterator contributes null.
+     *
+     * @template TZipValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
+     * @return static<int, static<int, TValue|TZipValue|null>>
+     *
+     * @psalm-variadic
+     */
+    public function zip($items) {}
+
+    /**
      * Select specific values from the items within the collection.
      *
      * Arr::select() maps every item to an array holding only the requested keys and
@@ -151,4 +189,72 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * Pad collection to the specified length with a value.
+     *
+     * The generator re-yields every item under its own key, so string keys are kept (a negative
+     * size delegates to Collection::pad(), which keeps them too); the appended values take int keys.
+     * Laravel's docblock declares `int`.
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return static<TKey|int, TValue|TPadValue>
+     */
+    public function pad($size, $value) {}
+
+    /**
+     * Callback params name the class with its templates instead of Laravel's `callable($this)`;
+     * see `Illuminate\Support\Collection::tap()` in the Collection stub.
+     *
+     * @param  callable(\Illuminate\Support\LazyCollection<TKey, TValue>): mixed  $callback
+     * @return $this
+     */
+    public function tap(callable $callback) {}
+
+    /**
+     * @template TPipeReturnType
+     *
+     * @param  callable(\Illuminate\Support\LazyCollection<TKey, TValue>): TPipeReturnType  $callback
+     * @return TPipeReturnType
+     */
+    public function pipe(callable $callback) {}
+
+    /**
+     * @template TWhenEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
+     */
+    public function whenEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TWhenNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
+     */
+    public function whenNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
+     */
+    public function unlessEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
+     */
+    public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
 }

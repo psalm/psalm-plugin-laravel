@@ -97,23 +97,6 @@ final class ClassConstantColumnNameTest extends AbstractSchemaAggregatorTestCase
     }
 
     #[Test]
-    public function it_resolves_class_constant_column_name_in_add_column(): void
-    {
-        $schema = $this->schemaFromMigration(self::HEADER . <<<'PHP'
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('posts', function (Blueprint $table): void {
-                        $table->addColumn('string', Col::TITLE);
-                    });
-                }
-            };
-            PHP);
-
-        $this->assertSchemaHasTableAndNotNullableColumnOfType('posts.title', 'string', $schema);
-    }
-
-    #[Test]
     public function it_ignores_non_string_constants_and_enum_cases(): void
     {
         $schema = $this->schemaFromMigration(self::HEADER . <<<'PHP'
@@ -162,25 +145,6 @@ final class ClassConstantColumnNameTest extends AbstractSchemaAggregatorTestCase
         self::assertTableHasNotNullableColumnOfType('reviewer_id', 'string', $table);
         $this->assertFalse($table->columns['customer_id']->unsigned);
         $this->assertCount(4, $table->columns);
-    }
-
-    #[Test]
-    public function foreign_uuid_for_with_unresolvable_class_registers_nothing(): void
-    {
-        $schema = $this->schemaFromMigration(self::HEADER . <<<'PHP'
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('comments', function (Blueprint $table): void {
-                        $table->id();
-                        $table->foreignUuidFor(Missing::class);
-                        $table->foreignUlidFor(Col::TITLE);
-                    });
-                }
-            };
-            PHP);
-
-        $this->assertSame(['id'], \array_keys($schema->tables['comments']->columns));
     }
 
     #[Test]

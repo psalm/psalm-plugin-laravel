@@ -11,6 +11,21 @@ namespace Illuminate\Support\Facades;
  *
  * Runtime: Builder::hasTable string-concatenates the table prefix with `$table`, which
  * coerces any stringable object via __toString.
+ *
+ * Every other Schema\Builder method resolves through the `@mixin` below, not the facade's generated
+ * `@method` tags: Psalm consults a mixin target's real method before the facade's pseudo-static
+ * entries, so the introspection methods get the types of the Builder stub
+ * (stubs/common/Database/Schema/Builder.phpstub), which corrects Laravel's docblocks where they contradict
+ * the driver processors, instead of the tags' bare `array`. `Schema::connection()->...` instance calls
+ * share those types.
+ *
+ * The mixin also brings Builder's PARAM types, which are narrower than the facade tags for the column
+ * lists (`array<string>` vs `array`). The methods declared below restate the facade tags verbatim so
+ * calls that were accepted before the mixin (an Expression or Stringable in the list, both handled at
+ * runtime) stay accepted. `defaultStringLength(non-negative-int)` is deliberately NOT restated: a
+ * negative length is not validated by the method itself and fails later, when the DDL for a string column is built.
+ *
+ * @mixin \Illuminate\Database\Schema\Builder
  */
 class Schema extends Facade
 {
@@ -23,12 +38,16 @@ class Schema extends Facade
     public static function hasTable($table) {}
 
     /**
-     * Get the column listing for a given table.
-     *
-     * Mirrors Schema\Builder::getColumnListing(); the facade's generated `@method` tag only says `array`.
-     *
      * @param  string  $table
-     * @return list<string>
+     * @param  array  $columns
+     * @return bool
      */
-    public static function getColumnListing($table) {}
+    public static function hasColumns($table, $columns) {}
+
+    /**
+     * @param  string  $table
+     * @param  string|array  $columns
+     * @return void
+     */
+    public static function dropColumns($table, $columns) {}
 }

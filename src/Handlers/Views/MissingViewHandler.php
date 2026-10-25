@@ -65,6 +65,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
 
     private static bool $enabled = false;
 
+    /** Whether init() read the finder, so a name {@see self::viewFileExists()} misses is provably absent. */
+    private static bool $pathsKnown = false;
+
     /** @var array<string, bool> Cached view existence results to avoid repeated filesystem checks */
     private static array $resolvedViews = [];
 
@@ -90,6 +93,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         self::$viewPaths = [];
         self::$extensions = ['blade.php', 'php'];
         self::$enabled = false;
+        self::$pathsKnown = false;
         self::$resolvedViews = [];
         self::$factoryClass = null;
     }
@@ -97,16 +101,32 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
     /**
      * @param list<string> $viewPaths Absolute paths to view directories (from config('view.paths'))
      * @param list<string> $extensions File extensions without leading dot (from FileViewFinder::getExtensions())
+     * @param bool $report false records the paths for {@see self::viewExists()} only, leaving MissingView off
      */
-    public static function init(array $viewPaths, array $extensions = ['blade.php', 'php']): void
+    public static function init(array $viewPaths, array $extensions = ['blade.php', 'php'], bool $report = true): void
     {
         self::$viewPaths = \array_map(static fn(string $path): string => \rtrim(
             $path,
             \DIRECTORY_SEPARATOR,
         ), $viewPaths);
         self::$extensions = $extensions;
-        self::$enabled = true;
+        self::$enabled = $report;
+        self::$pathsKnown = true;
         self::$resolvedViews = [];
+    }
+
+    /**
+     * Whether a view name resolves to a file in the finder's paths, or null when that cannot be
+     * told: the paths were never read, or the name is empty or namespaced (package hints are not
+     * tracked).
+     */
+    public static function viewExists(string $viewName): ?bool
+    {
+        if (!self::$pathsKnown || $viewName === '' || \str_contains($viewName, '::')) {
+            return null;
+        }
+
+        return self::viewFileExists($viewName);
     }
 
     /**

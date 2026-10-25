@@ -30,12 +30,6 @@ final class ContractRegistryTest extends TestCase
     }
 
     #[Test]
-    public function an_unregistered_view_name_has_no_contract(): void
-    {
-        $this->assertNull(ContractRegistry::contractFor('emails.welcome'));
-    }
-
-    #[Test]
     public function the_earliest_view_root_wins_whichever_order_the_templates_arrive_in(): void
     {
         // Templates are walked in path order, not view-root order, so the later root can register
@@ -67,12 +61,20 @@ final class ContractRegistryTest extends TestCase
         $this->assertSame([], $contract->vars);
     }
 
+    /** `[]` and `null` must stay apart: the first lets the call site be judged in full, the second skips the view. */
     #[Test]
-    public function reset_clears_a_previous_invocations_contracts(): void
+    public function composed_keys_distinguish_no_composer_from_an_unresolved_one(): void
     {
-        ContractRegistry::register('profile', 0, $this->contractDeclaring('string'));
-        ContractRegistry::reset();
+        ContractRegistry::registerComposerSources(['composed' => [['App\\Composer', 'compose']], 'opaque' => null]);
+        $this->assertSame([], ContractRegistry::composedKeys('plain'));
+        $this->assertNull(ContractRegistry::composedKeys('composed'), 'sources the resolver never reached');
 
-        $this->assertNull(ContractRegistry::contractFor('profile'));
+        ContractRegistry::registerComposedKeys(['composed' => ['title' => true], 'opaque' => null]);
+        $this->assertSame(['title' => true], ContractRegistry::composedKeys('composed'));
+        $this->assertNull(ContractRegistry::composedKeys('opaque'));
+
+        ContractRegistry::reset();
+        $this->assertSame([], ContractRegistry::composedKeys('composed'));
+        $this->assertSame([], ContractRegistry::composerSources());
     }
 }

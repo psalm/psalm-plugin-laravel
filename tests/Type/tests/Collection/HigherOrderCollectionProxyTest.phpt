@@ -5,6 +5,8 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Enumerable;
+use Illuminate\Support\HigherOrderCollectionProxy;
 use Illuminate\Support\LazyCollection;
 
 class Customer extends Model
@@ -16,6 +18,18 @@ class Customer extends Model
         return 0.0;
     }
 }
+
+/** @extends EloquentCollection<int, Customer> */
+final class CustomerCollection extends EloquentCollection {}
+
+/**
+ * Reorders the templates: its first type argument is the item, not the key.
+ *
+ * @template TValue
+ * @template TKey of array-key
+ * @extends Collection<TKey, TValue>
+ */
+final class ValuesFirstCollection extends Collection {}
 
 
 /**
@@ -382,6 +396,31 @@ final class HigherOrderCollectionProxyTest
         $_result = $members->sortByDesc->getKey();
         /** @psalm-check-type-exact $_result = EloquentCollection<int, Customer> */
         $_result->values();
+    }
+
+    /**
+     * A non-generic subclass takes its proxy from the vendor trait annotation (Laravel 13.31+: 3 params,
+     * 12.27-13.30: 2 params, never resolved to the subclass's item type). Chaining a collection method after
+     * the proxy call must still resolve to an Enumerable instead of `mixed` on every supported version.
+     */
+    public function subclassReceiverFallsBackToEnumerable(CustomerCollection $users): void
+    {
+        $_result = $users->each->getKey();
+        $_count = $_result->count();
+        /** @psalm-check-type-exact $_count = int */
+    }
+
+    /**
+     * A proxy held in a variable takes the fallback path. The key of its TCollection is resolved through the
+     * class ancestry, not read from slot 0 of the generic: `ValuesFirstCollection<Customer, string>` is keyed
+     * by `string`.
+     *
+     * @param HigherOrderCollectionProxy<'each', Customer, ValuesFirstCollection<Customer, string>> $proxy
+     */
+    public function reorderedTemplatesKeyComesFromAncestry(HigherOrderCollectionProxy $proxy): void
+    {
+        $_result = $proxy->getKey();
+        /** @psalm-check-type-exact $_result = Enumerable<string, Customer> */
     }
 }
 

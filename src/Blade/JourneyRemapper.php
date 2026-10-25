@@ -20,6 +20,8 @@ use Psalm\CodeLocation\Raw;
  * without a live Psalm run.
  *
  * @internal
+ *
+ * @psalm-immutable
  */
 final class JourneyRemapper
 {
@@ -28,13 +30,15 @@ final class JourneyRemapper
      * @param CodeLocation                   $issueLocation the issue's own (shadow) location, which
      *                                                      `journey_text` can name even when no
      *                                                      journey step does
-     * @param \Closure(string): ?ShadowTarget $resolve       shadow path => target; null for every
+     * @param \Closure[_](string): ?ShadowTarget $resolve    shadow path => target; null for every
      *                                                      path that is not a registered shadow
      *
      * @return array{journey: list<array{location: ?CodeLocation, label: string, entry_path_type: string}>, journey_text: string}|null
      *                                                      null declines: a step landed in a shadow
      *                                                      whose template has no such line, and a
      *                                                      half-remapped journey is worse than none
+     *
+     * @psalm-capabilities read-props
      */
     public static function remap(
         array $journey,
@@ -64,9 +68,11 @@ final class JourneyRemapper
      * what `journey_text` prints, while the journey array carries full paths.
      *
      * @param list<array{location: ?CodeLocation, label: string, entry_path_type: string}> $journey
-     * @param \Closure(string): ?ShadowTarget                                              $resolve
+     * @param \Closure[_](string): ?ShadowTarget                                           $resolve
      *
      * @return array<string, array{path: string, target: ShadowTarget}> file name => shadow
+     *
+     * @psalm-pure
      */
     private static function resolveTargets(array $journey, CodeLocation $issueLocation, \Closure $resolve): array
     {

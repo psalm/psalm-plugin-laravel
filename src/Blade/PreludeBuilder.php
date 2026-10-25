@@ -39,8 +39,8 @@ final class PreludeBuilder
     private const LOOP_FIELDS = 'index: int, iteration: int, remaining: int|null, count: int|null, first: bool, last: bool|null, odd: bool, even: bool, depth: int';
 
     /**
-     * Every name Blade injects into a compiled view itself, declared or not (`$component` is
-     * NEVER declared, see {@see componentTypesFor()}). This is the "Blade owns this name"
+     * Every name Blade injects into a compiled view itself, declared or not (`$component` only
+     * from a tag's bookkeeping, see {@see tagBookkeepingTypes()}). This is the "Blade owns this name"
      * question a read-set filter or UnusedViewData check asks, distinct from AMBIENT_TYPES,
      * which asks "does the prelude always declare a type for this name".
      */
@@ -49,20 +49,26 @@ final class PreludeBuilder
         'attributes' => true, 'slot' => true, 'component' => true,
     ];
 
+    private const COMPONENT_TYPE = '\Illuminate\View\Component';
+
     private const COMPONENT_ATTRIBUTES_TYPE = '\Illuminate\View\ComponentAttributeBag';
 
     private const COMPONENT_SLOT_TYPE = '\Illuminate\View\ComponentSlot';
 
     private ?Parser $parser = null;
 
-    public function build(string $compiled, string $source): string
+    /**
+     * @param array<string, string> $propTypes variable name (without $) => the type a `@props` literal
+     *                                         default gives the body: no docblock in the body states it
+     */
+    public function build(string $compiled, string $source, array $propTypes = []): string
     {
         $componentTypes = \array_filter(
             self::componentTypesFor($source),
             static fn(?string $type): bool => $type !== null,
         );
 
-        $declared = self::AMBIENT_TYPES + $componentTypes;
+        $declared = self::AMBIENT_TYPES + $componentTypes + $propTypes;
 
         $lines = [];
 
@@ -74,8 +80,32 @@ final class PreludeBuilder
             $lines[] = "/** @var {$type} \${$name} */";
         }
 
-        foreach ($this->undeclaredVariables($compiled, $declared) as $name) {
-            $lines[] = "/** @var mixed \${$name} */";
+        foreach ($propTypes as $name => $type) {
+            $lines[] = "/** @var {$type} \${$name} */";
+        }
+
+        $undeclared = $this->undeclaredVariables($compiled, $declared);
+        $tagTypes = $this->tagBookkeepingTypes($compiled, $source, $undeclared);
+
+        foreach ($tagTypes as $name => $type) {
+            $lines[] = "/** @var {$type} \${$name} */";
+        }
+
+        foreach ($undeclared as $name) {
+            if (!isset($tagTypes[$name])) {
+                $lines[] = "/** @var mixed \${$name} */";
+            }
+        }
+
+        // `@session`/`@context` push an outer `$value` onto these stacks and pop it back in `@end…`
+        // (CompilesSessions, CompilesContexts). Undeclared they report PossiblyUndefinedGlobalVariable;
+        // `mixed`, the `array_pop()` and `!empty()` report Mixed*/RiskyTruthyFalsyComparison (#1722).
+        // Keyed on the compiled push, not the name. Accepted residual: an author's own same-named
+        // variable in a template that also uses `@session` is typed `list<mixed>` too.
+        foreach (['__sessionPrevious', '__contextPrevious'] as $stack) {
+            if (\str_contains($compiled, "\${$stack}[] = \$value;")) {
+                $lines[] = "/** @var list<mixed> \${$stack} */";
+            }
         }
 
         // The closing tag is the prelude's sentinel: php-parser reads it as an empty statement and
@@ -156,6 +186,68 @@ final class PreludeBuilder
     }
 
     /**
+     * Types for the names a `<x-...>` tag's compiled save/restore reads
+     * (`CompilesComponents::compileClassComponentOpening()`/`compileEndComponentClass()`), keyed
+     * on the compiled save `if (isset($component)) { $__componentOriginal<hash> = $component; }`.
+     *
+     * Only a name that would otherwise fall to `mixed` and that the source never names: a template
+     * that declares, reads, or assigns `$component` keeps today's typing (#1701), and one naming
+     * `$attributes` is a component view typed by {@see componentTypesFor()}. The source is read as
+     * Blade rewrites it around the compile: `{{-- --}}` removed before, the component-class markers
+     * after, either of which can join an author's `$compo{{-- --}}nent` into a real read. Nullable,
+     * since a page renders outside any component. Each saved original gets the same type: assigned
+     * only inside the save's `if`, Psalm reads it as `mixed` in the restore's `isset()` branch.
+     *
+     * @param list<string> $undeclared names that would get the `mixed` fallback
+     * @return array<string, string> variable name (without $) => type
+     *
+     * @psalm-pure
+     */
+    private function tagBookkeepingTypes(string $compiled, string $source, array $undeclared): array
+    {
+        if (\preg_match_all('/if \(isset\(\$(component|attributes)\)\) \{ \$__\1Original([0-9a-f]+) = \$\1; \}/', $compiled, $saves, \PREG_SET_ORDER) < 1) {
+            return [];
+        }
+
+        $authored = \str_replace(
+            ['##BEGIN-COMPONENT-CLASS##', '##END-COMPONENT-CLASS##'],
+            '',
+            (string) \preg_replace('/\{\{--.*?--\}\}/s', '', $source),
+        );
+        $typed = [];
+
+        foreach (['component', 'attributes'] as $name) {
+            $typed[$name] = \in_array($name, $undeclared, true) && \preg_match('/\$' . $name . '\b/', $authored) !== 1;
+        }
+
+        $types = [];
+
+        foreach ($saves as [, $name, $hash]) {
+            if ($typed[$name]) {
+                $type = ($name === 'component' ? self::COMPONENT_TYPE : self::COMPONENT_ATTRIBUTES_TYPE) . '|null';
+                $types[$name] = $type;
+                $types["__{$name}Original{$hash}"] = $type;
+            }
+        }
+
+        return $types;
+    }
+
+    /**
+     * Whether a shadow's prelude types `$attributes` from tag bookkeeping
+     * ({@see tagBookkeepingTypes()}): the one prelude declaration of it with that exact spelling.
+     *
+     * @psalm-pure
+     */
+    public static function declaresTagAttributes(string $shadow): bool
+    {
+        $end = \strpos($shadow, "\n?>\n");
+
+        return $end !== false
+            && \str_contains(\substr($shadow, 0, $end), "\n/** @var " . self::COMPONENT_ATTRIBUTES_TYPE . '|null $attributes */');
+    }
+
+    /**
      * Every class name a shadow's prelude can ever emit a docblock for, for a caller that must
      * queue them all for scanning (BladeBootstrapper) rather than read their docblock type. Both
      * AMBIENT_TYPES (always declared) and the component-only names (declared in SOME shadows only)
@@ -170,6 +262,7 @@ final class PreludeBuilder
     public static function ambientClassNames(): array
     {
         $types = self::AMBIENT_TYPES + [
+            'component' => self::COMPONENT_TYPE,
             'attributes' => self::COMPONENT_ATTRIBUTES_TYPE,
             'slot' => self::COMPONENT_SLOT_TYPE,
         ];

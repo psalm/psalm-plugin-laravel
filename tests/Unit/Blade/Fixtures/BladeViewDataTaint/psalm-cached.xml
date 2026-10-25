@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    cacheDirectory=".cache/psalm-cached"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+>
+    <projectFiles>
+        <directory name="app" />
+    </projectFiles>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <blade cacheDir=".cache/blade-shadows-cached" />
+        </pluginClass>
+    </plugins>
+    <issueHandlers>
+        <!-- Illuminate\View\Component declares uninitialised properties; the fixture's Banner is not what this pins. -->
+        <MissingConstructor errorLevel="suppress" />
+    </issueHandlers>
+</psalm>

@@ -3,8 +3,8 @@
 Psalm plugin for Laravel. It boots a real Laravel application (the analyzed project's own `bootstrap/app.php`, with Orchestra Testbench as the package fallback), then hooks Psalm's event system and registers stubs to type Laravel's magic. It also ships taint sources, sinks, and escapes for security analysis.
 
 Active majors:
-- `4.x` is the Psalm 7 line (PHP 8.2+, Laravel `^12.20 || ^13.3`, Psalm 7 beta)
-- `3.x` is the Psalm 6 line (Laravel `^11.35+`), backports only
+- `4.x` is the Psalm 7 line (Laravel 12 and 13), the default branch
+- `3.x` is the Psalm 6 line (Laravel 11, 12 and 13), backports only
 
 Taint: Psalm 6 runs in exactly one mode per invocation: plain `psalm` reports type issues only, `psalm --taint-analysis` reports taint issues only, so full coverage takes two runs. Psalm 7 runs taint BY DEFAULT and emits type and taint issues together in one run, on a rewritten engine with different internals; `psalm-laravel init` additionally writes `runTaintAnalysis="true"` to make that explicit.
 On `3.x`, `psalm-laravel init` deliberately omits `runTaintAnalysis` (on Psalm 6 it switches to taint-only mode and silently drops type analysis, #1139), and self-analysis CI runs type mode only, so run `vendor/bin/psalm --taint-analysis` locally before touching taint handlers or stubs.
@@ -27,6 +27,7 @@ These documents are maintained and source-verified. Consult them before explorin
 | Design rationale: handler loading, producer narrowing, suppression, version policy, taint philosophy, performance budget | `docs/contributing/decisions.md` |
 | How Laravel `__call` / `__callStatic` / macros / forwarding resolve, and the handlers modeling them | `docs/contributing/laravel-magic-call-patterns.md` |
 | Taint annotation authoring | `docs/contributing/taint-analysis.md` |
+| Blade template analysis behaviour (dropped compiler findings, ambient typing, cache, limits) | `docs/contributing/blade.md` (user guide: `docs/blade.md`) |
 | Psalm type syntax (every type expression, accepted-but-misleading forms) | `docs/contributing/types.md` |
 | Psalm docblock tags and their accepted spellings | `docs/contributing/annotations.md` |
 | Psalm 7 purity capabilities, legacy tag mapping, purity policy | `docs/contributing/purity.md` |
@@ -117,7 +118,7 @@ Prefer Type over Unit when both fit (suite overview: `tests/README.md`). A test 
 
 Regression phpts use minimal abstracted fixtures (house style), but reduce toward them FROM the reported shape while the test stays red: simplifying before the first honest failure can delete the trigger (a trait, a docblock, a magic `__get` is often load-bearing).
 
-- Taint and opt-in-rule phpts need an `--ARGS--` section (`--taint-analysis` or an alternate `tests/Type/psalm-*.xml` config), or they pass vacuously under plain defaults.
+- Taint and opt-in-rule phpts need one of the two `--ARGS--` strings from `tests/Type/README.md` (taint, or `tests/Type/psalm-with-optin-custom-issues.xml`), or they pass vacuously under plain defaults. Never invent a variant: each distinct `--ARGS--` string is its own Psalm boot.
 - Unit tests gate version-dependent behavior on capability probes (`class_exists` + `markTestSkipped`), never version numbers; phpts use `--SKIPIF--`.
 - A deliberately accepted soundness gap gets a `*KnownLimitation.phpt` test pointing at the source caveat docblock.
 

@@ -24,6 +24,9 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     /** @var list<string> */
     public array $queuedResolvableClassLikes = [];
 
+    /** @var list<array{0: string, 1: string, 2: string}> template path, source, message */
+    public array $compileFailures = [];
+
     public int $markCalls = 0;
 
     public function __construct(private readonly bool $markSucceeds = true) {}
@@ -63,8 +66,14 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     /**
      * Nothing to record: the call site is `Plugin::initBladeAnalysis()`, not `BladeBootstrapper`,
      * so no test driving this double reaches it. The seam is covered end to end by
-     * `BladeRuntimeHelperVisibilityTest`.
+     * `BladeTemplatesTest`.
      */
     #[\Override]
     public function queueFilesForScanning(array $paths): void {}
+
+    #[\Override]
+    public function reportCompileFailure(string $templatePath, string $source, string $message): void
+    {
+        $this->compileFailures[] = [$templatePath, $source, $message];
+    }
 }

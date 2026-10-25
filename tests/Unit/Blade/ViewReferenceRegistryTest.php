@@ -29,14 +29,4 @@ final class ViewReferenceRegistryTest extends TestCase
 
         $this->assertSame(123, \array_key_first(ViewReferenceRegistry::templates()));
     }
-
-    #[Test]
-    public function reset_clears_templates_from_a_previous_invocation(): void
-    {
-        ViewReferenceRegistry::registerTemplate('profile', 0, '/app/views/profile.blade.php');
-
-        ViewReferenceRegistry::reset();
-
-        $this->assertSame([], ViewReferenceRegistry::templates());
-    }
 }

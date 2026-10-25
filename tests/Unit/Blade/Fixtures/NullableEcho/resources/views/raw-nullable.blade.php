@@ -1,1 +1,0 @@
-{!! (new \Fx\Source)->maybe() !!}

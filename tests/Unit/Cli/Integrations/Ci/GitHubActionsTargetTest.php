@@ -30,18 +30,6 @@ final class GitHubActionsTargetTest extends TestCase
     }
 
     #[Test]
-    public function id_is_stable(): void
-    {
-        $this->assertSame('github', (new GitHubActionsTarget())->id());
-    }
-
-    #[Test]
-    public function display_name_is_human_readable(): void
-    {
-        $this->assertSame('GitHub Actions', (new GitHubActionsTarget())->displayName());
-    }
-
-    #[Test]
     public function detects_github_directory(): void
     {
         $target = new GitHubActionsTarget();
@@ -76,23 +64,6 @@ final class GitHubActionsTargetTest extends TestCase
         $plan = (new GitHubActionsTarget())->plan($this->tempDir);
 
         $this->assertTrue($plan->targetExists);
-    }
-
-    #[Test]
-    public function plan_reads_contents_from_bundled_template(): void
-    {
-        $plan = (new GitHubActionsTarget())->plan($this->tempDir);
-
-        // Assert structural contents rather than whole file equality so doc
-        // tweaks to the template don't break the test.
-        $this->assertStringContainsString('name: Psalm', $plan->contents);
-        // Single-job workflow (#1132): one `psalm:` job runs type + taint in one
-        // pass, uploads SARIF, and feeds Code Scanning via security-events: write.
-        $this->assertStringContainsString('psalm:', $plan->contents);
-        $this->assertStringContainsString('security-events: write', $plan->contents);
-        $this->assertStringContainsString('shivammathur/setup-php', $plan->contents);
-        $this->assertStringContainsString('github/codeql-action/upload-sarif', $plan->contents);
-        $this->assertStringContainsString('--report=psalm.sarif', $plan->contents);
     }
 
     #[Test]

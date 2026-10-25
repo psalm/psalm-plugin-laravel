@@ -1,4 +1,7 @@
 <?xml version="1.0"?>
+<!-- Every non-default plugin setting in one config, so all fixtures that need one share a single
+     Psalm run. Settings only add opt-in findings or flip the dynamic-where default, which
+     fixtures outside this config must not see. -->
 <psalm
     disableSuppressAll="true"
     ensureArrayStringOffsetsExist="true"
@@ -10,6 +13,7 @@
     reportMixedIssues="true"
     runTaintAnalysis="false"
     sealAllMethods="true"
+    sealAllProperties="true"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
     xsi:schemaLocation="https://getpsalm.org/schema/config ../../vendor/vimeo/psalm/config.xsd"
@@ -17,12 +21,14 @@
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <reportImplicitQueryBuilderCalls value="true" />
-            <findMissingTranslations value="true" />
+            <findMissingTranslations value="true" keys="short" />
             <findMissingViews value="true" />
             <findUnconfiguredFilesystemDisks value="true" />
             <findSerializedQueuedModels value="true" />
             <findOctaneIncompatibleBinding value="true" />
             <failOnInternalError value="true" />
+            <experimental value="true" />
+            <resolveDynamicWhereClauses value="false" />
         </pluginClass>
     </plugins>
     <issueHandlers>

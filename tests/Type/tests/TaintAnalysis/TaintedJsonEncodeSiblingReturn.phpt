@@ -1,11 +1,11 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 
 /**
- * The handler must not strip taint on the enclosing function's other return paths:
- * Psalm accumulates removed taints of every return expression into the function storage.
+ * Neither the handler nor core may strip a taint on the enclosing function's other return paths:
+ * the call takes the raw `return $a;` path, so both html and has_quotes reach the echo.
  */
 function first(string $a, bool $b): string|false {
     if ($b) {

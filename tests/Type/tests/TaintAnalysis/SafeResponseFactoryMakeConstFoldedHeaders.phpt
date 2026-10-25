@@ -1,5 +1,7 @@
+--CONFLICTS--
+taint-SafeResponseFactoryMakeConstFoldedHeaders
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1 --no-reflection-cache
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 
@@ -8,9 +10,9 @@ use Illuminate\Routing\ResponseFactory;
 
 /**
  * #1416 widening 1. The headers array is a literal one statement up, held in a variable that is
- * assigned exactly once and never mutated before the call. The unique ARGS line runs this file in
- * its own batch: every `make()` call in the project meets at the same shared sink node, and a
- * shared batch would silently drop this file's finding if the exemption failed to apply.
+ * assigned exactly once and never mutated before the call. The unique CONFLICTS key runs this file
+ * in its own Psalm run: every `make()` call in the project meets at the same shared sink node, and
+ * a shared run would silently drop this file's finding if the exemption failed to apply.
  */
 function makeCsvExportFromReportedShape(Request $request, ResponseFactory $response): void
 {

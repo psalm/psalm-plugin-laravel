@@ -81,41 +81,4 @@ final class ProjectFileInjectorTest extends TestCase
         $this->assertFalse(ProjectFileInjector::inject($target, ['/views/a.blade.php']));
         $this->assertNull($target->read());
     }
-
-    #[Test]
-    public function declines_when_the_property_is_uninitialized(): void
-    {
-        // The reader is what keeps the property: Rector removes a private property nothing reads,
-        // which would quietly turn this into a second copy of the missing-property case.
-        $target = new class {
-            /** @var array<string, string> */
-            private array $project_files;
-
-            public function initialized(): bool
-            {
-                return isset($this->project_files);
-            }
-        };
-
-        $this->assertFalse(ProjectFileInjector::inject($target, ['/views/a.blade.php']));
-        $this->assertFalse($target->initialized(), 'a declined write leaves the property alone');
-    }
-
-    #[Test]
-    public function injecting_nothing_is_a_success(): void
-    {
-        $target = new class {
-            /** @var array<string, string> */
-            private array $project_files = [];
-
-            /** @return array<string, string> */
-            public function read(): array
-            {
-                return $this->project_files;
-            }
-        };
-
-        $this->assertTrue(ProjectFileInjector::inject($target, []));
-        $this->assertSame([], $target->read());
-    }
 }

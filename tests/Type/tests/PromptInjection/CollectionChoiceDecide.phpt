@@ -10,7 +10,7 @@ if (!class_exists(\Laravel\Ai\Classification\CollectionChoice::class)) {
     echo 'skip needs laravel/ai with Classification\CollectionChoice (1.1.0+)';
 }
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 

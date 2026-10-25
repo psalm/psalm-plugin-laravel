@@ -7,7 +7,7 @@ description: Review pull requests in psalm-plugin-laravel (the Psalm plugin for 
 
 The repository guide already loaded for this review holds the hard rules and code patterns; apply them as written. This file adds only what a reviewer needs on top.
 
-This branch is `3.x`: Psalm 6 (`vimeo/psalm ^6.16`), Laravel `^11.35 || ^12.14 || ^13.3`. It receives backports from `4.x` (Psalm 7).
+This branch is `4.x`: Psalm 7, Laravel 12 and 13 (exact constraints: `composer.json`). Fixes that also apply to Psalm 6 are backported to `3.x`.
 
 ## Procedure
 
@@ -17,7 +17,7 @@ This branch is `3.x`: Psalm 6 (`vimeo/psalm ^6.16`), Laravel `^11.35 || ^12.14 |
 
 ## Stubs
 
-- A method typed in `stubs/common/` must exist with that signature on every supported Laravel major (11, 12, 13). Newer-only behavior belongs in `stubs/<version>/`.
+- A method typed in `stubs/common/` must exist with that signature on every supported Laravel major (12, 13). Newer-only behavior belongs in `stubs/<version>/`.
 - A `@param` narrower than what Laravel accepts causes `ArgumentTypeCoercion` false positives. Compare against the Laravel source signature.
 - Never `@psalm-seal-methods` on Model, Builder, Relation, or Collection: it blocks `__call` re-dispatch.
 

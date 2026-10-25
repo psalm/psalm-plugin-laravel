@@ -13,6 +13,9 @@ namespace Psalm\LaravelPlugin\Blade;
  */
 final class ViewReferenceRegistry
 {
+    /** @var array<string, list<string>>|null template path => every view name it owns; derived, dropped on every write */
+    private static ?array $namesByTemplate = null;
+
     /** @var array<array-key, array{0: int, 1: string}> view name => [view root index, template path] */
     private static array $templates = [];
 
@@ -29,6 +32,13 @@ final class ViewReferenceRegistry
         }
 
         self::$templates[$viewName] = [$rootIndex, $templatePath];
+        self::$namesByTemplate = null;
+    }
+
+    /** The file Laravel renders for this view name, null when no discovered template claimed it. */
+    public static function templatePathFor(string $viewName): ?string
+    {
+        return self::$templates[$viewName][1] ?? null;
     }
 
     /**
@@ -43,9 +53,28 @@ final class ViewReferenceRegistry
         return \array_map(static fn(array $entry): string => $entry[1], self::$templates);
     }
 
+    /**
+     * Every view name a template owns: more than one for a published override, which sits under both
+     * the default root and its namespace's own hint root.
+     *
+     * @return list<string>
+     */
+    public static function namesFor(string $templatePath): array
+    {
+        if (self::$namesByTemplate === null) {
+            self::$namesByTemplate = [];
+
+            foreach (self::$templates as $viewName => [, $path]) {
+                self::$namesByTemplate[$path][] = (string) $viewName;
+            }
+        }
+
+        return self::$namesByTemplate[$templatePath] ?? [];
+    }
 
     public static function reset(): void
     {
         self::$templates = [];
+        self::$namesByTemplate = null;
     }
 }

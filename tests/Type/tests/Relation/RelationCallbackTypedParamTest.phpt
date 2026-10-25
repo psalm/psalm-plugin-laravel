@@ -69,5 +69,5 @@ function test_eager_load_union_hint_accepted(): void
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::whereHas expects Closure[impure](App\Builders\VehicleBuilder<App\Models\Vehicle>):mixed, but Closure[impure](Illuminate\Database\Eloquent\Builder<App\Models\Part>):Illuminate\Database\Eloquent\Builder<App\Models\Part>&static provided
-InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::withWhereHas expects Closure[impure](App\Builders\VehicleBuilder<App\Models\Vehicle>|Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer>):mixed, but Closure[impure](App\Builders\VehicleBuilder):App\Builders\VehicleBuilder<Illuminate\Database\Eloquent\Model> provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::whereHas expects Closure[impure](App\Builders\VehicleBuilder<App\Models\Vehicle>):mixed, but Closure[write-props|read-globals|write-globals|io|time](Illuminate\Database\Eloquent\Builder<App\Models\Part>):Illuminate\Database\Eloquent\Builder<App\Models\Part>&static provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::withWhereHas expects Closure[impure](App\Builders\VehicleBuilder<App\Models\Vehicle>|Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer>):mixed, but Closure[write-props|read-globals|write-globals|io|time](App\Builders\VehicleBuilder):App\Builders\VehicleBuilder<Illuminate\Database\Eloquent\Model> provided

@@ -44,8 +44,6 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 {
     private static bool $remapping = false;
 
-    private static bool $reportMixedIssues = false;
-
     /**
      * @var array<string, ShadowTarget|null> resolved shadows, negatives included: target() is asked
      *      once per issue and again per taint journey hop, over the same handful of paths, and both
@@ -53,15 +51,9 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
      */
     private static array $targets = [];
 
-    public static function init(bool $reportMixedIssues): void
-    {
-        self::$reportMixedIssues = $reportMixedIssues;
-    }
-
     public static function reset(): void
     {
         self::$remapping = false;
-        self::$reportMixedIssues = false;
         self::$targets = [];
     }
 
@@ -93,7 +85,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 
         // The resolver, not just the issue's own target: a taint journey hops between files, and
         // any of those hops can be another template's shadow.
-        $relocated = ShadowIssueRelocator::relocate($issue, $target, self::target(...), self::$reportMixedIssues);
+        $relocated = ShadowIssueRelocator::relocate($issue, $target, self::target(...));
 
         // Null is a decline, not a drop: Psalm keeps handling the original, which for a shadow
         // means it stays invisible — but nothing is ever silently thrown away here.
@@ -197,11 +189,23 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
         // a sibling's docblock must never become a template-wide suppression. A type issue can
         // point inside the enclosing node's own docblock, before its first code token.
         $enclosing = (new NodeFinder())->find($statements, static fn(Node $node): bool
-            => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike)
+            => ($node instanceof Node\Stmt || $node instanceof Node\FunctionLike || $node instanceof Node\MatchArm)
             && ($node->getDocComment()?->getStartFilePos() ?? $node->getStartFilePos()) <= $location->raw_file_start
             && $node->getEndFilePos() >= $location->raw_file_end);
         $rules = [];
         foreach ($enclosing as $node) {
+            // MatchAnalyzer suppresses these two across the arms of a `match` through a runtime list
+            // the event omits (upstream gap). The subject, and a `match` used as an operand, sit
+            // outside every arm and keep reporting (#1801). Residual: with no default arm Psalm
+            // analyzes the arm conditions again unsuppressed and can report there, a template stays
+            // silent.
+            if ($node instanceof Node\MatchArm) {
+                $rules[] = 'RedundantCondition';
+                $rules[] = 'RedundantConditionGivenDocblockType';
+
+                continue;
+            }
+
             foreach ($node->getComments() as $comment) {
                 if (!$comment instanceof Doc) {
                     continue;
@@ -259,6 +263,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             // Falling back to the live bytes only when boot recorded nothing: no worse than having
             // no snapshot at all, and a wrong prefix costs a no-op strip, never a wrong one.
             ShadowRegistry::markerPrefixFor($entry->templatePath) ?? MarkerComment::prefixFor($templateSource),
+            PreludeBuilder::declaresTagAttributes((string) @\file_get_contents($shadowPath)),
         );
     }
 }

@@ -283,6 +283,22 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Exception:** Sinks for high-severity, targeted operations remain valid — e.g., `Redis::eval($script)` (Lua injection) or `DB::unprepared($sql)` (SQL injection), because user input reaching this is almost always a real vulnerability.
 
+### Mail: only sender and recipient addresses are header sinks (#1958)
+
+**Decision:** `Mailable` `from()`, `to()`, `cc()`, `bcc()`, `replyTo()` and `MailMessage` `from()`, `cc()`, `bcc()`, `replyTo()` mark `$address` as a `header` sink. The display name (`$name`) and `subject()` are not sinks.
+
+**Why:**
+- Display names are safe: `Symfony\Component\Mime\Address::__construct()` strips `\r`/`\n` from the name on every symfony/mime version Laravel allows (>=7.2).
+- Subjects are safe when Symfony serializes the MIME message (SMTP, sendmail, SES raw): `UnstructuredHeader` RFC 2047-encodes tokens containing CR/LF, so a line break becomes folded whitespace. API transports (Resend, Postmark API, Mailgun API) pass the raw subject as a structured field and build the header provider-side, outside this proof.
+- Addresses are not safe on part of the supported range: a quoted local part (`"x\r\nBcc: a@evil.com"@example.com`) or domain literal (`victim@[\r\nX-Evil: 1]`) passes egulias validation and is written verbatim, injecting header lines; a `bcc` also reaches the SMTP envelope.
+- Two independent guards close the address hole: Laravel's `Message::ensureAddressIsSafe()` (12.60.0+, 13.10.0+) and symfony/mime 6.4.40 / 7.4.12 / 8.0.12+ (CVE-2026-45067). Either one suffices. Every supported 13.x carries the Laravel guard, so only 12.x below 12.60 on unpatched symfony/mime is vulnerable and the address sinks are true positives there.
+
+**Rejected alternatives:**
+- Drop the address sinks too: misses CVE-2026-45067 on supported versions.
+- Gate the address sinks by Laravel version directory: a single `12.60.0` override dir would now suffice (every supported 13.x is above the 13.10.0 fix). It would still be blind to the installed symfony/mime version, which can close the hole independently.
+
+**Known gaps (not covered):** Header-name injection via `metadata($key)`, and address sinks on `Illuminate\Mail\Message`, `Mailables\Address`, `Envelope` and `PendingMail`.
+
 ### Call-site sink exemptions are applied at issue emission, not in the taint graph
 
 **Decision:** When one call site has to be exempted from a stub's taint sink, implement `BeforeAddIssueInterface`, re-check the call site from the emitted issue, and return `false`. Do not mutate the taint graph through `RemoveTaintsInterface`.
@@ -313,7 +329,7 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 ### `json_encode()` HEX flags use `RemoveTaintsInterface`, with a type-unset gate
 
-**Decision:** `JsonEncodeTaintHandler` removes taint from `json_encode()` calls whose flags provably contain literal HEX flags, through `RemoveTaintsInterface`: `JSON_HEX_TAG` removes html, `JSON_HEX_APOS` plus `JSON_HEX_QUOT` removes has_quotes (either alone leaves a raw `'` or a `\"` that HTML does not unescape). Accepted gap: the encoder's own `"` delimiters still close a double-quoted attribute or JS string. Such markup is visibly broken for every string, array or object value (ints, bools and null encode bare), so it rarely survives manual testing; keeping has_quotes instead would report every `@json` in a `<script>` block, where it is safe. Pinned by `TaintedJsonEncodeDoubleQuotedAttributeKnownLimitation.phpt`.
+**Decision:** `JsonEncodeTaintHandler` removes has_quotes from `json_encode()` calls whose flags provably contain `JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP`, through `RemoveTaintsInterface` (any one missing leaves a raw `'`, a `\"` that HTML does not unescape, or a `&quot;` an attribute decodes back to `"`). Core removes html since Psalm 7.0.0-rc8 (vimeo/psalm#12453) but keeps has_quotes because of the gap below; the plugin accepts that gap. Accepted gap: the encoder's own `"` delimiters still close a double-quoted attribute or JS string. Such markup is visibly broken for every string, array or object value (ints, bools and null encode bare), so it rarely survives manual testing; keeping has_quotes instead would report every `@json` in a `<script>` block, where it is safe. Pinned by `TaintedJsonEncodeDoubleQuotedAttributeKnownLimitation.phpt`.
 
 **Why this is not the graph mutation rejected above:** the hazard there is a removal landing on a callee's single project-wide argument-to-return edge. `json_encode()` is a Psalm-shipped stub, so Psalm specializes both of its nodes per call location, and the removal affects only that call's own edge. The handler checks that instead of assuming it: it declines unless the resolved storage is specialized (the test of `TaintFlowGraph::isCallSpecialized()`), so a project stub that re-declares `json_encode()` without per-call specialization (neither `@psalm-taint-specialize` nor `@psalm-pure`) keeps its findings. The handler is stateless and keys on the call expression, not on a recorded node. Emission-time suppression does not fit: the escape belongs to the transform, not to any one sink, so there is no sink call site to key on.
 
@@ -398,6 +414,28 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
+### `Schema` facade: `@mixin Schema\Builder` types the introspection methods, with no handler whitelist (#1680)
+
+**Decision:** `stubs/common/Support/Facades/Schema.phpstub` carries `@mixin \Illuminate\Database\Schema\Builder`. `Schema::getTables()`, `getViews()`, `getColumns()`, `getIndexes()`, `getForeignKeys()`, `getTableListing()`, `getColumnListing()` (and `getSchemas()`, `getIndexListing()`) resolve to Builder's types (the installed Laravel's docblock, or the Builder stub's correction listed below) instead of the facade tag's bare `array`: `list<array{...}>` rows for `getTables()`, `getViews()`, `getColumns()`, `getForeignKeys()`, `getSchemas()`; `array<int, array{...}>` for `getIndexes()`; `list<string>` for `getTableListing()`, `getColumnListing()`, `getIndexListing()`. No `FacadeStubPrecedenceHandler` change.
+
+**Why:** Hand-copied shapes are wrong on one Laravel line (the `getColumns`/`getTypes` shapes changed between 12.x and 13.x; `getForeignKeys` is `array` before 13.7). The rejected alternative, a handler whitelist dropping those pseudo-static entries, is unnecessary: Psalm 7 resolves a static call on a facade through the `@mixin` target's real method (`AtomicStaticCallAnalyzer` mixin step) before it consults `pseudo_static_methods`, so the mixin alone wins.
+
+**Scope of the behavior change:** the mixin applies to EVERY Builder method not declared as a real method on the facade stub, not only the `array` returns. Builder's parameter types and generic callback inference (`create()`/`table()` closures, `whenTableHasColumn()`, `withoutForeignKeyConstraints()` returning `TReturn`) now replace the facade tags', and Builder's stub taint sinks (`drop`, `create`, ...) now fire on facade calls.
+
+**Builder-stub corrections (not facade carve-outs):** where Laravel's `Schema\Builder` docblock contradicts what the driver processors (`Query\Processors\*`) emit on a supported line, `stubs/common/Database/Schema/Builder.phpstub` declares the runtime-true shape. The facade picks it up through the mixin, and `Schema::connection()->...` instance calls share it (the Builder stub is the single source). Full audit matrix: processors are identical on 12.27-13.37 apart from Postgres `virtual` generation (12.70+).
+- `getTypes()`: `type` repeated (invalid docblock, `mixed`) before 13.7, no `schema_qualified_name` before 13.8, `type`/`category` non-null on every line but null for unmapped Postgres codes.
+- `getColumns()`: no `collation` before 13.8 (every driver emits it on every supported line); `generation.type` non-null on every line but null for unmapped MySQL/Postgres/SQLite codes.
+- `getIndexes()`: `type: string` on every line, but SQLite always emits null; SQLite also `array_filter()`s the synthetic `primary` row on composite primary keys, so the result is `array<int, ...>`, not a list.
+- `getForeignKeys()`: bare `array` before 13.7 (typed list declared on every line; the shape is identical).
+- `getViews()`: `definition` is NULL for encrypted SQL Server views (`sys.sql_modules.definition`) and passes through `Processor::processViews()` uncast; declared `string|null`.
+
+**Facade-side restatements (real static methods on the facade stub, restating the facade's own `@method` tag so a facade call is exactly what it was before the mixin).** Only the facade: the Builder instance keeps Laravel's docblocks, so `$schema->...` and `Schema::connection()->...` are unchanged.
+- `hasColumns()`, `dropColumns()` (common stub): Builder documents `array<string>` for the column list, the tags accept any array, and the runtime accepts `Stringable` (`strtolower()` coercion) and `Expression` (grammar `wrap()`).
+- `getColumn()` (`stubs/13.34.0/`, the method does not exist earlier): returns a full row or `[]` but documents only the full shape (`=== []` is a `DocblockTypeContradiction`); restated as the tag's bare `array`.
+- Found by scripting `UnionTypeComparator::isContainedBy()` over every facade `@method` param against the Builder param the mixin resolves (probed on 12.20 and 13.37; arity/optionality/by-ref/variadic were identical). Not restated on purpose: `defaultStringLength(non-negative-int)` (the method does not validate, but a negative length fails later in the DDL for a string column).
+
+**Known limitation:** each correction can go once laravel/framework fixes its docblock. The facade's `getColumn()` stays a bare `array` because Psalm merges `array{...}|array{}` into one shape with every key optional (`array{name?: string, ...}`), which turns a `!== []`-guarded `$column['name']` into a `PossiblyUndefinedArrayOffset` false positive; `array` reports the same offset check only as the generic `PossiblyUndefinedStringArrayOffset` every plain array gets under strict config (use `isset`), and accepts the `=== []` comparison.
+
 ## Laravel Docblock Gaps
 
 ### `Arr::toCssClasses()` accepts `null`; `toCssStyles()` is not widened
@@ -412,6 +450,168 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 **Boundaries:**
 - The plugin does not model Laravel's conditional `@return` (`''` vs `non-empty-string`): the wrong types are an upstream docblock bug, and `[null]` renders `''`, so the upstream `non-empty-string` is unsound for nullable items. Fix it in laravel/framework, not here.
 - A top-level `null` `$array` stays rejected.
+
+## Collections
+
+### In-place writes widen through `@psalm-this-out`; two receiver shapes are an accepted limitation
+
+**Decision:** `Support\Collection::push()`/`put()`/`prepend()`/`unshift()`/`add()`/`splice()`/`getOrPut()` take fresh value (and key) templates and declare `@psalm-this-out static<...>`, so writing a value outside the current `TValue` widens the receiver instead of reporting `InvalidArgument` (#1890). `$c[] = $v` (`offsetSet`) stays strict because `@psalm-this-out` does not apply to array-access writes. `transform()` already works through Laravel's own `@phpstan-this-out`.
+
+**Accepted limitation:** the model misbehaves for two receiver shapes, and `push()`/`put()` share both defects:
+- A generic subclass that reshapes the template list (`Bag<T> extends Collection<int, T>`): `static<TKey, TValue>` is applied positionally to `Bag`'s own templates, so `Bag<User>` becomes `Bag<int, User>` and `first()` turns into `int|null`. Psalm does not route the arguments through `template_extended_params`.
+- A union of different receiver classes (`Support\Collection|Eloquent\Collection`): this-out replaces the whole variable type with one branch and discards the unaffected branches, so a later `instanceof` reports a redundant or impossible condition.
+
+Both are Psalm-side defects. The stub does not work around them: a per-shape workaround would be spread across every in-place writer, and the common receivers (plain `Collection`, `Eloquent\Collection`, fixed-template subclasses) are correct for writes within their fixed types (a write outside the fixed `@extends` types widens beyond the subclass's declared parameters).
+
+**Boundaries:** `splice()` keeps its receiver key type `TKey` (`array_splice()` renumbers integer keys, which is not modelled) and returns the removed slice, so only its this-out carries the replacement values. `getOrPut()` leaves the key unbounded because Laravel accepts `mixed`.
+
+### Lookups on an empty collection: the `expects never` issue is dropped at emission, not widened in a stub
+
+**Decision:** `Handlers\Collections\EmptyCollectionLookupIssueHandler` (`BeforeAddIssueInterface`) drops an `InvalidArgument`/`PossiblyInvalidArgument`/`ArgumentTypeCoercion`/`InvalidScalarArgument` on `get`, `has`, `hasAny`, `contains`, `containsStrict`, `doesntContain`, `doesntContainStrict`, `search`, `offsetGet` or `offsetExists` of `Support\Collection` / `Eloquent\Collection` only when the expected type quoted in its message equals the declaring method's declared parameter with every class template replaced by `never` (`never`, `array<array-key, never>`, `callable(never, never):bool|string`, ...). It is registered before the Blade remap, which stops the dispatcher at the first bool. Companion stub fixes: `get()` takes `TKey|null` like Laravel, and `except()`/`only()`/`hasAny()` are `@psalm-variadic` because Laravel reads `func_get_args()` (they used to report `TooManyArguments`) (#1814).
+
+**Why:** `collect()`, `Collection::empty()` and a ternary / if-else merge with one give `Collection<never, never>`, which Psalm checks per receiver atomic. A lookup on an empty collection is valid and returns the default, but the `never` atomic rejects every key. The same union's populated atomic quotes its own substituted type (`int`, `array<array-key, int>|int`, ...), so `Collection<int, Item>->get('name')`, `->has('name')`, `->contains(1)` and the int-keyed atomic of `Collection<int, Item>|Collection<never, never>` keep reporting. The provided type quoted in the message must also fit that parameter with each class template replaced by its own upper bound (`TKey` -> `array-key`, `TValue` -> `mixed`, `TModel` -> `Model`): emptiness proves no entries exist, not that the argument is usable, and `array_key_exists(new stdClass)` throws on an empty collection too, as does `contains(new NotAModel)` on an empty Eloquent collection (kept reporting). A class template that occurs only at the top level of the parameter and shares it with another top-level atomic that can overlap the template's bound is ambiguous (`TValue|null` quotes `null` for `TValue = never` and for `Collection<int, null>`), so that parameter never drops; `TKey|null` (null cannot overlap `array-key`) and a bare `TKey` still do, and nested occurrences keep `never` visible. Psalm numbers `Argument N` by call-site position, so named calls (`get(default: 'x', key: $k)`) are matched against every parameter naming a class template, the provided type being checked against the parameter that matched. The declaring method is resolved from storage (the quoted method id names the receiver's class, e.g. `Eloquent\Collection::has`), so a user class that redeclares a lookup is declined; a parameter that names no class template and a subclass that reshapes the templates (`Bag<T> extends Collection<int, T>`, quoting `int`) are declined too. `offsetGet`/`offsetExists` take the same path, so `isset($empty['k'])` is clean; reading `$empty['k']` still ends in `NoValue` because `offsetGet` returns `never`.
+
+**Dead ends (probed, Psalm 7.0.0-rc2):**
+- **Conditional param `(TKey is never ? array-key : TKey)`.** Psalm unions both branches of a conditional parameter, so the param accepts `array-key` everywhere and `Collection<int, Item>->get('name')` stops reporting.
+- **`@template T super TKey`.** Parsed, but unused by rc2's argument check.
+- **`MethodParamsProvider`.** The event carries no receiver, so it cannot tell an empty receiver from a populated one.
+- **Widening every lookup parameter to `array-key`/`mixed`** (#1886). Silences the empty case and also every real wrong-key diagnostic on populated collections.
+
+**Accepted limitation:** a typed closure argument on an empty receiver (`$flag ? $items : collect()` then `->contains(static fn (Item $i): bool => ...)`, same for `map()`/`filter()`) still reports `ParadoxicalCondition: Parameter cannot be never` and a `MixedPropertyFetch` on the parameter. Psalm's `ArgumentsAnalyzer::handleClosureArg()` narrows the closure's declared parameter to the empty atomic's `never`; it is not an argument issue and not specific to lookups, so this handler does not cover it.
+
+### `groupBy()`/`keyBy()` with a `mixed`-returning callback is answered by a handler, not the stub
+
+Laravel casts group/key values to array keys at runtime, but the stub's `TGroupKey`/`TNewKey` conditional keeps `mixed` in the outer key (`array-key|mixed`), so the next `static<TKey, ...>` call reports `InvalidTemplateParam` (#1884). Rewriting those conditionals did not help (two attempts, probed dead end); `CollectionGroupByKeyByHandler` answers `array-key` for callbacks whose return type contains `mixed` and declines for every typed callback.
+### `filter()`/`reject()`/`where()` narrow TValue from a class-typed closure parameter (#1912)
+
+**Decision:** `CollectionFilterHandler` narrows the result TValue of `filter(Closure)`, `where(Closure)` and `reject(Closure)` from the closure's first parameter. Laravel calls the callback for every element and keeps the original item, and PHP never coerces an object into a class type, so any non-instance throws `TypeError`: every surviving element is an instance of the parameter type. Return type only; `ArgumentTypeCoercion` / `MixedArgumentTypeCoercion` are still reported.
+
+**Rules:**
+- Exactly one argument, a `Closure`/arrow-fn literal (no first-class callables or callable strings), first param non-variadic and non-by-ref.
+- The param's NATIVE type must be only class/interface/enum names and optionally `null`. Untyped, `mixed`, scalar, array, `object`, `iterable`, `callable` decline.
+- Gate: TValue is `mixed`, or the param's non-null part is contained by TValue without coercion. An unrelated param keeps today's result and Psalm's `InvalidArgument`. A template-derived atomic in TValue declines.
+- Per TValue atomic: kept when the param accepts it (preserves generics such as `Dog<int>`), replaced by the param's classes it contains (`mixed`/`object`/supertype) otherwise, dropped if neither. `null` survives only when the param is nullable and TValue had `null`/`mixed`.
+- Param narrowing needs an exact-base receiver: the dispatched class and every atomic of the receiver expression type are exactly `Support\Collection`, `LazyCollection` or `Eloquent\Collection`, with no intersection and no template (`C of Collection`). Subclasses with another template layout (`WithMetadata<V, M> extends Collection<int, V>`) would get the positional `(TKey, TValue)` result applied to their own templates. A receiver union of the three classes still narrows per branch.
+- A param typed `self`/`static`/`parent` declines: closures can be rebound, so the lexical class is not what the callback receives.
+- filter/where then run the existing predicate matcher on the narrowed TValue and fall back to the param-narrowed result when it yields nothing. `reject()` gets only param narrowing (predicate inversion is a separate matter).
+
+**Limitation:** `reject()`/`where()` on an `Eloquent\Collection` receiver do not reach the handler (declared on `EnumeratesValues`; the handler stays registered for `Support\Collection` and `LazyCollection` only), so only `filter()` narrows there.
+
+**Rejected (probed dead end): narrowing scalar params when the user's file declares `strict_types=1`.** The coercion mode of a call is decided by the CALLING file. The caller is `Arr::where()`/`array_filter()` (`Collection`), a generator in `LazyCollection::filter()`, or `EnumeratesValues::reject()`'s wrapper. None of those Laravel files declares `strict_types`, and `array_filter` is internal, so callbacks run in coercive mode regardless of the user's file: `fn (int $x)` accepts `"5"` and the original `"5"` stays in the result.
+
+**Boundaries:** `first`, `each`, `every`, `contains`, `partition`, `sortBy`, `keyBy`, `groupBy` do not qualify (early exit, or the result is not a kept subset). The receiver variable is not narrowed, and `Enumerable`-typed receivers and higher-order proxies are not covered.
+
+### `toArray()` keeps Laravel's return type (probed dead end, Psalm 7.0.0-rc2)
+
+**Rejected:** a conditional `toArray()` return that maps `Arrayable` items to `array<array-key, mixed>`. On the `EnumeratesValues` trait the template is not remapped through `@extends`, so a subclass `toArray(): array` override reports `InvalidReturnType`. On the class stubs, Psalm's conditional evaluation drops the `Arrayable` arm for concrete `Arrayable` classes and for generic `Arrayable`-plus-scalar unions, which is unsound. A narrower `Eloquent\Collection` return (`array<TKey, array<array-key, mixed>>`) breaks custom serializer overrides that only satisfy `Arrayable<TKey, TValue>`.
+
+### `setCollection()` keeps `@return $this`; a chained call keeps the old paginator templates (probed dead end)
+
+**Rejected:** `@return static<TSetKey, TSetValue>` on `setCollection()`. It is applied positionally to subclasses that reshape the template list (`Page<T> extends AbstractPaginator<int, T>` types its items as `int`; extra templates such as `TMeta` are dropped), and a userland `@return $this` override reports `ImplementedReturnTypeMismatch`.
+
+**Accepted limitation:** `$p->setCollection($c)->items()` keeps the receiver's old keys and values, while `$p->setCollection($c); $p->items()` rebinds through `@psalm-this-out`. Pinned by `PaginatorSetCollectionChainKnownLimitationTest`.
+### `HigherOrderCollectionProxy` uses Laravel 13.31+'s `<TMethod, TValue, TCollection>` on every version (#1920)
+
+**Decision:** `stubs/common/Support/HigherOrderCollectionProxy.phpstub` declares `TMethod of string`, `TValue` (covariant) and `TCollection of Enumerable` (covariant); the `Collection`, `LazyCollection` and `Eloquent\Collection` stubs type `$map` as `HigherOrderCollectionProxy<'map', TValue, Collection<TKey, TValue>>`. The runtime proxy is identical on all supported Laravel versions (12.27-13.30 only lack the annotation), so the shape lives in `common`, and user code written against Laravel's 3-argument type checks on every cell. `HigherOrderCollectionProxyHandler` reads TValue at index 1 and takes the `Enumerable` fallback key from TCollection (index 2), `array-key` otherwise.
+
+**Rejected (probed dead ends, Psalm 7.0.0-rc2):**
+- **Laravel's verbatim `static` as the third argument.** In a class-stub `@property-read` it resolves to `Collection&static`, an unparameterized object: TKey/TValue are lost for `Collection<int, X>`, `LazyCollection` and `Eloquent\Collection`, so the `HigherOrderCollectionProxy<'map', X, Collection<int, X>>` parameter reports `MixedArgumentTypeCoercion`. Each stub spells its own class out instead.
+- **Laravel's bound `TCollection of Enumerable<array-key, TValue>`.** The stub `Enumerable` declares an invariant `TKey`, so `Collection<int, X>` violates the bound and a user `@param` with the 3-argument shape reports `InvalidTemplateParam`. `Enumerable<array-key, mixed>` fails the same way; only the bare `Enumerable` bound passes.
+- **Invariant `TCollection`.** `HigherOrderCollectionProxy<string, X, Enumerable<int, X>>` then rejects `$collection->map` (`InvalidArgument`); covariance accepts it. `TMethod` stays invariant (as in Laravel): a `'map'` proxy given to a `'filter'` parameter is reported.
+
+**Accepted limitation:** a non-generic subclass (`final class UserCollection extends Eloquent\Collection` with `@extends`) and a template-bound receiver (`@template C of Collection<int, X>`) still resolve their proxy from the vendor trait annotation or lose TValue; this is unchanged by the 3-argument shape. The handler keeps a `count >= 2` guard because that vendor annotation is still `<TKey, TValue>` on Laravel 12.27-13.30, where dropping the guard turns `$subclass->each->method()` into `mixed`.
+
+### `tap()`/`pipe()`/`chunkWhile()`/`whenEmpty()` callback params are typed by class stubs, not a handler (#1900)
+
+**Decision:** the `Collection`, `LazyCollection` and `Eloquent\Collection` stubs re-declare `tap()`, `pipe()` and the `whenEmpty()` family with the class and its templates as the callback param (`callable(\Illuminate\Support\Collection<TKey, TValue>)`) instead of Laravel's `callable($this)`, and `chunkWhile()` passes a plain `Collection<TKey, TValue>` chunk, which is what `LazyCollection::chunkWhile()` builds. Laravel's `callable($this)` gives an untyped closure param the unresolved `static` (the enclosing class inside a class body), so every untyped closure was rejected. The `whenEmpty()` family declares its callable return as `T|null` and returns `(T is void ? $this : (T is null ? $this : $this|T))`, matching `$callback(...) ?? $this`.
+
+**Rejected (probed, Psalm 7.0.0-rc8):**
+- **A per-call-site params handler** (first version of #1901, ~320 code lines): same result for the three classes, plus subclasses, at the cost of receiver-shape modeling (template-mapped chunk keys, unions, defaulted and declared slot params) that took several review rounds.
+- **Trait-level `callable(static<TKey, TValue>)` or `callable(\Illuminate\Support\Enumerable<TKey, TValue>)`** in `EnumeratesValues`: the first still infers an unresolved `static`, the second rejects `fn (Collection $c)` with `ArgumentTypeCoercion`. `callable(self<...>)` in a trait stub crashes Psalm.
+- **`@return $this|T` with a plain `T` callable return** in the `whenEmpty()` family: a `void` or `null` callback leaves `|null` in the result although Laravel returns `$this` then.
+
+**Accepted limitation:** a user subclass keeps Laravel's `EnumeratesValues` declaration, because a stub override of a trait method does not reach subclasses (vimeo/psalm#12158), so its untyped closures are still rejected; `chunkWhile()` is a `Collection` method and is typed there too. Pinned by `CollectionCallbackParamsSubclassKnownLimitation.phpt`. Once Psalm inherits the override, a subclass callback param becomes the base class, and a closure typed with the subclass (`fn (UserCollection $c)`) would be reported.
+
+## Factories
+
+### An unbound `TCount` keeps `create()`/`make()` at `Model|Collection<int, Model>` (probed dead ends, Psalm 7.0.0-rc6)
+
+**Decision:** a factory declared `@extends Factory<User>` (no second template argument) answers `User|Collection<int, User>` for `create()`, `make()`, `createQuietly()` and `lazy()`. Writing `@extends Factory<User, null>` gives the single model. Pinned by `FactoryUnboundCountKnownLimitation`.
+
+**Why:** Psalm ignores `@template TCount of int|null = null` on a non-purity template, so an omitted argument leaves `TCount` at its `int|null` bound. Psalm 7.0.0-rc5 and earlier picked the single branch of the stub's conditional return for that bound; rc6 evaluates both. The missing piece is template-default support upstream, so the plugin does not paper over it.
+
+**Rejected:**
+- **Binding an omitted `TCount` to `null` class-wide.** Unsound: a count reaches a factory without `count()` (`new UserFactory(3)`, `User::factory(3)`, `UserFactory::times(3)`), and every one of them would type `make()` as a single model where Laravel returns a `Collection`.
+- **Proving "no count" at the call site.** A handler that answers the single model only when the receiver expression is a chain of `new X()` / `X::new()` / `Model::factory()` followed by calls other than `count`/`times`/`foreachSequence`/`when`/`unless` is sound, but is ~100 lines of workaround for a missing template default, and a factory held in a variable or property still gets the union.
+
+**Revisit:** when Psalm honours template defaults on class templates, restore the single-model answer with `@template TCount of int|null = null` alone. Upstream: https://github.com/vimeo/psalm/issues/12446 (template default ignored for an omitted `@extends` argument).
+
+## Variance
+
+### Paginators are covariant in `TValue`; `Support\Collection` stays invariant
+
+**Decision:** The three paginator contracts and the five paginator classes in `stubs/common/Pagination/` and `stubs/common/Contracts/Pagination.phpstub` declare `@template-covariant TValue`, exactly as Laravel does; `TKey` stays invariant (#1860, paginator half). The contracts use Laravel's `TValue` name, not the former `TItem`. `Support\Collection` and `Eloquent\Collection` variance is a separate decision (#410) and is not changed here.
+
+**Why:** Laravel 13.36 types `BelongsToMany` results as `TRelatedModel&object{pivot: TPivotModel}`, so `$post->tags()->paginate()` is a `LengthAwarePaginator<int, Tag&object{pivot: Pivot}>`. With an invariant `TValue` it could not be returned as, or passed to, `LengthAwarePaginator<int, Tag>`, a type Laravel itself accepts. A paginator is read-mostly, so covariance is sound for the common surface; the intended writes go through `setCollection()` / `through()`, whose `@psalm-this-out` retypes the receiver variable to the new value type (they still mutate the object in place; see Boundaries).
+
+**Boundaries:**
+- Accepted hole: a helper typed `LengthAwarePaginator<int, Model>` that receives a `LengthAwarePaginator<int, MechanicSpecialization>` can replace its items in place, and the caller keeps reading the narrower type. Not caught:
+  - `$p->getCollection()->transform(fn (Model $_): Model => new Mechanic())`: `getCollection()` returns the live wrapped collection, not a copy.
+  - `$p->through(...)` and `$p->setCollection(...)`: both mutate the same object at runtime; `@psalm-this-out` rebinds only the static type of the callee's receiver variable, never the caller's alias.
+  - `offsetSet`, and a forwarded `push`/`put` (`@mixin` / `__call` onto the wrapped collection).
+  Laravel's own PHPDoc has the same hole. Pinned by `PaginatorCovarianceKnownLimitationTest.phpt`.
+- Unrelated value types are still rejected (`LengthAwarePaginator<int, Tag>` is not a `LengthAwarePaginator<int, User>`).
+- Do not widen `Support\Collection` by copying this: a collection is routinely written through, which is why its variance is a separate decision.
+
+### `BelongsToMany` / `MorphToMany` are covariant in `TPivotModel` (#1944)
+
+**Decision:** All four `TPivotModel` declarations (`stubs/common/` `BelongsToMany` and `MorphToMany`, plus the `stubs/13/` and `stubs/13.5.0/` `BelongsToMany` re-declarations) are `@template-covariant`. A version dir re-declares the class header, so the flag must be on every copy or Psalm keeps the last-loaded (invariant) one.
+
+**Why:** a pivot refined with its `withPivot()` columns (`Pivot&object{role: string}`) must still satisfy every existing `BelongsToMany<..., Pivot, 'pivot'>` return and parameter. TPivotModel has no input position: callbacks receive it (covariant) and `$using` is a `class-string<TPivotModel>`.
+
+**Rejected:** refining the slot while keeping it invariant. Every existing plain `Pivot` declaration on a `withPivot()` body then fails with `InvalidReturnStatement` / `InvalidArgument`.
+
+### `withPivot()` columns refine TPivotModel in a handler (#1944)
+
+**Decision:** `BelongsToManyWithPivotHandler` answers `withPivot()` and `withTimestamps()` with the receiver whose TPivotModel gains `object{<column>: <type>}`; each type comes from the pivot table's migration, else `mixed`. `withTimestamps()` adds the columns Laravel selects: the parent's `CREATED_AT` / `UPDATED_AT`, or its literal arguments (a `false` argument adds none, as `withTimestamps(false)` means in Laravel 13 and names no column in 12.27). A selected column that already has a type in the receiver's shape keeps it: Laravel only appends columns.
+
+Date columns. Laravel casts the parent's created/updated column as a date only once the pivot's timestamps switch on: a plain pivot (`Pivot::fromAttributes()`) checks its OWN `created_at` before the parent is attached, so selecting `created_at` is the gate, and `getDates()` then names the parent's columns, not the `withTimestamps()` arguments. The date type is emitted only when all of this is proven, else `mixed`:
+- the chain is visible: every link between the `$this->belongsToMany(...)` call and the current call is one of `withPivot`, `withTimestamps`, `as`, `withPivotValue`, `orderByPivot` or the named `wherePivot*` / `orWherePivot*` family (`PivotColumnResolver::PIVOT_PRESERVING`; an exact list, so a macro with such a prefix is not trusted), which return the same relation and cannot change its pivot class. `when()` / `unless()`, `tap()`, macros, forwarded query calls and a `using()` with no literal class can replace the relation or its pivot class, so they make the chain invisible (a `using()` naming a literal class is a link too, see below), and then the factory's table is not used either: the columns the call adds are `mixed`. The same holds for a delegated relation method (`return $this->base()->withTimestamps()`), where the delegated body and every outer link must be visible, and a hidden receiver (a parameter) never is;
+- the date class is known: `Date::use()` state is read from the booted app (`Illuminate\Support\DateFactory`): unconfigured is `Illuminate\Support\Carbon`, a class is that class, a callable or a factory is `mixed`;
+- `created_at` is among the selected columns, wherever in the chain, and the parent's `CREATED_AT` / `UPDATED_AT` are known (`mixed` for all of them when the model overrides `getCreatedAtColumn()` / `getUpdatedAtColumn()`).
+
+A plain pivot's `forceFill()` runs before it has a parent, so a default-named `created_at` / `updated_at` that is not one of the parent's names holds a date-normalized string at runtime: `mixed`, never Carbon nor its raw schema type.
+
+**Boundary:** a dynamic or class-string `$table` argument declines the refinement (the pivot class may change through `using()`), so a declared pivot shape on such a relation still reports `InvalidReturnType`; so does a factory called on another model than `$this` (it takes that model's timestamp names), including when only one of several returned branches does. Out of scope: the pivot key columns, `as()` accessor shapes, and the implicit `using` of `belongsToMany(X, PivotClass::class)`.
+
+**`using(X::class)` pivots (#1998).** `using()` is answered too. A visible chain whose outermost `using()` names a resolvable class (the outermost runs last and wins; a non-literal one hides the chain) is rebuilt from scratch on that class, `X&object{<column>: <type>}`, whatever the call order. A hidden chain whose slot is exactly one custom `Pivot` subclass refines it like a plain pivot: only X's own answer (below) or `mixed`, no dates, no table; `using()` on a hidden receiver declines. The relation-method parser reads the same chain through the same resolver. Related-model `newPivot()` and parent `newBelongsToMany()` overrides are not modeled (pre-existing, both paths).
+
+Why the shape repeats X's own answer. Probed on Psalm 7.0.0-rc10: a native property or a plugin-provider-backed one (`doesPropertyExist` true: accessor, a column or cast of X's default table) is read BEFORE an object shape; an `@property`-only column and anything unknown reads the shape (`AtomicPropertyFetchAnalyzer` consults it only when `propertyExists()` is false). A shape that disagreed with X would override a user `@property` and misreport provider-backed columns, so a column's type is, first hit wins:
+1. X's own answer in Psalm's read order: a native property (declared type, else `mixed`), `@property` / `@property-read`, an accessor, then the cast or column of X's DEFAULT table. X missing from `ModelMetadataRegistry`, or with an incomplete methods or casts section, is `mixed` past the `@property`.
+2. A cast on a column X's default table lacks: the cast's type, nullable when the relation table's column is nullable or unknown (casts pass `null` through).
+3. The parent's created/updated column: the date type once the raw-hydration gate is proven, else `mixed`.
+4. The relation table's raw schema type, only on a visible chain whose table is known.
+5. `mixed`.
+
+Laravel's read order, probed on SQLite with Laravel 13.38 (same code on 12.20): accessor, then cast, then `getDates()` (`asDateTime`, non-null only), then the raw value. Any `using()`, `Pivot::class` included, hydrates through `AsPivot::fromRawAttributes()`: no `forceFill()` date normalization, and the timestamps switch on only when the PARENT's created column is selected (`hasTimestampAttributes()` with the parent already attached), so a default-named `created_at` / `updated_at` is no special case there (it reads its raw string when the parent renamed its timestamps). The gate (rule 3) is proven only on a visible chain with known parent timestamps, the parent's created column selected, and X keeping the stock `getDates`, `usesTimestamps`, `hasTimestampAttributes`, `getCreatedAtColumn`, `getUpdatedAtColumn`, `asDateTime`, `fromRawAttributes`, `fromAttributes`; a class overriding any of them gets `mixed` for rules 3 and 4. Probed but not emitted: with the parent's created column NOT selected the dates read as raw strings, yet the answer stays `mixed` (rule 3 is "proven or `mixed`").
+
+Hardening (#1998).
+- Relative types. Only types the pivot declares itself (native property, `@property`, accessor) are bound to X through `TypeExpander` (`self`, `static`, `$this`, `parent` become X): an unbound `static` made reads through the refined relation never settle. After binding, and for every cast-derived type (a provider-backed cast, the cast fallback), the type's atoms are inspected, never its rendered text: any `self` / `static` / `$this` / `parent` atom left, in generics, shapes or callables, gives `mixed` (a caster's `static` is the caster, not the pivot), while `'static'` as a literal or a shape key stays.
+- A templated X (`GenericMembership<T>`) is declined: rebuilding from the class name drops its parameters.
+- Hidden chains apply rule 1 only. The slot of a hidden receiver is an upper bound (TPivotModel is covariant), so a subclass overriding attribute reads may hydrate it; the cast fallback and everything after it are `mixed`. A visible chain names its exact class and keeps rule 2. On the `using()` path the relation table is read only on a visible chain, so a relation method and its in-body expression agree.
+- Stock hydration (rules 2 to 4 need it). X, through its own body, ancestors or traits, overrides no method that `HasAttributes`, `HasTimestamps` or `AsPivot` declare (enumerated by reflection on the running Laravel), except `casts()`, and no `__get()` / `__call()`. Accessors, mutators (`getXAttribute`, `Attribute` methods), relation methods, `boot()` / `booted()` and the like are no Laravel methods, so they stay stock; X's own provider-backed answer (rule 1) is not gated.
+
+Accepted gaps:
+- `Model::withoutTimestamps()` / `withoutTimestampsOn()` suppress `getDates()` at runtime inside the callback, so a date column proven here reads as a string there. The plain-pivot path has the same gap.
+- The `array` / `json` cast fallback inherits `CastResolver`'s plugin-wide `array` contract, although a JSON scalar or `null` decodes to something else.
+
+**Rejected for `using()`:** typing X's columns from the relation table alone. An accessor `getScoreAttribute($v): ?int` on a NOT NULL string column reads `int|null` at runtime, a cast applies to a column X's own table lacks, and a provider-backed property beats the shape on read, so the table type would be wrong or ignored.
+
+Known limitation: a date type inferred BEFORE an unproven link survives it. In `->withTimestamps()->when(true, fn ($r) => $r->using(Pivot::class))->withTimestamps()` the first call types `created_at` / `updated_at` as dates, `when()` returns the receiver's previous static type, and the plugin cannot tell its own earlier inference from a user-declared shape, so the dates stay although the `using()` pivot hydrates them as strings (`Issue1944WithTimestampsPivotKnownLimitation.phpt`).
+
+**Rejected:**
+- A stub-only refinement. The columns are call arguments and their types live in a migration; no docblock form maps a literal argument list to object-shape keys.
+- Leaving the inferred `Pivot` and relying on Psalm accepting a declared shape. Psalm 7.0.0-rc8 still compares two object shapes inside an intersection by name only (`ObjectComparator::isIntersectionShallowlyContainedBy`), so any `Pivot&object{...}` passes any declared one, but plain `Pivot` never does. The handler still types columns honestly so nothing breaks once Psalm compares the properties.
 
 ## Producer Return Narrowing
 
@@ -447,7 +647,7 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 **Rejected alternatives:**
 - **Blanket nullable typing** (`?ComponentAttributeBag` / `?ComponentSlot` everywhere, the issue's own first framing). Fixes the over-typing but adds a NEW false positive: `PossiblyNullReference` on an author's own `$attributes->merge()` in a class-component view that never writes `@props`, since `Component::data()` / `AnonymousComponent::data()` already guarantee the key there. Rejected in the issue itself before implementation started.
 - **Directory/view-name classifier** (a view name under `components.` or a registered anonymous-component namespace/path, `ComponentTagCompiler::guessAnonymousComponentUsingNamespaces()`/`guessAnonymousComponentUsingPaths()`). More "principled" — it reflects how `<x-*>` actually resolves — but strictly worse in practice: it needs the view name threaded from `BladeBootstrapper` into `ShadowCompiler::compile()`, it cannot see class-component views outside `components/` (Laravel's own published `vendor/mail/**` overrides are exactly that shape, reached via `@component('mail::message')` **and** `<x-mail::message>`), and the view roots it would depend on are not part of `CompilerEnvironment::describe()`'s cache fingerprint, so a view-path config change would not invalidate cached shadows.
-- **A `$slot` render-path union** (`ComponentSlot|HtmlString`, per the issue's "Render-path differentiation" addendum). Laravel has not produced `HtmlString` slots since before this plugin's floor (`illuminate/view: ^11.35`) — `ManagesComponents::componentData()` builds a `ComponentSlot` on both the `<x-*>` and `@component` paths, verified byte-identical across Laravel 11.50, 12.55, and 13.31. The union would be strictly weaker (losing `$slot->isEmpty()`/`$slot->attributes`) for no soundness gain; only `$attributes` is genuinely render-path-sensitive (absent on the `@component` path), and that distinction cannot be told apart statically from the template source alone — accepted as a documented gap rather than chased with cross-template tracking.
+- **A `$slot` render-path union** (`ComponentSlot|HtmlString`, per the issue's "Render-path differentiation" addendum). Laravel has not produced `HtmlString` slots anywhere in this plugin's supported range (`illuminate/view: ^12.27 || ^13.20`) — `ManagesComponents::componentData()` builds a `ComponentSlot` on both the `<x-*>` and `@component` paths, verified byte-identical across Laravel 12.27, 12.55, and 13.20. The union would be strictly weaker (losing `$slot->isEmpty()`/`$slot->attributes`) for no soundness gain; only `$attributes` is genuinely render-path-sensitive (absent on the `@component` path), and that distinction cannot be told apart statically from the template source alone — accepted as a documented gap rather than chased with cross-template tracking.
 
 ### Class component views are seeded at analysis time from `ClassLikeStorage` (#1804)
 
@@ -464,11 +664,25 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 - **Next-run type cache**: cold and warm runs would report differently; the manifest changes speed, never results.
 - **File-order tricks**: files are analyzed in worker chunks; producer-side types never cross workers.
 
+### Composer-supplied view keys are read from the composer's AST (#1832)
+
+**Decision:** A view reached by a composer or creator skips `MissingViewData` and `InvalidViewData` only for the keys its composers pass. `Blade\ComposerSourceReader` finds the class and method at boot, recognising only the closure `Factory::buildClassEventCallback()` builds; `Blade\ComposerKeyResolver` reads the method body at `AfterCodebasePopulated` and collects the literal keys of `$view->with(...)`. A closure or a raw listener on the exact view name, a non-literal key, `$view` used as anything but the receiver of such a `with()` or of a read-only accessor, a `share()`, or a function that reaches `$view` by name or position (`extract()`, `get_defined_vars()`, `func_get_args()`, `func_get_arg()`, a `compact()` naming it or a non-literal name) makes the view unknown, which keeps the earlier whole-view skip.
+
+**Why:** Skipping the whole view hid every real missing variable behind one unrelated composer key. The only error that costs the user anything is an under-approximated key set (a false positive on a correct call site), so the walker over-approximates and gives up on the first use of `$view` it cannot follow. Resolving before Psalm forks matches `ComponentViewRegistry` (#1804): workers inherit the result. A wildcard listener the composer API did not wrap is skipped as an observer: debugging and monitoring packages (Ray, Telescope, Debugbar) register one for every view, and reading it as an unknown composer turned both checks off for the whole app.
+
+**Rejected alternatives:**
+- **Invoking composers at analysis time** (what Bladestan does): runs arbitrary application code in the analysis process, needs request-time services (auth, session, database) that are not there, and its answer is the composer's runtime values rather than a key set read from code, so it cannot back an under-approximation guarantee.
+- **A config list of keys per view or global** (`<composerKeys>`): duplicates what the composer already says in code, goes stale silently, and puts the maintenance on every user for a problem the AST answers.
+- **Following `$view` into helper methods**: needs inter-procedural tracking of aliases and escapes for a rare shape; declining is correct and cheap.
+- **Modelling every way the class or its keys can change** (container bindings, extenders, before-resolving hooks, `#[Bind]`, factory and dispatcher subclasses, constructor bodies, trait `insteadof`, method visibility, `call_user_func()`, `include`): an earlier draft did, at three times the size, for setups ordinary apps do not have. Their residual is a rare false positive with a documented fix.
+
+**Accepted limitation:** the class is read as written. A container rebinding, extender or before-resolving hook, a factory or dispatcher subclass, a constructor that shares data, a protected method served by `__call()`, a `share()` hidden in a helper or an injected dependency, and view data added by a wildcard listener registered straight on the dispatcher (taken for an observer, such as a debugging package's view watcher, and skipped) are not seen; if the real keys differ, the call site reports, and the fix is `= null` on the declaration or a suppression. Composers registered after boot (middleware, a controller) are not read: a view whose only composer is registered at runtime is checked as if it had none, while a view with a boot composer plus a runtime one is checked against the boot keys only.
+
 ### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
 
 **Decision:** `ShadowIssueRelocator::isGeneratedAwareArgument()` drops argument 1 and string-cast issues on `$__value` in the generated list-form `$__env->getConsumableComponentData($__value)` call, and `NoValue` on `$__key` in the keyed call, only when that call text is absent from the raw template (#1695; gate from #1708, keyed `NoValue` arm from #1716). `Factory::getConsumableComponentData()` keeps Laravel's own `string $key`.
 
-**Why:** the finding is a correlation gap, not a wrong signature. `compileAware()` picks the arm by `is_string($__key)`, and Psalm does not tie that ternary to the key it narrowed, so a keyed non-string default reaches an arm that runs only for an int key. The fault lives in one compiled shape, so the fix belongs where that shape is recognised. Residuals: [Compiler-generated code](../blade.md#compiler-generated-code).
+**Why:** the finding is a correlation gap, not a wrong signature. `compileAware()` picks the arm by `is_string($__key)`, and Psalm does not tie that ternary to the key it narrowed, so a keyed non-string default reaches an arm that runs only for an int key. The fault lives in one compiled shape, so the fix belongs where that shape is recognised. Residuals: [Compiler-generated code](blade.md#compiler-generated-code).
 
 **Rejected alternatives:**
 - **A `string|null $key` stub.** Silences the `null` default from the original report, but hides a real `null` passed to a hand-written call in any PHP file. It also covers only `null`: `false`, `0`, `[]` defaults and the keyed arm's `NoValue` keep reporting.
@@ -495,7 +709,7 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 Evidence (Psalm 7.0.0-rc1, laravel/framework 13.34, `--threads=1` and `--threads=4 --scan-threads=4`; each state compared with its own `--no-cache` run, sorted output):
 - Every key flipped on/off/on/off against one cache dir (both directions; the reference diffs were 120–190 lines, so the comparison is sensitive): identical to `--no-cache` at every step, except `blade`.
 - Positive control: a probe `AfterClassLikeVisit` handler gated on an env var went stale on the first warm run, so the method can detect a storage-affecting key.
-- `blade` on→off→on with `<blade />` and dead-code detection: the off run (warm) loses `UnusedClass` for classes only templates reference. The ON run persists the shadows' references (they are analysed through `addFilesToAnalyze`); the OFF run does not analyse the shadows, nothing overwrites those references, and dead-code consolidation still counts the classes as used. Fixed only by `--no-reference-cache` (not `--no-file-cache`, not `--no-reflection-cache`). `blade` is the sole key that changes the ANALYSED FILE SET under an identical config hash; `blade.*` sub-settings change nothing once Blade is on.
+- `blade` on→off→on with `<blade />` and dead-code detection: the off run (warm) loses `UnusedClass` for classes only templates reference. The ON run persists the shadows' references (they are analysed through `addFilesToAnalyze`); the OFF run does not analyse the shadows, nothing overwrites those references, and dead-code consolidation still counts the classes as used. Fixed only by `--no-reference-cache` (not `--no-file-cache`, not `--no-reflection-cache`). `blade` is the sole key that changes the ANALYSED FILE SET under an identical config hash.
 
 **Rejected alternatives:**
 - **Plugin-side cache wipe on a settings fingerprint change.** Works in a probe, but `Config::removeCacheDirectory()` deadlocks in-process (it takes `LOCK_EX` on files this process holds `LOCK_SH` on), the hand-rolled variant hard-codes Psalm's internal directory names, wipes caches of other configs, and races between concurrent runs sharing one cache dir.
@@ -503,3 +717,13 @@ Evidence (Psalm 7.0.0-rc1, laravel/framework 13.34, `--threads=1` and `--threads
 - **Upstream cache-key hook** (plugin contribution known before `initProviders`): worth an upstream issue, nothing needs it today.
 
 Known separate defect, not caused by overrides: a Blade shadow with a syntax error loses its `ParseError` on a warm run (the parser cache replays the broken shadow's statements); it reproduces with the XML `<blade />` alone.
+
+### MorphTo relation generics use Psalm's declared type
+
+**Decision:** The AST relation parser does not reconstruct a `MorphTo` related-model generic from raw PHPDoc. Since its target model is selected at runtime and the parser has no static factory class-string to resolve, `relationType()` declines it; Psalm's declared return type supplies a documented generic such as `MorphTo<Model&HasTitle, self>`.
+
+**Why:** Psalm 7 preserves the declared intersection on external calls to an autoloaded model and resolves aliases, traits, inheritance, and receiver context. Reconstructing the first generic slot from raw PHPDoc produced `App\Models\Model&HasTitle` and an `UndefinedClass` issue in the #1753 regression. Property access already reads the generic from Psalm's effective relation type, so its separate raw-PHPDoc fallback duplicated the same broken resolution path.
+
+**Rejected:** A broader provider gate that declined for all explicit generic relation returns. It changed established non-MorphTo behavior: partial generic declarations with defaulted slots and `$this` receiver cases rely on AST binding to preserve concrete relation templates.
+
+**Callback consumers:** `RelationCallbackParamsHandler` keeps using the AST-only `relationType()` helper for relation objects passed to eager-load callbacks. It explicitly declines `MorphTo` before eager resolution, so removing raw MorphTo reconstruction does not change callback relation typing.

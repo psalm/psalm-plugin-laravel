@@ -1,0 +1,9 @@
+{
+    "name": "psalm-laravel-plugin/blade-view-data-taint-fixture",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "BladeViewDataTaintFixture\\": "app/"
+        }
+    }
+}

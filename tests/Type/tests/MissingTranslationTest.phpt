@@ -10,9 +10,14 @@ __('auth.nonexistent');
 // Missing translations via trans() — should emit MissingTranslation
 trans('messages.missing');
 
-// Default keys="all": sentence-style keys are reported too (contrast with keys="short")
+// A typo in the group is still reported under keys="short" (the shared opt-in config)
+__('mesages.welcome');
+
+// keys="short" skips sentence-style keys (whitespace), a trailing-period sentence and a bare word
 __('Online courses - more coming up!');
+__('Done.');
 __('Dashboard');
+trans('Dashboard');
 
 // Existing translations — should return narrowed string type
 $failed = __('auth.failed');
@@ -47,5 +52,4 @@ __($key);
 MissingTranslation on line %d: Translation key 'nonexistent.key' not found in language files
 MissingTranslation on line %d: Translation key 'auth.nonexistent' not found in language files
 MissingTranslation on line %d: Translation key 'messages.missing' not found in language files
-MissingTranslation on line %d: Translation key 'Online courses - more coming up!' not found in language files
-MissingTranslation on line %d: Translation key 'Dashboard' not found in language files
+MissingTranslation on line %d: Translation key 'mesages.welcome' not found in language files

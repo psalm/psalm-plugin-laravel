@@ -22,6 +22,7 @@ use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\PivotColumnResolver;
 use Psalm\LaravelPlugin\Handlers\Magic\ReturnTypeResolver;
 use Psalm\LaravelPlugin\Internal\Ast\BodyReturnCollectorVisitor;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
@@ -34,7 +35,7 @@ use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
- * Extracts relationship metadata from a model method's AST body and docblock annotations,
+ * Extracts relationship metadata from a model method's AST body and declared return types,
  * without invoking the method.
  *
  * This enables property type resolution for relationship accessors even when the
@@ -48,7 +49,6 @@ use Psalm\Type\Union;
  * - Direct returns: return $this->belongsTo(Vault::class)
  * - Chained methods: return $this->belongsTo(Vault::class)->withDefault()
  * - No declared return type: public function image() { return $this->morphOne(Image::class, 'imageable'); }
- * - Docblock generics for morphTo: @return MorphTo<User|Post, $this>
  * - Trait-hosted methods: the body is read from the trait, `self::class` / `static::class` bind to
  *   the composing class; declines when composed traits (nested ones included) declare the name twice (#1613)
  * - Several returns (early returns in `if` / loops): only when every one resolves to the same relation;
@@ -78,9 +78,12 @@ final class RelationMethodParser
      *
      * pivotModel / accessor are non-null only when an explicit `->using(...)` / `->as(...)` was
      * detected on a BelongsToMany or MorphToMany chain with a statically resolvable argument.
-     * Other relations leave them null.
+     * Other relations leave them null. pivotColumns lists the literal `->withPivot(...)` columns of
+     * such a chain and pivotTable the table they live in ({@see PivotColumnResolver::table()}; false:
+     * no refinement is safe). pivotVisible is true when every link of the chain is known to keep the relation
+     * and its pivot class ({@see PivotColumnResolver::keepsPivot()}).
      *
-     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}>
+     * @var array<string, ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}>
      */
     private static array $cache = [];
 
@@ -107,35 +110,6 @@ final class RelationMethodParser
         self::$passthru = null;
     }
 
-    /** @var list<string> Types that should not be resolved as class names in generic params */
-    private const NON_CLASS_TYPES = [
-        'static',
-        'self',
-        'parent',
-        'null',
-        'int',
-        'string',
-        'bool',
-        'float',
-        'mixed',
-        'array',
-        'object',
-        'callable',
-        'iterable',
-        'void',
-        'never',
-        'true',
-        'false',
-        'scalar',
-        'numeric',
-        'resource',
-        // Deprecated aliases recognized by Psalm's TypeTokenizer
-        'boolean',
-        'integer',
-        'double',
-        'real',
-    ];
-
     /**
      * Maps HasRelationships factory method names to their corresponding Relation class FQCNs.
      *
@@ -160,7 +134,7 @@ final class RelationMethodParser
      * through relations only) the intermediate model, and (for BelongsToMany / MorphToMany
      * only) any `->using()` / `->as()` mutations detected on the chain.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      *         null if the method cannot be parsed as a relationship method.
      *         relatedModel is null when polymorphic (morphTo) or when the first argument
      *         could not be statically resolved. intermediateModel is non-null only for
@@ -196,7 +170,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function doParse(Codebase $codebase, string $className, string $methodName, string $receiverClass): ?array
     {
@@ -283,11 +257,12 @@ final class RelationMethodParser
             }
 
             $parsed = self::parseReturn($codebase, $expr, $methodStorage, $scopeClass, $parentClass, $receiverClass);
-            if ($parsed === null || ($result !== null && $parsed !== $result)) {
+            if ($parsed === null || ($result !== null && self::withoutPivotShape($parsed) !== self::withoutPivotShape($result))) {
                 return null;
             }
 
-            $result = $parsed;
+            // Returns that differ only in their pivot shape still build the same relation, without one.
+            $result = $result === null || $parsed === $result ? $parsed : self::mergePivotShapes($result, $parsed);
         }
 
         if ($result === null) {
@@ -300,6 +275,38 @@ final class RelationMethodParser
     }
 
     /**
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
+     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
+     * @psalm-pure
+     */
+    private static function withoutPivotShape(array $parsed): array
+    {
+        $parsed['pivotColumns'] = [];
+        $parsed['pivotTable'] = null;
+        $parsed['pivotVisible'] = false;
+
+        return $parsed;
+    }
+
+    /**
+     * Two returns that differ only in their pivot shape: no columns, but a refusal on either one stands and the
+     * chain is visible only when both are, so a delegating `->withTimestamps()` cannot undo either.
+     *
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $first
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $second
+     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
+     * @psalm-pure
+     */
+    private static function mergePivotShapes(array $first, array $second): array
+    {
+        $first['pivotColumns'] = [];
+        $first['pivotTable'] = $first['pivotTable'] === false || $second['pivotTable'] === false ? false : null;
+        $first['pivotVisible'] = $first['pivotVisible'] && $second['pivotVisible'];
+
+        return $first;
+    }
+
+    /**
      * @psalm-mutation-free
      */
     private static function isNullExit(PhpParser\Node\Expr $expr): bool
@@ -308,7 +315,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function parseReturn(
         Codebase $codebase,
@@ -323,6 +330,8 @@ final class RelationMethodParser
         $chain = [];
         $parsed = self::findRelationCallInExpr($expr, $scopeClass, $parentClass, $pivotModel, $accessor, $chain);
         if ($parsed !== null) {
+            $parsed = self::collectPivotColumns($codebase, $parsed, $expr, $scopeClass, $parentClass, $receiverClass);
+
             return self::applyDirectChain($codebase, $parsed, $chain, $methodStorage->return_type, $methodStorage->signature_return_type);
         }
 
@@ -337,13 +346,47 @@ final class RelationMethodParser
     }
 
     /**
+     * Add the `->withPivot(...)` / `->withTimestamps(...)` columns of a direct BelongsToMany / MorphToMany
+     * factory chain and the pivot table; the factory runs on the receiver, so its class names the default table.
+     *
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
+     * @return array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
+     */
+    private static function collectPivotColumns(
+        Codebase $codebase,
+        array $parsed,
+        PhpParser\Node\Expr $expr,
+        string $scopeClass,
+        ?string $parentClass,
+        string $receiverClass,
+    ): array {
+        if (!\is_a($parsed['relationClass'], BelongsToMany::class, true)) {
+            return $parsed;
+        }
+
+        $chain = PivotColumnResolver::readChain(
+            $codebase,
+            $expr,
+            $receiverClass,
+            $parsed['relatedModel'],
+            fn(PhpParser\Node\Expr\MethodCall $using): ?string => self::firstClassStringArg($using, $scopeClass, $parentClass),
+        );
+        $parsed['pivotColumns'] = $chain['columns'];
+        // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it.
+        $parsed['pivotTable'] = $chain['table'];
+        $parsed['pivotVisible'] = $chain['visible'];
+
+        return $parsed;
+    }
+
+    /**
      * Resolve a returned `$this->other()->chain()` to other()'s relation. Each condition proves
      * the runtime result is that relation with the same generics:
      * - the method declares exactly that relation class (`->one()` would change it);
      * - every chain call keeps the relation (`->when()` / `->getRelated()` may replace it);
      * - an outer `->using()` / `->as()` is statically resolvable; it runs after other()'s own, so it wins.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function parseDelegation(
         Codebase $codebase,
@@ -366,7 +409,7 @@ final class RelationMethodParser
                 $parsed = self::parseDelegatedTarget($codebase, $scopeClass, $receiverClass, $name);
 
                 return $parsed !== null && \strcasecmp($parsed['relationClass'], $declaredClass) === 0
-                    ? self::applyChain($codebase, $parsed, $chain, $scopeClass, $parentClass)
+                    ? self::applyChain($codebase, $parsed, $chain, $scopeClass, $parentClass, $receiverClass)
                     : null;
             }
 
@@ -378,9 +421,9 @@ final class RelationMethodParser
     }
 
     /**
-     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
      * @param list<array{lowercase-string, PhpParser\Node\Expr\MethodCall}> $chain
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function applyChain(
         Codebase $codebase,
@@ -388,13 +431,18 @@ final class RelationMethodParser
         array $chain,
         string $scopeClass,
         ?string $parentClass,
+        string $receiverClass,
     ): ?array {
         // MorphToMany extends BelongsToMany; both carry the pivot / accessor slots.
         $pivotAware = \is_a($parsed['relationClass'], BelongsToMany::class, true);
         $pivotModel = null;
         $accessor = null;
+        $pivotColumns = [];
+        // A delegated chain is visible only when the target's own chain is and every outer link keeps the relation.
+        $visible = $parsed['pivotVisible'];
 
         foreach ($chain as [$name, $call]) {
+            $visible = $visible && ($name === 'using' || PivotColumnResolver::keepsPivot($name));
             // The outermost mutator runs last, so it wins; a dynamic argument leaves the slot unknown.
             if ($pivotAware && $name === 'using') {
                 $pivotModel ??= self::firstClassStringArg($call, $scopeClass, $parentClass);
@@ -406,6 +454,8 @@ final class RelationMethodParser
                 if ($accessor === null) {
                     return null;
                 }
+            } elseif ($pivotAware && \in_array($name, ['withpivot', 'withtimestamps'], true)) {
+                $pivotColumns = [...PivotColumnResolver::callColumns($codebase, $call, $name, $receiverClass), ...$pivotColumns];
             } elseif (self::chainCallKeepsRelation($codebase, $parsed['relationClass'], $name) !== true) {
                 return null;
             }
@@ -413,6 +463,8 @@ final class RelationMethodParser
 
         $parsed['pivotModel'] = $pivotModel ?? $parsed['pivotModel'];
         $parsed['accessor'] = $accessor ?? $parsed['accessor'];
+        $parsed['pivotColumns'] = [...$parsed['pivotColumns'], ...$pivotColumns];
+        $parsed['pivotVisible'] = $visible;
 
         return $parsed;
     }
@@ -422,7 +474,7 @@ final class RelationMethodParser
      * (the class declaring or composing the body) binds lexically; anything else dispatches on the
      * receiver, so a child override wins.
      *
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function parseDelegatedTarget(
         Codebase $codebase,
@@ -505,9 +557,9 @@ final class RelationMethodParser
      * resolve (scope / macro via `__call`) is accepted as keeping the relation. A declaration none
      * of whose alternatives admits the result also declines.
      *
-     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
      * @param list<lowercase-string> $chain outermost call first
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function applyDirectChain(Codebase $codebase, array $parsed, array $chain, ?Union $docblockType, ?Union $nativeType): ?array
     {
@@ -528,7 +580,7 @@ final class RelationMethodParser
      * `object`, a template whose bound leaves room, or a plain class it is / extends (`null` aside).
      * Scalars and intersections never admit it.
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function declarationAdmits(?Union $declared, string $relationClass): bool
     {
@@ -580,7 +632,7 @@ final class RelationMethodParser
     /**
      * The class named by the declared return type when it is a single class (`null` aside).
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function singleDeclaredClass(?Union $declared): ?string
     {
@@ -680,7 +732,7 @@ final class RelationMethodParser
     }
 
     /**
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function declaresRelation(Union $declared): bool
     {
@@ -725,7 +777,7 @@ final class RelationMethodParser
      * @param ?string $pivotModel out-parameter: FQCN captured from `->using(...)` if found
      * @param ?string $accessor   out-parameter: literal string captured from `->as(...)` if found
      * @param list<lowercase-string> $chain out-parameter: names of the calls above the factory, outermost first
-     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool}
+     * @return ?array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool}
      */
     private static function findRelationCallInExpr(
         PhpParser\Node\Expr $expr,
@@ -760,6 +812,9 @@ final class RelationMethodParser
                     : null,
                 'pivotModel' => $pivotModel,
                 'accessor' => $accessor,
+                'pivotColumns' => [],
+                'pivotTable' => null,
+                'pivotVisible' => false,
                 'nullable' => false,
             ];
         }
@@ -926,178 +981,6 @@ final class RelationMethodParser
         }
 
         return $expr->class->toString();
-    }
-
-    /**
-     * Extract TRelatedModel from the method's docblock generic return type annotation.
-     *
-     * Used for morphTo relations where the related model can't be determined from the
-     * factory call arguments but may be annotated via @return MorphTo<User|Post, $this>.
-     *
-     * When Psalm resolves $this in generic params, it may collapse the type to a
-     * non-generic TNamedObject, losing the generic info. This method reads the raw
-     * docblock to recover it.
-     *
-     * @return ?Union The related model type (e.g. User|Post), or null if not annotated
-     */
-    public static function extractDocblockRelatedModelType(Codebase $codebase, string $className, string $methodName): ?Union
-    {
-        $context = ClassMethodResolver::resolve($codebase, MethodIdentifier::wrap($className . '::' . $methodName));
-        if ($context === null) {
-            return null;
-        }
-
-        $docComment = $context['classMethod']->getDocComment();
-        if (!$docComment instanceof \PhpParser\Comment\Doc) {
-            return null;
-        }
-
-        // Extract the first generic param from @psalm-return (preferred), @phpstan-return, or @return
-        $firstParam = self::extractFirstGenericParam($docComment->getText());
-        if ($firstParam === null) {
-            return null;
-        }
-
-        // Resolve short class names against the file's use statements
-        $useMap = self::buildUseMap($context['fileStmts']);
-        $namespace = self::extractNamespace($className);
-
-        return self::resolveTypeNames($firstParam, $useMap, $namespace);
-    }
-
-    /**
-     * Extract the first generic type parameter from a docblock @return annotation.
-     *
-     * Checks @psalm-return, @phpstan-return, then @return (matching Psalm's priority).
-     * e.g. "@psalm-return MorphTo<User|Post, $this>" → "User|Post"
-     *
-     * @psalm-pure
-     */
-    private static function extractFirstGenericParam(string $docblock): ?string
-    {
-        // Psalm's priority: @psalm-return > @phpstan-return > @return
-        foreach (['@psalm-return', '@phpstan-return', '@return'] as $tag) {
-            if (\preg_match('/' . $tag . '\s+\S+<([^,>]+)/', $docblock, $matches)) {
-                return \trim($matches[1]);
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Build a map of short class name → FQCN from use statements in the file AST.
-     *
-     * Handles both regular use statements and group use statements (use App\Models\{User, Post}).
-     *
-     * @param list<PhpParser\Node\Stmt> $stmts
-     * @return array<string, string> alias → FQCN
-     */
-    private static function buildUseMap(array $stmts): array
-    {
-        $map = [];
-
-        foreach ($stmts as $stmt) {
-            self::collectUseStatements($stmt, $map);
-
-            // Also check inside namespace blocks
-            if ($stmt instanceof PhpParser\Node\Stmt\Namespace_) {
-                foreach ($stmt->stmts as $nsStmt) {
-                    self::collectUseStatements($nsStmt, $map);
-                }
-            }
-        }
-
-        return $map;
-    }
-
-    /**
-     * Collect use and group-use statements into the alias map.
-     *
-     * @param array<string, string> $map
-     */
-    private static function collectUseStatements(PhpParser\Node\Stmt $stmt, array &$map): void
-    {
-        // Only collect class imports (TYPE_NORMAL), skip use function/use const
-        if ($stmt instanceof PhpParser\Node\Stmt\Use_ && $stmt->type === PhpParser\Node\Stmt\Use_::TYPE_NORMAL) {
-            foreach ($stmt->uses as $use) {
-                $alias = $use->alias?->toString() ?? $use->name->getLast();
-                $map[$alias] = $use->name->toString();
-            }
-        } elseif ($stmt instanceof PhpParser\Node\Stmt\GroupUse) {
-            $prefix = $stmt->prefix->toString();
-            foreach ($stmt->uses as $use) {
-                // Combine statement-level and item-level type via bitwise OR, matching
-                // PhpParser's NameResolver. For "use App\Models\{User}" the GroupUse
-                // has TYPE_UNKNOWN and items have TYPE_NORMAL. For "use function App\{foo}"
-                // the GroupUse has TYPE_FUNCTION and items have TYPE_UNKNOWN.
-                $type = $stmt->type | $use->type;
-                if (
-                    $type === PhpParser\Node\Stmt\Use_::TYPE_FUNCTION
-                    || $type === PhpParser\Node\Stmt\Use_::TYPE_CONSTANT
-                ) {
-                    continue;
-                }
-
-                $alias = $use->alias?->toString() ?? $use->name->getLast();
-                $map[$alias] = $prefix . '\\' . $use->name->toString();
-            }
-        }
-    }
-
-    /**
-     * Extract the namespace from a FQCN (everything before the last backslash).
-     *
-     * @psalm-pure
-     */
-    private static function extractNamespace(string $className): string
-    {
-        $lastSlash = \strrpos($className, '\\');
-
-        return $lastSlash !== false ? \substr($className, 0, $lastSlash) : '';
-    }
-
-    /**
-     * Resolve a pipe-separated type string (e.g. "User|Post") to a Psalm Union type.
-     *
-     * Each name is resolved against the use map, falling back to the current namespace.
-     *
-     * @param array<string, string> $useMap
-     * @psalm-pure
-     */
-    private static function resolveTypeNames(string $typeString, array $useMap, string $namespace): ?Union
-    {
-        $names = \array_map(\trim(...), \explode('|', $typeString));
-        $atomics = [];
-
-        foreach ($names as $name) {
-            // Skip non-class types ($this, static, self, scalar types)
-            if ($name === '' || $name[0] === '$' || \in_array(\strtolower($name), self::NON_CLASS_TYPES, true)) {
-                continue;
-            }
-
-            // Already fully qualified
-            if ($name[0] === '\\') {
-                $atomics[] = new TNamedObject(\ltrim($name, '\\'));
-                continue;
-            }
-
-            // Check use map
-            if (isset($useMap[$name])) {
-                $atomics[] = new TNamedObject($useMap[$name]);
-                continue;
-            }
-
-            // Fall back to current namespace
-            $fqcn = $namespace !== '' ? $namespace . '\\' . $name : $name;
-            $atomics[] = new TNamedObject($fqcn);
-        }
-
-        if ($atomics === []) {
-            return null;
-        }
-
-        return new Union($atomics);
     }
 
 }

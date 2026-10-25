@@ -35,7 +35,7 @@ composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0@RC"
 ./vendor/bin/psalm-laravel analyze
 ```
 
-Requires PHP 8.2+ and Laravel 12 or 13.
+Requires PHP 8.2+ and Laravel 12.x or 13.x.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
 * [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently a release candidate. The `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
@@ -58,17 +58,17 @@ Psalm 7, and therefore the 4.x plugin line, merged the two: one run reports both
 Plugin ships Laravel-specific taint stubs that track user input from source to sink across your entire codebase.
 Unlike pattern-matching tools, Psalm follows dataflow across function boundaries, so input that travels through helper functions, service classes, and any number of call layers is still caught.
 
-| Vulnerability           | OWASP    | Example sinks                                                                              |
-|-------------------------|----------|--------------------------------------------------------------------------------------------|
-| SQL injection           | A03:2021 | `orderBy()` column, `orderByRaw()`, `DB::select()`, `DB::statement()`, `DB::unprepared()`  |
-| XSS                     | A03:2021 | `response()`, `new HtmlString()`, mailable `html()`                                        |
-| Shell injection         | A03:2021 | `Process::path()->run()`, `app(Kernel::class)->call()`                                     |
-| File traversal          | A01:2021 | `Storage::disk()->get()`, `->put()`, `->delete()`                                          |
-| Open redirect           | A01:2021 | `redirect()`, `redirect()->to()`                                                           |
-| SSRF                    | A10:2021 | `Http::withOptions()->get()` and the rest of `PendingRequest`                              |
-| Crypto misuse           | A02:2021 | encryption and hashing taint escape or unescape                                            |
-| Timing attack (CWE-208) | A02:2021 | a secret compared with `===`, `<=>`, or `strcmp()`                                         |
-| XSS in Blade templates, opt-in | A03:2021 | `{!! $userInput !!}`                                                                |
+| Vulnerability                  | OWASP    | Example sinks                                                                             |
+|--------------------------------|----------|-------------------------------------------------------------------------------------------|
+| SQL injection                  | A03:2021 | `orderBy()` column, `orderByRaw()`, `DB::select()`, `DB::statement()`, `DB::unprepared()` |
+| XSS                            | A03:2021 | `response()`, `new HtmlString()`, mailable `html()`                                       |
+| Shell injection                | A03:2021 | `Process::path()->run()`, `app(Kernel::class)->call()`                                    |
+| File traversal                 | A01:2021 | `Storage::disk()->get()`, `->put()`, `->delete()`                                         |
+| Open redirect                  | A01:2021 | `redirect()`, `redirect()->to()`                                                          |
+| SSRF                           | A10:2021 | `Http::withOptions()->get()` and the rest of `PendingRequest`                             |
+| Crypto misuse                  | A02:2021 | encryption and hashing taint escape or unescape                                           |
+| Timing attack (CWE-208)        | A02:2021 | a secret compared with `===`, `<=>`, or `strcmp()`                                        |
+| XSS in Blade templates, opt-in | A03:2021 | `{!! $userInput !!}`                                                                      |
 
 You can read more about how the plugin's taint analysis works and what vulnerabilities it detects in [docs/security.md](docs/security.md).
 

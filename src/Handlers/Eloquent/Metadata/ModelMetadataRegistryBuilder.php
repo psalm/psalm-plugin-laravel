@@ -332,8 +332,6 @@ final class ModelMetadataRegistryBuilder
         //
         // One folded section: a mid-walk throw leaves the instance half-prepared, so all four instance-derived
         // sections below degrade together (the degradation test still maps 'trait initializers' → those four).
-        // Pre-12.22 (class_uses_recursive parents-first) walk order is immaterial — the config attributes are
-        // all Laravel-13-only; the sole pre-12.22 divergence is casts()-vs-user-mergeCasts() (see computeCasts).
         //
         // prepare() INVOKES Laravel's own initializers rather than mirroring them, so what the readers below
         // observe is the installed framework's behaviour, not a copy of it that has to be kept in sync.
@@ -704,10 +702,14 @@ final class ModelMetadataRegistryBuilder
 
     /**
      * @template T
+     *
      * @param array<string, \Throwable> $failures
-     * @param \Closure(): T $compute
+     * @param \Closure[_](): T $compute
      * @param T $fallback
+     *
      * @return T
+     *
+     * @psalm-capabilities read-props|write-this-props|write-refs
      */
     private static function computeSection(
         int $section,
@@ -1406,7 +1408,7 @@ final class ModelMetadataRegistryBuilder
     }
 
     /** @psalm-mutation-free */
-    private static function buildColumnInfo(SchemaColumn $column): ColumnInfo
+    public static function buildColumnInfo(SchemaColumn $column): ColumnInfo
     {
         /** @var non-empty-string $name */
         $name = $column->name;
@@ -1479,14 +1481,6 @@ final class ModelMetadataRegistryBuilder
         // alongside it. Coerce instead of dropping the key so the map — and SECTION_CASTS — stay
         // honest; 'mixed' matches CastsMethodParser's own `$value ?? 'mixed'` convention.
         $merged = \array_map(self::asCastString(...), $merged);
-
-        // KNOWN DIVERGENCE (Laravel 12.20–12.21 only): when a user trait initializer mergeCasts() a key that
-        // casts() ALSO declares, runtime there runs casts() first (bootTraits walks class_uses_recursive
-        // parents-first) then the user init, so the USER value wins; from 12.22+ the order flips and casts()
-        // wins — which is what merging casts() last reproduces on every version. Making it version-aware needs
-        // a pre-replay casts snapshot diffed here to re-apply user-merged keys after casts(); deferred as a
-        // documented divergence — a rare same-key collision, on older supported releases, costing one cast
-        // type. See ModelInstancePreparer::prepare() for the getMethods()-order walk that motivates this.
 
         $result = [];
         foreach ($merged as $columnName => $castString) {

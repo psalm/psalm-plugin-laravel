@@ -147,11 +147,11 @@ final class CollectionTypes
         return $collection->isEmpty() ? $collection->first() : null;
     }
 
-    public function isNotEmpty_assertions_works(): null
+    public function isNotEmpty_first_stays_sound(): ?string
     {
         $collection = $this->getCollection();
 
-        return $collection->isNotEmpty() ? null : $collection->first();
+        return $collection->isNotEmpty() ? $collection->first() : null;
     }
 
     /**
@@ -177,7 +177,7 @@ final class CollectionTypes
 
     /**
      * sum() returns int|float for string-key and no-argument calls,
-     * while callable callbacks narrow the return type.
+     * while an int-returning callback narrows to int.
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/678
      */
     public function sumWithStringKey(): int|float
@@ -200,10 +200,10 @@ final class CollectionTypes
     }
 
     /**
-     * When the callback returns float, sum() narrows to float.
+     * When the callback returns float, sum() stays int|float: an empty collection yields int 0.
      * @see https://github.com/psalm/psalm-plugin-laravel/issues/678
      */
-    public function sumWithCallableReturningFloat(): float
+    public function sumWithCallableReturningFloat(): int|float
     {
         return $this->getCollection()->sum(function (string $item): float {
             return (float) strlen($item);
@@ -223,12 +223,13 @@ final class CollectionTypes
     }
 
     /** @see https://github.com/psalm/psalm-plugin-laravel/issues/678 */
-    public function sumWithoutArgumentsFloat(): float
+    public function sumWithoutArgumentsFloat(): int|float
     {
         /** @var Collection<int, float> */
         $numbers = new Collection();
 
-        /** @psalm-check-type-exact $sum = float */
+        // An empty collection yields int 0, so float items do not narrow to float.
+        /** @psalm-trace $sum */
         $sum = $numbers->sum();
 
         return $sum;
@@ -268,3 +269,4 @@ foreach ($collection as $key => $value) {
 
 ?>
 --EXPECTF--
+Trace on line %d: $sum: float|int

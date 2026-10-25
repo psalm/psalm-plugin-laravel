@@ -14,5 +14,6 @@ final class UnusedViewData extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UnusedViewData/';
 
-    // No ERROR_LEVEL override: controlled by the plugin setting reportUnusedViewData
+    // Level 4 like Psalm's TooManyArguments. Not -2: plugin issues are not gated on `findUnusedCode`.
+    public const ERROR_LEVEL = 4;
 }

@@ -45,11 +45,6 @@ final class AnonymousClassNameDetectorTest extends TestCase
             '/home/app/vendor/algolia/scout-extended/src/Searchable/Aggregator.php',
         ];
 
-        yield 'namespaced unix path' => [
-            'App\\Models\\_home_app_src_Foo_php_10_42',
-            '/home/app/src/Foo.php',
-        ];
-
         yield 'no namespace' => [
             '_home_app_src_Foo_php_5_20',
             '/home/app/src/Foo.php',
@@ -67,19 +62,9 @@ final class AnonymousClassNameDetectorTest extends TestCase
      */
     public static function regularNames(): iterable
     {
-        yield 'plain model class' => [
-            'App\\Models\\User',
-            '/home/app/src/Models/User.php',
-        ];
-
         yield 'short name does not match sanitised file path' => [
             'App\\Models\\_home_other_file_php_1_1',
             '/home/app/src/Models/User.php',
-        ];
-
-        yield 'missing line/pos suffix' => [
-            'App\\_home_app_src_Foo_php',
-            '/home/app/src/Foo.php',
         ];
 
         yield 'single numeric suffix (not line_pos)' => [

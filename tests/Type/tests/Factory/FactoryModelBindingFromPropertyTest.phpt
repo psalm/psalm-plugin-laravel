@@ -36,7 +36,7 @@ namespace App\Sandbox\Property {
     use Database\Factories\PomeloFactory;
 
     $_one = (new PomeloFactory())->create();
-    /** @psalm-check-type-exact $_one = \App\Models\Widget */;
+    /** @psalm-check-type-exact $_one = \App\Models\Widget|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Widget> */;
 }
 ?>
 --EXPECTF--

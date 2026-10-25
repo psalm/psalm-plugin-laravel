@@ -619,6 +619,8 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * returns null (Path 2 __call dispatch doesn't always populate template params).
      *
      * @return non-empty-list<Union>|null
+     *
+     * @psalm-capabilities read-props
      */
     private static function extractTemplateParamsFromCaller(
         StatementsAnalyzer $source,
@@ -708,18 +710,24 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        // TRelatedModel is always the first template parameter on Relation subclasses.
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0], $codebase);
+        // Narrow only a single-atomic receiver: `HasMany<A,P>|HasMany<B,P>` would otherwise be
+        // validated (and re-typed) from whichever alternative comes first.
+        $stmt = $event->getStmt();
+        $receiverType = $stmt instanceof MethodCall ? $event->getSource()->getNodeTypeProvider()->getType($stmt->var) : null;
 
-        if ($modelClass === null) {
+        if ($receiverType instanceof Union && !$receiverType->isSingle()) {
             return null;
         }
 
-        $stmt = $event->getStmt();
-
+        // TRelatedModel is always the first template parameter on Relation subclasses. Every
+        // model alternative of a union must accept the suffix.
         $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
 
-        $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
+        $columnType = DynamicWhereResolver::resolveColumnTypeForModels(
+            $codebase,
+            $templateParams[0],
+            $originalMethodName,
+        );
 
         if ($columnType === false) {
             return null;

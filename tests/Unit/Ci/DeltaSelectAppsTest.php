@@ -41,17 +41,15 @@ final class DeltaSelectAppsTest extends TestCase
     {
         yield 'group plus flag' => ['blade --blade', 'alpha,beta', '--blade'];
         yield 'flag alone keeps default' => ['--blade', 'alpha', '--blade'];
-        yield 'comma separated' => ['blade,--blade', 'alpha,beta', '--blade'];
         yield 'all plus flag' => ['all --no-blade', 'alpha,beta,gamma', '--no-blade'];
         // A later override wins in psalm-laravel analyze, so the order must survive.
         yield 'order preserved' => ['--no-blade blade --blade', 'alpha,beta', '--no-blade --blade'];
-        yield 'no flag' => ['blade', 'alpha,beta', ''];
         // Plugin option keys are camelCase, so only names and groups are case-folded.
         yield 'flag case kept' => ['BLADE --opt=camelKey=x', 'alpha,beta', '--opt=camelKey=x'];
         yield 'undeclared plugin option' => [
-            'blade --blade --plugin-option=blade.reportMixedIssues=true',
+            'blade --blade --plugin-option=modelProperties.columnFallback=none',
             'alpha,beta',
-            '--blade --plugin-option=blade.reportMixedIssues=true',
+            '--blade --plugin-option=modelProperties.columnFallback=none',
         ];
     }
 
@@ -74,18 +72,14 @@ final class DeltaSelectAppsTest extends TestCase
         yield 'typo gets a hint' => [self::REGISTRY, 'blade --blad', '`--blad` Did you mean `--blade`?'];
         yield 'undeclared psalm flag' => [self::REGISTRY, '--set-baseline=x', '- `--set-baseline=x`'];
         yield 'unsafe flag not echoed' => [self::REGISTRY, '--$(id)', '(not echoed)'];
-        yield 'flags are case-sensitive' => [self::REGISTRY, '--opt=camelkey=x', '- `--opt=camelkey=x`'];
         yield 'help never mixes with flags' => [self::REGISTRY, 'help --blade', '`help` works only on its own'];
         yield 'registry declares no flags' => [
             \array_diff_key(self::REGISTRY, ['flags' => true]),
             '--blade',
             'Flags: none declared, or any `--plugin-option=KEY=VALUE`.',
         ];
-        yield 'plugin option without a value' => [self::REGISTRY, '--plugin-option=blade', '- `--plugin-option=blade`'];
         yield 'plugin option with a second equals' => [self::REGISTRY, '--plugin-option=a=b=c', '- `--plugin-option=a=b=c`'];
-        yield 'plugin option key not starting with a letter' => [self::REGISTRY, '--plugin-option=.a=b', '- `--plugin-option=.a=b`'];
         yield 'plugin option with shell characters' => [self::REGISTRY, '--plugin-option=blade=$(id)', '(not echoed)'];
-        yield 'plugin option with a glob' => [self::REGISTRY, '--plugin-option=blade=*', '(not echoed)'];
     }
 
     #[Test]

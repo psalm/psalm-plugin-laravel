@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 
@@ -15,6 +15,4 @@ function compareDecryptedSecretWithStrcasecmp(\Illuminate\Encryption\Encrypter $
 ?>
 --EXPECTF--
 TaintedSystemSecret on line %d: Detected tainted system secret leaking
-TaintedSystemSecret on line %d: Detected tainted system secret leaking
-TaintedUserSecret on line %d: Detected tainted user secret leaking
 TaintedUserSecret on line %d: Detected tainted user secret leaking

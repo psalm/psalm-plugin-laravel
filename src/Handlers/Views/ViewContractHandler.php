@@ -4,21 +4,31 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use Illuminate\Contracts\Support\Renderable;
 use PhpParser\Node\Expr;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
+use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
+use Psalm\LaravelPlugin\Blade\ComposerKeyResolver;
 use Psalm\LaravelPlugin\Blade\ContractParser;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ContractVar;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
-use Psalm\LaravelPlugin\Issues\InvalidViewVariableType;
-use Psalm\LaravelPlugin\Issues\MissingViewVariable;
+use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\LaravelPlugin\Internal\LateStatic;
+use Psalm\LaravelPlugin\Issues\InvalidViewData;
+use Psalm\LaravelPlugin\Issues\MissingViewData;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
+use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
+use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type;
@@ -27,8 +37,8 @@ use Psalm\Type;
  * Checks a `view()` call site against the contract its template declares: a
  * `@var \App\Models\User $user` docblock or a `@props([...])` entry.
  *
- * Reports a declared variable the call never passes ({@see MissingViewVariable}) and a passed value
- * that does not satisfy the declared type ({@see InvalidViewVariableType}).
+ * Reports a declared variable the call never passes ({@see MissingViewData}) and a passed value
+ * that does not satisfy the declared type ({@see InvalidViewData}).
  *
  * Hooked on statement analysis rather than expression analysis because expressions are visited
  * post-order: the inner `view('greeting')` of a `view('greeting')->with('name', $n)` chain would be
@@ -36,53 +46,53 @@ use Psalm\Type;
  * missing. A statement is visited once, and {@see ViewCallChain} walks it outermost-first, so the
  * whole chain is in hand before anything is reported.
  *
- * Also reports, under its own independent flag, a data key the template never reads
- * ({@see UnusedViewData}) — the same walk and the same resolved chain, asked from the other side.
+ * Also reports a data key the template never reads ({@see UnusedViewData}): the same walk and the
+ * same resolved chain, asked from the other side.
+ *
+ * Inside a template, the `$__env->make()` call an `@include` compiles to is checked as the
+ * `Factory::make()` call site it is, and so are the `renderWhen()`, `renderUnless()` and `first()`
+ * calls of `@includeWhen`, `@includeUnless` and `@includeFirst`. Each passes the including scope as
+ * `$mergeData`, which leaves the key set open, so only its explicit keys are type-checked;
+ * `@includeIsolated` passes no scope and is checked in full.
  *
  * Every check is conservative in the same direction: anything that cannot be proven declines.
  * A missing variable needs the supplied key set to be provably closed, so an open data array
  * (a spread, a dynamic key, `$mergeData`) silences it while leaving the type check on the keys that
  * ARE known.
  */
-final class ViewContractHandler implements AfterStatementAnalysisInterface
+final class ViewContractHandler implements AfterCodebasePopulatedInterface, AfterStatementAnalysisInterface
 {
-    private static bool $validateViewData = false;
-
-    private static bool $reportUnusedViewData = false;
-
     /** @var array<string, Type\Union|null> declared type string => parsed union, null when unparseable */
     private static array $declaredTypes = [];
 
     /** @var array<string, array<string, true>|null> view name => include-chain read set, null when unprovable */
     private static array $readSets = [];
 
-    public static function init(bool $validateViewData, bool $reportUnusedViewData): void
-    {
-        self::$validateViewData = $validateViewData;
-        self::$reportUnusedViewData = $reportUnusedViewData;
-    }
-
     public static function reset(): void
     {
-        self::$validateViewData = false;
-        self::$reportUnusedViewData = false;
         self::$declaredTypes = [];
         self::$readSets = [];
+    }
+
+    /** Resolved here, before Psalm forks its workers, so each one inherits the result. */
+    #[\Override]
+    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
+    {
+        ComposerKeyResolver::resolve($event->getCodebase());
     }
 
     #[\Override]
     public static function afterStatementAnalysis(AfterStatementAnalysisEvent $event): ?bool
     {
-        if (!self::$validateViewData && !self::$reportUnusedViewData) {
-            return null;
-        }
-
         $stmt = $event->getStmt();
+        $include = $stmt instanceof Stmt\Echo_ ? self::compiledInclude($stmt) : null;
 
-        // The two statement shapes a rendering expression is the whole of. An expression nested
-        // deeper (an argument, an array element) is left alone on purpose: the check costs a walk
-        // per statement, and reaching those shapes would mean re-walking every sub-expression.
+        // The two statement shapes a rendering expression is the whole of, plus a compiled include.
+        // An expression nested deeper (an argument, an array element) is left alone on purpose: the
+        // check costs a walk per statement, and reaching those shapes would mean re-walking every
+        // sub-expression.
         $expr = match (true) {
+            $include instanceof Expr\MethodCall => $include,
             $stmt instanceof Stmt\Expression, $stmt instanceof Stmt\Return_ => $stmt->expr,
             default => null,
         };
@@ -92,7 +102,7 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         }
 
         $source = $event->getStatementsSource();
-        $chain = ViewCallChain::from($expr, $source);
+        $chain = $include instanceof Expr\MethodCall ? ViewCallChain::fromInclude($include, $source) : ViewCallChain::from($expr, $source);
 
         if (!$chain instanceof \Psalm\LaravelPlugin\Handlers\Views\ViewCallChain) {
             return null;
@@ -104,9 +114,41 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return null;
         }
 
-        self::check($chain, $contract, new CodeLocation($source, $expr), $source);
+        self::check($chain, $contract, new CodeLocation($source, $expr), $source, $include instanceof Expr\MethodCall);
 
         return null;
+    }
+
+    /**
+     * The Factory call of a statement Blade compiles an include directive to:
+     * `echo $__env->make(...)->render();` (`@include`, `@includeIf`, `@extends`, `@includeIsolated`),
+     * `echo $__env->first(...)->render();` (`@includeFirst`), and
+     * `echo $__env->renderWhen(...);` / `renderUnless(...)` (`@includeWhen`, `@includeUnless`).
+     * {@see ViewCallChain::fromInclude()} reads its arguments.
+     */
+    public static function compiledInclude(Stmt\Echo_ $stmt): ?Expr\MethodCall
+    {
+        $echoed = \count($stmt->exprs) === 1 ? $stmt->exprs[0] : null;
+
+        if (!$echoed instanceof Expr\MethodCall) {
+            return null;
+        }
+
+        $call = self::isNamed($echoed, 'render') ? $echoed->var : $echoed;
+        $names = $call === $echoed ? ['renderwhen', 'renderunless'] : ['make', 'first'];
+
+        return $call instanceof Expr\MethodCall
+            && $call->name instanceof Identifier
+            && \in_array($call->name->toLowerString(), $names, true)
+            && $call->var instanceof Expr\Variable
+            && $call->var->name === '__env'
+                ? $call
+                : null;
+    }
+
+    private static function isNamed(Expr\MethodCall $call, string $name): bool
+    {
+        return $call->name instanceof Identifier && $call->name->toLowerString() === $name;
     }
 
     private static function check(
@@ -114,19 +156,27 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         ViewDataContract $contract,
         CodeLocation $codeLocation,
         StatementsSource $source,
+        bool $include,
     ): void {
         $suppressedIssues = $source->getSuppressedIssues();
 
-        // A composer or creator can overwrite any key after the call site passed it, so neither what
-        // is missing nor what a value's type is can be judged from the call site alone.
-        if (self::$validateViewData && !ContractRegistry::isComposed($chain->viewName)) {
+        // A composer (at render time) or a creator (inside `view()`, before a chained `with()`) can
+        // overwrite a key the call site passed, so for the keys it supplies neither presence nor type
+        // can be judged from the call site. A view whose composer cannot be read is exempt as a whole.
+        $composed = ContractRegistry::composedKeys($chain->viewName);
+
+        if ($composed !== null) {
             $supplied = $chain->supplied();
 
             foreach ($contract->vars as $name => $var) {
+                if (isset($composed[$name])) {
+                    continue;
+                }
+
                 $passed = $supplied[$name] ?? null;
 
                 if ($passed === null) {
-                    self::reportMissing($chain, $contract, $var, $codeLocation, $suppressedIssues);
+                    self::reportMissing($chain, $contract, $var, $codeLocation, $source, $suppressedIssues);
 
                     continue;
                 }
@@ -135,7 +185,8 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             }
         }
 
-        if (self::$reportUnusedViewData) {
+        // UnusedViewData judges `view()` call sites only.
+        if (!$include) {
             self::reportUnusedData($chain, $contract, $codeLocation, $suppressedIssues);
         }
     }
@@ -173,7 +224,8 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
 
             IssueBuffer::accepts(
                 new UnusedViewData(
-                    "View '{$chain->viewName}' never reads \${$name}, but the call site passes '{$name}' to it",
+                    "View '{$chain->viewName}' never reads \${$name}, but this call passes '{$name}'. "
+                    . 'Remove the key, or declare it with @var if the template needs it.',
                     $codeLocation,
                 ),
                 $suppressedIssues,
@@ -189,20 +241,26 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
         ViewDataContract $contract,
         ContractVar $var,
         CodeLocation $codeLocation,
+        StatementsSource $source,
         array $suppressedIssues,
     ): void {
         // `optional` is a @props entry with a literal default, which Blade fills in itself, or a
         // declaration ending in `= null`.
         // `propsUnknown` means the declared set is a lower bound, so absence proves nothing about
-        // what the template needs; an open data set proves nothing about what was passed; and a
-        // composer or creator registered for the view supplies data no call site shows.
-        if ($var->optional || $contract->propsUnknown || !$chain->complete || ContractRegistry::isComposed($chain->viewName)) {
+        // what the template needs, and an open data set proves nothing about what was passed.
+        if ($var->optional || $contract->propsUnknown || !$chain->complete) {
             return;
         }
 
+        $templatePath = ViewReferenceRegistry::templatePathFor($chain->viewName);
+        $declaredAt = $templatePath === null
+            ? ''
+            : ', ' . BladeBootstrapper::displayPath($templatePath, $source->getCodebase()->config->base_dir) . ":{$var->declarationLine}";
+
         IssueBuffer::accepts(
-            new MissingViewVariable(
-                "View '{$chain->viewName}' declares \${$var->name} but the call site does not pass '{$var->name}'",
+            new MissingViewData(
+                "View '{$chain->viewName}' requires \${$var->name} ({$var->typeString}{$declaredAt}), but this call does not pass '{$var->name}'. "
+                . 'Pass it, or mark it optional with "= null" or a @props default.',
                 $codeLocation,
             ),
             $suppressedIssues,
@@ -225,6 +283,15 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             return;
         }
 
+        $codebase = $source->getCodebase();
+
+        // A class nothing defines is already reported where it was written (UndefinedDocblockClass).
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof Type\Atomic\TNamedObject && !$codebase->classOrInterfaceOrEnumExists($atomic->value)) {
+                return;
+            }
+        }
+
         $declared = self::declaredType($var->optional ? ContractParser::withNull($var->typeString) : $var->typeString);
 
         if (!$declared instanceof Type\Union || $declared->hasMixed()) {
@@ -239,18 +306,43 @@ final class ViewContractHandler implements AfterStatementAnalysisInterface
             }
         }
 
-        if ($source->getCodebase()->isTypeContainedByType($supplied, $declared)) {
+        // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
+        // gains no new report.
+        if (
+            $codebase->isTypeContainedByType($supplied, $declared)
+            || $codebase->isTypeContainedByType(self::renderablesAsString($supplied, $codebase), $declared)
+        ) {
             return;
         }
 
         IssueBuffer::accepts(
-            new InvalidViewVariableType(
-                "View '{$chain->viewName}' declares \${$var->name} as {$var->typeString}, but "
-                . $supplied->getId() . ' is passed for it',
+            new InvalidViewData(
+                "View '{$chain->viewName}' declares \${$var->name} as {$var->typeString}, but this call passes "
+                . LateStatic::strip($supplied)->getId() . ". Pass a value of the declared type, or correct the template's declaration.",
                 $codeLocation,
             ),
             $suppressedIssues,
         );
+    }
+
+    /**
+     * What the template receives: `View::gatherData()` swaps every `Renderable` data value for the
+     * string it renders to. A class Psalm never scanned is not proven `Renderable` and stays as is.
+     *
+     * @psalm-mutation-free
+     */
+    private static function renderablesAsString(Type\Union $supplied, Codebase $codebase): Type\Union
+    {
+        $atomics = [];
+
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            $atomics[] = $atomic instanceof Type\Atomic\TNamedObject
+                && ClassLineage::isA($codebase, $atomic->value, Renderable::class)
+                    ? new Type\Atomic\TString()
+                    : $atomic;
+        }
+
+        return new Type\Union($atomics);
     }
 
     /**

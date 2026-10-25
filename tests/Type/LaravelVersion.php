@@ -12,7 +12,7 @@ use Illuminate\Foundation\Application;
  * Stubs under `stubs/<version>/` load only when the installed Laravel is `>=` that version
  * (see `StubFileFinder::stubsForLaravelVersion`). A phpt asserting such a stub must skip when the
  * installed Laravel is older, otherwise it fails on the lower cells of the CI matrix
- * (`.github/workflows/tests.yml` runs `test:type` over `^13.0` and `^12.4`, including `prefer-lowest`).
+ * (`.github/workflows/tests.yml` runs `test:type` over the highest 12.x and 13.x).
  *
  * The `--SKIPIF--` script runs in a bare `php` process from the project-root working directory with
  * no autoloader preloaded, so require it via `getcwd()`:

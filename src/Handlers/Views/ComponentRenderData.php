@@ -6,21 +6,24 @@ namespace Psalm\LaravelPlugin\Handlers\Views;
 
 use Illuminate\View\InvokableComponentVariable;
 use Psalm\Codebase;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type;
-use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TClosure;
+use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Union;
 
 /**
  * What `Illuminate\View\Component::data()` merges into the view a component's `render()` returns,
  * on top of whatever that `render()` passed itself.
  *
- * Without this, every class component is a {@see \Psalm\LaravelPlugin\Issues\MissingViewVariable}
+ * Without this, every class component is a {@see \Psalm\LaravelPlugin\Issues\MissingViewData}
  * false positive: `render()` typically passes `['component' => $this]` (or nothing at all) while
  * the template reads the component's public properties, which Laravel merges in at render time
  * (`Concerns\CompilesComponents` emits `startComponent($component->resolveView(), $component->data())`,
@@ -87,7 +90,7 @@ final class ComponentRenderData
         }
 
         $codebase = $source->getCodebase();
-        $storage = self::storage($codebase, $fqClassName);
+        $storage = ViewClassProperties::storage($codebase, $fqClassName);
 
         if (!$storage instanceof ClassLikeStorage || !isset($storage->parent_classes[self::COMPONENT])) {
             return null;
@@ -100,8 +103,8 @@ final class ComponentRenderData
 
     /**
      * The keys `Component::data()` hands the view of a class rendered as `<x-…>`, typed by what
-     * every render of the class guarantees: declared property types expanded against the class,
-     * and a method's runtime wrapper. A property with no declared type, or one declared by a
+     * every render of the class guarantees: declared property types (`self`/`parent` resolved against
+     * the class declaring the property), and a method's runtime wrapper. A property with no declared type, or one declared by a
      * generic class, is left out rather than guessed.
      *
      * @return array<string, Union>|null null when the key set is not knowable: a userland
@@ -125,6 +128,10 @@ final class ComponentRenderData
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
+            // A property type arrives expanded against its declaring class, so this pass leaves it as is.
+            // It stays for the method variables: Psalm's own expansion does not recurse into everything
+            // (`public-properties-of<self>` keeps a raw `parent` inside its array), and a type seeded with
+            // one makes a call on it throw.
             $expanded = TypeExpander::expandUnion(
                 $codebase,
                 $type,
@@ -146,8 +153,6 @@ final class ComponentRenderData
      * @param bool $typedOnly skip a property with no declared type or a generic declaring class
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function exposed(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
@@ -190,55 +195,153 @@ final class ComponentRenderData
     }
 
     /**
+     * The property nodes a taint flow into `data()`'s variables can come from: `Class::$name`, per name
+     * that really reaches the view. Narrower than the typing side's superset, because here a name in the
+     * set only ever REPORTS:
+     *
+     *  - a name in a literal `$except` default is dropped (a non-literal one keeps every name);
+     *  - a public method of the same name, which wins the variable in `data()`, is not consulted (an
+     *    accepted over-report);
+     *  - the class is the one Psalm writes the property node for: the declaring class, or for a trait
+     *    property the (farthest) class using the trait, never the trait itself or an unrelated user of it.
+     *
+     * Empty when a declaring class could not be resolved: nothing is connected rather than guessed.
+     *
+     * @return array<string, string> variable name => property id
+     *
+     * @psalm-capabilities read-props
+     */
+    public static function exposedPropertyIds(Codebase $codebase, ClassLikeStorage $storage): array
+    {
+        $except = self::exceptedNames($codebase, $storage) ?? [];
+        $ids = [];
+
+        foreach (ViewClassProperties::publicOf($codebase, $storage, self::ignored(...)) ?? [] as $name => [$declaring, $property]) {
+            if ($property->is_static === true || \in_array($name, $except, true)) {
+                continue;
+            }
+
+            $ids[$name] = self::nodeClass($codebase, $storage, $declaring) . '::$' . $name;
+        }
+
+        return $ids;
+    }
+
+    /**
+     * The class whose property node Psalm writes for `$this->name = ...`: the declaring class, or for a
+     * trait the farthest class of the hierarchy that uses it. Psalm links no subclass id to an inherited
+     * property's node, so the concrete class's `Card::$message` would never be written.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function nodeClass(Codebase $codebase, ClassLikeStorage $storage, ClassLikeStorage $declaring): string
+    {
+        if (!$declaring->is_trait) {
+            return $declaring->name;
+        }
+
+        $trait = \strtolower($declaring->name);
+        $class = $storage->name;
+
+        foreach (\array_keys($storage->parent_classes) as $parent) {
+            $parentStorage = ViewClassProperties::storage($codebase, $parent);
+
+            if ($parentStorage instanceof ClassLikeStorage && isset($parentStorage->used_traits[$trait])) {
+                $class = $parentStorage->name;
+            }
+        }
+
+        return $class;
+    }
+
+    /**
      * @param bool $typedOnly skip a property with no declared type, or one a generic class declares
      *
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
      *         makes the exposed set unknowable rather than empty
-     *
-     * @psalm-mutation-free
      */
     private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
+        $declared = ViewClassProperties::publicOf($codebase, $storage, self::ignored(...));
+
+        if ($declared === null) {
+            return null;
+        }
+
+        // `forSource()` keeps an excluded name as supplied (a superset), but must not type it: Laravel then
+        // leaves the value the call passes in place. `guaranteedFor()` already declines on a userland `$except`.
+        $excepted = $typedOnly ? [] : self::exceptedNames($codebase, $storage);
         $properties = [];
 
-        foreach ($storage->declaring_property_ids as $name => $declaringClass) {
-            if (self::ignored($name)) {
+        foreach ($declared as $name => [$declaring, $property]) {
+            if ($property->is_static === true || ($typedOnly && ($property->type === null || $declaring->template_types !== null))) {
                 continue;
             }
 
-            $declaring = self::storage($codebase, $declaringClass);
+            if ($excepted === null || \in_array($name, $excepted, true)) {
+                $properties[$name] = Type::getMixed();
 
-            if (!$declaring instanceof ClassLikeStorage) {
-                return null;
-            }
-
-            $property = $declaring->properties[$name] ?? null;
-
-            if ($property === null
-                || $property->is_static === true
-                || $property->visibility !== ClassLikeAnalyzer::VISIBILITY_PUBLIC
-            ) {
                 continue;
             }
 
-            if ($typedOnly && ($property->type === null || $declaring->template_types !== null)) {
-                continue;
-            }
-
-            $properties[$name] = $property->type ?? Type::getMixed();
+            // `static` collapses to the class for the view's own seed and for `forSource()`; the
+            // `<x-…>` side keeps a non-final class's late-static marker, as its types always did.
+            $properties[$name] = ViewClassProperties::typeOf($codebase, $storage, $name, $declaring, $property, final: !$typedOnly || $storage->final)
+                ?? Type::getMixed();
         }
 
         return $properties;
     }
 
     /**
+     * The names a userland `$except` default lists, `[]` when the class does not redeclare it, and null when
+     * the list is not readable from storage: Psalm keeps a default only for an untyped property, as
+     * `list{'a', 'b'}`, so a `@var`-typed or computed default is unknown.
+     *
+     * @return list<string>|null
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function exceptedNames(Codebase $codebase, ClassLikeStorage $storage): ?array
+    {
+        $declaringClass = $storage->declaring_property_ids['except'] ?? self::COMPONENT;
+
+        if (\strtolower($declaringClass) === self::COMPONENT) {
+            return [];
+        }
+
+        $declaring = ViewClassProperties::storage($codebase, $declaringClass);
+        $default = $declaring?->properties['except']->suggested_type ?? null;
+        $atomic = $default?->isSingle() === true ? $default->getSingleAtomic() : null;
+
+        if ($atomic instanceof TArray && $atomic->isEmptyArray()) {
+            return [];
+        }
+
+        if (!$atomic instanceof TKeyedArray || $atomic->fallback_params !== null) {
+            return null;
+        }
+
+        $names = [];
+
+        foreach ($atomic->properties as $item) {
+            if (!$item->isSingleStringLiteral()) {
+                return null;
+            }
+
+            $names[] = $item->getSingleStringLiteral()->value;
+        }
+
+        return $names;
+    }
+
+    /**
      * Every public method becomes a variable of the same (cased) name, built by
-     * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` for a method with no
-     * parameters at all (optional ones count), a `Closure` otherwise.
+     * `Component::createVariableFromMethod()`: an `InvokableComponentVariable` of the method's return
+     * type for a method with no parameters at all (optional ones count), a `Closure` of the method's
+     * signature otherwise.
      *
      * @return array<string, Union>|null
-     *
-     * @psalm-mutation-free
      */
     private static function publicMethods(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
@@ -249,7 +352,7 @@ final class ComponentRenderData
                 continue;
             }
 
-            $declaring = self::storage($codebase, $methodId->fq_class_name);
+            $declaring = ViewClassProperties::storage($codebase, $methodId->fq_class_name);
 
             if (!$declaring instanceof ClassLikeStorage) {
                 return null;
@@ -262,11 +365,114 @@ final class ComponentRenderData
             }
 
             $methods[$method->cased_name ?? $methodName] = $method->params === []
-                ? new Union([new TNamedObject(InvokableComponentVariable::class)])
-                : Type::getClosure();
+                ? self::invokableOf($codebase, $storage, $declaring, $method, $methodName)
+                : self::closureOf($codebase, $storage, $declaring, $method, $methodName);
         }
 
         return $methods;
+    }
+
+    /**
+     * `$name()` is `call_user_func()` of the method, so the wrapper carries its return type (`null`
+     * for `void`). Without a declared return type the variable is `mixed`, i.e. not checked, as for a
+     * generic method or declaring class: `InvokableComponentVariable<mixed>` would reject a
+     * template's correct `InvokableComponentVariable<TValue>` declaration.
+     */
+    private static function invokableOf(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): Union {
+        $expand = self::expanderFor($codebase, $storage, $declaring, $method, $methodName);
+
+        if (!$expand instanceof \Closure || !$method->return_type instanceof Union) {
+            return Type::getMixed();
+        }
+
+        $returnType = $expand($method->return_type);
+
+        return new Union([
+            new TGenericObject(InvokableComponentVariable::class, [$returnType->isVoid() ? Type::getNull() : $returnType]),
+        ]);
+    }
+
+    /**
+     * `Closure::fromCallable([$this, $name])` keeps the method's signature, so the variable is that
+     * signature with Psalm's own slots: an untyped parameter or return stays unknown, as it does for
+     * a first-class callable, and the method's own purity carries over.
+     *
+     * A generic method or declaring class is `mixed`, i.e. not checked: nothing binds its templates
+     * here, and a bare `Closure` would reject a template's correct `\Closure(...)` declaration.
+     */
+    private static function closureOf(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): Union {
+        $expand = self::expanderFor($codebase, $storage, $declaring, $method, $methodName);
+
+        if (!$expand instanceof \Closure) {
+            return Type::getMixed();
+        }
+
+        // TypeExpander skips a parameter's `@param-out` type (a gap in Psalm's own callable expansion),
+        // and an unexpanded `self` there becomes the by-ref variable's type in the template.
+        $params = [];
+
+        foreach ($method->params as $param) {
+            $outType = $param->out_type;
+
+            if ($outType instanceof Union) {
+                $param = clone $param;
+                $param->out_type = $expand($outType);
+            }
+
+            $params[] = $param;
+        }
+
+        return $expand(new Union([new TClosure($params, $method->return_type, $method->capabilities)]));
+    }
+
+    /**
+     * Resolves a method's types as the rendered component sees them, or null when nothing can: a
+     * generic method or declaring class (no template is bound here), or an unresolvable appearing class.
+     *
+     * @return (\Closure(Union): Union)|null
+     */
+    private static function expanderFor(
+        Codebase $codebase,
+        ClassLikeStorage $storage,
+        ClassLikeStorage $declaring,
+        MethodStorage $method,
+        string $methodName,
+    ): ?\Closure {
+        if ($method->template_types !== null || $declaring->template_types !== null) {
+            return null;
+        }
+
+        // `self` and `parent` name the class the method appears in (a trait's user, not the trait);
+        // only `static` is the rendered component.
+        $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
+        $appearing = $appearingId === null ? null : ViewClassProperties::storage($codebase, $appearingId->fq_class_name);
+
+        if (!$appearing instanceof ClassLikeStorage) {
+            return null;
+        }
+
+        // `final: true` collapses `static` to the component: a subclass instance is still one, and
+        // `Component&static` means nothing to a template.
+        return static fn(Union $type): Union => TypeExpander::expandUnion(
+            $codebase,
+            $type,
+            $appearing->name,
+            $storage->name,
+            $appearing->parent_class,
+            final: true,
+        );
     }
 
     /**
@@ -275,17 +481,5 @@ final class ComponentRenderData
     private static function ignored(string $name): bool
     {
         return \str_starts_with($name, '__') || \in_array(\strtolower($name), self::IGNORED, true);
-    }
-
-    /**
-     * @psalm-mutation-free
-     */
-    private static function storage(Codebase $codebase, string $fqClassName): ?ClassLikeStorage
-    {
-        try {
-            return $codebase->classlike_storage_provider->get(\strtolower($fqClassName));
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return null;
-        }
     }
 }

@@ -63,7 +63,7 @@ For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-opt
 
 When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on both Eloquent relation chains and direct Model static / instance calls (`User::whereEmail('a@b')`, `$user->whereEmail('a@b')`), preserving the relation or `Builder<TModel>` generic type instead of returning `mixed` or raising `UndefinedMagicMethod`.
 
-Column names are validated against the model's `@property` annotations. Columns with no matching declaration are not claimed by the plugin: relation chains fall through to `mixed`, and direct Model calls fall through to `UndefinedMagicMethod`. Custom Eloquent builder methods that happen to start with `where` (e.g. `whereByMake(string)`) are also left to Psalm's normal resolution so their declared return types win. Partial `@property` annotation is therefore safe.
+Column names are validated against the model's `@property` annotations and, when [`columnFallback`](#columnfallback-values) is `migrations`, against the columns parsed from your migrations. A segment is matched as `Str::snake($segment)` against the exact column name, as Laravel builds the query, so `whereUserId()` matches `user_id` but `whereLine1()` does not match `line_1`. `@property` wins over the migration schema, which also types the single argument of `where{Column}($value)` (casts and nullability included; object and array columns stay untyped). With `columnFallback="none"`, or when the model's schema could not be resolved, only `@property` annotations count. Columns found in neither source are not claimed by the plugin: relation chains fall through to `mixed`, and direct Model calls fall through to `UndefinedMagicMethod`. Custom Eloquent builder methods that happen to start with `where` (e.g. `whereByMake(string)`) are also left to Psalm's normal resolution so their declared return types win. Partial `@property` annotation is therefore safe.
 
 Disable if dynamic where resolution conflicts with your codebase.
 
@@ -281,23 +281,15 @@ An explicit `<TaintedLlmPrompt errorLevel="..." />` in `issueHandlers` always wi
 
 ## `blade`
 
-See [Blade template analysis](blade.md) for the full user guide (enabling it, suppression, [tuning template findings](blade.md#tuning-template-findings), ambient variables, taint reporting, and known limits).
-
-**default**: off. The element's presence turns analysis on; the settings below are attributes of the same element. Omit it, or write `<blade value="false" />`, to turn analysis off.
+**default**: off
 
 ```xml
 <blade />
 ```
 
-Opt in to analyzing Blade templates. The plugin compiles every `*.blade.php` file under the view paths of the booted application (`config('view.paths')` plus whatever service providers added) into a PHP "shadow" file, and adds those shadows to the Psalm run. The templates themselves are never handed to Psalm as PHP; only the compiled shadows are analyzed.
+Analyze `*.blade.php` templates as PHP files at their own paths. Omit the element, or write `<blade value="false" />`, to turn it off; `psalm-laravel analyze --blade` / `--no-blade` switches it for one run. User guide: [Blade Template Analysis](blade.md).
 
-Opt-in because the compile pass costs time proportional to the number of templates, and because template analysis is new.
-
-Notes on this release:
-
-- Every template variable the plugin cannot prove a type for is `mixed`, silently. A `@var` docblock (`<?php /** @var \App\Models\User $user */ ?>`) types the template's own body as well as the call-site checks below; `@props([...])` entries stay `mixed`. The `Mixed*` issues that fallback would otherwise produce are suppressed by default; see [`reportMixedIssues`](#reportmixedissues).
-- Each template is analyzed on its own. `@include`, `@extends` and components are not followed.
-- `{{-- @psalm-suppress SomeIssue --}}` in a template is carried into the compiled shadow.
+`value` and `cacheDir` are the only attributes. Any other one aborts the run like an unknown `--plugin-option` key.
 
 ### `cacheDir`
 
@@ -307,62 +299,7 @@ Notes on this release:
 <blade cacheDir="build/blade-shadows" />
 ```
 
-Where the compiled shadows and their manifest are written. Absolute, or relative to the directory Psalm runs in. The plugin creates the directory, reuses a shadow whose template has not changed, and deletes shadows whose template is gone.
-
-The default deliberately sits outside your project tree. A shadow file that one of your `<projectFiles>` patterns happens to match is treated by Psalm as a file of your own, which both reports issues at their compiled locations instead of the template's and makes Psalm drop taint flows that start in it. If you point `cacheDir` inside the project, exclude it from `<projectFiles>` (and from version control).
-
-### `validateViewData`
-
-**default**: off
-
-```xml
-<blade validateViewData="true" />
-```
-
-Check `view()` call sites against the contract their template declares, and report a declared variable the call never passes ([MissingViewVariable](issues/MissingViewVariable.md)) or a value that does not satisfy the declared type ([InvalidViewVariableType](issues/InvalidViewVariableType.md)).
-
-A template declares its variables with `/** @var \App\Models\User $user */` docblocks in a `<?php` or `@php` block (every declared variable is required, `T|null` and `mixed` included; a trailing `= null` makes it optional; a name the template binds itself, such as a `@foreach` alias, or one the framework supplies, such as `$errors`, `$slot` or `$app`, is never a declaration), see [Declaring view variables](blade.md#declaring-view-variables), and `@props([...])` entries. A template that declares nothing is never checked, so the rule costs you nothing until you annotate a template.
-
-Recognized call shapes: the `view()` helper, `Factory::make()` and its `View` facade forms, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls chained on top of them. The whole chain is read at once, so `view('profile')->with('name', $n)` is checked against the data the chain supplies in total, not against the empty data of its inner call.
-
-Both checks decline rather than guess. The per-issue pages list every gate; the short version is that a dynamic view name, an unreadable `@props` array, an open data set (a spread, a dynamic key, `$mergeData`), a `mixed` on either side, and an unmodeled method in the chain each silence the check for that call.
-
-
-### `reportUnusedViewData`
-
-**default**: off
-
-```xml
-<blade reportUnusedViewData="true" />
-```
-
-Report a data key ([UnusedViewData](issues/UnusedViewData.md)) that the rendered template neither reads nor declares. Independent of `validateViewData`: same call shapes, opposite direction (that rule checks what the template asks for, this one checks what the call site hands over).
-
-A key that a template reached through `@include` or `@extends` reads or declares counts as consumed, because those directives inherit the including template's whole scope. The chain is followed as far as every include in it names a literal template; one dynamic `@include($name)` at any depth silences the check for that call site alone, not for the run.
-
-Enabling it makes every template recompile once, because the read set and the include graph are collected during compilation and a cache warmed without the flag holds neither. Declines rather than guesses: the issue page lists every gate, the load-bearing one being that a template whose compiled body does something that hides which names it reads (`@props`, `@aware`, `extract()`, a non-literal `compact()`) is never checked.
-
-Has no effect under `<blade value="false" />`: the read sets only exist once the compile pass has read the templates.
-
-### `reportMixedIssues`
-
-**default**: off (the `Mixed*` family is suppressed)
-
-```xml
-<blade reportMixedIssues="true" />
-```
-
-Every template variable the plugin cannot prove a type for is `mixed` (see the notes above), so `MixedArgument`, `MixedAssignment`, and the rest of Psalm's `MixedIssue` family are overwhelmingly noise about the prelude's own fallback rather than a real template bug. They are dropped at the point issues are relocated onto the template, before Psalm's own suppression accounting sees them.
-
-Set `reportMixedIssues="true"` to opt back in and see them at the template's file and line, same as any other issue type. Opting in restores only findings that map to a real template line: a `Mixed*` finding on an unmapped line (the prelude that declares the fallback types) stays dropped unconditionally, because it can only ever describe the fallback itself. No recompile needed either way: the flag changes only which issues are reported, never what the compile pass collects, so flipping it reuses a warm shadow cache.
-
-For some but not all of the family back, first set `reportMixedIssues="true"`, then silence the unwanted `Mixed*` types over `resources/views` with [an `issueHandlers` entry](blade.md#suppressing-issues). An `issueHandlers` entry alone cannot bring anything back: with the flag off the plugin drops the whole family before Psalm's issue handlers are consulted.
-
-### Degradation
-
-Blade analysis never fails a run. If the analyzed application binds no Blade compiler or no view finder (common for a package, or a trimmed-down bootstrap), if the cache directory cannot be written, or if Psalm's internals have moved under the plugin, the feature turns itself off for that run and prints one warning naming the cause. Templates that fail to compile are skipped and summarized in a single warning; run with `--debug` for the individual causes.
-
-Psalm's `--no-progress` installs a progress implementation that discards warnings, so a degradation is invisible under that flag.
+Where compiled templates are cached. Absolute, or relative to the directory Psalm runs in. A directory inside the project must be gitignored and kept out of `<projectFiles>`.
 
 ## Per-run overrides
 
@@ -372,13 +309,12 @@ Bool and enum settings on this page can be overridden for one run without touchi
 vendor/bin/psalm-laravel analyze --experimental --plugin-option=modelProperties.columnFallback=none
 ```
 
-* Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`, `blade.validateViewData`). `psalm-laravel analyze --help` lists every key with its values.
+* Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`). `psalm-laravel analyze --help` lists every key with its values.
 * Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`; `findMissingTranslations.keys` takes `all` or `short`.
 * Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
 * `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false` and `--experimental` for `experimental=true`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.
 * There is no environment-variable form for a bare `vendor/bin/psalm`; edit `psalm.xml` there.
 * `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless an override or the XML sets one of them explicitly.
-* `blade.*` settings never switch Blade on by themselves; only `blade=true` does.
 * An unknown key, a token without `=`, or a value outside the key's values aborts the run with a non-zero exit and a message naming the problem. `analyze` checks them before it starts Psalm. An override never skips the XML checks: a malformed element in `psalm.xml` still fails the run.
 
 ### Result cache
@@ -397,7 +333,7 @@ The plugin stores generated files (alias stubs) and cached migration schemas in 
 
 When `columnFallback="migrations"` is active, the plugin caches the parsed migration schema to disk so subsequent Psalm runs skip re-parsing unchanged migrations.
 
-The cache key is a fingerprint of sorted migration and SQL dump file paths, hashes of their contents, and the plugin version. Any file change or plugin upgrade automatically invalidates the cache. Content hashes (rather than modification times) keep the cache usable on CI, where a fresh checkout stamps every file with the checkout time.
+The cache key is a fingerprint of sorted migration and SQL dump file paths, hashes of their contents, and the installed plugin version and commit reference. Any file change or plugin upgrade (including a new commit of a dev branch such as `4.x-dev`) automatically invalidates the cache. Content hashes (rather than modification times) keep the cache usable on CI, where a fresh checkout stamps every file with the checkout time.
 
 **Cache invalidation**: run `--clear-cache` to remove all plugin caches (including migration schema). The plugin also cleans up stale cache files automatically on each cache miss.
 
@@ -450,6 +386,8 @@ When the plugin encounters an internal error (e.g. failing to boot the Laravel a
 Set this to `true` to throw the exception instead.
 
 This also covers partial boots. When the app's `bootstrap()` throws partway (for example, a `config/*.php` file that calls `parse_url(env('UNSET'))`), the plugin normally keeps running in a degraded mode (service providers never booted, so model, facade and container inference is reduced) and prints a warning about it. With `failOnInternalError` enabled, that swallowed bootstrap failure fails the run instead of degrading silently.
+
+The same holds for [Blade analysis](blade.md): when it is enabled but turns itself off for the run (for example, the booted app never bound `blade.compiler`), the run fails instead of reporting zero template findings. A view tree with no templates is not a failure.
 
 **Recommended for CI.** Without this, a misconfigured environment causes the plugin to silently disable itself — your pipeline passes but without any plugin analysis.
 With `failOnInternalError`, the Psalm run fails immediately, so you know the plugin isn't working.

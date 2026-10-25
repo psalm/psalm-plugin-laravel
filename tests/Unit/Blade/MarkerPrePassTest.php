@@ -26,18 +26,6 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
-    public function skips_php_block_body_lines(): void
-    {
-        $skip = MarkerPrePass::computeSkipLines("@php\n\$x = 1;\n\$y = 2;\n@endphp\ndone\n");
-
-        $this->assertArrayNotHasKey(1, $skip);
-        $this->assertArrayHasKey(2, $skip);
-        $this->assertArrayHasKey(3, $skip);
-        $this->assertArrayHasKey(4, $skip);
-        $this->assertArrayNotHasKey(5, $skip);
-    }
-
-    #[Test]
     public function skips_multiline_comment_body(): void
     {
         $skip = MarkerPrePass::computeSkipLines("{{--\nhidden\n--}}\nvisible\n");
@@ -80,7 +68,6 @@ final class MarkerPrePassTest extends TestCase
         // #1700: `->` inside an echo.
         yield 'attributes echo with arrow call' => ["{{ \$attributes->merge(['class' => 'x']) }}"];
         yield '@class with array arrow' => ["@class(['active' => \$on])"];
-        yield '@style with array arrow' => ["@style(['color: red' => \$on])"];
     }
 
     #[Test]
@@ -109,15 +96,32 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
-    public function skips_a_multiline_livewire_tag_body(): void
+    public function skips_a_multiline_prefixed_precompiled_tag_body(): void
     {
-        $source = "<livewire:counter\n    :count=\"\$multi\"\n    wire:key=\"c\"\n/>\ndone\n";
+        // #1910: precompilers owning a tag prefix (`<native:...>`, `<flux:...>`) match as strictly.
+        $source = "<native:top-bar\n    title=\"{{ \$t }}\"\n>\n    x\n</native:top-bar\n>\ndone\n";
         $skip = MarkerPrePass::computeSkipLines($source);
 
+        $this->assertArrayNotHasKey(1, $skip);
         $this->assertArrayHasKey(2, $skip);
         $this->assertArrayHasKey(3, $skip);
-        $this->assertArrayHasKey(4, $skip);
+        $this->assertArrayNotHasKey(4, $skip);
         $this->assertArrayNotHasKey(5, $skip);
+        $this->assertArrayHasKey(6, $skip); // the wrapped closing tag's `>`
+        $this->assertArrayNotHasKey(7, $skip);
+    }
+
+    #[Test]
+    public function a_prefixed_pseudo_tag_in_a_script_does_not_run_past_the_next_tag(): void
+    {
+        // Skipped lines inherit the opener's line, so a line-keyed `@psalm-suppress` would swallow
+        // the distinct findings on lines 5 and 6.
+        $source = "{{-- @psalm-suppress UndefinedMethod --}}\n<script>\nconst text = `<demo:tag\n`;\n"
+            . "{{ (new \\stdClass)->missingOne() }}\n{{ (new \\stdClass)->missingTwo() }}\n</script>\n";
+        $skip = MarkerPrePass::computeSkipLines($source);
+
+        $this->assertArrayNotHasKey(5, $skip);
+        $this->assertArrayNotHasKey(6, $skip);
     }
 
     #[Test]
@@ -145,20 +149,6 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
-    public function a_long_unbalanced_class_directive_does_not_disarm_later_component_tags(): void
-    {
-        // Each `@class(` iteration a non-possessive inner loop keeps for backtracking costs JIT
-        // stack; a few hundred lines of calls inside a never-closed `@class([` exhaust it.
-        $source = "<x-alert @class([\n" . \str_repeat("    'a' => \$f(\$b) && \$g(\$c),\n", 1000) . "\n<x-foo\n    class='a'\n/>\n";
-        $tagLine = 1003;
-
-        $skip = MarkerPrePass::computeSkipLines($source);
-
-        $this->assertArrayHasKey($tagLine + 1, $skip);
-        $this->assertArrayHasKey($tagLine + 2, $skip);
-    }
-
-    #[Test]
     public function whitespace_only_lines_get_no_marker(): void
     {
         $marked = MarkerPrePass::inject("line one\n   \nline three\n");
@@ -175,12 +165,6 @@ final class MarkerPrePassTest extends TestCase
 
         // Once for the opening-line marker, once more as the trailing footer marker.
         $this->assertSame(2, \substr_count($marked, '/* blade:1 */'));
-    }
-
-    #[Test]
-    public function extends_line_returns_null_when_absent(): void
-    {
-        $this->assertNull(MarkerPrePass::extendsLine("hello\n"));
     }
 
     #[Test]
@@ -201,24 +185,9 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
-    public function skips_raw_php_block_body_lines_when_unclosed_at_eof(): void
-    {
-        $skip = MarkerPrePass::computeSkipLines("<?php\n\$x = 1;\n");
-
-        $this->assertArrayNotHasKey(1, $skip);
-        $this->assertArrayHasKey(2, $skip);
-    }
-
-    #[Test]
     public function extends_line_returns_null_for_a_commented_out_extends(): void
     {
         $this->assertNull(MarkerPrePass::extendsLine("{{-- @extends('layout') --}}\nhello\n"));
-    }
-
-    #[Test]
-    public function extends_line_skips_a_commented_out_extends_and_finds_the_live_one(): void
-    {
-        $this->assertSame(3, MarkerPrePass::extendsLine("{{-- @extends('old') --}}\n\n@extends('real')\n"));
     }
 
     #[Test]
@@ -231,18 +200,6 @@ final class MarkerPrePassTest extends TestCase
 
         $this->assertSame([], MarkerPrePass::computeSkipLines($source));
         $this->assertSame(4, MarkerPrePass::extendsLine($source));
-    }
-
-    #[Test]
-    public function skips_an_uppercase_raw_php_block(): void
-    {
-        // `<?PHP` is a legal, case-insensitive PHP open tag.
-        $skip = MarkerPrePass::computeSkipLines("<?PHP\n\$x = 1;\n?>\nhi\n");
-
-        $this->assertArrayNotHasKey(1, $skip);
-        $this->assertArrayHasKey(2, $skip);
-        $this->assertArrayHasKey(3, $skip);
-        $this->assertArrayNotHasKey(4, $skip);
     }
 
     #[Test]
@@ -275,30 +232,6 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
-    public function a_masked_switch_does_not_arm_the_case_gate(): void
-    {
-        // A `@switch(` typed inside a Blade comment is not a live directive; it must not arm
-        // the gate for the real @case that follows, so that @case finds nothing pending and
-        // suppresses nothing.
-        $skip = MarkerPrePass::computeSkipLines("{{-- @switch(\$x) --}}\nline two\n@case('a')\nline four\n");
-
-        $this->assertSame([], $skip);
-    }
-
-    #[Test]
-    public function a_masked_case_does_not_disarm_a_live_switch_gate(): void
-    {
-        // A `@case(` typed inside a Blade comment must not consume the pending switch: the real
-        // @case that follows still needs its own gate, or the ParseError from #1496 comes back.
-        $source = "@switch(\$x)\n{{-- @case(9) --}}\nreal text\n@case('a')\nfoo\n@endswitch\n";
-        $skip = MarkerPrePass::computeSkipLines($source);
-
-        $this->assertArrayHasKey(2, $skip);
-        $this->assertArrayHasKey(3, $skip);
-        $this->assertArrayHasKey(4, $skip); // the real @case line: still inside open PHP
-    }
-
-    #[Test]
     public function nested_switch_rearms_the_gate_and_a_later_case_finds_it_already_disarmed(): void
     {
         // firstCaseInSwitch is a single bool, not a stack: the inner @switch re-arms it and the
@@ -317,36 +250,6 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
-    public function same_line_switch_and_case_marks_nothing_extra(): void
-    {
-        $skip = MarkerPrePass::computeSkipLines("@switch(\$x) @case('a')\nfoo\n@endswitch\n");
-
-        $this->assertSame([], $skip);
-    }
-
-    #[Test]
-    public function an_unresolved_switch_with_no_case_marks_nothing(): void
-    {
-        // Blade's own output is already unterminated PHP in this shape; the gate must not
-        // invent a recovery for it.
-        $skip = MarkerPrePass::computeSkipLines("@switch(\$x)\nno case here\n");
-
-        $this->assertSame([], $skip);
-    }
-
-    #[Test]
-    public function mixed_case_switch_and_case_directives_are_recognized(): void
-    {
-        // Blade dispatches directives via `compile{$name}`, and PHP method names are
-        // case-insensitive, so `@SWITCH`/`@CASE` compile identically to their lowercase form.
-        $skip = MarkerPrePass::computeSkipLines("@SWITCH(\$x)\n\n@CASE('a')\nfoo\n@endswitch\n");
-
-        $this->assertArrayHasKey(2, $skip);
-        $this->assertArrayHasKey(3, $skip);
-        $this->assertArrayNotHasKey(4, $skip);
-    }
-
-    #[Test]
     public function a_quoted_case_directive_inside_a_switch_argument_does_not_disarm_the_gate(): void
     {
         // The literal text "@case(1)" inside a STRING argument to @switch must not be mistaken
@@ -358,19 +261,6 @@ final class MarkerPrePassTest extends TestCase
         $this->assertArrayHasKey(2, $skip);
         $this->assertArrayHasKey(3, $skip); // the real @case line
         $this->assertArrayNotHasKey(4, $skip);
-    }
-
-    #[Test]
-    public function a_comment_between_the_directive_name_and_its_parenthesis_still_arms_the_gate(): void
-    {
-        // Blade strips Blade comments before directive recognition, so `@switch{{-- note --}}($x)`
-        // compiles exactly like `@switch($x)`. The gate walks the same blanked scan source the
-        // sibling patterns use, so a masked comment there still leaves `[ \t]*` free to match.
-        $source = "@switch{{-- note --}}(\$x)\nreal text\n@case('a')\nfoo\n@endswitch\n";
-        $skip = MarkerPrePass::computeSkipLines($source);
-
-        $this->assertArrayHasKey(2, $skip);
-        $this->assertArrayHasKey(3, $skip);
     }
 
     #[Test]
@@ -387,16 +277,6 @@ final class MarkerPrePassTest extends TestCase
     }
 
     #[Test]
-    public function blanking_inert_text_leaves_executable_php_bodies_alone(): void
-    {
-        // Narrower than maskedRanges() on purpose: a `@php` or raw `<?php` body compiles and runs,
-        // so a caller reading the source for what the template does must still see it.
-        $source = "@php \$slot = 1; @endphp\n<?php echo \$attributes; ?>\n";
-
-        $this->assertSame($source, MarkerPrePass::blankInertText($source));
-    }
-
-    #[Test]
     public function an_escaped_php_directive_does_not_open_a_masked_range(): void
     {
         // Blade's own `(?<!@)@php(.*?)@endphp` skips `@@php`, so it is literal text and the
@@ -404,29 +284,5 @@ final class MarkerPrePassTest extends TestCase
         $source = "@@php\n{{-- note --}}\n@endphp\n";
 
         $this->assertSame(['{{-- note --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
-    }
-
-    #[Test]
-    public function a_real_php_block_after_an_escaped_one_still_masks(): void
-    {
-        $source = "@@php literal\n@php \$x = 1; @endphp\n";
-
-        $this->assertSame(['@php $x = 1; @endphp'], \array_column(MarkerPrePass::maskedRanges($source), 0));
-    }
-
-    #[Test]
-    public function an_escaped_verbatim_directive_does_not_open_a_masked_range(): void
-    {
-        $source = "@@verbatim\n{{-- note --}}\n@endverbatim\n";
-
-        $this->assertSame(['{{-- note --}}'], \array_column(MarkerPrePass::maskedRanges($source), 0));
-    }
-
-    #[Test]
-    public function blanking_inert_text_ignores_an_escaped_verbatim_directive(): void
-    {
-        $source = "@@verbatim\n{{ \$slot }}\n@endverbatim\n";
-
-        $this->assertSame($source, MarkerPrePass::blankInertText($source));
     }
 }

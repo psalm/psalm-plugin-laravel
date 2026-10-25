@@ -1,0 +1,22 @@
+<x-alert :message="request('m')" />
+<x-escaped :message="request('m')" />
+<x-literal message="hi" />
+<x-hidden :message="request('m')" />
+<x-unmapped :message="request('m')" />
+<x-card :message="request('m')" />
+@php(\App\Support\Lookalike::resolve(['message' => request('m')]))
+<x-san-e :message="request('m')" />
+<x-renamed :label="request('l')" />
+<x-unbound :message="request('m')" />
+<x-trait-a :message="request('m')" />
+<x-trait-b message="SAFE" />
+@component(\App\View\Components\Compo::class, 'compo', ['message' => request('m')])
+@endComponentClass
+<x-except-lit :message="request('m')" />
+<x-static-prop :message="request('m')" />
+<x-ignored-name :data="request('d')" />
+<x-shared-x-one :message="request('m')" />
+<x-shared-x-two message="lit" />
+<x-sib-b message="lit" />
+<x-holder :slot="request('s')">Safe</x-holder>
+<x-extra :message="request('m')" />
