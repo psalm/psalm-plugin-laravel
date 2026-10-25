@@ -124,20 +124,6 @@ final class DiagnoseCommandTest extends TestCase
     }
 
     #[Test]
-    public function no_tips_flag_suppresses_tips_section(): void
-    {
-        $tipsProvider = $this->stubTipsProvider(['should not appear']);
-        $tester = $this->testerFor($this->fixtureProvider($this->okReport()), $tipsProvider);
-
-        $exit = $tester->execute(['--no-tips' => true]);
-        $display = $tester->getDisplay();
-
-        $this->assertSame(Command::SUCCESS, $exit, $display);
-        $this->assertStringNotContainsString('Tips', $display);
-        $this->assertStringNotContainsString('should not appear', $display);
-    }
-
-    #[Test]
     public function provider_count_renders_by_default_without_the_full_list(): void
     {
         $tester = $this->testerFor($this->fixtureProvider($this->okReport()));

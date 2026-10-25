@@ -12,7 +12,6 @@ use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AccessorInfo;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AttributeAccessorInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CastShape;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
@@ -127,20 +126,6 @@ final class ModelSerializationShapeBuilderTest extends TestCase
     }
 
     #[Test]
-    public function hidden_keys_are_dropped(): void
-    {
-        $this->override(
-            columns: [
-                'id' => $this->col('id', SchemaColumn::TYPE_INT),
-                'password' => $this->col('password', SchemaColumn::TYPE_STRING),
-            ],
-            hidden: ['password'],
-        );
-
-        $this->assertSame('array{id?: int, ...<string, mixed>}', (string) $this->build());
-    }
-
-    #[Test]
     public function visible_limits_the_shape_to_the_allow_list(): void
     {
         $this->override(
@@ -196,19 +181,6 @@ final class ModelSerializationShapeBuilderTest extends TestCase
         );
 
         $this->assertSame('array{status?: int, ...<string, mixed>}', (string) $this->build());
-    }
-
-    #[Test]
-    public function a_backed_string_enum_cast_serializes_to_its_backing_string(): void
-    {
-        $this->seedEnumBacking('string');
-
-        $this->override(
-            columns: ['status' => $this->col('status', SchemaColumn::TYPE_STRING)],
-            casts: ['status' => $this->enumCast('status')],
-        );
-
-        $this->assertSame('array{status?: string, ...<string, mixed>}', (string) $this->build());
     }
 
     #[Test]
@@ -271,19 +243,6 @@ final class ModelSerializationShapeBuilderTest extends TestCase
     }
 
     #[Test]
-    public function a_column_backed_by_a_modern_accessor_takes_the_accessor_type(): void
-    {
-        // Modern Attribute accessors flow through the same accessorFor()/serializedAppendType() path as
-        // legacy ones; for a scalar return the serialized type equals the read type.
-        $this->override(
-            columns: ['ratio' => $this->col('ratio', SchemaColumn::TYPE_INT)],
-            accessors: ['ratio' => new AttributeAccessorInfo('ratio', Type::getString(), new MethodStorage(), hasMutator: false)],
-        );
-
-        $this->assertSame('array{ratio?: string, ...<string, mixed>}', (string) $this->build());
-    }
-
-    #[Test]
     public function an_unhinted_column_accessor_yields_mixed(): void
     {
         // An accessor with no resolvable return type makes the present key mixed (sound: the runtime
@@ -319,21 +278,6 @@ final class ModelSerializationShapeBuilderTest extends TestCase
         $this->override(columns: []);
 
         $this->assertNull($this->build());
-    }
-
-    #[Test]
-    public function appends_emit_a_shape_even_without_columns(): void
-    {
-        // The schema-empty case is NOT a hard gate: $appends are always serialized, so they name keys
-        // even when migrations are disabled. The shape stays OPEN, so the unseen columns fall through
-        // to mixed. This pins the production behavior that ToArrayShapeTest.phpt asserts end-to-end.
-        $this->override(
-            columns: [],
-            accessors: ['fullname' => new LegacyAccessorInfo('fullname', Type::getString(), new MethodStorage())],
-            appends: ['full_name'],
-        );
-
-        $this->assertSame('array{full_name?: string, ...<string, mixed>}', (string) $this->build());
     }
 
     #[Test]

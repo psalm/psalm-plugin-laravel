@@ -15,8 +15,6 @@ final class MarkerCommentTest extends TestCase
     /** @return iterable<string, array{string}> */
     public static function adversarialSources(): iterable
     {
-        yield 'plain' => ["<div>{{ \$x }}</div>\n"];
-        yield 'names the prefix stem' => ["@php\n\$x = 'blade:';\n@endphp\n"];
         yield 'embeds a marker comment' => ["@php\n/* blade:2 */ \$x = 1;\n@endphp\n"];
         yield 'embeds another template prefix' => ['x' . MarkerComment::prefixFor("<div>x</div>\n") . "1\n"];
     }

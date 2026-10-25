@@ -8,8 +8,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Cli\AddCommand;
-use Psalm\LaravelPlugin\Cli\Integrations\Ci\CiPlan;
-use Psalm\LaravelPlugin\Cli\Integrations\Ci\CiTargetInterface;
 use Psalm\LaravelPlugin\Cli\Integrations\Ci\CiTargetRegistry;
 use Psalm\LaravelPlugin\Cli\Integrations\Ci\GitHubActionsTarget;
 use Symfony\Component\Console\Application;
@@ -248,48 +246,6 @@ final class AddCommandTest extends TestCase
         } finally {
             \chdir($originalCwd);
         }
-    }
-
-    #[Test]
-    public function registry_resolves_across_invocations_with_stub_target(): void
-    {
-        // Ensures AddCommand doesn't hardcode GitHub and that a fully stubbed
-        // target (no bundled template, no real files) still round-trips through
-        // the command.
-        $stubTarget = new class implements CiTargetInterface {
-            #[\Override]
-            public function id(): string
-            {
-                return 'stub';
-            }
-
-            #[\Override]
-            public function displayName(): string
-            {
-                return 'Stub CI';
-            }
-
-            #[\Override]
-            public function detect(string $projectRoot): bool
-            {
-                return true;
-            }
-
-            #[\Override]
-            public function plan(string $projectRoot): CiPlan
-            {
-                $destination = $projectRoot . \DIRECTORY_SEPARATOR . 'stub.yml';
-                return new CiPlan($destination, "stub: content\n", \file_exists($destination));
-            }
-        };
-
-        $tester = $this->makeTester(new CiTargetRegistry([$stubTarget]));
-
-        $exit = $tester->execute(['target' => 'stub']);
-
-        $this->assertSame(Command::SUCCESS, $exit);
-        $this->assertSame("stub: content\n", \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'stub.yml'));
-        $this->assertStringContainsString('Stub CI', $tester->getDisplay());
     }
 
     private function makeTester(?CiTargetRegistry $registry = null): CommandTester

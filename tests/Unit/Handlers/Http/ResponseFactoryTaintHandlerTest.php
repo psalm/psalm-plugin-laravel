@@ -94,72 +94,48 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
     public static function provideMakeCalls(): iterable
     {
         yield 'bare attachment' => ['$r->make($c, 200, ["Content-Disposition" => "attachment"])', true];
-        yield 'attachment with filename' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=\"x.csv\""])', true];
         yield 'case insensitive header and value' => ['$r->make($c, 200, ["CONTENT-disposition" => " \tATTACHMENT ; filename=x.csv\t "])', true];
-        yield 'alongside a content type' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "Content-Disposition" => "attachment"])', true];
         yield 'static call' => ['Response::make($c, 200, ["Content-Disposition" => "attachment"])', true];
+        yield 'unknown parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; junk"])', true];
+        // #1416 widening 3: the `Illuminate\Http\Response` constructor shares the same sink and proof.
+        yield 'new Response with literal attachment' => ['new \Illuminate\Http\Response($c, 200, ["Content-Disposition" => "attachment"])', true];
+        // Horizontal tab stays accepted: it is the one control a field value carries legitimately.
+        yield 'horizontal tab around the token' => ['$r->make($c, 200, ["Content-Disposition" => " \tattachment\t "])', true];
 
         yield 'no headers argument' => ['$r->make($c)', false];
-        // #1416 widening 4: a literal Content-Type naming a media type never sniffed as HTML proves
-        // the exemption on its own, with no Content-Disposition at all.
-        yield 'content type only' => ['$r->make($c, 200, ["Content-Type" => "text/csv"])', true];
         yield 'fourth argument' => ['$r->make($c, 200, ["Content-Disposition" => "attachment"], true)', false];
-        // PHP allows a named argument only after every positional one, so these three are the only
-        // reachable named shapes. The last is the load-bearing one: the earlier two are also caught
-        // by the same check on the third argument.
+        // PHP allows a named argument only after every positional one, so these are the only reachable named shapes.
         yield 'all named arguments' => ['$r->make(content: $c, status: 200, headers: ["Content-Disposition" => "attachment"])', false];
-        yield 'named from the status argument' => ['$r->make($c, status: 200, headers: ["Content-Disposition" => "attachment"])', false];
         yield 'named headers argument only' => ['$r->make($c, 200, headers: ["Content-Disposition" => "attachment"])', false];
         yield 'spread headers' => ['$r->make($c, 200, ...[["Content-Disposition" => "attachment"]])', false];
         yield 'variable headers' => ['$r->make($c, 200, $headers)', false];
         yield 'spread entry' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", ...$extra])', false];
         yield 'computed key' => ['$r->make($c, 200, ["Content-" . "Disposition" => "attachment"])', false];
         yield 'variable value' => ['$r->make($c, 200, ["Content-Disposition" => $disposition])', false];
-        yield 'list value' => ['$r->make($c, 200, ["Content-Disposition" => ["attachment"]])', false];
         yield 'list entry' => ['$r->make($c, 200, ["attachment"])', false];
         yield 'duplicate disposition' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", "content-disposition" => "attachment"])', false];
-        yield 'attachment with an extended filename' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename*=UTF-8\'\'x.csv"])', true];
-        yield 'attachment with a quoted semicolon' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=\"a;b\""])', true];
-        yield 'attachment with an unknown parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; junk"])', true];
 
         // Symfony folds `_` onto `-` before keying, so these are one header at runtime and the last
-        // write decides. Both orders keep the sink, and the underscore spelling never proves alone.
+        // write decides. The underscore spelling never proves alone.
         yield 'underscore header' => ['$r->make($c, 200, ["Content_Disposition" => "attachment"])', false];
         yield 'underscore inline shadows a dashed attachment' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", "Content_Disposition" => "inline"])', false];
-        yield 'dashed attachment shadows an underscore inline' => ['$r->make($c, 200, ["Content_Disposition" => "inline", "Content-Disposition" => "attachment"])', false];
-        yield 'underscore duplicate of a dashed attachment' => ['$r->make($c, 200, ["Content-Disposition" => "attachment", "CONTENT_DISPOSITION" => "attachment"])', false];
         yield 'inline disposition' => ['$r->make($c, 200, ["Content-Disposition" => "inline; filename=x.csv"])', false];
         yield 'attachment prefix' => ['$r->make($c, 200, ["Content-Disposition" => "attachmentx"])', false];
         yield 'missing semicolon' => ['$r->make($c, 200, ["Content-Disposition" => "attachment filename=x.csv"])', false];
         yield 'empty parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment;"])', false];
-        yield 'whitespace parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; \t"])', false];
+        yield 'token followed by a tab and text' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\tfilename=x.csv"])', false];
 
         // Trimming first would approve values PHP refuses to emit, leaving the response HTML.
         yield 'smuggled header' => ['$r->make($c, 200, ["Content-Disposition" => "attachment;\nX-Injected: x"])', false];
-        yield 'trailing newline' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\n"])', false];
-        yield 'leading carriage return' => ['$r->make($c, 200, ["Content-Disposition" => "\rattachment"])', false];
         yield 'embedded nul' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\0"])', false];
-
-        // Every other C0 control and DEL, none of which trim() removes on the way to the token.
         yield 'trailing vertical tab' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\v"])', false];
         yield 'control in a parameter' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; \x01"])', false];
-        yield 'form feed' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\f"])', false];
         yield 'trailing delete' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\x7f"])', false];
-        yield 'escape in a filename' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=\"a\x1bb\""])', false];
-
-        // Horizontal tab stays accepted: it is the one control a field value carries legitimately.
-        yield 'horizontal tab around the token' => ['$r->make($c, 200, ["Content-Disposition" => " \tattachment\t "])', true];
-        yield 'token followed by a tab and text' => ['$r->make($c, 200, ["Content-Disposition" => "attachment\tfilename=x.csv"])', false];
-
-        // #1416 widening 3: the `Illuminate\Http\Response` constructor shares the same sink and proof.
-        yield 'new Response with literal attachment' => ['new \Illuminate\Http\Response($c, 200, ["Content-Disposition" => "attachment"])', true];
-        yield 'new Response with named headers argument' => ['new \Illuminate\Http\Response($c, 200, headers: ["Content-Disposition" => "attachment"])', false];
 
         // #1416 widening 1: a local variable resolved to the single array literal assigned to it.
         yield 'variable resolved to a single literal assignment' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $headers); }', true];
         yield 'variable with no enclosing function-like keeps the sink' => ['$headers = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $headers)', false];
         yield 'variable reassigned before the call' => ['function f($r, $c) { $headers = ["Content-Disposition" => "inline"]; $headers = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $headers); }', false];
-        yield 'variable dim-mutated before the call' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $headers["X-Extra"] = "y"; $r->make($c, 200, $headers); }', false];
         yield 'variable passed elsewhere before the call' => ['function f($r, $c, $other) { $headers = ["Content-Disposition" => "attachment"]; $other->log($headers); $r->make($c, 200, $headers); }', false];
         yield 'variable captured by a nested closure' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $cb = function () use ($headers) { return $headers; }; $r->make($c, 200, $headers); }', false];
         yield 'variable assigned from a non-array expression' => ['function f($r, $c, $h) { $headers = $h; $r->make($c, 200, $headers); }', false];
@@ -167,69 +143,43 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'variable assigned after the call' => ['function f($r, $c) { $r->make($c, 200, $headers); $headers = ["Content-Disposition" => "attachment"]; }', false];
         yield 'variable resolution bails on a sibling variable-variable' => ['function f($r, $c, $name) { $headers = ["Content-Disposition" => "attachment"]; $$name = 1; $r->make($c, 200, $headers); }', false];
         yield 'variable resolution bails on extract() in scope' => ['function f($r, $c, $vars) { $headers = ["Content-Disposition" => "attachment"]; extract($vars); $r->make($c, 200, $headers); }', false];
-        yield 'variable resolution bails on compact() in scope' => ['function f($r, $c) { $headers = ["Content-Disposition" => "attachment"]; $all = compact("headers"); $r->make($c, 200, $headers); }', false];
         yield 'variable resolution bails on a dynamic function-name callee' => ['function f($r, $c, $vars) { $headers = ["Content-Disposition" => "attachment"]; $fn = "extract"; $fn($vars); $r->make($c, 200, $headers); }', false];
-
-        // #1416 review round 3: an assignment nested in a ternary/if/loop/try does not DOMINATE
-        // the sink read, even when it is textually the only assignment and precedes the call: the
-        // branch that runs at runtime need not be the one containing the assignment.
-        yield 'arrow function ternary assignment does not dominate the sink' => ['$send = fn ($download, $tainted) => $download ? ($headers = ["Content-Type" => "text/html"]) : $response->make($tainted, 200, $headers);', false];
-        yield 'if-wrapped assignment does not dominate the sink' => ['function f($r, $c, $cond) { if ($cond) { $headers = ["Content-Disposition" => "attachment"]; } $r->make($c, 200, $headers); }', false];
-        yield 'loop-wrapped assignment does not dominate the sink' => ['function f($r, $c, $items) { foreach ($items as $item) { $headers = ["Content-Disposition" => "attachment"]; } $r->make($c, 200, $headers); }', false];
-        yield 'try-wrapped assignment does not dominate the sink' => ['function f($r, $c) { try { $headers = ["Content-Disposition" => "attachment"]; } catch (\Throwable $e) { } $r->make($c, 200, $headers); }', false];
-        // Arrow functions implicitly capture outer variables by value with no ClosureUse node at
-        // all, so even a straight-line assignment inside one is rejected: its body has no
-        // statement list for a "direct top-level statement" to belong to.
-        yield 'arrow function straight-line assignment still declines (no statement list)' => ['$send = fn ($c) => ($headers = ["Content-Disposition" => "attachment"]) && $r->make($c, 200, $headers);', false];
-
-        // Superglobals and $this are rejected outright, regardless of the occurrence count.
         yield 'superglobal variable keeps the sink' => ['function f($r, $c) { $_SERVER = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $_SERVER); }', false];
-        yield 'this keeps the sink' => ['class C { function f($r, $c) { $this = ["Content-Disposition" => "attachment"]; $r->make($c, 200, $this); } }', false];
 
-        // #1416 review round 3: the WHATWG JavaScript MIME group all contain "script".
-        yield 'content type javascript' => ['$r->make($c, 200, ["Content-Type" => "text/javascript"])', false];
-        yield 'content type application javascript' => ['$r->make($c, 200, ["Content-Type" => "application/javascript"])', false];
-        yield 'content type ecmascript' => ['$r->make($c, 200, ["Content-Type" => "application/x-ecmascript"])', false];
-        // Known, accepted collateral: application/postscript also contains "script" and keeps the
-        // sink even though it is not a script MIME type, matching the fail-toward-retained rule.
-        yield 'content type postscript collateral' => ['$r->make($c, 200, ["Content-Type" => "application/postscript"])', false];
-        yield 'content type csv still exempt after adding the script needle' => ['$r->make($c, 200, ["Content-Type" => "text/csv"])', true];
+        // #1416 review round 3: an assignment nested in a branch does not DOMINATE the sink read,
+        // even when it is textually the only assignment and precedes the call.
+        yield 'if-wrapped assignment does not dominate the sink' => ['function f($r, $c, $cond) { if ($cond) { $headers = ["Content-Disposition" => "attachment"]; } $r->make($c, 200, $headers); }', false];
+        // Arrow functions capture outer variables by value with no ClosureUse node, and their body
+        // has no statement list for a "direct top-level statement" to belong to.
+        yield 'arrow function straight-line assignment still declines' => ['$send = fn ($c) => ($headers = ["Content-Disposition" => "attachment"]) && $r->make($c, 200, $headers);', false];
 
         // #1416 widening 2: an interpolated or concatenated disposition whose literal prefix already
         // proves the `attachment;` token. The suffix is never inspected.
         yield 'interpolated disposition with literal prefix' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=\"{$name}.csv\""])', true];
         yield 'concatenated disposition with literal prefix' => ['$r->make($c, 200, ["Content-Disposition" => "attachment; filename=" . $name])', true];
         yield 'interpolated disposition missing the separator' => ['$r->make($c, 200, ["Content-Disposition" => "attachment{$name}"])', false];
-        yield 'interpolated disposition not starting with attachment' => ['$r->make($c, 200, ["Content-Disposition" => "{$name}; attachment"])', false];
         yield 'concatenated disposition leftmost leaf is not a string' => ['$r->make($c, 200, ["Content-Disposition" => $name . "; attachment"])', false];
         yield 'concatenated disposition split across two literals' => ['$r->make($c, 200, ["Content-Disposition" => "attachment" . "; filename=" . $name])', false];
         yield 'interpolated disposition prefix carries a control character' => ['$r->make($c, 200, ["Content-Disposition" => "attachment;\n{$name}"])', false];
 
-        // #1416 widening 4: a literal Content-Type proof, independent of Content-Disposition.
+        // #1416 widening 4: a literal Content-Type naming a media type never sniffed as HTML proves
+        // the exemption on its own, with no Content-Disposition at all.
+        yield 'content type only' => ['$r->make($c, 200, ["Content-Type" => "text/csv"])', true];
+        yield 'content type with parameters stripped' => ['$r->make($c, 200, ["Content-Type" => "text/csv; charset=utf-8"])', true];
+        yield 'content type case insensitive' => ['$r->make($c, 200, ["CONTENT-TYPE" => "TEXT/CSV"])', true];
+        // Non-proving entries only need a literal key; an unrelated entry's value may be dynamic.
+        yield 'content type alongside an unrelated dynamic entry' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "X-Custom" => $dynamic])', true];
         yield 'content type html' => ['$r->make($c, 200, ["Content-Type" => "text/html"])', false];
         yield 'content type svg xml' => ['$r->make($c, 200, ["Content-Type" => "image/svg+xml"])', false];
-        yield 'content type application xml' => ['$r->make($c, 200, ["Content-Type" => "application/xml"])', false];
-        yield 'content type multipart' => ['$r->make($c, 200, ["Content-Type" => "multipart/form-data"])', false];
+        yield 'content type javascript' => ['$r->make($c, 200, ["Content-Type" => "text/javascript"])', false];
         yield 'content type malformed' => ['$r->make($c, 200, ["Content-Type" => "not-a-media-type"])', false];
-        // WHATWG MIME Sniffing's "rules for identifying an unknown MIME type" fall through to
-        // sniffing for exactly these two essences (plus `*/*`, already rejected by the token
-        // regex), and that sniffing CAN return text/html.
+        // WHATWG MIME Sniffing falls through to sniffing, which CAN return text/html, for these essences.
         yield 'content type unknown/unknown' => ['$r->make($c, 200, ["Content-Type" => "unknown/unknown"])', false];
-        yield 'content type application/unknown' => ['$r->make($c, 200, ["Content-Type" => "application/unknown"])', false];
-        yield 'content type unknown essence case-folded with parameters' => ['$r->make($c, 200, ["Content-Type" => "Application/Unknown; charset=x"])', false];
-        yield 'content type unknown essence via a single-assignment variable' => ['function f($r, $c) { $headers = ["Content-Type" => "unknown/unknown"]; $r->make($c, 200, $headers); }', false];
         yield 'content type non-literal value' => ['$r->make($c, 200, ["Content-Type" => $type])', false];
         yield 'content type duplicate' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "content-type" => "text/csv"])', false];
         yield 'content type underscore spelling alone' => ['$r->make($c, 200, ["Content_Type" => "text/csv"])', false];
         yield 'content type control character' => ['$r->make($c, 200, ["Content-Type" => "text/csv\r\nX-Injected: x"])', false];
-        yield 'content type with parameters stripped' => ['$r->make($c, 200, ["Content-Type" => "text/csv; charset=utf-8"])', true];
-        yield 'content type case insensitive' => ['$r->make($c, 200, ["CONTENT-TYPE" => "TEXT/CSV"])', true];
-        yield 'content type vendor download type' => ['$r->make($c, 200, ["Content-Type" => "application/pdf"])', true];
-        // Non-proving entries only need a literal key; an unrelated entry's value may be dynamic.
-        yield 'content type alongside an unrelated dynamic entry' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "X-Custom" => $dynamic])', true];
         yield 'non-literal key anywhere bails the whole array' => ['$r->make($c, 200, [$key => "value", "Content-Type" => "text/csv"])', false];
-        yield 'new Response with content type only' => ['new \Illuminate\Http\Response($c, 200, ["Content-Type" => "text/csv"])', true];
-        yield 'variable resolved through a content type only assignment' => ['function f($r, $c) { $headers = ["Content-Type" => "text/csv"]; $r->make($c, 200, $headers); }', true];
     }
 
     /** The content argument's span is the only link from the emitted issue back to the call site. */

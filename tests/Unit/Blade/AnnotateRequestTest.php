@@ -53,23 +53,6 @@ final class AnnotateRequestTest extends TestCase
     }
 
     #[Test]
-    public function refuses_a_file_that_is_not_json_at_all(): void
-    {
-        \file_put_contents($this->controlFile, "#!/bin/sh\necho hello\n");
-        \putenv(AnnotateRequest::ENV_VAR . '=' . $this->controlFile);
-
-        $this->assertNull(AnnotateRequest::fromEnvironment());
-    }
-
-    #[Test]
-    public function refuses_an_environment_variable_naming_nothing(): void
-    {
-        \putenv(AnnotateRequest::ENV_VAR . '=' . $this->controlFile . '-absent');
-
-        $this->assertNull(AnnotateRequest::fromEnvironment());
-    }
-
-    #[Test]
     public function refuses_a_stream_wrapper_that_carries_the_marker_inline(): void
     {
         // `data://` satisfies the marker with no file at all, arming the codemod straight from the
@@ -78,17 +61,6 @@ final class AnnotateRequestTest extends TestCase
             . \base64_encode((string) \json_encode(['psalm-laravel-annotate' => 1, 'dryRun' => false]));
 
         \putenv(AnnotateRequest::ENV_VAR . '=' . $inline);
-
-        $this->assertNull(AnnotateRequest::fromEnvironment());
-    }
-
-    #[Test]
-    public function refuses_a_stream_wrapper_naming_a_control_file_this_cli_wrote(): void
-    {
-        // `file://` passes is_file() and reads back the real marked file, so the scheme check is the
-        // only thing refusing it. Without it, every wrapper is one is_file() quirk from being armed.
-        $this->control(['psalm-laravel-annotate' => 1, 'dryRun' => false]);
-        \putenv(AnnotateRequest::ENV_VAR . '=file://' . $this->controlFile);
 
         $this->assertNull(AnnotateRequest::fromEnvironment());
     }

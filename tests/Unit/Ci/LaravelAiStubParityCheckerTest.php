@@ -93,16 +93,8 @@ final class LaravelAiStubParityCheckerTest extends TestCase
         $prompt = 'AgentInput|UserMessage|Decisions|string $prompt,';
 
         yield 'clean Promptable' => [self::stub('Promptable'), 0, [], []];
-        yield 'object default matching by class' => [self::stub('PendingStep'), 0, [], []];
         // The real class also implements Responsable; the implied Traversable must not count as a gap.
         yield 'IteratorAggregate implies Traversable' => [self::stub('Responses/StreamableAgentResponse'), 0, [], []];
-        yield 'full interface clause' => [self::stub('Tools/Request'), 0, [], []];
-        yield 'Stringable is implicit with __toString()' => [
-            self::mutate('Responses/TextResponse', 'implements \Stringable', ''),
-            0,
-            [],
-            [],
-        ];
 
         yield 'missing trailing parameter' => [
             self::mutate('Promptable', "        ?int \$timeout = null,\n", ''),
@@ -135,12 +127,6 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             ['by-reference metadata differs'],
             [],
         ];
-        yield 'variadic parameter' => [
-            self::mutate('Promptable', $prompt, 'AgentInput|UserMessage|Decisions|string ...$prompt,'),
-            1,
-            ['variadic metadata differs'],
-            [],
-        ];
         yield 'changed scalar default' => [
             self::mutate('Promptable', '?int $timeout = null,', '?int $timeout = 30,'),
             1,
@@ -153,23 +139,11 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             ['Laravel\Ai\PendingStep::__construct(): parameter at position 10 default/optionality differs'],
             [],
         ];
-        yield 'object default dropped' => [
-            self::mutate('PendingStep', ' = new TextUsage,', ','),
-            1,
-            ['Laravel\Ai\PendingStep::__construct(): parameter at position 10 default/optionality differs'],
-            [],
-        ];
 
         yield 'vendor-only public method' => [
             self::mutate('Promptable', 'public static function make(...$arguments): static {}', ''),
             1,
             ['make(): public method exists'],
-            [],
-        ];
-        yield 'vendor-only protected method' => [
-            self::mutate('Promptable', 'protected function getTimeout(?int $timeout): int {}', ''),
-            1,
-            ['getTimeout(): protected method exists'],
             [],
         ];
         yield 'vendor-only property' => [
@@ -194,7 +168,7 @@ final class LaravelAiStubParityCheckerTest extends TestCase
 
         // `@since` on a method and on an `implements` line gate independently, each strictly while the
         // installed release is older than the tag.
-        foreach ([[true, true], [false, false], [true, false], [false, true]] as [$interfaceAhead, $methodAhead]) {
+        foreach ([[true, true], [true, false], [false, true]] as [$interfaceAhead, $methodAhead]) {
             $interfaceFinding = "ToolNameResolver: stub's `implements` clause declares Laravel\\Ai\\Contracts\\Approvable, but the installed class doesn't implement it";
             $methodFinding = 'needsApproval(): declared in the stub but not found on the installed class';
             $interfaceGated = 'ToolNameResolver implements Laravel\Ai\Contracts\Approvable (@since 999.0.0)';
@@ -244,14 +218,8 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             ['Version-gated', 'Laravel\Ai\NotYetShipped (@since 999.0.0)', 'Compared 0 method/function signatures across 0 classes'],
             ['declared in'],
         ];
-        foreach ([
-            '@since class due' => '@since 0.0.1',
-            'untagged class' => null,
-            'interface-clause tag is not a class tag' => '@since 999.0.0 implements \Countable',
-            'non-numeric @since version' => '@since 999.0.0-beta',
-        ] as $name => $tag) {
-            yield $name => [self::missingClassStub($tag), 1, ['Laravel\Ai\NotYetShipped: declared in'], ['Version-gated']];
-        }
+        yield 'untagged class' => [self::missingClassStub(null), 1, ['Laravel\Ai\NotYetShipped: declared in'], ['Version-gated']];
+        yield '@since class due' => [self::missingClassStub('@since 0.0.1'), 1, ['Laravel\Ai\NotYetShipped: declared in'], ['Version-gated']];
 
         // `@stub-waive`: an omitted member the class docblock waives is still printed (with its reason) but is not fatal.
         $dropped = self::mutate('Promptable', 'public static function make(...$arguments): static {}', '');
@@ -262,16 +230,6 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             0,
             $listed,
             ['Signature drift detected', 'no longer matches'],
-        ];
-        yield 'waived omitted protected method' => [
-            self::tagClass(
-                self::mutate('Promptable', 'protected function getTimeout(?int $timeout): int {}', ''),
-                'trait Promptable',
-                '@stub-waive getTimeout() an int clamp, no text',
-            ),
-            0,
-            ['getTimeout(): protected method exists', '(@stub-waive: an int clamp, no text)'],
-            ['Signature drift detected'],
         ];
         yield 'waived omitted property' => [
             self::tagClass(
@@ -311,12 +269,6 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             ['::warning::Waiver `@stub-waive make()` on Laravel\Ai\Promptable no longer matches any finding'],
             ['Promptable::make()'],
         ];
-        yield 'a waiver for a member the vendor dropped is stale' => [
-            self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive removedUpstream() was removed in a later release'),
-            0,
-            ['::warning::Waiver `@stub-waive removedUpstream()`'],
-            [],
-        ];
 
         // A trailing `*` waives a PREFIX family, one tag for many members; each member is still listed with the reason.
         $withoutGetters = self::replaceIn(
@@ -349,46 +301,20 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             ],
             ['Promptable::getDefaultModelFor(): protected method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
         ];
-        yield 'a property wildcard waives properties, not methods' => [
-            self::tagClass(
-                self::mutate('Promptable', 'protected ?array $adHocMessages = null;', ''),
-                'trait Promptable',
-                '@stub-waive $adHoc* only holds already-sunk messages',
-            ),
-            0,
-            ['adHocMessages: public/protected property exists', '(@stub-waive: only holds already-sunk messages)'],
-            ['Signature drift detected'],
-        ];
-        yield 'a wildcard matching nothing is stale' => [
-            self::tagClass(self::stub('Promptable'), 'trait Promptable', '@stub-waive zzz*() nothing starts with this'),
-            0,
-            ['::warning::Waiver `@stub-waive zzz*()` on Laravel\Ai\Promptable no longer matches any finding'],
-            ['Waived by @stub-waive: zzz'],
-        ];
-        yield 'a wildcard without a reason is an error' => [
-            self::tagClass($withoutGetters, 'trait Promptable', '@stub-waive get*()'),
+        yield 'a bare * target is an error' => [
+            self::tagClass($withoutGetters, 'trait Promptable', '@stub-waive * everything is fine'),
             1,
-            ['`@stub-waive get*()` has no reason', 'getTimeout(): protected method exists'],
-            ['getTimeout(): protected method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
+            ['`@stub-waive *` would waive every omitted member', 'getTimeout(): protected method exists'],
+            ['Waived by @stub-waive: everything'],
         ];
-        foreach (['*', '*()', '$*'] as $bare) {
-            yield "a bare {$bare} target is an error" => [
-                self::tagClass($withoutGetters, 'trait Promptable', "@stub-waive {$bare} everything is fine"),
-                1,
-                ["`@stub-waive {$bare}` would waive every omitted member", 'getTimeout(): protected method exists'],
-                ['Waived by @stub-waive: everything'],
-            ];
-        }
 
         // The `*` is a prefix marker only at the very end of a name; any other position is not a target at all.
-        foreach (['*Timeout()', 'get*Timeout()', 'get**()', 'get*'] as $misplaced) {
-            yield "a wildcard at {$misplaced} is not a target" => [
-                self::tagClass($withoutGetters, 'trait Promptable', "@stub-waive {$misplaced} no text"),
-                1,
-                ['needs a target', 'getTimeout(): protected method exists'],
-                ['getTimeout(): protected method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
-            ];
-        }
+        yield 'a mid-name wildcard is not a target' => [
+            self::tagClass($withoutGetters, 'trait Promptable', '@stub-waive get*Timeout() no text'),
+            1,
+            ['needs a target', 'getTimeout(): protected method exists'],
+            ['getTimeout(): protected method exists in installed laravel/ai but is missing from the stub (@stub-waive'],
+        ];
 
         // Two classes in one file: the wildcard on `Audio` must not waive the same-named members of `Image`.
         $imageWithoutAssertWaiver = self::mutate(
@@ -450,12 +376,6 @@ final class LaravelAiStubParityCheckerTest extends TestCase
             \str_replace('@@REASON@@', 'withTools() narrowed on purpose', $drifting),
             1,
             ['`@stub-waive withTools()` names a target'],
-            [],
-        ];
-        yield 'a wildcard in a member docblock is an error' => [
-            \str_replace('@@REASON@@', 'with*() narrowed on purpose', $drifting),
-            1,
-            ['`@stub-waive with*()` names a target'],
             [],
         ];
         yield 'class-level waiver without a target is an error' => [

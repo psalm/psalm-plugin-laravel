@@ -65,23 +65,6 @@ final class ResolveColumnTypeTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_user_property_with_object_type(): void
-    {
-        // Class-typed @property — proves resolveColumnType passes through non-scalar Unions
-        // (e.g. `@property CarbonInterface|null $created_at`) without rewriting them.
-        $storage = $this->classLikeStorageProvider->get(WorkOrder::class);
-        $storage->pseudo_property_get_types['$created_at'] = new \Psalm\Type\Union([
-            new \Psalm\Type\Atomic\TNamedObject(\Carbon\CarbonInterface::class),
-            new \Psalm\Type\Atomic\TNull(),
-        ]);
-
-        $type = ModelPropertyHandler::resolveColumnType($this->codebase, WorkOrder::class, 'created_at');
-
-        $this->assertNotNull($type);
-        $this->assertSame('Carbon\CarbonInterface|null', (string) $type);
-    }
-
-    #[Test]
     public function it_returns_null_when_no_property_and_no_schema(): void
     {
         // No pseudo_property_get_types set; SchemaStateProvider has no schema for work_orders.

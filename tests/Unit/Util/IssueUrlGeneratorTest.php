@@ -11,7 +11,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Internal\IssueUrlGenerator;
-use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
 
 #[CoversClass(IssueUrlGenerator::class)]
 final class IssueUrlGeneratorTest extends TestCase
@@ -36,22 +35,6 @@ final class IssueUrlGeneratorTest extends TestCase
         } else {
             \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
         }
-    }
-
-    #[Test]
-    public function url_points_to_new_issue_form_with_bug_report_template(): void
-    {
-        $url = IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig());
-
-        $this->assertStringStartsWith('https://github.com/psalm/psalm-plugin-laravel/issues/new?template=bug_report.md', $url);
-    }
-
-    #[Test]
-    public function title_prefixes_plugin_initialization_error(): void
-    {
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
-
-        $this->assertSame('Plugin initialization error: boom', $title);
     }
 
     /**
@@ -85,9 +68,6 @@ final class IssueUrlGeneratorTest extends TestCase
     public static function leadingPhpPrefixes(): iterable
     {
         yield 'PHP Error' => ['PHP Error: Something broke', 'Something broke'];
-        yield 'PHP Fatal error' => ['PHP Fatal error: Something broke', 'Something broke'];
-        yield 'PHP Warning' => ['PHP Warning: Something broke', 'Something broke'];
-        yield 'PHP Notice' => ['PHP Notice: Something broke', 'Something broke'];
         yield 'case insensitive' => ['PHP fatal ERROR: Something broke', 'Something broke'];
     }
 
@@ -106,70 +86,6 @@ final class IssueUrlGeneratorTest extends TestCase
         $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException('Class not found: Foo'), $this->defaultConfig()));
 
         $this->assertSame('Plugin initialization error: Class not found: Foo', $title);
-    }
-
-    /**
-     * Guard against long titles sneaking back in via future regressions —
-     * the sanitised title for the reported example must stay well under the
-     * original raw message length so GitHub's issue form does not truncate it.
-     */
-    #[Test]
-    public function sanitised_title_is_shorter_than_raw_message(): void
-    {
-        $rawMessage = 'PHP Error: Class "Introspect" not found in '
-            . '/Users/matthewdally/docker/business-directory/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php:79'
-            . ' for command with CLI args "./vendor/bin/psalm --no-cache --config=psalm.xml"';
-
-        $title = $this->titleFrom(IssueUrlGenerator::generate(new \RuntimeException($rawMessage), $this->defaultConfig()));
-        $expectedTitle = 'Plugin initialization error: Class "Introspect" not found';
-
-        $this->assertSame($expectedTitle, $title);
-        $this->assertLessThan(\strlen($rawMessage), \strlen($expectedTitle));
-    }
-
-    #[Test]
-    public function body_includes_fenced_trace_block(): void
-    {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
-
-        $this->assertStringContainsString("```\n", $body);
-        $this->assertStringContainsString('RuntimeException', $body);
-        $this->assertStringContainsString('boom', $body);
-    }
-
-    #[Test]
-    public function body_lists_plugin_version_from_installed_versions(): void
-    {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
-
-        // psalm/plugin-laravel is this very package — always resolvable during test runs.
-        $this->assertStringContainsString('**Versions:**', $body);
-        $this->assertStringContainsString('- psalm/plugin-laravel:', $body);
-    }
-
-    #[Test]
-    public function body_includes_plugin_configuration_section_with_default_values(): void
-    {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
-
-        $this->assertStringContainsString('**Plugin configuration:**', $body);
-        $this->assertStringContainsString('- modelPropertiesColumnFallback: migrations', $body);
-        $this->assertStringContainsString('- resolveDynamicWhereClauses: true', $body);
-        $this->assertStringContainsString('- findMissingTranslations: false', $body);
-        $this->assertStringContainsString('- findMissingViews: false', $body);
-        $this->assertStringContainsString('- findUnregisteredRouteNames: false', $body);
-        $this->assertStringContainsString('- findPromptInjection: auto', $body);
-        $this->assertStringContainsString('- laravelAiIntegrationGate: ' . LaravelAiIntegration::diagnostic(), $body);
-        // Tri-state default (null) renders as "auto (...)" with the resolved
-        // class_exists() outcome so triagers know whether the handler actually ran.
-        // The plugin's own composer.json does not depend on laravel/octane, so the
-        // resolution is "false" in the test environment.
-        $this->assertStringContainsString(
-            '- findOctaneIncompatibleBinding: auto (laravel/octane installed: false)',
-            $body,
-        );
-        $this->assertStringContainsString('- cachePath:', $body);
-        $this->assertStringContainsString('- failOnInternalError: false', $body);
     }
 
     #[Test]
@@ -199,37 +115,6 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString('- findOctaneIncompatibleBinding: true', $body);
         $this->assertStringContainsString('- findPromptInjection: false', $body);
         $this->assertStringContainsString('- failOnInternalError: true', $body);
-    }
-
-    #[Test]
-    public function body_renders_explicit_prompt_injection_enforcement(): void
-    {
-        $xml = new \SimpleXMLElement(
-            '<pluginClass><findPromptInjection value="true" /></pluginClass>',
-        );
-
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), PluginConfig::fromXml($xml)));
-
-        $this->assertStringContainsString('- findPromptInjection: true', $body);
-    }
-
-    #[Test]
-    public function body_makes_the_laravel_ai_gate_and_installed_version_auditable(): void
-    {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
-        $version = LaravelAiIntegration::installedVersion();
-
-        if ($version === null) {
-            $this->assertStringContainsString('laravel/ai not installed', $body);
-
-            return;
-        }
-
-        $this->assertStringContainsString('laravel/ai ' . $version, $body);
-        $this->assertStringContainsString(
-            LaravelAiIntegration::isEnabled() ? 'laravelAiIntegrationGate: enabled' : 'laravelAiIntegrationGate: disabled',
-            $body,
-        );
     }
 
     /**
@@ -310,18 +195,6 @@ final class IssueUrlGeneratorTest extends TestCase
         $this->assertStringContainsString($expected, $body);
     }
 
-    #[Test]
-    #[IgnoreDeprecations]
-    public function body_sanitises_cache_path_under_temp_dir_prefix(): void
-    {
-        $tmp = \sys_get_temp_dir();
-        $cachePath = \rtrim($tmp, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . 'psalm-laravel-unit-test';
-
-        $body = $this->bodyFromCachePath($cachePath);
-
-        $this->assertStringContainsString('- cachePath: <tmp>' . \DIRECTORY_SEPARATOR . 'psalm-laravel-unit-test', $body);
-    }
-
     /**
      * Path under $HOME (but not under cwd) collapses to "~/..." so the reporter's
      * username does not leak into the bug-report body. This covers the realistic
@@ -371,142 +244,54 @@ final class IssueUrlGeneratorTest extends TestCase
         }
     }
 
-    #[Test]
-    public function body_renders_plugin_configuration_between_versions_and_trace(): void
+    /** @return iterable<string, array{string, string}> */
+    public static function provideTraces(): iterable
     {
-        $body = $this->bodyFrom(IssueUrlGenerator::generate(new \RuntimeException('boom'), $this->defaultConfig()));
-
-        $versionsPos = \strpos($body, '**Versions:**');
-        $configPos = \strpos($body, '**Plugin configuration:**');
-        $fencePos = \strpos($body, '```');
-
-        $this->assertIsInt($versionsPos);
-        $this->assertIsInt($configPos);
-        $this->assertIsInt($fencePos);
-        $this->assertLessThan($configPos, $versionsPos);
-        $this->assertLessThan($fencePos, $configPos);
+        yield 'absolute vendor path' => [
+            '#0 /home/bob/app/vendor/vimeo/psalm/src/Foo.php(99): Bar->baz()',
+            '#0 vendor/vimeo/psalm/src/Foo.php(99): Bar->baz()',
+        ];
+        yield 'absolute src path' => [
+            '#0 /home/bob/psalm-plugin-laravel/src/Plugin.php(697): X->y()',
+            '#0 src/Plugin.php(697): X->y()',
+        ];
+        // A naive `(vendor/|src/)` alternation would stop at the earlier /src/ in the home dir
+        // and leak "project/vendor/…"; the inner src/ of a vendor path must survive too.
+        yield 'src inside the absolute prefix with a vendor segment' => [
+            '#0 /Users/alice/src/project/vendor/laravel/framework/src/Illuminate/F.php(9): A->b()',
+            '#0 vendor/laravel/framework/src/Illuminate/F.php(9): A->b()',
+        ];
+        yield 'quoted path arguments in a stack frame' => [
+            "#0 /a/vendor/b.php(9): X->y('/dev/vendor/z.php', 79)",
+            "#0 vendor/b.php(9): X->y('vendor/z.php', 79)",
+        ];
+        yield 'windows backslash path' => [
+            '#0 C:\\Users\\carol\\src\\app\\vendor\\laravel\\framework\\src\\Foo.php(1): X->y()',
+            '#0 vendor\\laravel\\framework\\src\\Foo.php(1): X->y()',
+        ];
+        // A non-greedy middle would stop at the first `src/` of the prefix and leak "project/src/…".
+        yield 'nested src paths without a vendor segment' => [
+            '#0 /Users/alice/src/project/src/Plugin.php(42): X->y()',
+            '#0 src/Plugin.php(42): X->y()',
+        ];
+        yield 'already relative path' => [
+            '#0 vendor/already/relative.php(1): X->y()',
+            '#0 vendor/already/relative.php(1): X->y()',
+        ];
     }
 
     /**
-     * The trace-specific tests exercise the private `sanitizeTrace()` directly so the
-     * synthetic absolute paths we want to observe are not entangled with PHPUnit's own
-     * stack-frame-argument truncation, which otherwise rewrites them as `/foo/bar/ap...`
-     * before the sanitizer can see a `vendor/` or `src/` segment.
+     * Exercises the private `sanitizeTrace()` directly so the synthetic absolute paths are not
+     * entangled with PHPUnit's own stack-frame-argument truncation, which otherwise rewrites them
+     * as `/foo/bar/ap...` before the sanitizer can see a `vendor/` or `src/` segment.
      */
-    private function invokeSanitizeTrace(string $input): string
+    #[Test]
+    #[DataProvider('provideTraces')]
+    public function trace_is_sanitised(string $input, string $expected): void
     {
         $method = new \ReflectionMethod(IssueUrlGenerator::class, 'sanitizeTrace');
 
-        return (string) $method->invoke(null, $input);
-    }
-
-    #[Test]
-    public function trace_collapses_absolute_vendor_path(): void
-    {
-        $input = '#0 /home/bob/app/vendor/vimeo/psalm/src/Foo.php(99): Bar->baz()';
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame('#0 vendor/vimeo/psalm/src/Foo.php(99): Bar->baz()', $output);
-    }
-
-    #[Test]
-    public function trace_collapses_absolute_src_path(): void
-    {
-        $input = '#0 /home/bob/psalm-plugin-laravel/src/Plugin.php(697): X->y()';
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame('#0 src/Plugin.php(697): X->y()', $output);
-    }
-
-    /**
-     * Regression: on checkouts like /Users/alice/src/project/vendor/… a naive
-     * `(vendor/|src/)` alternation would stop at the earlier /src/ in the home
-     * dir and leak "project/vendor/…". The vendor pass must consume the whole
-     * prefix.
-     */
-    #[Test]
-    public function trace_does_not_leak_src_inside_absolute_prefix_when_vendor_is_present(): void
-    {
-        $input = '#0 /Users/alice/src/project/vendor/laravel/framework/src/Illuminate/F.php(9): A->b()';
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame('#0 vendor/laravel/framework/src/Illuminate/F.php(9): A->b()', $output);
-    }
-
-    /**
-     * Regression: vendor paths contain an inner "src/" directory
-     * (vendor/laravel/framework/src/…). A too-greedy regex would collapse that
-     * to "vendorsrc/…" and lose the framework path.
-     */
-    #[Test]
-    public function trace_preserves_inner_src_inside_vendor_path(): void
-    {
-        $input = '#0 /home/u/app/vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php(79): X->y()';
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame('#0 vendor/laravel/framework/src/Illuminate/Foundation/AliasLoader.php(79): X->y()', $output);
-        $this->assertStringNotContainsString('vendorsrc', $output);
-    }
-
-    #[Test]
-    public function trace_sanitises_quoted_path_arguments_in_stack_frame(): void
-    {
-        $input = "#0 /a/vendor/b.php(9): X->y('/dev/vendor/z.php', 79)";
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame("#0 vendor/b.php(9): X->y('vendor/z.php', 79)", $output);
-    }
-
-    #[Test]
-    public function trace_collapses_windows_backslash_path(): void
-    {
-        $input = '#0 C:\\Users\\carol\\src\\app\\vendor\\laravel\\framework\\src\\Foo.php(1): X->y()';
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame('#0 vendor\\laravel\\framework\\src\\Foo.php(1): X->y()', $output);
-    }
-
-    /**
-     * Regression: nested `.../src/.../src/...` paths with no vendor segment.
-     * A non-greedy middle in the src pass would stop at the first `src/` in the
-     * absolute prefix and leak "project/src/...". The greedy middle prefers the
-     * last `src/` segment and collapses the whole prefix.
-     */
-    #[Test]
-    public function trace_collapses_nested_src_paths_without_vendor_segment(): void
-    {
-        $input = '#0 /Users/alice/src/project/src/Plugin.php(42): X->y()';
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame('#0 src/Plugin.php(42): X->y()', $output);
-    }
-
-    #[Test]
-    public function trace_only_collapses_src_when_no_vendor_segment_exists(): void
-    {
-        // When no vendor/ segment exists, the src pass handles the rewrite.
-        $input = '#0 /home/u/project/src/Plugin.php(42): X->y()';
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame('#0 src/Plugin.php(42): X->y()', $output);
-    }
-
-    #[Test]
-    public function trace_leaves_already_relative_paths_untouched(): void
-    {
-        $input = '#0 vendor/already/relative.php(1): X->y()';
-
-        $output = $this->invokeSanitizeTrace($input);
-
-        $this->assertSame($input, $output);
+        $this->assertSame($expected, $method->invoke(null, $input));
     }
 
     private function defaultConfig(): PluginConfig

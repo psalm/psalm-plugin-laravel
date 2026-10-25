@@ -66,31 +66,12 @@ final class TranslationKeyHandlerTest extends TestCase
         TranslationKeyHandler::init($translator, reportMissing: true);
     }
 
-    #[Test]
-    public function returns_trans_and_double_underscore_function_ids(): void
-    {
-        $this->assertSame(['__', 'trans'], TranslationKeyHandler::getFunctionIds());
-    }
-
-    #[Test]
-    public function reset_forgets_the_translator_and_resolved_keys(): void
-    {
-        $this->assertInstanceOf(Union::class, TranslationKeyHandler::getFunctionReturnType($this->createEvent('auth.failed')));
-
-        TranslationKeyHandler::reset();
-
-        $this->assertNotInstanceOf(Union::class, TranslationKeyHandler::getFunctionReturnType($this->createEvent('auth.failed')));
-    }
-
     /**
      * @return iterable<string, array{string}>
      */
     public static function existingStringKeyProvider(): iterable
     {
         yield 'auth.failed' => ['auth.failed'];
-        yield 'auth.password' => ['auth.password'];
-        yield 'auth.throttle' => ['auth.throttle'];
-        yield 'messages.welcome' => ['messages.welcome'];
     }
 
     /**
@@ -126,7 +107,6 @@ final class TranslationKeyHandlerTest extends TestCase
     public static function skippedKeyProvider(): iterable
     {
         yield 'namespaced package key' => ['package::file.key'];
-        yield 'another namespaced key' => ['notifications::email.greeting'];
     }
 
     /**

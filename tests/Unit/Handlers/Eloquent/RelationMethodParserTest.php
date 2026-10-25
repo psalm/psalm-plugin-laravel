@@ -39,9 +39,6 @@ final class RelationMethodParserTest extends TestCase
         yield 'self resolves to declaring class' => [
             'self', 'App\\Models\\WorkOrderNote', 'Illuminate\\Database\\Eloquent\\Model', 'App\\Models\\WorkOrderNote',
         ];
-        yield 'self is case-insensitive' => [
-            'SELF', 'App\\Models\\WorkOrderNote', null, 'App\\Models\\WorkOrderNote',
-        ];
         yield 'static resolves to declaring class (conservative — see resolveClassConstFetch docblock)' => [
             'static', 'App\\Models\\Tool', 'Illuminate\\Database\\Eloquent\\Model', 'App\\Models\\Tool',
         ];

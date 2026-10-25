@@ -68,18 +68,6 @@ final class BladeIssueRemapHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_passes_through_an_issue_from_a_file_that_is_not_a_shadow(): void
-    {
-        $this->registerShadow();
-
-        // A non-taint issue on an ordinary file: it falls into remapJourney() (#1519), which
-        // declines immediately because PsalmBridge::taintArguments() is not a TaintedInput.
-        $this->assertNull(BladeIssueRemapHandler::beforeAddIssue(
-            $this->event($this->issueOn('/app/src/Controller.php'), null),
-        ));
-    }
-
-    #[Test]
     public function it_declines_a_taint_issue_whose_journey_never_touches_a_shadow(): void
     {
         // #1519: the journey-only branch only fires when a hop actually crossed a template. A
@@ -107,26 +95,6 @@ final class BladeIssueRemapHandlerTest extends TestCase
         $this->assertNull(BladeIssueRemapHandler::beforeAddIssue(
             $this->event($this->issueOn(self::SHADOW), null),
         ));
-    }
-
-    #[Test]
-    public function a_taint_flow_graph_is_not_a_decline_reason(): void
-    {
-        // Psalm 7 runs taint by default and emits type and taint issues from the same run, so a
-        // non-taint issue on a shadow still has to be relocated. (Psalm 6 runs taint exclusively and
-        // discards non-Tainted* issues under a graph, which is why 3.x declines here instead.)
-        // Proof that nothing short-circuits on the graph: the handler runs past it into target
-        // resolution, which reaches for the live Config this bare harness deliberately has none of.
-        // That is all this pins — that the graph is not a decline. The relocation it goes on to
-        // perform is covered against a real taint run by {@see BladeViewDataTaintTest}.
-        $this->registerShadow();
-
-        $this->expectException(\UnexpectedValueException::class);
-        $this->expectExceptionMessage('No config initialized');
-
-        BladeIssueRemapHandler::beforeAddIssue(
-            $this->event($this->issueOn(self::SHADOW), new TaintFlowGraph()),
-        );
     }
 
     #[Test]

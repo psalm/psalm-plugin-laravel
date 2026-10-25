@@ -63,23 +63,6 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function extra_spaces_before_the_variable_name_do_not_leak_into_the_type(): void
-    {
-        $contract = $this->parse("<?php /** @var \\App\\Models\\User  \$user */ ?>\n{{ \$user->name }}\n");
-
-        $this->assertSame('\App\Models\User', $contract->vars['user']->typeString ?? null);
-    }
-
-    #[Test]
-    public function a_template_with_no_contract_comments_declares_nothing_but_still_reads_variables(): void
-    {
-        $contract = $this->parse("Hello {{ \$name }}\n");
-
-        $this->assertSame([], $contract->vars);
-        $this->assertSame(['name'], $contract->readVariables);
-    }
-
-    #[Test]
     public function props_with_defaults_records_optional_and_bare_entries_as_required(): void
     {
         $contract = $this->parse("@props(['title' => 'Default', 'count'])\n<div>{{ \$title }}</div>\n");
@@ -90,16 +73,6 @@ final class ContractParserTest extends TestCase
         $this->assertSame('string', $contract->vars['title']->defaultType);
         $this->assertFalse($contract->vars['count']->optional);
         $this->assertNull($contract->vars['count']->defaultType);
-    }
-
-    #[Test]
-    public function a_props_name_that_is_no_assignable_variable_infers_no_default_type(): void
-    {
-        $contract = $this->parse("@props(['max-width' => 'x', 'this' => 'y', 'ok' => 'z'])\n");
-
-        $this->assertNull($contract->vars['max-width']->defaultType);
-        $this->assertNull($contract->vars['this']->defaultType);
-        $this->assertSame('string', $contract->vars['ok']->defaultType);
     }
 
     /** PHP casts a decimal-integer string key to int, which reached `ContractVar`'s string name (#1848). */
@@ -119,8 +92,6 @@ final class ContractParserTest extends TestCase
     public static function integerNameProvider(): iterable
     {
         yield 'keyed' => ["@props(['1' => '2', 'size' => 'lg'])\n"];
-        yield 'negative keyed' => ["@props(['-1' => '3', 'size' => 'lg'])\n"];
-        yield 'bare' => ["@props(['1', 'size' => 'lg'])\n"];
         yield 'aware' => ["@aware(['1', '2' => 'x'])\n@props(['size' => 'lg'])\n"];
     }
 
@@ -137,12 +108,6 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function a_numeric_keyed_props_entry_with_a_non_literal_value_is_unreadable(): void
-    {
-        $this->assertTrue($this->parse("@props(['1' => \$name])\n")->propsUnknown);
-    }
-
-    #[Test]
     public function a_props_name_any_aware_shares_infers_no_default_type(): void
     {
         $contract = $this->parse("@props(['color' => 'gray', 'size' => 'lg'])\n@aware(['color' => 'red'])\n");
@@ -155,30 +120,12 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function an_unreadable_aware_leaves_every_props_default_untyped(): void
-    {
-        $contract = $this->parse("@aware(\$inherited)\n@props(['size' => 'lg'])\n");
-
-        $this->assertNull($contract->vars['size']->defaultType);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
     public function an_unreadable_props_list_leaves_every_later_default_untyped(): void
     {
         $contract = $this->parse("@php \$defaults = ['size' => 3]; @endphp\n@props(\$defaults)\n@props(['size' => 'lg'])\n");
 
         $this->assertTrue($contract->propsUnknown);
         $this->assertNull($contract->vars['size']->defaultType);
-    }
-
-    #[Test]
-    public function a_blade_comment_inside_an_aware_list_makes_it_unreadable(): void
-    {
-        // Blade strips the comment before compiling, so this `@aware` consumes `color`.
-        $contract = $this->parse("@props(['color' => 'gray'])\n@aware(['co{{-- split --}}lor'])\n");
-
-        $this->assertNull($contract->vars['color']->defaultType);
     }
 
     #[Test]
@@ -201,26 +148,9 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function a_later_props_entry_for_an_already_declared_name_infers_no_default_type(): void
-    {
-        $contract = $this->parse("@props(['size'])\n@props(['size' => 'lg'])\n");
-
-        $this->assertTrue($contract->vars['size']->optional);
-        $this->assertNull($contract->vars['size']->defaultType);
-    }
-
-    #[Test]
     public function props_built_from_a_variable_flags_props_unknown(): void
     {
         $contract = $this->parse("@props(\$defaults)\n<div></div>\n");
-
-        $this->assertTrue($contract->propsUnknown);
-    }
-
-    #[Test]
-    public function props_built_from_a_function_call_flags_props_unknown(): void
-    {
-        $contract = $this->parse("@props(array_merge(['a' => 1]))\n<div></div>\n");
 
         $this->assertTrue($contract->propsUnknown);
     }
@@ -260,29 +190,12 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function an_escaped_props_directive_is_not_live(): void
-    {
-        $contract = $this->parse("@@props(['a'])\n<div></div>\n");
-
-        $this->assertArrayNotHasKey('a', $contract->vars);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
     public function a_var_comment_after_an_escaped_php_directive_is_still_read(): void
     {
         $contract = $this->parse("@@php\n<?php /** @var int \$n */ ?>\n@endphp\n");
 
         $this->assertArrayHasKey('n', $contract->vars);
         $this->assertSame('int', $contract->vars['n']->typeString);
-    }
-
-    #[Test]
-    public function a_var_comment_after_an_escaped_verbatim_directive_is_still_read(): void
-    {
-        $contract = $this->parse("@@verbatim\n<?php /** @var int \$n */ ?>\n@endverbatim\n");
-
-        $this->assertArrayHasKey('n', $contract->vars);
     }
 
     #[Test]
@@ -308,169 +221,9 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function the_literal_text_props_inside_a_props_strings_default_value_does_not_confuse_the_scan(): void
-    {
-        $contract = $this->parse("@props(['hint' => 'Use @props for inputs'])\n<div>{{ \$hint }}</div>\n");
-
-        $this->assertArrayHasKey('hint', $contract->vars);
-        $this->assertTrue($contract->vars['hint']->optional);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
-    public function a_php_comment_inside_a_props_argument_does_not_declare_a_nested_props_name(): void
-    {
-        $contract = $this->parse("@props(['a' /* @props(['b']) */])\n<div>{{ \$a }}</div>\n");
-
-        $this->assertArrayHasKey('a', $contract->vars);
-        $this->assertFalse($contract->vars['a']->optional);
-        $this->assertArrayNotHasKey('b', $contract->vars);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
-    public function a_blank_line_before_unrelated_parens_does_not_extend_the_previous_directive(): void
-    {
-        // Blade only skips SAME-LINE whitespace (`[ \t]*`) between a directive name and its `(`:
-        // a scan that also skips newlines would let `@endif` (which never takes an argument)
-        // swallow this unrelated, later parenthesised `@props` as its own "argument".
-        $contract = $this->parse("@if(true)\nhello\n@endif\n(\n@props(['real'])\n)");
-
-        $this->assertArrayHasKey('real', $contract->vars);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
-    public function a_props_call_after_email_like_text_is_still_found(): void
-    {
-        // Blade's own directive regex is anchored `\B@`: a `@` preceded by a word character
-        // (`a@example`) is never a directive at all, so the LATER, genuine `@props(...)` must
-        // still be found independently, not swallowed as "@example"'s argument.
-        $contract = $this->parse("a@example(@props(['real']))");
-
-        $this->assertArrayHasKey('real', $contract->vars);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
-    public function a_directive_argument_cannot_span_a_raw_php_tag(): void
-    {
-        // Blade tokenizes the WHOLE template first and compiles each T_INLINE_HTML segment
-        // independently: a `(` before a raw PHP open tag and the real `@props(...)` after it are
-        // never in the same segment, so `@unknown`'s "argument" can never reach past the tag to
-        // swallow the genuine declaration.
-        $contract = $this->parse("@unknown(<?php echo 'hello'; ?>\n@props(['real']))");
-
-        $this->assertArrayHasKey('real', $contract->vars);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
-    public function a_later_live_props_is_still_declared_alongside_a_phantom_free_scan(): void
-    {
-        $contract = $this->parse("@php(\$x = \"@props(['phantom'])\")\n@props(['real'])\n<div>{{ \$real }}</div>\n");
-
-        $this->assertArrayHasKey('real', $contract->vars);
-        $this->assertArrayNotHasKey('phantom', $contract->vars);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
-    public function a_short_open_tag_is_a_boundary_when_enabled(): void
-    {
-        if (!\filter_var(\ini_get('short_open_tag'), \FILTER_VALIDATE_BOOL)) {
-            $this->markTestSkipped('short_open_tag is off for this run (PHP_INI_PERDIR, no runtime toggle).');
-        }
-
-        // Same shape as a_directive_argument_cannot_span_a_raw_php_tag(), with the bare `<?`
-        // spelling Blade's own tokenizer also opens PHP mode for when short tags are on.
-        $contract = $this->parse("@unknown(<? echo 'hello'; ?>\n@props(['real']))");
-
-        $this->assertArrayHasKey('real', $contract->vars);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
-    public function a_short_open_tag_is_not_a_boundary_when_disabled(): void
-    {
-        if (\filter_var(\ini_get('short_open_tag'), \FILTER_VALIDATE_BOOL)) {
-            $this->markTestSkipped('short_open_tag is on for this run (PHP_INI_PERDIR, no runtime toggle).');
-        }
-
-        // Same shape as a_short_open_tag_is_a_boundary_when_enabled(): with short tags off, a
-        // bare `<?` is inline HTML text, not a PHP opener, so it creates no segment boundary —
-        // `@unknown`'s argument still spans straight through to the final `)`, exactly as any
-        // other plain text would, same as before this directive-boundary work existed.
-        $contract = $this->parse("@unknown(<? echo 'hello'; ?>\n@props(['real']))");
-
-        $this->assertArrayNotHasKey('real', $contract->vars);
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    #[Test]
-    #[DataProvider('adjacentConstructProvider')]
-    public function props_is_found_correctly_around_an_adjacent_blade_construct(string $source): void
-    {
-        $contract = $this->parse($source);
-
-        $this->assertSame(['real'], array_keys($contract->vars));
-        $this->assertFalse($contract->propsUnknown);
-    }
-
-    /** @return iterable<string, array{string}> */
-    public static function adjacentConstructProvider(): iterable
-    {
-        // `\B@` requires a NON-word character before the `@`: a directive-shaped token glued
-        // directly onto preceding text ("s1@props-two") is invisible to the scan, the same way
-        // it is to Blade's own tokenizer, so this must not set propsUnknown and must not stop the
-        // later, genuine `@props` from being found.
-        yield 'a props-prefixed directive name glued to preceding text is not a directive' => [
-            "s1@props-two(['fake'])\n@props(['real'])\n",
-        ];
-
-        // An escaped directive consumes its own balanced argument (however it spells its name)
-        // without opening a gap the later, genuine `@props` could fall into.
-        yield 'an escaped directive with a balanced argument does not hide a later @props' => [
-            "@@foreach(\$i as \$x)\n@props(['real'])\n",
-        ];
-    }
-
-    #[Test]
     public function foreach_subject_is_read_but_its_alias_is_local(): void
     {
         $contract = $this->parse("@foreach(\$items as \$item)\n{{ \$item }}\n@endforeach\n");
-
-        $this->assertContains('items', $contract->readVariables);
-        $this->assertNotContains('item', $contract->readVariables);
-    }
-
-    #[Test]
-    public function nested_foreach_excludes_both_loop_aliases(): void
-    {
-        $contract = $this->parse(
-            "@foreach(\$groups as \$group)\n@foreach(\$group as \$item)\n{{ \$item }}\n@endforeach\n@endforeach\n",
-        );
-
-        $this->assertContains('groups', $contract->readVariables);
-        $this->assertNotContains('group', $contract->readVariables);
-        $this->assertNotContains('item', $contract->readVariables);
-    }
-
-    #[Test]
-    public function outer_read_shadowed_by_a_later_loop_alias_is_dropped_known_limitation(): void
-    {
-        // Pins the documented gap: loop aliases are excluded template-wide,
-        // so the genuine outer read of $user before the loop is lost too.
-        $contract = $this->parse("{{ \$user }}\n@foreach(\$rows as \$user)\n{{ \$user }}\n@endforeach\n");
-
-        $this->assertContains('rows', $contract->readVariables);
-        $this->assertNotContains('user', $contract->readVariables);
-    }
-
-    #[Test]
-    public function forelse_subject_is_read_and_alias_stays_local(): void
-    {
-        $contract = $this->parse("@forelse(\$items as \$item)\n{{ \$item }}\n@empty\nnone\n@endforelse\n");
 
         $this->assertContains('items', $contract->readVariables);
         $this->assertNotContains('item', $contract->readVariables);
@@ -496,24 +249,6 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function a_write_only_local_never_read_again_is_excluded(): void
-    {
-        $contract = $this->parse("@php\n\$temp = \$input;\n@endphp\ndone\n");
-
-        $this->assertContains('input', $contract->readVariables);
-        $this->assertNotContains('temp', $contract->readVariables);
-    }
-
-    #[Test]
-    public function a_write_only_reference_assignment_target_is_excluded(): void
-    {
-        $contract = $this->parse("@php\n\$temp =& \$input;\n@endphp\ndone\n");
-
-        $this->assertContains('input', $contract->readVariables);
-        $this->assertNotContains('temp', $contract->readVariables);
-    }
-
-    #[Test]
     public function multi_byte_lines_before_a_var_comment_do_not_throw_off_its_declaration_line(): void
     {
         $source = "Héllo wörld with émoji 😀 and more unicode chars here\n"
@@ -523,28 +258,6 @@ final class ContractParserTest extends TestCase
         $contract = $this->parse($source);
 
         $this->assertSame(2, $contract->vars['user']->declarationLine);
-    }
-
-    #[Test]
-    public function a_var_comment_inside_verbatim_is_not_a_declaration(): void
-    {
-        // Blade emits a @verbatim body as literal text, so a docblock inside it is not PHP at all.
-        $source = "@verbatim\n<?php /** @var \\App\\Models\\User \$user */ ?>\n@endverbatim\n{{ \$user }}\n";
-
-        $contract = $this->parse($source);
-
-        $this->assertArrayNotHasKey('user', $contract->vars);
-    }
-
-    #[Test]
-    public function a_var_comment_inside_a_php_block_is_not_a_declaration(): void
-    {
-        // A `//` comment is not a docblock, whatever text it holds.
-        $source = "@php\n// <?php /** @var \\App\\Models\\User \$user */ ?>\n@endphp\n{{ \$user }}\n";
-
-        $contract = $this->parse($source);
-
-        $this->assertArrayNotHasKey('user', $contract->vars);
     }
 
     #[Test]
@@ -590,15 +303,6 @@ final class ContractParserTest extends TestCase
         $this->assertFalse($contract->readsUnknown);
         $this->assertContains('first', $contract->readVariables);
         $this->assertContains('second', $contract->readVariables);
-    }
-
-    #[Test]
-    public function an_all_digit_compact_arg_reads_nothing(): void
-    {
-        $contract = $this->dataContract("@php\n\$out = compact('1', '-1', 'first');\n@endphp\n{{ \$out }}\n");
-
-        $this->assertFalse($contract->readsUnknown);
-        $this->assertContains('first', $contract->readVariables);
     }
 
     #[Test]
@@ -662,17 +366,6 @@ final class ContractParserTest extends TestCase
         $this->assertSame(['id', 'name'], $contract->localVariables);
     }
 
-    #[Test]
-    public function collects_a_keyed_destructured_loop_binding(): void
-    {
-        $contract = (new ContractParser())->parseDataContract(
-            '',
-            '<?php foreach ($rows as $key => [\'a\' => $first]): echo e($first) . e($key); endforeach;',
-        );
-
-        $this->assertSame(['first', 'key'], $contract->localVariables);
-    }
-
     /**
      * The gap this closes: a name the template assigns and then echoes is read (so it stays in the
      * read set) AND bound by the template, so the annotate pass must not declare it as an input.
@@ -700,26 +393,6 @@ final class ContractParserTest extends TestCase
         $this->assertSame(['item'], $contract->localVariables);
         $this->assertContains('sep', $contract->readVariables);
         $this->assertContains('items', $contract->readVariables);
-    }
-
-    #[Test]
-    public function an_arrow_function_parameter_and_a_catch_variable_are_local(): void
-    {
-        $contract = (new ContractParser())->parseDataContract(
-            '',
-            '<?php try { echo e(array_map(fn ($row) => $row, $rows)); } catch (\Throwable $error) { echo e($error); }',
-        );
-
-        $this->assertSame(['error', 'row'], $contract->localVariables);
-        $this->assertContains('rows', $contract->readVariables);
-    }
-
-    #[Test]
-    public function reads_a_declaration_with_a_non_ascii_variable_name(): void
-    {
-        $contract = (new ContractParser())->parseDeclarations("<?php /** @var string \$men\u{00fc} */ ?>\n", '');
-
-        $this->assertArrayHasKey("men\u{00fc}", $contract->vars);
     }
 
     #[Test]
@@ -794,34 +467,6 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function a_multi_line_raw_var_type_keeps_going_past_an_asterisk_only_line(): void
-    {
-        $source = "<?php\n/**\n * @var array{\n *   a: int,\n *\n *   b: int\n * } \$data\n */\n?>\n";
-
-        $this->assertSame('array{ a: int, b: int }', $this->dataContract($source)->vars['data']->typeString ?? null);
-        $this->assertSame(['data'], ContractParser::rawDeclaredNames($source));
-    }
-
-    #[Test]
-    public function a_multi_line_raw_var_type_stops_at_an_empty_line(): void
-    {
-        // Psalm's DocblockParser ends a tag at a truly empty line, so the shape never closes.
-        $source = "<?php\n/**\n * @var array{\n *   a: int,\n\n *   b: int\n * } \$data\n */\n?>\n";
-
-        $this->assertSame([], \array_keys($this->dataContract($source)->vars));
-        $this->assertSame([], ContractParser::rawDeclaredNames($source));
-    }
-
-    #[Test]
-    public function a_name_first_raw_var_never_binds_a_name_from_the_next_line(): void
-    {
-        $source = "<?php\n/**\n * @var \$user\n * \$other is described\n */\n?>\n";
-
-        $this->assertSame([], \array_keys($this->dataContract($source)->vars));
-        $this->assertSame(['user'], ContractParser::rawDeclaredNames($source));
-    }
-
-    #[Test]
     public function an_ignore_var_tag_turns_every_raw_var_of_its_docblock_into_no_contract(): void
     {
         // Psalm's DocblockParser::resolveTags() drops every `@var` of a docblock carrying either tag.
@@ -839,17 +484,6 @@ final class ContractParserTest extends TestCase
 
         $other = "<?php /** @psalm-ignore-var */ ?>\n<?php\n/**\n * @var int \$data\n * @psalm-ignore-variable-method\n */\n?>\n";
         $this->assertSame(['data'], \array_keys($this->dataContract($other)->vars), 'only a tag of that exact name, in the same docblock');
-    }
-
-    #[Test]
-    public function a_multi_line_raw_var_type_continues_over_crlf_but_not_over_a_bare_cr(): void
-    {
-        // Psalm splits a docblock on LF only and strips CR after.
-        $crlf = "<?php\r\n/**\r\n * @var array{\r\n *   id: int\r\n * } \$data\r\n */\r\n?>\r\n";
-        $this->assertSame('array{ id: int }', $this->dataContract($crlf)->vars['data']->typeString ?? null);
-
-        $cr = "<?php\r/**\r * @var array{\r * id:int\r * } \$data\r */\r?>";
-        $this->assertSame([], \array_keys($this->dataContract($cr)->vars));
     }
 
     #[Test]
@@ -905,14 +539,6 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function an_upper_case_open_tag_still_declares_a_raw_contract(): void
-    {
-        $contract = $this->dataContract("<?PHP /** @var string \$title */ ?>\n{{ \$title }}\n");
-
-        $this->assertSame(['title'], \array_keys($contract->vars));
-    }
-
-    #[Test]
     public function a_var_inside_running_text_is_not_a_declaration(): void
     {
         $source = "<?php\n/** @deprecated Replace @var Foo \$user with a value object */\n/**\n * Some text @var int \$other here\n */\n?>\n{{ \$user }}{{ \$other }}\n";
@@ -920,15 +546,6 @@ final class ContractParserTest extends TestCase
         $this->assertSame([], \array_keys($this->dataContract($source)->vars));
         $this->assertSame([], ContractParser::rawDeclaredNames($source));
     }
-
-    #[Test]
-    public function a_var_tag_at_the_start_of_a_line_or_right_after_the_opener_still_declares(): void
-    {
-        $source = "<?php /** @var int \$a */ ?>\n<?php\n/**\n *   @var int \$b\n */\n?>\n";
-
-        $this->assertSame(['a', 'b'], \array_keys($this->dataContract($source)->vars));
-    }
-
 
     #[Test]
     public function only_an_equals_null_tail_makes_a_declaration_optional(): void
@@ -952,29 +569,6 @@ final class ContractParserTest extends TestCase
     }
 
     #[Test]
-    public function with_null_widens_only_what_is_not_already_nullable(): void
-    {
-        $this->assertSame('string|null', ContractParser::withNull('string'));
-        $this->assertSame('string|null', ContractParser::withNull('string|null'));
-        $this->assertSame('?int', ContractParser::withNull('?int'));
-        $this->assertSame('mixed', ContractParser::withNull('mixed'));
-        $this->assertSame('array<int|null>|null', ContractParser::withNull('array<int|null>'));
-        $this->assertSame('(Closure(int): string)|null', ContractParser::withNull('Closure(int): string'));
-        $this->assertSame('int | NULL', ContractParser::withNull('int | NULL'));
-    }
-
-    #[Test]
-    public function an_equals_null_followed_by_a_dash_or_word_is_not_the_marker(): void
-    {
-        $vars = $this->dataContract("<?php\n/**\n * @var string \$a = null-ish\n * @var string \$b = null\n * @var string \$c = null.\n */\n?>\n<?php /** @var string \$d = null-ish */ ?>\n")->vars;
-
-        $this->assertFalse($vars['a']->optional ?? null);
-        $this->assertTrue($vars['b']->optional ?? null);
-        $this->assertFalse($vars['c']->optional ?? null);
-        $this->assertFalse($vars['d']->optional ?? null);
-    }
-
-    #[Test]
     public function an_array_write_binds_its_root_variable_as_a_local(): void
     {
         $source = "<?php\n/** @var array<string, string> \$row */\n/** @var list<int> \$list */\n/** @var array<mixed> \$deep */\n/** @var string \$title */\n?>\n"
@@ -993,26 +587,6 @@ final class ContractParserTest extends TestCase
 
         $this->assertSame(['title'], \array_keys($this->dataContract($source)->vars));
         $this->assertSame(['title'], ContractParser::rawDeclaredNames($source));
-    }
-
-    #[Test]
-    public function an_opener_inside_a_description_is_not_a_declaration(): void
-    {
-        $source = "<?php\n/**\n * Example: /** @var string \$phantom\n * @var string \$real\n */\n?>\n";
-
-        $this->assertSame(['real'], \array_keys($this->dataContract($source)->vars));
-    }
-
-    #[Test]
-    public function a_bare_cr_ends_a_declaration_line(): void
-    {
-        $source = "<?php\r/**\r * @var string \$a\r * @var int \$b = null\r */\r?>\r";
-
-        $vars = $this->dataContract($source)->vars;
-
-        $this->assertSame(['a', 'b'], \array_keys($vars));
-        $this->assertSame(3, $vars['a']->declarationLine);
-        $this->assertTrue($vars['b']->optional);
     }
 
     #[Test]

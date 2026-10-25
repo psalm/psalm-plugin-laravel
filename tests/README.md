@@ -5,7 +5,17 @@ There are 3 types of tests:
 2. **Application**: creates an empty Laravel app, adds some typical classes of different types and run Psalm over its codebase.
 3. **Unit**: uses PHPUnit to test internal logic. Most cases run in process, but some classes fork a real `vendor/bin/psalm` over a fixture project, for regressions that only reproduce under whole-program analysis. A Psalm boot costs several seconds whatever the fixture's size, so a forking class runs Psalm once (or twice for a warm-cache case) and every assertion reads that shared run, and unrelated single-purpose regressions share one fixture app (`Fixtures/BladeTemplates`, one template per behavior) rather than each owning a fixture. Prefer adding a template to an existing fixture over a new forking class. The Blade classes get that memoized run through `tests/Unit/Blade/AnalysesFixtureApp`. Each forking class is tagged `#[Group('subprocess')]`.
 
-`composer test:unit` runs everything (via `paratest --processes=auto`); `composer test:unit:fast` excludes the subprocess group for a local loop of about one second.
+`composer test:unit` runs everything (via `paratest --processes=auto`); `composer test:unit:fast` excludes the subprocess group for a local loop that finishes in seconds.
+
+## What a unit test is for
+
+Keep a unit test only when it guards a behavior that no phpt type test and no other unit test already covers. Keep one case per distinct branch of the code under test, not one per literal: a data provider with many rows that all take the same path should shrink to the rows that differ. Do not add:
+
+- tests that read `src/`, `docs/` or stubs as text to check their shape (wiring, source order, doc paths, catalog completeness);
+- tests that compare a call with itself, echo a mock's return value, or pin an incidental default or getter;
+- a unit test for handler behavior that a phpt in `tests/Type/tests` already asserts.
+
+A text check is acceptable only when it guards something a user would otherwise hit and nothing else catches (for example `IssueDocumentationTest`, because every issue links to its docs page).
 
 ## Fixture ownership (unit suite, subprocess and otherwise)
 
