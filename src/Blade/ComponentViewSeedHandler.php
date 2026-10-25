@@ -21,8 +21,8 @@ use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
  * Seeded names are never ones the template declares itself (the registry leaves them out), so a
  * template's contract still wins.
  *
- * Types only: a seeded value carries no taint data-flow node, so taint from a component's
- * properties does not reach the template.
+ * Types only: a seeded value carries no taint data-flow node. A component's properties reach the
+ * template's taint graph through {@see ViewTaintBridge}, registered after this handler.
  *
  * @internal
  */

@@ -195,6 +195,66 @@ final class ComponentRenderData
     }
 
     /**
+     * The property nodes a taint flow into `data()`'s variables can come from: `Class::$name`, per name
+     * that really reaches the view. Narrower than the typing side's superset, because here a name in the
+     * set only ever REPORTS:
+     *
+     *  - a name in a literal `$except` default is dropped (a non-literal one keeps every name);
+     *  - a public method of the same name, which wins the variable in `data()`, is not consulted (an
+     *    accepted over-report);
+     *  - the class is the one Psalm writes the property node for: the declaring class, or for a trait
+     *    property the (farthest) class using the trait, never the trait itself or an unrelated user of it.
+     *
+     * Empty when a declaring class could not be resolved: nothing is connected rather than guessed.
+     *
+     * @return array<string, string> variable name => property id
+     *
+     * @psalm-capabilities read-props
+     */
+    public static function exposedPropertyIds(Codebase $codebase, ClassLikeStorage $storage): array
+    {
+        $except = self::exceptedNames($codebase, $storage) ?? [];
+        $ids = [];
+
+        foreach (ViewClassProperties::publicOf($codebase, $storage, self::ignored(...)) ?? [] as $name => [$declaring, $property]) {
+            if ($property->is_static === true || \in_array($name, $except, true)) {
+                continue;
+            }
+
+            $ids[$name] = self::nodeClass($codebase, $storage, $declaring) . '::$' . $name;
+        }
+
+        return $ids;
+    }
+
+    /**
+     * The class whose property node Psalm writes for `$this->name = ...`: the declaring class, or for a
+     * trait the farthest class of the hierarchy that uses it. Psalm links no subclass id to an inherited
+     * property's node, so the concrete class's `Card::$message` would never be written.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function nodeClass(Codebase $codebase, ClassLikeStorage $storage, ClassLikeStorage $declaring): string
+    {
+        if (!$declaring->is_trait) {
+            return $declaring->name;
+        }
+
+        $trait = \strtolower($declaring->name);
+        $class = $storage->name;
+
+        foreach (\array_keys($storage->parent_classes) as $parent) {
+            $parentStorage = ViewClassProperties::storage($codebase, $parent);
+
+            if ($parentStorage instanceof ClassLikeStorage && isset($parentStorage->used_traits[$trait])) {
+                $class = $parentStorage->name;
+            }
+        }
+
+        return $class;
+    }
+
+    /**
      * @param bool $typedOnly skip a property with no declared type, or one a generic class declares
      *
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
