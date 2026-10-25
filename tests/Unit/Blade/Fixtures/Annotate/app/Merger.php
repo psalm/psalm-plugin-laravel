@@ -87,6 +87,21 @@ final class Merger
         return view('arrays', ['labels' => $this->labels(), 'params' => ['a' => $this->text()]]);
     }
 
+    public function framed(): View
+    {
+        return view('framed', ['content' => view('fragment')]);
+    }
+
+    public function framedHost(): View
+    {
+        return view('framed-host');
+    }
+
+    public function framedNested(): View
+    {
+        return view('framed-nested', ['row' => ['v' => view('fragment')]]);
+    }
+
     /** @return list<string> */
     private function labels(): array
     {

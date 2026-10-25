@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -48,7 +49,8 @@ final class AnnotateSafetyTest extends TestCase
 
         $this->assertTemplatesPristine($run['templates']);
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(17, $result['changed']);
+        // `framed-included` is declared only from an `@includeIsolated` producer, which older Laravel lacks.
+        $this->assertCount(\method_exists(BladeCompiler::class, 'compileIncludeIsolated') ? 20 : 19, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 
