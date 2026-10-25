@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792960520533,
+  "lastUpdate": 1792960994850,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16620,6 +16620,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1313,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "19eed9912d215380747d4833b491d4c9551670a5",
+          "message": "fix(eloquent): decline relation callback typing when the related builder is unknown #2080 (#2110)",
+          "timestamp": "2026-10-25T21:39:19+01:00",
+          "tree_id": "10b6e849b1d89ea66c73228df7fb49f8744a6dd5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/19eed9912d215380747d4833b491d4c9551670a5"
+        },
+        "date": 1792960993507,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 41.73,
+            "range": "± 1.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
             "unit": "MB"
           }
         ]
