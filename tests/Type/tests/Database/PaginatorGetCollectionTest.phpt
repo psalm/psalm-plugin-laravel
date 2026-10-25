@@ -79,28 +79,6 @@ function array_value_paginator_get_collection_stays_support(): void
 }
 
 /**
- * Customer has no custom collection, so CustomCollectionHandler must decline and let the
- * stub's own conditional return answer unmodified — including its inferred TKey. A plain
- * paginate() call can't distinguish "declined" from "answered with the same-looking base
- * Eloquent\Collection<int, Model>" (both infer TKey=int at that call site); a manually
- * constructed paginator with a single-element array literal infers a literal `0` key
- * instead, which only survives if the handler truly declined rather than reconstructing a
- * generic type with a hardcoded `int` key.
- *
- * This fixture is byte-identical to PaginatorGetCollectionKnownLimitationTest.phpt's
- * `manual_construction_holds_plain_support_collection_not_eloquent` (same assertion,
- * same construction) — kept here too for locality with the rest of this handler's
- * decline-path coverage, not because it exercises a codepath the sibling file misses.
- */
-function no_custom_collection_manual_construction_decline_preserves_inferred_key(): void
-{
-    $paginator = new LengthAwarePaginator([new Customer()], 1, 15);
-
-    $_collection = $paginator->getCollection();
-    /** @psalm-check-type-exact $_collection = Illuminate\Database\Eloquent\Collection<0, Customer> */
-}
-
-/**
  * WorkOrder and Part declare DIFFERENT custom collections (WorkOrderCollection,
  * PartCollection) — a paginator whose TValue unions both is ambiguous, which
  * `hasMultipleModelTypes()` must catch. This pins that decline branch: without it,

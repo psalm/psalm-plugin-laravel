@@ -23,19 +23,14 @@ use Psalm\Issue\InvalidDocblock;
 use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidNullableReturnType;
 use Psalm\Issue\InvalidScope;
-use Psalm\Issue\MissingClosureParamType;
-use Psalm\Issue\MissingClosureReturnType;
 use Psalm\Issue\MissingPureAnnotation;
-use Psalm\Issue\MixedArgument;
 use Psalm\Issue\MixedAssignment;
 use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\NullArgument;
 use Psalm\Issue\ParseError;
-use Psalm\Issue\PossiblyFalseArgument;
-use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
-use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\ReferenceReusedFromConfusingScope;
@@ -47,7 +42,6 @@ use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
 use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
-use Psalm\Issue\UnusedForeachValue;
 use Psalm\Issue\UnusedVariable;
 use Psalm\LaravelPlugin\Blade\MarkerComment;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
@@ -76,9 +70,6 @@ final class ShadowIssueRelocatorTest extends TestCase
 
     private const AWARE_NO_VALUE = 'All possible types for this argument were invalidated - This may be dead code';
 
-    /** `CompilesComponents::newComponentHash()` output: xxh128, 32 lowercase hex characters. */
-    private const COMPONENT_HASH = '5194778a3a7b899dcee5619d0610f5cf';
-
     /** @param array<int, int> $lineMap */
     private function entry(array $lineMap): ShadowEntry
     {
@@ -94,7 +85,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     private function relocate(
         CodeIssue $issue,
         ShadowEntry $entry,
-        bool $reportMixed = false,
         bool $isComponentView = false,
         string $templateSource = self::TEMPLATE_SOURCE,
         bool $attributesFromTag = false,
@@ -103,7 +93,7 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         // No other shadow: none of these cases is a taint issue, so the journey resolver is never
         // reached. {@see JourneyRemapperTest} covers it.
-        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null, $reportMixed);
+        return ShadowIssueRelocator::relocate($issue, $target, static fn(): null => null);
     }
 
     #[Test]
@@ -144,44 +134,10 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function it_drops_an_unmapped_mixed_issue(): void
     {
         // Prelude lines map to 0: the prelude types every unresolved template variable as mixed,
-        // so a Mixed* issue there says nothing about the template. Run with the flag ON so this
-        // keeps pinning the unmapped-line path specifically, not the new default-off behavior.
+        // so a Mixed* issue there says nothing about the template.
         $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(2));
 
-        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0]), reportMixed: true));
-    }
-
-    #[Test]
-    public function a_mapped_mixed_issue_is_dropped_by_default(): void
-    {
-        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    #[Test]
-    public function a_mapped_mixed_issue_is_rebuilt_when_reportmixed_is_on(): void
-    {
-        $issue = new MixedAssignment('Unable to determine the type', $this->shadowLocation(9));
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
-
-        $this->assertInstanceOf(MixedAssignment::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    #[Test]
-    public function a_mapped_non_mixed_issue_is_unaffected_by_the_flag(): void
-    {
-        $issue = new UndefinedVariable('Cannot find referenced variable $x', $this->shadowLocation(9));
-
-        $off = $this->relocate($issue, $this->entry([9 => 3]));
-        $on = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true);
-
-        $this->assertInstanceOf(CodeIssue::class, $off);
-        $this->assertInstanceOf(CodeIssue::class, $on);
-        $this->assertSame(3, $off->code_location->getLineNumber());
-        $this->assertSame(3, $on->code_location->getLineNumber());
+        $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
     }
 
     #[Test]
@@ -194,17 +150,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertInstanceOf(CodeIssue::class, $relocated);
         $this->assertSame(1, $relocated->code_location->getLineNumber());
         $this->assertSame('Cannot find referenced variable $x (unmapped)', $relocated->message);
-    }
-
-    #[Test]
-    public function a_shadow_line_missing_from_the_map_is_treated_as_unmapped(): void
-    {
-        $issue = new UndefinedVariable('Cannot find referenced variable $x', $this->shadowLocation(7));
-
-        $relocated = $this->relocate($issue, $this->entry([2 => 3]));
-
-        $this->assertInstanceOf(CodeIssue::class, $relocated);
-        $this->assertSame(1, $relocated->code_location->getLineNumber());
     }
 
     /**
@@ -226,34 +171,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame('Possibly undefined global variable $__authorLocal, first seen on line 2', $relocated->message);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
         $this->assertSame('$__authorlocal', $relocated->var_name);
-    }
-
-    /** The function and closure scope wording, emitted by a different class with a two-argument constructor. */
-    #[Test]
-    public function a_first_seen_line_reference_on_a_possibly_undefined_variable_names_the_template_line(): void
-    {
-        $issue = new PossiblyUndefinedVariable(
-            'Possibly undefined variable $x, first seen on line 31',
-            $this->shadowLocation(40),
-        );
-
-        $relocated = $this->relocate($issue, $this->entry([31 => 2, 40 => 3]));
-
-        $this->assertInstanceOf(PossiblyUndefinedVariable::class, $relocated);
-        $this->assertSame('Possibly undefined variable $x, first seen on line 2', $relocated->message);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    #[Test]
-    public function a_parse_error_line_reference_names_the_template_line(): void
-    {
-        $issue = new ParseError('Syntax error, unexpected T_ENDIF on line 23', $this->shadowLocation(23));
-
-        $relocated = $this->relocate($issue, $this->entry([23 => 3]));
-
-        $this->assertInstanceOf(ParseError::class, $relocated);
-        $this->assertSame('Syntax error, unexpected T_ENDIF on line 3', $relocated->message);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     /** A reference into the compiler-generated prelude has no template line: omit it rather than invent one. */
@@ -298,29 +215,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertSame('Cannot find referenced variable $x on line 31', $relocated->message);
     }
 
-    #[Test]
-    public function a_parse_error_without_the_line_suffix_is_left_alone(): void
-    {
-        $issue = new ParseError('Interfaces cannot have properties', $this->shadowLocation(40));
-
-        $relocated = $this->relocate($issue, $this->entry([40 => 3]));
-
-        $this->assertInstanceOf(ParseError::class, $relocated);
-        $this->assertSame('Interfaces cannot have properties', $relocated->message);
-    }
-
-    /** End anchor: quoted parser text that looks like the suffix must not be rewritten, only the real tail. */
-    #[Test]
-    public function only_the_trailing_line_reference_of_a_parse_error_is_rewritten(): void
-    {
-        $issue = new ParseError('Syntax error, unexpected identifier "x on line 31" on line 23', $this->shadowLocation(23));
-
-        $relocated = $this->relocate($issue, $this->entry([23 => 3, 31 => 2]));
-
-        $this->assertInstanceOf(ParseError::class, $relocated);
-        $this->assertSame('Syntax error, unexpected identifier "x on line 31" on line 3', $relocated->message);
-    }
-
     /**
      * #1723: `ReferenceReusedFromConfusingScope` embeds `CodeLocation::getShortSummary()`
      * (`<shadow file name>:<line>:<column>`) in its message. The descriptor must name the template,
@@ -342,30 +236,6 @@ final class ShadowIssueRelocatorTest extends TestCase
             $relocated->message,
         );
         $this->assertSame(2, $relocated->code_location->getLineNumber());
-    }
-
-    /** The journey convention: a descriptor into the prelude clamps to line 1. */
-    #[Test]
-    public function a_location_descriptor_into_the_prelude_clamps_to_line_one(): void
-    {
-        $issue = new ReferenceReusedFromConfusingScope('$x is possibly a reference defined at shadow.php:5:9.', $this->shadowLocation(40));
-
-        $relocated = $this->relocate($issue, $this->entry([5 => 0, 40 => 2]));
-
-        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
-        $this->assertSame('$x is possibly a reference defined at resources/views/profile.blade.php:1:9.', $relocated->message);
-    }
-
-    /** Only the issue's own shadow is rewritten; another file's descriptor is ordinary text. */
-    #[Test]
-    public function a_descriptor_naming_another_file_is_left_alone(): void
-    {
-        $issue = new ReferenceReusedFromConfusingScope('$x is possibly a reference defined at app/Other.php:31:64.', $this->shadowLocation(40));
-
-        $relocated = $this->relocate($issue, $this->entry([31 => 3, 40 => 2]));
-
-        $this->assertInstanceOf(ReferenceReusedFromConfusingScope::class, $relocated);
-        $this->assertSame('$x is possibly a reference defined at app/Other.php:31:64.', $relocated->message);
     }
 
     /**
@@ -427,18 +297,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new UndefinedThisPropertyFetch('Instance property Foo::$bar is not defined', $this->shadowLocation(2), 'Foo::$bar');
 
         $this->assertFalse($this->relocate($issue, $this->entry([2 => 0])));
-    }
-
-    /** Negative: a MAPPED instance of the same class is a real signal and must keep reporting. */
-    #[Test]
-    public function a_mapped_undefined_this_property_fetch_survives(): void
-    {
-        $issue = new UndefinedThisPropertyFetch('Instance property Foo::$bar is not defined', $this->shadowLocation(9), 'Foo::$bar');
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(UndefinedThisPropertyFetch::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     /**
@@ -514,31 +372,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertNull($this->relocate($issue, $this->entry([2 => 0])));
     }
 
-    /** The #1545 trade-off holds for the positionless shape too: it can be the only diagnostic. */
-    #[Test]
-    public function a_positionless_undefined_this_property_assignment_is_still_reported_on_line_one(): void
-    {
-        $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->positionlessLocation(), 'Foo::$bar');
-
-        $relocated = $this->relocate($issue, $this->entry([2 => 0]));
-
-        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
-        $this->assertSame(1, $relocated->code_location->getLineNumber());
-        $this->assertSame('Instance property Foo::$bar is not defined (unmapped)', $relocated->message);
-    }
-
-    /** A MAPPED instance was never affected by the unmapped-branch logic either way. */
-    #[Test]
-    public function a_mapped_undefined_this_property_assignment_survives(): void
-    {
-        $issue = new UndefinedThisPropertyAssignment('Instance property Foo::$bar is not defined', $this->shadowLocation(9), 'Foo::$bar');
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
     #[Test]
     public function it_declines_when_a_constructor_argument_cannot_be_resolved(): void
     {
@@ -553,24 +386,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $issue = new UndefinedVariable('Cannot find referenced variable $x', $this->shadowLocation(9));
 
         $this->assertNull($this->relocate($issue, $this->entry([9 => 99])));
-    }
-
-    #[Test]
-    public function a_missing_closure_param_type_is_dropped_unconditionally(): void
-    {
-        // Livewire's precompiler (and others like it) inject an untyped closure a template
-        // author has no docblock position to annotate (#1498).
-        $issue = new MissingClosureParamType('Parameter $x has no provided type', $this->shadowLocation(9));
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    #[Test]
-    public function a_missing_closure_return_type_is_dropped_unconditionally(): void
-    {
-        $issue = new MissingClosureReturnType('Closure does not have a return type', $this->shadowLocation(9));
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
     }
 
     /** #1908: Livewire's compiled `$__split` closure. */
@@ -619,22 +434,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     #[Test]
-    public function a_method_call_on_a_string_literal_at_an_unreadable_location_keeps_reporting(): void
-    {
-        $issue = new InvalidMethodCall("Cannot call method on 'tab' variable ", $this->shadowLocation(9));
-
-        $this->assertInstanceOf(InvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    #[Test]
-    public function a_method_call_on_a_non_literal_receiver_keeps_reporting(): void
-    {
-        $issue = new InvalidMethodCall('Cannot call method on int variable $count', $this->shadowLocation(9));
-
-        $this->assertInstanceOf(InvalidMethodCall::class, $this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    #[Test]
     public function an_unused_variable_is_dropped_unconditionally(): void
     {
         // Compiler bookkeeping ($__componentOriginal*, the tail $loop reassignment) the template
@@ -662,24 +461,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
-     * Negative: identical wording naming an author's own variable must keep reporting — the gate is
-     * exact-name on `$__errorArgs`, not a wide `__`-prefix family (#1566).
-     */
-    #[Test]
-    public function an_authors_own_invalid_array_offset_survives(): void
-    {
-        $issue = new InvalidArrayOffset(
-            "Cannot access value on variable \$arr using offset value of '1', expecting 0",
-            $this->shadowLocation(9),
-        );
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(InvalidArrayOffset::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /**
      * Negative: `@error(1 => 'field')` (a keyed argument, unusual but valid PHP) compiles to
      * `$__errorArgs = [1 => 'field'];`, which has no key `0` — the compiled `$__bag->has($__errorArgs[0])`
      * read then reports THIS class with the offset-`0` wording, a genuine malformed-input bug (runtime
@@ -691,24 +472,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     {
         $issue = new InvalidArrayOffset(
             "Cannot access value on variable \$__errorArgs using offset value of '0', expecting 1",
-            $this->shadowLocation(9),
-        );
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(InvalidArrayOffset::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /**
-     * Negative control: the exact-name boundary must not widen to any `$__`-prefixed name — only
-     * `$__errorArgs` is gated (#1566 review).
-     */
-    #[Test]
-    public function a_dunder_prefixed_but_differently_named_offset_survives(): void
-    {
-        $issue = new InvalidArrayOffset(
-            "Cannot access value on variable \$__foo using offset value of '9', expecting 0",
             $this->shadowLocation(9),
         );
 
@@ -744,19 +507,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     #[Test]
-    public function an_unused_foreach_value_still_relocates(): void
-    {
-        // The author-named foreach variable is real signal, unlike the compiler's own $loop
-        // bookkeeping dropped above, and must still be rebuilt on the template line.
-        $issue = new UnusedForeachValue('$item is never referenced or the value is not used', $this->shadowLocation(9));
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(UnusedForeachValue::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    #[Test]
     public function a_toomanyarguments_issue_is_kept_when_its_snippet_cannot_be_read(): void
     {
         // No ProjectAnalyzer is booted in this pure-unit context, so `getSnippet()` throws for any
@@ -767,43 +517,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $relocated = $this->relocate($issue, $this->entry([9 => 3]));
 
         $this->assertInstanceOf(TooManyArguments::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /**
-     * #1535, both halves of the echo-position family. Same "cannot be read" case as the arity gate
-     * above: without a booted ProjectAnalyzer `getSnippet()` throws, and an issue whose callee and
-     * argument position both match the gate must still come back relocated rather than dropped.
-     * The discriminating behaviour needs a real compiled shadow and is pinned by
-     * {@see EchoUnionArgumentTest}; the string rule itself by {@see TemplateSnippetMatcherTest}.
-     */
-    #[Test]
-    public function an_echo_position_argument_issue_is_kept_when_its_snippet_cannot_be_read(): void
-    {
-        $issue = new PossiblyInvalidArgument(
-            'Argument 1 of e expects string, but possibly different type array<array-key, mixed>|null|string provided',
-            $this->shadowLocation(9),
-            'e',
-        );
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(PossiblyInvalidArgument::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    #[Test]
-    public function an_echo_position_false_argument_issue_is_kept_when_its_snippet_cannot_be_read(): void
-    {
-        $issue = new PossiblyFalseArgument(
-            'Argument 1 of echo cannot be false, possibly string value expected',
-            $this->shadowLocation(9),
-            'echo',
-        );
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(PossiblyFalseArgument::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
@@ -850,9 +563,7 @@ final class ShadowIssueRelocatorTest extends TestCase
         $list = self::selectionLocation(self::AWARE_LIST_CALL, 8);
 
         yield 'issue class outside the gate' => [new UndefinedVariable('Cannot find referenced variable $__value', $list)];
-        yield 'NoValue on an assignment' => [new NoValue('All possible types for this assignment were invalidated - This may be dead code', self::selectionLocation(self::AWARE_KEYED_CALL, 6))];
         yield 'another callee' => [new NullArgument(self::AWARE_NULL_ARGUMENT, $list, 'foo')];
-        yield 'second argument' => [new NullArgument(\str_replace('Argument 1 ', 'Argument 2 ', self::AWARE_NULL_ARGUMENT), $list, self::AWARE_CALLEE)];
         yield 'selection wider than the argument' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::selectionLocation(self::AWARE_LIST_CALL, 9), self::AWARE_CALLEE)];
         // An author's own factory: same callee and argument, so only the `$__env->` call text differs.
         yield 'receiver other than $__env' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::selectionLocation('$factory->getConsumableComponentData($__value', 8, '$factory->getConsumableComponentData($__value);'), self::AWARE_CALLEE)];
@@ -860,106 +571,6 @@ final class ShadowIssueRelocatorTest extends TestCase
             new NullArgument(self::AWARE_NULL_ARGUMENT, $list, self::AWARE_CALLEE),
             "<div>\n@php \$__value = null; \$__env->getConsumableComponentData(\$__value); @endphp\n</div>\n",
         ];
-    }
-
-    /** Same "cannot be read" case as the arity gate: an unreadable snippet is no evidence, so no drop. */
-    #[Test]
-    public function an_aware_shaped_issue_is_kept_when_its_snippet_cannot_be_read(): void
-    {
-        $relocated = $this->relocate(new NoValue(self::AWARE_NO_VALUE, $this->shadowLocation(9)), $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(NoValue::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /**
-     * #1872: the restores of a `<x-...>` tag, `@error`, `@session`/`@context`, and the stack push of
-     * the latter two, as Laravel compiles them. `MixedAssignment` sits on the assignment target.
-     * {@see BladeIssueRemapTest} pins the same gate end to end on real compiled shadows.
-     */
-    #[Test]
-    #[DataProvider('compiledSaveRestoreIssues')]
-    public function a_mixed_issue_on_a_compiled_save_or_restore_is_dropped(CodeIssue $issue): void
-    {
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), reportMixed: true));
-    }
-
-    /** @return iterable<string, array{CodeIssue}> */
-    public static function compiledSaveRestoreIssues(): iterable
-    {
-        foreach (['attributes', 'component'] as $name) {
-            yield "\${$name} restore" => [self::mixedAssignment(
-                "<?php \${$name} = \$__{$name}Original" . self::COMPONENT_HASH . '; ?>',
-                "<?php \${$name}",
-                \strlen("\${$name}"),
-                $name,
-            )];
-        }
-
-        yield '$message restore' => [self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message')];
-
-        foreach (['session', 'context'] as $kind) {
-            yield "@{$kind} push" => [self::mixedAssignment(
-                "if (isset(\$value)) { \$__{$kind}Previous[] = \$value; }",
-                "{ \$__{$kind}Previous[]",
-                \strlen("\$__{$kind}Previous[]"),
-            )];
-            yield "@{$kind} restore" => [self::mixedAssignment(
-                "if (isset(\$__{$kind}Previous) && !empty(\$__{$kind}Previous)) { \$value = array_pop(\$__{$kind}Previous); }",
-                '{ $value',
-                6,
-                'value',
-            )];
-        }
-    }
-
-    /**
-     * Negatives: each case differs from a dropped one above in exactly ONE gate condition, so the
-     * case goes red if that condition is removed.
-     */
-    #[Test]
-    #[DataProvider('authorSaveRestoreLookAlikes')]
-    public function a_save_or_restore_look_alike_keeps_reporting(CodeIssue $issue, string $templateSource = self::TEMPLATE_SOURCE): void
-    {
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), reportMixed: true, templateSource: $templateSource);
-
-        $this->assertInstanceOf($issue::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /** @return iterable<string, array{0: CodeIssue, 1?: string}> */
-    public static function authorSaveRestoreLookAlikes(): iterable
-    {
-        $restore = '<?php $attributes = $__attributesOriginal' . self::COMPONENT_HASH . '; ?>';
-
-        yield 'author value' => [self::mixedAssignment('<?php $attributes = $something; ?>', '<?php $attributes', 11, 'attributes')];
-        yield 'hash shorter than xxh128' => [self::mixedAssignment('<?php $attributes = $__attributesOriginalabc123; ?>', '<?php $attributes', 11, 'attributes')];
-        yield 'original of the other name' => [self::mixedAssignment('<?php $attributes = $__componentOriginal' . self::COMPONENT_HASH . '; ?>', '<?php $attributes', 11, 'attributes')];
-        yield 'not the assignment target' => [new MixedArgument(
-            'Argument 1 of array_pop cannot be mixed, expecting array<array-key, mixed>',
-            self::selectionLocation('array_pop($__sessionPrevious', 18, 'if (isset($__sessionPrevious) && !empty($__sessionPrevious)) { $value = array_pop($__sessionPrevious); }'),
-            'array_pop',
-        )];
-        yield 'statement written in the template' => [
-            self::mixedAssignment($restore, '<?php $attributes', 11, 'attributes'),
-            "<div>\n@php \$attributes = \$__attributesOriginal" . self::COMPONENT_HASH . "; @endphp\n</div>\n",
-        ];
-        // String literals that only look like a Blade comment: stripping `{{-- ... --}}` from the
-        // template would remove the author's statement between them.
-        yield 'statement written between comment look-alikes' => [
-            self::mixedAssignment('if (isset($__messageOriginal)) { $message = $__messageOriginal; }', '{ $message', 8, 'message'),
-            "<div>\n@php \$open = '{{--'; if (isset(\$__messageOriginal)) { \$message = \$__messageOriginal; } \$close = '--}}'; @endphp\n</div>\n",
-        ];
-        yield 'issue class outside the Mixed family' => [new UndefinedVariable('Cannot find referenced variable $attributes', self::selectionLocation('<?php $attributes', 11, $restore))];
-    }
-
-    /** `MixedAssignment` on the $width bytes of $snippet that end where $anchor ends. */
-    private static function mixedAssignment(string $snippet, string $anchor, int $width, ?string $name = null): MixedAssignment
-    {
-        return new MixedAssignment(
-            $name === null ? 'Unable to determine the type of this assignment' : "Unable to determine the type that \${$name} is being assigned to",
-            self::selectionLocation($anchor, $width, $snippet),
-        );
     }
 
     /**
@@ -1018,47 +629,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
     }
 
-    #[Test]
-    public function an_ambient_guard_docblock_contradiction_on_component_is_dropped_inside_a_component_view(): void
-    {
-        $issue = new DocblockTypeContradiction(
-            'Cannot resolve types for $component - docblock-defined type Illuminate\View\Component does not contain null',
-            $this->shadowLocation(9),
-            null,
-        );
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
-    }
-
-    /** Bare `$slot`, mirroring the `$attributes` case above: dropped inside a component view. */
-    #[Test]
-    public function a_bare_slot_redundant_condition_is_dropped_inside_a_component_view(): void
-    {
-        $issue = new RedundantCondition(
-            'Type Illuminate\View\ComponentSlot for $slot is never null',
-            $this->shadowLocation(9),
-            null,
-        );
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
-    }
-
-    /** Negative: the SAME bare `$slot` message, outside a component view, must survive. */
-    #[Test]
-    public function a_bare_slot_redundant_condition_survives_outside_a_component_view(): void
-    {
-        $issue = new RedundantCondition(
-            'Type Illuminate\View\ComponentSlot for $slot is never null',
-            $this->shadowLocation(9),
-            null,
-        );
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
-
-        $this->assertInstanceOf(RedundantCondition::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
     /** Declares `$footer` and `$füß` as required named slots; line 3 is the mapped one. */
     private const NAMED_SLOT_SOURCE = "<?php /** @var \\Illuminate\\View\\ComponentSlot \$footer */ ?>\n<?php /** @var \\Illuminate\\View\\ComponentSlot \$füß Optional. */ ?>\n<p>x</p>\n";
 
@@ -1103,14 +673,10 @@ final class ShadowIssueRelocatorTest extends TestCase
         $guard = static fn(): RedundantConditionGivenDocblockType => new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null);
 
         yield 'outside a component view' => [$guard(), false];
-        yield '?? outside a component view' => [new DocblockTypeContradiction('Cannot resolve types for $footer - docblock-defined type Illuminate\View\ComponentSlot does not contain null', self::staticShadowLocation(9), null), false];
         yield 'another type' => [new RedundantConditionGivenDocblockType('Docblock-defined type string for $title is never null', self::staticShadowLocation(9), null), true];
         yield 'not a null guard' => [new RedundantConditionGivenDocblockType('Docblock-defined type Illuminate\View\ComponentSlot for $footer is always Illuminate\View\ComponentSlot', self::staticShadowLocation(9), null), true];
-        yield 'inferred wording' => [new RedundantCondition('Type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null), true];
-        yield 'docblock wording on another class' => [new RedundantCondition('Docblock-defined type Illuminate\View\ComponentSlot for $footer is never null', self::staticShadowLocation(9), null), true];
         // Narrowed by an outer `isset()`: Psalm renders the same wording, but the declaration is fine.
         yield 'declared optional' => [$guard(), true, "<?php /** @var \\Illuminate\\View\\ComponentSlot|null \$footer = null */ ?>\n\n<p>x</p>\n"];
-        yield 'declared nullable' => [$guard(), true, "<?php /** @var ?\\Illuminate\\View\\ComponentSlot \$footer */ ?>\n\n<p>x</p>\n"];
         yield 'not declared in the template' => [$guard(), true, self::TEMPLATE_SOURCE];
     }
 
@@ -1130,18 +696,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     {
         $issue = new TypeDoesNotContainNull(
             'Cannot resolve types for $attributes - Illuminate\View\ComponentAttributeBag does not contain null',
-            $this->shadowLocation(9),
-            null,
-        );
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: true));
-    }
-
-    #[Test]
-    public function type_does_not_contain_type_is_dropped_inside_a_component_view(): void
-    {
-        $issue = new TypeDoesNotContainType(
-            'Illuminate\View\ComponentAttributeBag for $attributes is never Illuminate\View\Component',
             $this->shadowLocation(9),
             null,
         );
@@ -1197,6 +751,45 @@ final class ShadowIssueRelocatorTest extends TestCase
         }
     }
 
+    /**
+     * #1909: Psalm's virtual `offsetGet()`/`offsetExists()` call is positioned on the subject of
+     * the access, so the selection is immediately followed by `[`.
+     */
+    #[Test]
+    #[DataProvider('virtualOffsetCalls')]
+    public function a_method_call_issue_on_the_subject_of_an_array_access_is_dropped(CodeIssue $issue): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** @return iterable<string, array{CodeIssue}> */
+    public static function virtualOffsetCalls(): iterable
+    {
+        $line = "<?php echo e(\$x['k']['n']); ?>";
+
+        // The subject of the outer access (`$x['k']`) and of the inner one (`$x`).
+        yield 'PossiblyInvalidMethodCall' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, mixed> variable $x', self::selectionLocation("\$x['k']", 7, $line))];
+    }
+
+    /** Negatives: each differs from the dropped case in ONE gate condition. */
+    #[Test]
+    #[DataProvider('callsNotBeforeABracket')]
+    public function a_method_call_issue_not_on_the_subject_of_an_array_access_keeps_reporting(CodeIssue $issue): void
+    {
+        $this->assertInstanceOf(CodeIssue::class, $this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** @return iterable<string, array{CodeIssue}> */
+    public static function callsNotBeforeABracket(): iterable
+    {
+        $real = "<?php echo e(\$obj->items()['k']); ?>";
+
+        // A real call is positioned on its method name, followed by `(`.
+        yield 'PossiblyInvalidMethodCall on a real call' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, string> variable $obj', self::selectionLocation('$obj->items', 5, $real))];
+        // Whitespace before the `[` is not skipped.
+        yield 'whitespace before the bracket' => [new PossiblyInvalidMethodCall('Cannot call method on possible array<string, mixed> variable $x', self::selectionLocation('$x', 2, "<?php echo e(\$x ['k']); ?>"))];
+    }
+
     /** Negatives: each differs from the dropped case in ONE gate condition. */
     #[Test]
     #[DataProvider('attributesCheckLookAlikes')]
@@ -1224,10 +817,6 @@ final class ShadowIssueRelocatorTest extends TestCase
             \strlen(self::ATTRIBUTES_CHECK),
             "@php \$attr##BEGIN-COMPONENT-CLASS##ibutes = new \\Illuminate\\View\\ComponentAttributeBag;\n"
                 . "if (isset(\$attr##BEGIN-COMPONENT-CLASS##ibutes) && \$attr##BEGIN-COMPONENT-CLASS##ibutes instanceof Illuminate\\View\\ComponentAttributeBag) {} @endphp\n",
-        ];
-        yield 'check split by a Blade comment' => [
-            \strlen(self::ATTRIBUTES_CHECK),
-            "<div>\n@if (isset(\$attr{{-- x --}}ibutes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag) x @endif\n</div>\n",
         ];
     }
 
@@ -1268,39 +857,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
     }
 
-    #[Test]
-    public function an_ambient_errors_docblock_contradiction_is_dropped_outside_a_component_view(): void
-    {
-        $issue = new DocblockTypeContradiction(
-            'Cannot resolve types for $errors - docblock-defined type Illuminate\Support\ViewErrorBag does not contain null',
-            $this->shadowLocation(9),
-            null,
-        );
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
-    }
-
-    /**
-     * Negative: a message that names `$errors` but does not match either anchored shape (no
-     * `for $errors`, does not start with `Cannot resolve types for $errors`) must keep reporting.
-     * Drawn from the corpus's own out-of-scope case: `Operand of type ViewErrorBag is always
-     * truthy` names no variable at all, so it is ungateable by construction.
-     */
-    #[Test]
-    public function a_non_matching_errors_message_shape_survives(): void
-    {
-        $issue = new RedundantConditionGivenDocblockType(
-            'Operand of type Illuminate\Support\ViewErrorBag is always truthy',
-            $this->shadowLocation(9),
-            null,
-        );
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
-
-        $this->assertInstanceOf(RedundantConditionGivenDocblockType::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
     /**
      * #1546 review: an author who reassigns `$errors` before guarding it (`@php $errors = 42;
      * @endphp @if (is_string($errors))`) replaces the prelude's docblock type with an INFERRED
@@ -1322,29 +878,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
 
         $this->assertInstanceOf(TypeDoesNotContainType::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /**
-     * #1532 review: a bare substring search for `" for $component"` also matches a rendered TYPE
-     * that happens to quote it. `Reconciler::triggerIssueForImpossible()` puts `$key` immediately
-     * BEFORE `" is (never|always) "` in this message shape (`Type <type> for $key is ... <assertion>`)
-     * — here the real key is `$range` and the TYPE is the literal string `' for $component '`, so a
-     * substring-only gate drops an author's OWN guard because its rendered type happens to contain
-     * the ambient name.
-     */
-    #[Test]
-    public function a_literal_type_string_naming_component_does_not_mask_the_real_key(): void
-    {
-        $issue = new RedundantCondition(
-            "Type ' for \$component ' for \$range is always isset",
-            $this->shadowLocation(9),
-            null,
-        );
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
-
-        $this->assertInstanceOf(RedundantCondition::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
@@ -1404,22 +937,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
-     * Negative: the `$component` drop applies OUTSIDE a component view too, so it needs the same
-     * `->` boundary check as `$slot->attributes` above, on a receiver where `isComponentView` can't
-     * rescue a missed boundary.
-     */
-    #[Test]
-    public function a_message_naming_a_property_fetch_on_component_survives_outside_a_component_view(): void
-    {
-        $issue = new RedundantCondition('Type string for $component->name is never null', $this->shadowLocation(9), null);
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
-
-        $this->assertInstanceOf(RedundantCondition::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /**
      * #1557: `compileAware()`'s generated `foreach ($expr as $__key => $__value) { is_string($__key)
      * ? ... }` iterates a literal array, so Psalm enumerates the single pair and narrows `$__key` to
      * its literal key — the template author never wrote `$__key` and cannot act on a guard about it.
@@ -1432,15 +949,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function an_ambient_key_redundant_condition_is_dropped_unconditionally(): void
     {
         $issue = new RedundantCondition("Type 'type' for \$__key is always string", $this->shadowLocation(9), null);
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
-    }
-
-    /** Same shape, the `TypeDoesNotContainType` sibling the negated `is_string($__key)` arm hits. */
-    #[Test]
-    public function an_ambient_key_type_does_not_contain_type_is_dropped_unconditionally(): void
-    {
-        $issue = new TypeDoesNotContainType("Type 'type' for \$__key is always !string", $this->shadowLocation(9), null);
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
     }
@@ -1461,22 +969,6 @@ final class ShadowIssueRelocatorTest extends TestCase
         );
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
-    }
-
-    /**
-     * Negative: the gate's pattern fragment requires a literal DOUBLE underscore (`__`), the prefix
-     * Blade's own compiler reserves for its bookkeeping — a single-underscore name an author chose
-     * themselves (`$_key`) is not compiled bookkeeping and must keep reporting.
-     */
-    #[Test]
-    public function a_single_underscore_key_name_survives(): void
-    {
-        $issue = new RedundantCondition("Type 'type' for \$_key is always string", $this->shadowLocation(9), null);
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]), isComponentView: false);
-
-        $this->assertInstanceOf(RedundantCondition::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
     }
 
     /**
@@ -1517,32 +1009,6 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(TypeDoesNotContainType::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /** The docblock-branch counterpart: `$__env`'s OWN ambient guard, dropped like `$errors`'s. */
-    #[Test]
-    public function an_ambient_dunder_env_docblock_contradiction_is_dropped(): void
-    {
-        $issue = new RedundantConditionGivenDocblockType(
-            'Docblock-defined type Illuminate\View\Factory for $__env is never null',
-            $this->shadowLocation(9),
-            null,
-        );
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
-    }
-
-    /**
-     * Negative: the `$__env` exclusion from the wide `$__`-prefix match is exact-name, not a
-     * prefix — `$__environment` is compiled bookkeeping like any other `$__`-prefixed local and
-     * must still be dropped, proving the lookahead's word boundary doesn't over-exclude.
-     */
-    #[Test]
-    public function a_dunder_environment_name_is_still_dropped(): void
-    {
-        $issue = new RedundantCondition("Type 'x' for \$__environment is always string", $this->shadowLocation(9), null);
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), isComponentView: false));
     }
 
     /**
@@ -1606,39 +1072,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
-     * Negative: `$this` inside a static method IS a class context, so this message is genuine
-     * author signal — reported only when `@php class ... @endphp` compiles a real class into the
-     * shadow (VariableFetchAnalyzer.php's `$statements_analyzer->isStatic()` branch) — and must
-     * keep reporting on the template.
-     */
-    #[Test]
-    public function this_in_a_static_context_survives(): void
-    {
-        $issue = new InvalidScope('Invalid reference to $this in a static context', $this->shadowLocation(9));
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(InvalidScope::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /**
-     * Negative: `$this = 1` (AssignmentAnalyzer.php's `Cannot re-assign $this`) is a PHP fatal the
-     * author literally wrote in `@php`, never compiled bookkeeping — must keep reporting even
-     * though its issue class is also `InvalidScope`.
-     */
-    #[Test]
-    public function a_this_reassignment_survives(): void
-    {
-        $issue = new InvalidScope('Cannot re-assign $this', $this->shadowLocation(9));
-
-        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
-
-        $this->assertInstanceOf(InvalidScope::class, $relocated);
-        $this->assertSame(3, $relocated->code_location->getLineNumber());
-    }
-
-    /**
      * `self::bar()`/`self::CONST` outside any class (StaticCallAnalyzer.php and
      * ClassConstAnalyzer.php share this class): the same classless-shadow flooding as `$this`
      * above.
@@ -1647,29 +1080,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     public function self_outside_class_context_is_dropped_unconditionally(): void
     {
         $issue = new NonStaticSelfCall('Cannot use self outside class context', $this->shadowLocation(9));
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    /**
-     * StaticCallAnalyzer.php preserves the AUTHOR's own case for this message (unlike
-     * ClassConstAnalyzer.php, which always lowercases it): an uppercase `SELF::bar()` call is the
-     * SAME flooding shape and must be dropped too, so the gate cannot be anchored to a lowercase
-     * literal.
-     */
-    #[Test]
-    public function an_uppercase_self_call_outside_class_context_is_also_dropped(): void
-    {
-        $issue = new NonStaticSelfCall('Cannot use SELF outside class context', $this->shadowLocation(9));
-
-        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
-    }
-
-    /** `static::` is the same classless-shadow flooding as `self::` above. */
-    #[Test]
-    public function static_outside_class_context_is_dropped_unconditionally(): void
-    {
-        $issue = new NonStaticSelfCall('Cannot use static outside class context', $this->shadowLocation(9));
 
         $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
     }

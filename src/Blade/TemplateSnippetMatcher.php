@@ -49,20 +49,6 @@ final class TemplateSnippetMatcher
     }
 
     /**
-     * {@see self::occursIn()}, or $snippet appears in $source with Blade comments left in. The
-     * comment strip is lexical, so `'{{--'` and `'--}}'` string literals in an author's `@php`
-     * block would otherwise remove the author's own text between them. Only turns non-matches
-     * into matches.
-     *
-     * @psalm-pure
-     */
-    public static function occursInRawOrStripped(string $snippet, string $source, string $markerPrefix): bool
-    {
-        return self::occursIn($snippet, $source, $markerPrefix)
-            || \str_contains(self::normalize($source), self::normalize(MarkerComment::strip($snippet, $markerPrefix)));
-    }
-
-    /**
      * {@see self::occursIn()}, with two of Blade's own raw-text rewrites additionally mirrored
      * onto $source before matching: `@@foo` unescaping ({@see BladeCompiler::compileStatements()},
      * the pattern that keeps `$match[1]` when it contains a second `@`) and `##BEGIN/END-COMPONENT-

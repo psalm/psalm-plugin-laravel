@@ -9,7 +9,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedIntStatus;
 
 /**
  * An int-backed enum reaching `$connection` as a plain PROPERTY DEFAULT, with no `#[Connection]` involved —
- * the other half of what {@see EnumConnectionModel} covers, and the half no attribute mirror could ever see.
+ * the half no attribute mirror could ever see.
  * `newInstanceWithoutConstructor()` applies it before any initializer runs.
  *
  * Same failure if unnormalized: `getConnectionName()`'s `enum_value()` yields the raw `int` backing value,

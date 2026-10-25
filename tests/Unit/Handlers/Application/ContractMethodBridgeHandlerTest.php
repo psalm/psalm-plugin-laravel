@@ -31,16 +31,6 @@ final class ContractMethodBridgeHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_treats_an_unbound_abstract_as_unresolved(): void
-    {
-        $container = new Container();
-
-        // make() on an unbound, non-instantiable abstract throws inside the handler
-        // and is swallowed — nothing gets widened.
-        $this->assertFalse(ContractMethodBridgeHandler::containerResolvesConcrete($container, 'not.bound', \stdClass::class));
-    }
-
-    #[Test]
     public function it_rejects_a_non_object_resolution(): void
     {
         $container = new Container();

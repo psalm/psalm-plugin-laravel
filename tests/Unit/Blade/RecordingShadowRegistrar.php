@@ -66,7 +66,7 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     /**
      * Nothing to record: the call site is `Plugin::initBladeAnalysis()`, not `BladeBootstrapper`,
      * so no test driving this double reaches it. The seam is covered end to end by
-     * `BladeRuntimeHelperVisibilityTest`.
+     * `BladeTemplatesTest`.
      */
     #[\Override]
     public function queueFilesForScanning(array $paths): void {}

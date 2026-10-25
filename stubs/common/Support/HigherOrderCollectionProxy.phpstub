@@ -8,7 +8,7 @@ namespace Illuminate\Support;
  * @template-covariant TCollection of \Illuminate\Support\Enumerable
  *
  * The template list is Laravel 13.31+'s `<TMethod, TValue, TCollection>`, declared for every supported
- * Laravel version: the runtime proxy is identical, 12.20-13.30 only lack the annotation. The collection
+ * Laravel version: the runtime proxy is identical, 12.27-13.30 only lack the annotation. The collection
  * stubs' `@property-read` blocks spell the receiver class out (`Collection<TKey, TValue>`) because a
  * `static` there stays an unparameterized `Collection&static`. TCollection is bounded by bare `Enumerable`:
  * the `Enumerable<array-key, TValue>` bound Laravel declares rejects `Collection<int, X>` (TKey is

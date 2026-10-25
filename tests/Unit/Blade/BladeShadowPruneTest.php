@@ -9,16 +9,22 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
+use Psalm\LaravelPlugin\Blade\BladeIssueRemapHandler;
 use Psalm\LaravelPlugin\Blade\ShadowManifest;
 use Symfony\Component\Process\Process;
 
 /**
- * End-to-end proof that a shadow and its manifest entry never outlive the template that produced
- * them, across two real `vendor/bin/psalm` runs. Each test gets a private scratch copy of the
- * fixture: it deletes templates between runs, which would break every other test sharing the
- * committed fixture directory.
+ * End-to-end proof, over two real `vendor/bin/psalm` runs against one scratch copy of the fixture,
+ * that a shadow and its manifest entry never outlive the template that produced them: the first run
+ * compiles both templates, the second runs after both are deleted, the empty-project path that must
+ * still reach `ShadowManifest::prune()`. Pruning one template among several is covered by
+ * ShadowManifestTest. Neither run leaks a shadow path into the report.
+ *
+ * The scratch copy exists because the test deletes templates between runs, which would break every
+ * other test sharing the committed fixture directory.
  */
 #[CoversClass(BladeBootstrapper::class)]
+#[CoversClass(BladeIssueRemapHandler::class)]
 #[CoversClass(ShadowManifest::class)]
 #[Group('subprocess')]
 final class BladeShadowPruneTest extends TestCase
@@ -39,7 +45,6 @@ final class BladeShadowPruneTest extends TestCase
         'bootstrap/app.php',
         'bootstrap/cache/.gitignore',
         'config/view.php',
-        'psalm.xml',
         'resources/views/broken.blade.php',
         'resources/views/suppressed.blade.php',
     ];
@@ -55,6 +60,24 @@ final class BladeShadowPruneTest extends TestCase
             @\mkdir(\dirname($target), 0o777, true);
             \copy(self::FIXTURE . '/' . $relative, $target);
         }
+
+        \file_put_contents($this->scratchDir . '/psalm.xml', <<<'XML'
+            <?xml version="1.0"?>
+            <psalm
+                errorLevel="1"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xmlns="https://getpsalm.org/schema/config"
+            >
+                <projectFiles>
+                    <directory name="app" />
+                </projectFiles>
+                <plugins>
+                    <pluginClass class="Psalm\LaravelPlugin\Plugin">
+                        <blade cacheDir=".cache/blade-shadows" />
+                    </pluginClass>
+                </plugins>
+            </psalm>
+            XML);
     }
 
     protected function tearDown(): void
@@ -106,7 +129,9 @@ final class BladeShadowPruneTest extends TestCase
         return $entries;
     }
 
-    /** @return list<array{type: string, file_path: string}> */
+    /**
+     * @return array{raw: string, issues: list<array{type: string, file_path: string, line_from: int}>}
+     */
     private function analyze(): array
     {
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
@@ -120,66 +145,67 @@ final class BladeShadowPruneTest extends TestCase
         // Not mustRun(): the fixture reports issues on purpose.
         $process->run();
 
-        $decoded = \json_decode($process->getOutput(), true);
-        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$process->getOutput()}\n{$process->getErrorOutput()}");
+        $raw = $process->getOutput();
+        $decoded = \json_decode($raw, true);
+        $this->assertIsArray($decoded, "Psalm did not emit a JSON report.\n{$raw}\n{$process->getErrorOutput()}");
 
         $issues = [];
 
         foreach ($decoded as $issue) {
             $this->assertIsArray($issue);
-            $issues[] = ['type' => (string) $issue['type'], 'file_path' => (string) $issue['file_path']];
+            $issues[] = [
+                'type' => (string) $issue['type'],
+                'file_path' => (string) $issue['file_path'],
+                'line_from' => (int) $issue['line_from'],
+            ];
         }
 
-        return $issues;
+        return ['raw' => $raw, 'issues' => $issues];
+    }
+
+    /**
+     * @param list<array{type: string, file_path: string, line_from: int}> $issues
+     *
+     * @return list<int>
+     */
+    private function brokenTemplateLines(array $issues): array
+    {
+        $lines = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === 'UndefinedPropertyFetch' && \str_ends_with($issue['file_path'], 'resources/views/broken.blade.php')) {
+                $lines[] = $issue['line_from'];
+            }
+        }
+
+        return $lines;
     }
 
     #[Test]
-    public function deleting_every_template_prunes_every_shadow_and_manifest_entry(): void
+    public function a_shadow_and_its_manifest_entry_never_outlive_their_templates(): void
     {
-        $this->analyze();
-        $this->assertNotSame([], $this->shadowFiles(), 'sanity: the first run should have compiled shadows');
+        $first = $this->analyze();
+        $this->assertSame([2], $this->brokenTemplateLines($first['issues']), $first['raw']);
+        $this->assertCount(2, $this->shadowFiles(), 'sanity: two templates should compile to two shadows');
+        $this->assertCount(2, $this->manifestEntries(), 'sanity: two templates should have two manifest entries');
+        // A shadow path could leak into an issue's message, code snippet or taint trail as well as
+        // `file_path`, so the whole raw report is searched.
+        $this->assertStringNotContainsString('blade-shadows', $first['raw'], 'the first run leaked a shadow path');
 
+        // Every template at once, so the run has none left: the path that must still reach prune().
+        // broken.blade.php reported above, so its absence from the report is a real signal, not one
+        // that holds whether or not the shadow gets pruned (suppressed.blade.php never reports).
         \unlink($this->scratchDir . '/resources/views/broken.blade.php');
         \unlink($this->scratchDir . '/resources/views/suppressed.blade.php');
+        $second = $this->analyze();
 
-        $issues = $this->analyze();
-        $dump = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
-
-        // Losing the class's only two callers legitimately reports its own UnusedClass issue,
-        // which is noise for this test: the pruning contract is about the shadow side, not about
-        // whatever the now-templateless app class reports on its own.
-        foreach ($issues as $issue) {
-            $this->assertStringNotContainsString('blade.php', $issue['file_path'], $dump);
+        // Losing the class's only two callers legitimately reports its own UnusedClass issue, which
+        // is noise here: the contract is about the shadow side.
+        foreach ($second['issues'] as $issue) {
+            $this->assertStringNotContainsString('blade.php', $issue['file_path'], $second['raw']);
         }
 
         $this->assertSame([], $this->shadowFiles(), 'an orphan shadow file survived on disk');
         $this->assertSame([], $this->manifestEntries(), 'an orphan manifest entry survived');
-    }
-
-    #[Test]
-    public function deleting_one_template_prunes_only_its_own_shadow(): void
-    {
-        $before = $this->analyze();
-
-        // broken.blade.php, not suppressed.blade.php: the latter's inline @psalm-suppress
-        // means it never reports an issue whether or not its shadow gets pruned, which would
-        // make the "no issue after deletion" assertion below true regardless of the fix.
-        $this->assertNotSame(
-            [],
-            \array_filter($before, static fn(array $issue): bool => \str_ends_with($issue['file_path'], 'broken.blade.php')),
-            'sanity: the template being deleted should report an issue before deletion',
-        );
-        $this->assertCount(2, $this->shadowFiles(), 'sanity: two templates should compile to two shadows');
-
-        \unlink($this->scratchDir . '/resources/views/broken.blade.php');
-
-        $issues = $this->analyze();
-
-        foreach ($issues as $issue) {
-            $this->assertStringNotContainsString('broken.blade.php', $issue['file_path']);
-        }
-
-        $this->assertCount(1, $this->shadowFiles(), "the surviving template's shadow should remain alone");
-        $this->assertCount(1, $this->manifestEntries(), "the deleted template's manifest entry should be gone");
     }
 }

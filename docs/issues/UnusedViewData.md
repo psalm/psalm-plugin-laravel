@@ -49,17 +49,26 @@ view('page', ['title' => 'Home', 'author' => 'Ada']);
 2. If the template should be using it, use it (or declare it with a `<?php /** @var T $name */ ?>` docblock or `@props`, both of which also silence this check).
 3. If it is consumed somewhere this release cannot follow, see Limitations and suppress it.
 
-## Configuration
+## Reporting level
 
-This check is disabled by default. Enable it alongside Blade analysis in your `psalm.xml`:
+Runs whenever [Blade analysis](../blade.md) is on. Without an explicit issue handler, it is reported as `info` by default: hidden unless Psalm runs with `--show-info=true`, never failing the run, and left out of a baseline. Promote that default to an error in `psalm.xml`:
 
 ```xml
-<plugins>
-    <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <blade reportUnusedViewData="true" />
-    </pluginClass>
-</plugins>
+<pluginClass class="Psalm\LaravelPlugin\Plugin">
+    <blade />
+    <experimental value="true" />
+</pluginClass>
 ```
+
+Or promote this issue alone:
+
+```xml
+<issueHandlers>
+    <PluginIssue name="UnusedViewData" errorLevel="error" />
+</issueHandlers>
+```
+
+Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy, regardless of `<experimental>`.
 
 ## Suppressing it
 
@@ -75,4 +84,4 @@ Every gate below silences the check for that call site rather than guessing:
 - **Ambient names are never reported.** `$errors`, `$slot`, `$attributes`, `$component`, `$loop`, and `$__env` are Blade's own, so passing one is never wrong about the template.
 - **Loop aliases count as read.** `@foreach ($items as $item)` marks both `items` and `item` as read: the read set is deliberately template-wide rather than scope-aware, and over-counting a name as used is the safe direction.
 - **A write-only variable does not count as a read.** `@php $key = 1; @endphp` with `key` passed in is reported, because the passed value is provably discarded.
-- The call shapes recognized are the same ones [`validateViewData`](../config.md#validateviewdata) recognizes, and a key is only checked when it is a literal string in the data array or a `with()` call.
+- The call shapes recognized are the same ones [MissingViewData](MissingViewData.md) recognizes, and a key is only checked when it is a literal string in the data array or a `with()` call.

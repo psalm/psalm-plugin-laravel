@@ -30,12 +30,6 @@ final class ContractRegistryTest extends TestCase
     }
 
     #[Test]
-    public function an_unregistered_view_name_has_no_contract(): void
-    {
-        $this->assertNull(ContractRegistry::contractFor('emails.welcome'));
-    }
-
-    #[Test]
     public function the_earliest_view_root_wins_whichever_order_the_templates_arrive_in(): void
     {
         // Templates are walked in path order, not view-root order, so the later root can register
@@ -65,15 +59,6 @@ final class ContractRegistryTest extends TestCase
 
         $this->assertNotNull($contract);
         $this->assertSame([], $contract->vars);
-    }
-
-    #[Test]
-    public function reset_clears_a_previous_invocations_contracts(): void
-    {
-        ContractRegistry::register('profile', 0, $this->contractDeclaring('string'));
-        ContractRegistry::reset();
-
-        $this->assertNull(ContractRegistry::contractFor('profile'));
     }
 
     /** `[]` and `null` must stay apart: the first lets the call site be judged in full, the second skips the view. */

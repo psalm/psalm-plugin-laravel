@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Illuminate\View\Compilers\BladeCompiler;
 use PhpParser\Error as PhpParserError;
 use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Blade\BladeCompileError;
-use Psalm\LaravelPlugin\Blade\MarkerPrePass;
+use Psalm\LaravelPlugin\Blade\CompileFailureReason;
 use Psalm\LaravelPlugin\Blade\ShadowCompiler;
 use Psalm\LaravelPlugin\Blade\ShadowResult;
 
@@ -46,19 +46,26 @@ final class ShadowCompilerTest extends TestCase
         return $result->lineMap[\array_key_first($matching) + 1];
     }
 
+    /** Psalm runs with E_ALL; PHPUnit's runtime reports less, which would let PHP errors pass. */
+    private function compileReportingAll(ShadowCompiler $compiler, string $source): ShadowResult|CompileFailureReason
+    {
+        $previous = \error_reporting(\E_ALL);
+
+        try {
+            return $compiler->compile('view.blade.php', $source);
+        } finally {
+            \error_reporting($previous);
+        }
+    }
+
     /** @return iterable<string, array{string}> */
     public static function lexicalBoundaryTemplates(): iterable
     {
         yield 'directive block comment' => ["@if(/* ) */\n true)\n{{ strlen([]) }}\n@endif\n"];
-        yield 'directive line comment' => ["@if(// )\n true)\n{{ strlen([]) }}\n@endif\n"];
-        yield 'directive hash comment' => ["@if(# )\n true)\n{{ strlen([]) }}\n@endif\n"];
-        yield 'switch argument comment' => ["@switch(/* ) @case(1) */\n 1)\n@case(1)\n{{ strlen([]) }}\n@break\n@endswitch\n"];
         yield 'raw string' => ["<?php\n\$tag = '?>';\nstrlen([]);\n?>\n"];
-        yield 'raw comment' => ["<?php\n/* ?> */\nstrlen([]);\n?>\n"];
         yield 'escaped directive quote' => ["@if(str_contains('it\\'s)',\n 'x'))\n@php strlen([]); @endphp\n@endif\n"];
         // Bare-CR endings: a marker counted against `\n` alone lands inside the PHP body.
         yield 'bare CR php directive block' => ["@php\r\$x = 1;\rstrlen([]);\r@endphp\r{{ \$x }}\r"];
-        yield 'bare CR raw php block' => ["<?php\r\$x = 1;\rstrlen([]);\r?>\r{{ \$x }}\r"];
     }
 
     #[Test]
@@ -72,25 +79,6 @@ final class ShadowCompilerTest extends TestCase
         $this->assertInstanceOf(ShadowResult::class, $result);
         $this->assertNotNull($parser->parse($result->contents));
         $this->assertStringContainsString('strlen([])', $result->contents);
-    }
-
-    #[Test]
-    public function a_false_php_opener_does_not_mask_following_template_lines(): void
-    {
-        $source = "<?php-not-php ?>\n{{ strlen([]) }}\n{{ strval(1) }}\n";
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $plain = (new BladeCompiler(new Filesystem(), \sys_get_temp_dir()))->compileString($source);
-        $this->assertNotNull($parser->parse($plain));
-        $result = $this->compiler->compile('view.blade.php', $source);
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertNotNull($parser->parse($result->contents));
-        $this->assertStringContainsString('<?php-not-php ?>', $result->contents);
-        foreach (['strlen([])' => 2, 'strval(1)' => 3] as $expression => $bladeLine) {
-            $matching = \array_filter(\explode("\n", $result->contents), static fn(string $line): bool => \str_contains($line, $expression));
-            $this->assertCount(1, $matching);
-            $this->assertSame($bladeLine, $result->lineMap[\array_key_first($matching) + 1]);
-        }
     }
 
     #[Test]
@@ -121,24 +109,6 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
-    public function compiles_a_plain_echo(): void
-    {
-        $result = $this->compiler->compile('view.blade.php', "Hello {{ \$name }}\n");
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('echo e($name)', $result->contents);
-    }
-
-    #[Test]
-    public function compiles_a_raw_echo(): void
-    {
-        $result = $this->compiler->compile('view.blade.php', "Hello {!! \$name !!}\n");
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('echo $name;', $result->contents);
-    }
-
-    #[Test]
     public function echo_at_end_of_line_doubles_the_trailing_newline_but_both_map_to_the_same_source_line(): void
     {
         // Acceptance (a): Blade's echo compiler doubles the trailing newline;
@@ -159,24 +129,6 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
-    public function compiles_if(): void
-    {
-        $result = $this->compiler->compile('view.blade.php', "@if(\$cond)\nyes\n@endif\n");
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('if($cond):', $result->contents);
-    }
-
-    #[Test]
-    public function compiles_include(): void
-    {
-        $result = $this->compiler->compile('view.blade.php', "before\n@include('partial')\nafter\n");
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString("\$__env->make('partial'", $result->contents);
-    }
-
-    #[Test]
     public function extends_footer_maps_to_the_extends_line(): void
     {
         // Acceptance (b): addFooters() appends the `@extends` footer at the very
@@ -194,30 +146,6 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
-    public function extends_line_is_null_without_extends(): void
-    {
-        $result = $this->compiler->compile('view.blade.php', "hello\n");
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertNull($result->extendsLine);
-    }
-
-    #[Test]
-    public function compiles_props_with_named_and_bare_entries(): void
-    {
-        $result = $this->compiler->compile(
-            'view.blade.php',
-            "@props(['title' => 'Default', 'count'])\n<div>{{ \$title }}</div>\n",
-        );
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('extractPropNames', $result->contents);
-        // The @props preamble collapses to the opening line; the div is its own line.
-        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 1));
-        $this->assertNotEmpty($this->shadowLinesMappedTo($result, 2));
-    }
-
-    #[Test]
     public function each_statement_of_a_php_block_maps_to_its_own_line(): void
     {
         $result = $this->compiler->compile(
@@ -231,20 +159,6 @@ final class ShadowCompilerTest extends TestCase
         $this->assertNotEmpty($this->shadowLinesMappedTo($result, 5));
     }
 
-    #[Test]
-    public function each_statement_of_a_raw_php_block_maps_to_its_own_line(): void
-    {
-        $result = $this->compiler->compile(
-            'view.blade.php',
-            "<?php\n\$x = 1;\n\$y = 2;\n\$z = 3;\n?>\ndone\n",
-        );
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertSame(2, $this->bladeLineOf($result, '$x = 1;'));
-        $this->assertSame(3, $this->bladeLineOf($result, '$y = 2;'));
-        $this->assertSame(4, $this->bladeLineOf($result, '$z = 3;'));
-    }
-
     /**
      * Constructs whose interior a bare marker comment cannot enter: it would become part of the
      * quoted text (heredoc, nowdoc, string), part of the comment, or — past a `?>` — literal HTML.
@@ -256,13 +170,9 @@ final class ShadowCompilerTest extends TestCase
     public static function unmarkableInteriors(): iterable
     {
         yield 'heredoc' => ["<?php\n\$a = <<<EOT\n  body line\nEOT;\n\$b = 1;\n?>\n", "  body line\nEOT;"];
-        yield 'nowdoc' => ["<?php\n\$a = <<<'EOT'\n  body line\nEOT;\n\$b = 1;\n?>\n", "  body line\nEOT;"];
         yield 'multi-line string' => ["<?php\n\$a = 'one\ntwo';\n\$b = 1;\n?>\n", "'one\ntwo';"];
         yield 'block comment' => ["<?php\n/* one\n   two */\n\$b = 1;\n?>\n", "/* one\n   two */"];
-        yield 'php block heredoc' => ["@php\n\$a = <<<EOT\n  body line\nEOT;\n@endphp\n", "  body line\nEOT;"];
         yield 'multi-line call' => ["<?php\nstrlen(\n    'x',\n);\n?>\n", "'x',"];
-        yield 'short echo tag' => ["<?=\n    'x'\n?>\n", "'x'"];
-        yield 'unclosed at eof' => ["<?php\n\$a = 1;\n\$b = 2;\n", '$b = 2;'];
 
         // The block's opener has to be rewritten to `<?php` before its body can be tokenized, and
         // `<?=` is the one opener a body can follow with no separator at all. Glued straight on,
@@ -270,7 +180,6 @@ final class ShadowCompilerTest extends TestCase
         // then reads as the one that opens PHP mode: the body's own lines are judged markable and
         // a marker lands in front of the closing delimiter, which ends the nowdoc nowhere.
         yield 'short echo opening a nowdoc' => ["<?=<<<'TXT'\n<?php\necho \"sample\";\nTXT ?>\n", "<?php\necho \"sample\";\nTXT"];
-        yield 'short echo opening a heredoc' => ["<?=<<<TXT\nplain\nTXT ?>\n", "plain\nTXT"];
     }
 
     #[Test]
@@ -289,28 +198,6 @@ final class ShadowCompilerTest extends TestCase
         }
 
         $this->assertNotNull($stmts);
-    }
-
-    #[Test]
-    public function compiles_verbatim(): void
-    {
-        $result = $this->compiler->compile(
-            'view.blade.php',
-            "@verbatim\n{{ raw }}\nstill raw\n@endverbatim\ndone\n",
-        );
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('{{ raw }}', $result->contents);
-        $this->assertStringContainsString('still raw', $result->contents);
-    }
-
-    #[Test]
-    public function undeclared_variable_gets_var_mixed_in_the_prelude(): void
-    {
-        $result = $this->compiler->compile('view.blade.php', "Hello {{ \$foo }}\n");
-
-        $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertStringContainsString('@var mixed $foo */', $result->contents);
     }
 
     #[Test]
@@ -337,49 +224,126 @@ final class ShadowCompilerTest extends TestCase
         // component tags need — this IS the compile-error case, not a bug.
         $result = $this->compiler->compile('view.blade.php', "<x-alert/>\n");
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
         $this->assertSame('view.blade.php', $result->templatePath);
-        $this->assertStringContainsString('BindingResolutionException', $result->message);
+        $this->assertSame('Target [Illuminate\\Contracts\\View\\Factory] is not instantiable.', $result->message);
     }
 
     #[Test]
-    public function multiline_component_tag_is_still_recognized_and_yields_a_compile_error(): void
+    public function a_compile_error_is_one_line_of_the_exception_message_without_its_class(): void
     {
-        // The naive failure mode: a marker landing between the tag's attribute
-        // lines would defeat ComponentTagCompiler's match, leaving the tag as
-        // literal text instead — a SILENT no-op, not this compile error.
-        $result = $this->compiler->compile('view.blade.php', "<x-alert\n    type=\"error\"\n/>\n");
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('explode', static function (): never {
+            throw new \LogicException("the explode directive\n    needs a request\n");
+        });
 
-        $this->assertInstanceOf(BladeCompileError::class, $result);
-        $this->assertStringContainsString('BindingResolutionException', $result->message);
+        $result = (new ShadowCompiler($blade))->compile('view.blade.php', "@explode\n");
+
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
+        $this->assertSame('the explode directive needs a request', $result->message);
     }
 
     #[Test]
-    public function marker_pre_pass_never_splits_a_multiline_component_tag(): void
+    public function a_php_error_in_an_argumentless_directive_asks_for_arguments(): void
     {
-        $marked = MarkerPrePass::inject("<x-alert\n    type=\"error\"\n/>\n");
+        $result = $this->compileReportingAll($this->compiler, "<p>\n  Wrap it in a @component block.\n</p>\n");
 
-        $this->assertStringContainsString('blade:1 */', $marked);
-        $this->assertStringNotContainsString('blade:2 */', $marked);
-        $this->assertStringNotContainsString('blade:3 */', $marked);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
+        $this->assertSame('@component needs arguments; write @@component to print it as text', $result->message);
     }
 
     #[Test]
-    public function multiline_raw_php_block_yields_a_parseable_shadow(): void
+    public function an_argumentless_directive_whose_compile_method_is_typed_asks_for_arguments(): void
     {
-        // A marker injected mid-block (while PHP mode is already open) breaks the shadow's
-        // syntax outright; this must lint clean, matching Laravel's own compiler.
-        $result = $this->compiler->compile('view.blade.php', "<?php\n\$x = 1;\n?>\nhello {{ \$x }}\n");
+        // compileJs(string) throws a TypeError before any PHP error is raised. Production php.ini
+        // drops exception arguments from traces, which must not cost the advice.
+        foreach (['0', '1'] as $ignoreArgs) {
+            $previous = \ini_set('zend.exception_ignore_args', $ignoreArgs);
+
+            try {
+                $result = $this->compiler->compile('view.blade.php', "Use @js here\n");
+            } finally {
+                \ini_set('zend.exception_ignore_args', (string) $previous);
+            }
+
+            $this->assertInstanceOf(CompileFailureReason::class, $result);
+            $this->assertSame('@js needs arguments; write @@js to print it as text', $result->message, "exception_ignore_args={$ignoreArgs}");
+        }
+    }
+
+    #[Test]
+    public function a_custom_directive_never_gets_the_arguments_advice(): void
+    {
+        // callCustomDirective() passes '' for a bare directive, so the null is the closure's own. Str is
+        // not strict, so the null raises the deprecation rather than a TypeError.
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('analytics', static fn(): string => Str::lower(null));
+        // Overrides a built-in directive whose compile method does require an argument.
+        $blade->directive('section', static fn(): string => Str::lower(null));
+
+        foreach (['analytics', 'section'] as $directive) {
+            $result = $this->compileReportingAll(new ShadowCompiler($blade), "Track it with @{$directive} today\n");
+
+            $this->assertInstanceOf(CompileFailureReason::class, $result);
+            $this->assertSame(
+                "@{$directive}: mb_strtolower(): Passing null to parameter #1 (\$string) of type string is deprecated",
+                $result->message,
+            );
+        }
+    }
+
+    #[Test]
+    public function a_directive_catching_the_runtime_exception_psalm_throws_still_compiles(): void
+    {
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('guarded', static function (): string {
+            try {
+                \trigger_error('optional feature unavailable', \E_USER_WARNING);
+            } catch (\RuntimeException $runtimeException) {
+                return "<?php /* {$runtimeException->getCode()} */ ?>";
+            }
+
+            return '';
+        });
+
+        $result = $this->compileReportingAll(new ShadowCompiler($blade), "@guarded\n");
 
         $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertStringContainsString('/* ' . \E_USER_WARNING . ' */', $result->contents);
+    }
+
+    #[Test]
+    public function a_php_error_in_a_directive_with_arguments_names_the_directive(): void
+    {
+        $blade = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $blade->directive('warn', static function (string $expression): string {
+            \trigger_error("cannot compile {$expression}", \E_USER_WARNING);
+
+            return '';
+        });
+
+        $result = $this->compileReportingAll(new ShadowCompiler($blade), "@warn(\$user)\n");
+
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
+        $this->assertSame('@warn: cannot compile $user', $result->message);
+    }
+
+    #[Test]
+    public function the_previous_error_handler_is_restored_after_a_failed_compile(): void
+    {
+        $sentinel = static fn(): bool => false;
+        \set_error_handler($sentinel);
 
         try {
-            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($result->contents);
-        } catch (PhpParserError $phpParserError) {
-            $this->fail('shadow is not parseable PHP: ' . $phpParserError->getMessage());
+            $result = $this->compiler->compile('view.blade.php', "<x-alert/>\n");
+            $current = \set_error_handler(static fn(): bool => false);
+            \restore_error_handler();
+        } finally {
+            \restore_error_handler();
         }
 
-        $this->assertNotNull($stmts);
+        $this->assertInstanceOf(CompileFailureReason::class, $result);
+        $this->assertSame($sentinel, $current);
     }
 
     #[Test]

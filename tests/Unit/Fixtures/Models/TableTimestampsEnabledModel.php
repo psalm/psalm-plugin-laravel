@@ -10,9 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * `#[Table(timestamps: true)]` on an otherwise-default model: the only fixture that reaches
  * `initializeHasTimestamps()`'s `$timestamps = $table->timestamps` assignment with `true` on the
- * right-hand side. Every other
- * `timestamps: true` fixture short-circuits before it — {@see TimestampsAttributePrecedenceModel} on
- * `#[WithoutTimestamps]`, {@see AttributeOverriddenByPropertyModel} on the `!== true` guard.
+ * right-hand side. The other
+ * `timestamps: true` fixture, {@see AttributeOverriddenByPropertyModel}, short-circuits on the `!== true` guard.
  *
  * Without it, a registry that recorded `false` for every attribute-configured model would pass the rest of
  * the timestamps cases while inverting #1276: a `timestamps: true` model reporting false where runtime

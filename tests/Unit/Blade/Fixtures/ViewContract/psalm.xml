@@ -9,7 +9,8 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <blade validateViewData="true" cacheDir=".cache/blade-shadows" />
+            <blade cacheDir=".cache/blade-shadows" />
+            <experimental value="true" />
         </pluginClass>
     </plugins>
 </psalm>

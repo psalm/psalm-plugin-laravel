@@ -11,18 +11,14 @@ use App\Models\Customer;
 use App\Models\DamageReport;
 use App\Models\Part;
 use App\Models\WorkOrder;
-use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Codebase;
-use Psalm\LaravelPlugin\Handlers\Eloquent\CustomCollectionHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\CustomTypeDetector;
 use Psalm\Progress\VoidProgress;
 
 /**
- * Tests custom collection detection in CustomTypeDetector.
- *
  * Priority matches Laravel's HasCollection::newCollection():
  * 1. newCollection() override (bypasses everything when present)
  * 2. #[CollectedBy] attribute (checked first in base method, walks parent chain)
@@ -31,143 +27,36 @@ use Psalm\Progress\VoidProgress;
 #[CoversClass(CustomTypeDetector::class)]
 final class CustomCollectionDetectionTest extends TestCase
 {
-    #[\Override]
-    protected function tearDown(): void
-    {
-        // Reset static state to prevent leaking between tests.
-        (new \ReflectionProperty(CustomCollectionHandler::class, 'modelToCollectionMap'))->setValue(null, []);
-    }
-
     #[Test]
-    public function it_registers_custom_collection_for_model_with_collected_by_attribute(): void
+    public function it_resolves_the_custom_collection_from_each_declaration_form(): void
     {
-        $this->resolveAndRegisterCollection(WorkOrder::class);
+        $codebase = $this->createCodebase();
 
-        $this->assertSame(WorkOrderCollection::class, $this->getRegisteredCollection(WorkOrder::class));
-    }
-
-    #[Test]
-    public function it_registers_custom_collection_for_model_with_new_collection_override(): void
-    {
-        $this->resolveAndRegisterCollection(Part::class);
-
-        $this->assertSame(PartCollection::class, $this->getRegisteredCollection(Part::class));
-    }
-
-    #[Test]
-    public function it_registers_custom_collection_for_model_with_collection_class_property(): void
-    {
-        $this->resolveAndRegisterCollection(DamageReport::class);
-
-        $this->assertSame(DamageReportCollection::class, $this->getRegisteredCollection(DamageReport::class));
-    }
-
-    #[Test]
-    public function it_does_not_register_collection_for_model_without_custom_collection(): void
-    {
-        $this->resolveAndRegisterCollection(Customer::class);
-
-        $this->assertNull($this->getRegisteredCollection(Customer::class));
-    }
-
-    #[Test]
-    public function it_handles_non_existent_class_gracefully(): void
-    {
-        // Should not throw — the ReflectionException is caught and logged.
-        $this->resolveAndRegisterCollection('NonExistent\\FakeModelClass');
-
-        $this->assertEmpty($this->getCollectionMap());
+        $this->assertSame(WorkOrderCollection::class, CustomTypeDetector::resolveCustomCollectionClass($codebase, WorkOrder::class));
+        $this->assertSame(PartCollection::class, CustomTypeDetector::resolveCustomCollectionClass($codebase, Part::class));
+        $this->assertSame(DamageReportCollection::class, CustomTypeDetector::resolveCustomCollectionClass($codebase, DamageReport::class));
     }
 
     #[Test]
     public function it_inherits_collected_by_from_parent_model(): void
     {
-        // CollectedByParentModel has #[CollectedBy(WorkOrderCollection::class)],
-        // CollectedByChildModel extends it without its own attribute — should inherit.
-        $this->resolveAndRegisterCollection(Fixtures\CollectedByChildModel::class);
-
-        $this->assertSame(WorkOrderCollection::class, $this->getRegisteredCollection(Fixtures\CollectedByChildModel::class));
+        // CollectedByChildModel extends CollectedByParentModel (#[CollectedBy(WorkOrderCollection::class)])
+        // without its own attribute.
+        $this->assertSame(
+            WorkOrderCollection::class,
+            CustomTypeDetector::resolveCustomCollectionClass($this->createCodebase(), Fixtures\CollectedByChildModel::class),
+        );
     }
 
     #[Test]
-    public function it_resolves_collection_from_attribute_directly(): void
+    public function it_resolves_nothing_for_inherited_members_or_an_unloadable_class(): void
     {
-        $result = $this->callResolveCollectionFromAttribute(WorkOrder::class);
-
-        $this->assertSame(WorkOrderCollection::class, $result);
-    }
-
-    #[Test]
-    public function it_returns_null_for_inherited_new_collection(): void
-    {
-        // Customer inherits newCollection from Model — not an override, so no custom collection.
-        $result = $this->callResolveCollectionFromMethodOverride(Customer::class);
-
-        $this->assertNull($result);
-    }
-
-    #[Test]
-    public function it_resolves_collection_from_static_property_directly(): void
-    {
-        $result = $this->callResolveCollectionFromStaticProperty(DamageReport::class);
-
-        $this->assertSame(DamageReportCollection::class, $result);
-    }
-
-    #[Test]
-    public function it_returns_null_for_inherited_static_collection_class_property(): void
-    {
-        // Customer inherits $collectionClass from Model — not an override.
-        $result = $this->callResolveCollectionFromStaticProperty(Customer::class);
-
-        $this->assertNull($result);
-    }
-
-    /**
-     * Call resolveCollectionFromAttribute directly via reflection.
-     */
-    private function callResolveCollectionFromAttribute(string $className): ?string
-    {
-        $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromAttribute');
         $codebase = $this->createCodebase();
 
-        return $method->invoke(null, $reflection, $codebase);
-    }
-
-    /**
-     * Call resolveCollectionFromMethodOverride directly via reflection.
-     */
-    private function callResolveCollectionFromMethodOverride(string $className): ?string
-    {
-        $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromMethodOverride');
-
-        return $method->invoke(null, $reflection);
-    }
-
-    /**
-     * Call resolveCollectionFromStaticProperty directly via reflection.
-     */
-    private function callResolveCollectionFromStaticProperty(string $className): ?string
-    {
-        $reflection = new \ReflectionClass($className);
-        $method = new \ReflectionMethod(CustomTypeDetector::class, 'resolveCollectionFromStaticProperty');
-
-        return $method->invoke(null, $reflection);
-    }
-
-    /**
-     * Resolve a model's custom collection and register it — the resolve→registerCustomCollection sink
-     * registerHandlersForModel() uses on the warm-up-failure fallback (the warm path reads the
-     * already-resolved class off the registry; resolution itself is what this asserts).
-     */
-    private function resolveAndRegisterCollection(string $className): void
-    {
-        $collectionClass = CustomTypeDetector::resolveCustomCollectionClass($this->createCodebase(), $className);
-        if ($collectionClass !== null) {
-            CustomCollectionHandler::registerCustomCollection($className, $collectionClass);
-        }
+        // Customer only inherits newCollection() and $collectionClass from Model: not overrides.
+        $this->assertNull(CustomTypeDetector::resolveCustomCollectionClass($codebase, Customer::class));
+        // The ReflectionException must be caught rather than thrown.
+        $this->assertNull(CustomTypeDetector::resolveCustomCollectionClass($codebase, 'NonExistent\\FakeModelClass'));
     }
 
     private function createCodebase(): Codebase
@@ -178,22 +67,5 @@ final class CustomCollectionDetectionTest extends TestCase
         $progressRef->setValue($codebase, new VoidProgress());
 
         return $codebase;
-    }
-
-    /**
-     * Read the private $modelToCollectionMap via reflection.
-     *
-     * @return array<string, string>
-     */
-    private function getCollectionMap(): array
-    {
-        $ref = new \ReflectionProperty(CustomCollectionHandler::class, 'modelToCollectionMap');
-
-        return $ref->getValue();
-    }
-
-    private function getRegisteredCollection(string $modelClass): ?string
-    {
-        return $this->getCollectionMap()[$modelClass] ?? null;
     }
 }

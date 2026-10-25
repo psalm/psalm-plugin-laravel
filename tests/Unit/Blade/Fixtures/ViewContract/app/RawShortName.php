@@ -12,4 +12,9 @@ final class RawShortName
     {
         return view('raw-short', ['thing' => new Thing()]);
     }
+
+    public function missing(): View
+    {
+        return view('raw-short', []);
+    }
 }

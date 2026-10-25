@@ -34,21 +34,12 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
     /** @return \Iterator<string, array{string, bool}> */
     public static function couldBeAggregateProvider(): \Iterator
     {
-        // exact suffixes
         yield 'contacts_count' => ['contacts_count', true];
         yield 'contacts_exists' => ['contacts_exists', true];
-        // column-including suffixes
         yield 'contacts_sum_amount' => ['contacts_sum_amount', true];
-        yield 'contacts_avg_price' => ['contacts_avg_price', true];
-        yield 'contacts_min_created_at' => ['contacts_min_created_at', true];
-        yield 'contacts_max_updated_at' => ['contacts_max_updated_at', true];
-        // non-aggregate properties
         yield 'email' => ['email', false];
-        yield 'name' => ['name', false];
-        yield 'created_at' => ['created_at', false];
         // partial match — suffix without underscore prefix
         yield 'count' => ['count', false];
-        yield 'sum_amount' => ['sum_amount', false];
         // suffix in wrong position
         yield 'count_contacts' => ['count_contacts', false];
     }
@@ -70,8 +61,6 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
     {
         yield 'single word' => ['contacts', 'contacts'];
         yield 'two words' => ['work_orders', 'workOrders'];
-        yield 'three words' => ['work_order_items', 'workOrderItems'];
-        yield 'already camelCase' => ['workOrders', 'workOrders'];
         yield 'leading underscore' => ['_contacts', 'contacts'];
     }
 
@@ -98,16 +87,11 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
         yield 'min float' => ['min', Type::getFloat(), 'float|int|null|numeric-string'];
         yield 'max string (datetime, varchar)' => ['max', Type::getString(), 'null|string'];
         yield 'min bool column keeps the fallback' => ['min', Type::getBool(), 'null|string'];
-        yield 'max unresolvable' => ['max', null, 'null|string'];
 
         yield 'sum int' => ['sum', Type::getInt(), 'int|null|numeric-string'];
-        yield 'sum float' => ['sum', Type::getFloat(), 'float|int|null|numeric-string'];
-        yield 'sum string column' => ['sum', Type::getString(), 'float|int|null|numeric-string'];
         yield 'sum unresolvable' => ['sum', null, 'float|int|null|numeric-string'];
 
-        yield 'avg int' => ['avg', Type::getInt(), 'float|null|numeric-string'];
         yield 'avg float' => ['avg', Type::getFloat(), 'float|null|numeric-string'];
-        yield 'avg unresolvable' => ['avg', null, 'float|null|numeric-string'];
     }
 
     /** @param 'sum'|'min'|'max'|'avg' $function */

@@ -37,10 +37,72 @@ final class IndirectMethodReferencesTest extends TestCase
     /** @var list<string> */
     private const DEAD_RETURNS = ['PossiblyUnusedReturnValue', 'UnusedReturnValue'];
 
+    /**
+     * One cold and one warm run over a private fixture copy cover everything: the cold run asserts the
+     * dead-code report, the warm run (after touching three files) asserts the references replay from cache.
+     *
+     * The config sets `findUnusedCode="false"` and the run passes `--find-dead-code`: the flag turns
+     * reference collection on after the config is parsed, so the plugin must gate handler registration on
+     * the codebase flag rather than on the config value.
+     */
     #[Test]
-    public function it_reports_dead_code_only_where_laravel_cannot_dispatch(): void
+    public function it_reports_dead_code_only_where_laravel_cannot_dispatch_and_replays_it_from_cache(): void
     {
-        $findings = $this->runPsalm(self::FIXTURE, false);
+        // Keep the copy under the repository so Psalm's GitInfoCollector does not emit its
+        // "not a git repository" warning, which would hide real subprocess failures on stderr.
+        $fixtureDir = self::FIXTURE . '/.incremental-' . (int) \getmypid();
+        $this->copyDirectory(self::FIXTURE, $fixtureDir);
+
+        try {
+            $this->assertColdReport($this->runPsalm($fixtureDir));
+
+            foreach (['/app/Dependencies/Dependencies.php', '/app/Models/User.php', '/app/Conventions/QueuedJob.php'] as $changed) {
+                $this->assertNotFalse(
+                    \file_put_contents($fixtureDir . $changed, "\n// incremental change\n", \FILE_APPEND),
+                );
+            }
+
+            $findings = $this->runPsalm($fixtureDir);
+            $deadCode = $this->report($findings, self::DEAD_CODE);
+
+            $this->assertStringContainsString(
+                'Models\User::privateTeam',
+                $deadCode,
+                'Expected the incremental run to still consolidate dead code.',
+            );
+            $this->assertStringNotContainsString(
+                'Dependencies\UpdateDriver',
+                $deadCode,
+                'Expected the queued constructor edge to be replayed after its file changed.',
+            );
+            $this->assertStringNotContainsString(
+                '::team',
+                $deadCode,
+                'Expected the queued relationship edge to be replayed after the model changed.',
+            );
+            $this->assertStringNotContainsString(
+                'Conventions\SendReportJob',
+                $deadCode,
+                'Expected the class-sourced job edges (method and hook property) to be replayed after the job file changed.',
+            );
+            // The relationship edge is anchored to the plugin file (recordFileReference()), which is
+            // never re-analyzed, so its "return value used" half must survive the model file's own
+            // invalidation too - not just the method-used half asserted above.
+            $this->assertStringNotContainsString(
+                'function team(',
+                $this->report($findings, self::DEAD_RETURNS),
+                'Expected the relationship return value to remain used after the model file changed.',
+            );
+        } finally {
+            $this->removeDirectory($fixtureDir);
+        }
+    }
+
+    /**
+     * @param list<array{type: string, message: string, snippet: string}> $findings
+     */
+    private function assertColdReport(array $findings): void
+    {
         $deadCode = $this->report($findings, self::DEAD_CODE);
 
         foreach ([
@@ -132,79 +194,6 @@ final class IndirectMethodReferencesTest extends TestCase
     }
 
     /**
-     * `--find-dead-code` turns reference collection on after the config is parsed, so the plugin
-     * must gate handler registration on the codebase flag rather than on the config value.
-     */
-    #[Test]
-    public function it_honors_the_cli_dead_code_override_when_config_disables_it(): void
-    {
-        $deadCode = $this->report(
-            $this->runPsalm(self::FIXTURE, false, 'psalm-no-dead-code.xml', ['--find-dead-code']),
-            self::DEAD_CODE,
-        );
-
-        $this->assertStringNotContainsString('::update', $deadCode, 'Expected the CLI override to activate the handler.');
-        $this->assertStringContainsString(
-            'Dependencies\UnusedDependency::__construct',
-            $deadCode,
-            'Expected the CLI override to actually report dead code.',
-        );
-    }
-
-    #[Test]
-    public function cached_runs_replay_references_after_file_changes(): void
-    {
-        // Keep the copy under the repository so Psalm's GitInfoCollector does not emit its
-        // "not a git repository" warning, which would hide real subprocess failures on stderr.
-        $fixtureDir = self::FIXTURE . '/.incremental-' . (int) \getmypid();
-        $this->copyDirectory(self::FIXTURE, $fixtureDir);
-
-        try {
-            $this->runPsalm($fixtureDir, true);
-
-            foreach (['/app/Dependencies/Dependencies.php', '/app/Models/User.php', '/app/Conventions/QueuedJob.php'] as $changed) {
-                $this->assertNotFalse(
-                    \file_put_contents($fixtureDir . $changed, "\n// incremental change\n", \FILE_APPEND),
-                );
-            }
-
-            $findings = $this->runPsalm($fixtureDir, true);
-            $deadCode = $this->report($findings, self::DEAD_CODE);
-
-            $this->assertStringContainsString(
-                'Models\User::privateTeam',
-                $deadCode,
-                'Expected the incremental run to still consolidate dead code.',
-            );
-            $this->assertStringNotContainsString(
-                'Dependencies\UpdateDriver',
-                $deadCode,
-                'Expected the queued constructor edge to be replayed after its file changed.',
-            );
-            $this->assertStringNotContainsString(
-                '::team',
-                $deadCode,
-                'Expected the queued relationship edge to be replayed after the model changed.',
-            );
-            $this->assertStringNotContainsString(
-                'Conventions\SendReportJob',
-                $deadCode,
-                'Expected the class-sourced job edges (method and hook property) to be replayed after the job file changed.',
-            );
-            // The relationship edge is anchored to the plugin file (recordFileReference()), which is
-            // never re-analyzed, so its "return value used" half must survive the model file's own
-            // invalidation too - not just the method-used half asserted above.
-            $this->assertStringNotContainsString(
-                'function team(',
-                $this->report($findings, self::DEAD_RETURNS),
-                'Expected the relationship return value to remain used after the model file changed.',
-            );
-        } finally {
-            $this->removeDirectory($fixtureDir);
-        }
-    }
-
-    /**
      * Joins each finding's message with its source snippet: method and class findings name their
      * symbol in the message, return-value findings only in the snippet.
      *
@@ -224,30 +213,14 @@ final class IndirectMethodReferencesTest extends TestCase
     }
 
     /**
-     * @param list<string> $extraArguments
      * @return list<array{type: string, message: string, snippet: string}>
      */
-    private function runPsalm(
-        string $fixtureDir,
-        bool $useCache,
-        string $config = 'psalm.xml',
-        array $extraArguments = [],
-    ): array {
-        $arguments = [
-            \PHP_BINARY,
-            \dirname(__DIR__, 3) . '/vendor/bin/psalm',
-            '-c',
-            $config,
-            '--threads=1',
-            '--no-progress',
-            '--output-format=json',
-            ...$extraArguments,
-        ];
-        if (!$useCache) {
-            $arguments[] = '--no-cache';
-        }
-
-        $process = new Process($arguments, $fixtureDir);
+    private function runPsalm(string $fixtureDir): array
+    {
+        $process = new Process(
+            [\PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', '-c', 'psalm.xml', '--threads=1', '--no-progress', '--output-format=json', '--find-dead-code'],
+            $fixtureDir,
+        );
         $process->setTimeout(300);
         $process->run();
 

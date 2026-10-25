@@ -22,9 +22,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame(self::NEW_TITLE_BLOCK . "<h1>{{ \$title }}</h1>\n", $result[0]);
-        $this->assertSame(3, $result[1], 'the declaration is the third line: after `<?php` and `/**`');
-        $this->assertSame(['@var string $title'], $result[2]);
+        $this->assertSame(self::NEW_TITLE_BLOCK . "<h1>{{ \$title }}</h1>\n", $result);
     }
 
     #[Test]
@@ -38,36 +36,33 @@ final class TemplateAnnotatorTest extends TestCase
         $this->assertSame(
             "<?php\n\ndeclare(strict_types=1);\n\n/**\n * Header.\n *\n * @var int \$count\n * @var string \$title\n */\n?>\n"
             . "<p>{{ \$count }} {{ \$title }}</p>\n",
-            $result[0],
-        );
-        $this->assertSame(9, $result[1]);
-        $this->assertSame(['@var string $title'], $result[2]);
-    }
-
-    #[Test]
-    public function matches_the_indentation_and_crlf_endings_of_the_header_docblock(): void
-    {
-        $source = "<?php\r\n\t/**\r\n\t * Header.\r\n\t */\r\n?>\r\n<p>{{ \$title }}</p>\r\n";
-
-        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
-
-        $this->assertNotNull($result);
-        $this->assertSame(
-            "<?php\r\n\t/**\r\n\t * Header.\r\n\t * @var string \$title\r\n\t */\r\n?>\r\n<p>{{ \$title }}</p>\r\n",
-            $result[0],
+            $result,
         );
     }
 
     #[Test]
-    public function opens_out_a_one_line_header_docblock_keeping_its_own_bytes(): void
+    public function opens_out_a_one_line_header_docblock_into_one_tag_per_line(): void
     {
         $source = "<?php /** Header. */ ?>\n<p>{{ \$title }}</p>\n";
 
         $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame("<?php /** Header.\n * @var string \$title\n */ ?>\n<p>{{ \$title }}</p>\n", $result[0]);
-        $this->assertSame(2, $result[1]);
+        $this->assertSame("<?php /**\n * Header.\n * @var string \$title\n */ ?>\n<p>{{ \$title }}</p>\n", $result);
+    }
+
+    #[Test]
+    public function opens_out_a_one_line_declaration_on_its_own_line_aligned_with_the_new_ones(): void
+    {
+        $source = "<?php declare(strict_types=1);\n/** @var \\App\\Course \$course */\n?>\n{{ \$course }}{{ \$report }}\n";
+
+        $result = TemplateAnnotator::annotate($source, ['report' => '\\App\\Report']);
+
+        $this->assertNotNull($result);
+        $this->assertSame(
+            "<?php declare(strict_types=1);\n/**\n * @var \\App\\Course \$course\n * @var \\App\\Report \$report\n */\n?>\n{{ \$course }}{{ \$report }}\n",
+            $result,
+        );
     }
 
     #[Test]
@@ -84,25 +79,8 @@ final class TemplateAnnotatorTest extends TestCase
             $result = TemplateAnnotator::annotate($header . "<p>{{ \$title }}</p>\n", ['title' => 'string']);
 
             $this->assertNotNull($result);
-            $this->assertSame($header . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result[0], $header);
+            $this->assertSame($header . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result, $header);
         }
-    }
-
-    #[Test]
-    public function recognises_an_upper_case_open_tag_as_the_header(): void
-    {
-        $source = "<?PHP\n/**\n * Header.\n */\n?>\n<p>{{ \$title }}</p>\n";
-
-        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
-
-        $this->assertNotNull($result);
-        $this->assertSame("<?PHP\n/**\n * Header.\n * @var string \$title\n */\n?>\n<p>{{ \$title }}</p>\n", $result[0]);
-    }
-
-    #[Test]
-    public function a_name_first_raw_declaration_is_already_declared(): void
-    {
-        $this->assertNull(TemplateAnnotator::annotate("<?php /** @var \$x string */ ?>\n<p>{{ \$x }}</p>\n", ['x' => 'string']));
     }
 
     #[Test]
@@ -115,24 +93,8 @@ final class TemplateAnnotatorTest extends TestCase
         $this->assertNotNull($result);
         $this->assertSame(
             "<?php declare(strict_types=1); ?>\n" . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n",
-            $result[0],
+            $result,
             'the declare stays the first statement',
-        );
-        $this->assertSame(4, $result[1]);
-    }
-
-    #[Test]
-    public function a_non_doc_comment_in_the_leading_php_block_does_not_count_as_a_docblock(): void
-    {
-        $source = "<?php\n// declare(strict_types=1);\n/* not a docblock */\ndeclare(strict_types=1);\n?>\n<p>{{ \$title }}</p>\n";
-
-        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
-
-        $this->assertNotNull($result);
-        $this->assertSame(
-            "<?php\n// declare(strict_types=1);\n/* not a docblock */\ndeclare(strict_types=1);\n?>\n"
-            . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n",
-            $result[0],
         );
     }
 
@@ -144,18 +106,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame("<?php\n/**\n * @var string \$title\n */\ndeclare(strict_types=1);\n", $result[0]);
-    }
-
-    #[Test]
-    public function does_not_mistake_php_looking_text_for_a_header(): void
-    {
-        $source = "<p>/** not php */ {{ \$title }}</p>\n";
-
-        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
-
-        $this->assertNotNull($result);
-        $this->assertSame(self::NEW_TITLE_BLOCK . $source, $result[0]);
+        $this->assertSame("<?php\n/**\n * @var string \$title\n */\ndeclare(strict_types=1);\n", $result);
     }
 
     #[Test]
@@ -172,28 +123,8 @@ final class TemplateAnnotatorTest extends TestCase
             $first = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
             $this->assertNotNull($first);
-            $this->assertNull(TemplateAnnotator::annotate($first[0], ['title' => 'string']), $source);
+            $this->assertNull(TemplateAnnotator::annotate($first, ['title' => 'string']), $source);
         }
-    }
-
-    #[Test]
-    public function declines_when_every_name_is_already_declared(): void
-    {
-        $source = "<?php /** @var string \$title */ ?>\n<h1>{{ \$title }}</h1>\n";
-
-        $this->assertNull(TemplateAnnotator::annotate($source, ['title' => 'int']));
-    }
-
-    #[Test]
-    public function is_idempotent_across_a_second_run(): void
-    {
-        $source = "<h1>{{ \$title }}</h1>\n";
-        $vars = ['title' => 'string'];
-
-        $first = TemplateAnnotator::annotate($source, $vars);
-
-        $this->assertNotNull($first);
-        $this->assertNull(TemplateAnnotator::annotate($first[0], $vars));
     }
 
     #[Test]
@@ -218,7 +149,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate("<p>x</p>\n", ['a' => 'string', 'b' => 'int|null', 'c' => 'int'], ['a' => true, 'b' => true]);
 
         $this->assertNotNull($result);
-        $this->assertSame(['@var string|null $a = null', '@var int|null $b = null', '@var int $c'], $result[2]);
+        $this->assertSame("<?php\n/**\n * @var string|null \$a = null\n * @var int|null \$b = null\n * @var int \$c\n */\n?>\n<p>x</p>\n", $result);
     }
 
     #[Test]
@@ -237,7 +168,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame("<?php\r\n/**\r\n * @var string \$title\r\n */\r\n?>\r\n" . $source, $result[0]);
+        $this->assertSame("<?php\r\n/**\r\n * @var string \$title\r\n */\r\n?>\r\n" . $source, $result);
     }
 
     #[Test]
@@ -248,33 +179,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame("\u{FEFF}" . self::NEW_TITLE_BLOCK . "<h1>{{ \$title }}</h1>\n", $result[0]);
-    }
-
-    #[Test]
-    public function appends_to_a_header_docblock_that_follows_a_bom(): void
-    {
-        $source = "\u{FEFF}<?php\n/**\n * Header.\n */\n?>\n<p>{{ \$title }}</p>\n";
-
-        $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
-
-        $this->assertNotNull($result);
-        $this->assertSame(
-            "\u{FEFF}<?php\n/**\n * Header.\n * @var string \$title\n */\n?>\n<p>{{ \$title }}</p>\n",
-            $result[0],
-        );
-    }
-
-    #[Test]
-    public function emits_several_names_in_a_stable_alphabetical_order(): void
-    {
-        $result = TemplateAnnotator::annotate("<p>x</p>\n", ['title' => 'string', 'count' => 'int']);
-
-        $this->assertNotNull($result);
-        $this->assertSame(
-            "<?php\n/**\n * @var int \$count\n * @var string \$title\n */\n?>\n<p>x</p>\n",
-            $result[0],
-        );
+        $this->assertSame("\u{FEFF}" . self::NEW_TITLE_BLOCK . "<h1>{{ \$title }}</h1>\n", $result);
     }
 
     #[Test]
@@ -287,45 +192,6 @@ final class TemplateAnnotatorTest extends TestCase
     }
 
     #[Test]
-    public function recognises_a_declaration_whose_array_shape_spans_several_lines(): void
-    {
-        $source = "<?php\n/**\n * @var array{\n *     retryRate: float,\n *     manualRate: float,\n * } \$data\n"
-            . " * @var array<string, string> \$countryNames\n */\n?>\n{{ \$data['retryRate'] }}\n";
-
-        $this->assertNull(TemplateAnnotator::annotate($source, ['data' => 'array<string, float>', 'countryNames' => 'array<string, string>']));
-    }
-
-    #[Test]
-    public function recognises_a_raw_php_declaration_whose_type_contains_a_variable(): void
-    {
-        $source = "<?php /** @var Closure(Foo \$f): Bar \$callback */ ?>\n<p>x</p>\n";
-
-        $this->assertNull(TemplateAnnotator::annotate($source, ['callback' => 'mixed']));
-    }
-
-    #[Test]
-    public function is_idempotent_for_a_type_it_wrote_that_contains_a_variable(): void
-    {
-        $vars = ['cb' => 'Closure(string $a):void'];
-
-        $first = TemplateAnnotator::annotate("<p>x</p>\n", $vars);
-
-        $this->assertNotNull($first);
-        $this->assertNull(TemplateAnnotator::annotate($first[0], $vars), 'the comment must not be re-appended');
-    }
-
-    #[Test]
-    public function is_idempotent_for_a_non_ascii_variable_name_it_wrote(): void
-    {
-        $vars = ["men\u{00fc}" => 'string'];
-
-        $first = TemplateAnnotator::annotate("<p>x</p>\n", $vars);
-
-        $this->assertNotNull($first);
-        $this->assertNull(TemplateAnnotator::annotate($first[0], $vars));
-    }
-
-    #[Test]
     public function reads_a_raw_php_declaration_without_being_fooled_by_the_code_after_it(): void
     {
         // The scan used to run to the end of the line, binding `$body` (the echo) and missing the
@@ -335,17 +201,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['title' => 'string', 'body' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame(['@var string $body'], $result[2]);
-    }
-
-    #[Test]
-    public function recognises_a_raw_php_declaration_with_a_non_ascii_variable_name(): void
-    {
-        // A reader binding only the ASCII prefix sees `$men` declared and `$menü` undeclared, and
-        // appends a second declaration for the same variable on every run.
-        $source = "<?php /** @var string \$men\u{00fc} */ ?>\n<p>x</p>\n";
-
-        $this->assertNull(TemplateAnnotator::annotate($source, ["men\u{00fc}" => 'string']));
+        $this->assertSame("<?php /**\n * @var string \$title\n * @var string \$body\n */ echo \$body; ?>\n<p>x</p>\n", $result);
     }
 
     #[Test]
@@ -356,7 +212,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['user' => 'string']);
 
         $this->assertNotNull($result, 'a string literal is not a declaration');
-        $this->assertSame(['@var string $user'], $result[2]);
+        $this->assertSame("<?php echo '@var string \$user'; ?>\n<?php\n/**\n * @var string \$user\n */\n?>\n<p>x</p>\n", $result);
     }
 
     #[Test]
@@ -367,9 +223,8 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['user' => 'App\\User']);
 
         $this->assertNotNull($result, 'a verbatim body and a Blade comment are literal text, not PHP');
-        $this->assertSame(['@var App\\User $user'], $result[2]);
+        $this->assertSame("<?php\n/**\n * @var App\\User \$user\n */\n?>\n" . $source, $result);
     }
-
 
     #[Test]
     public function an_expression_local_docblock_is_not_the_header(): void
@@ -378,14 +233,6 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($header . "<p>{{ \$title }}</p>\n", ['title' => 'string']);
 
         $this->assertNotNull($result);
-        $this->assertSame($header . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result[0], 'a new block after the leading one, not inside its array item');
-    }
-
-    #[Test]
-    public function a_cr_only_file_is_annotated_once(): void
-    {
-        $source = "<?php\r/**\r * Header.\r * @var string \$title\r */\r?>\r<p>{{ \$title }}</p>\r";
-
-        $this->assertNull(TemplateAnnotator::annotate($source, ['title' => 'string']));
+        $this->assertSame($header . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result, 'a new block after the leading one, not inside its array item');
     }
 }

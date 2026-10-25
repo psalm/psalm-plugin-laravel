@@ -1,9 +1,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Expression;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
 
@@ -117,15 +115,6 @@ function schema_connection_instance_calls_share_the_corrected_types(): void
             echo $_generationType;
         }
     }
-}
-
-/**
- * Laravel 12.20-12.21 document the resolver as `Closure(string, Closure, string): Blueprint|null`, which
- * contradicts createBlueprint() (`$connection, $table, $callback`).
- */
-function schema_facade_blueprint_resolver_accepts_runtime_resolver(): void
-{
-    Schema::blueprintResolver(static fn (Connection $connection, string $table): Blueprint => new Blueprint($connection, $table));
 }
 
 /**
