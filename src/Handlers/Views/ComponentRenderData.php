@@ -13,8 +13,10 @@ use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type;
+use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Union;
 
 /**
@@ -101,8 +103,8 @@ final class ComponentRenderData
 
     /**
      * The keys `Component::data()` hands the view of a class rendered as `<x-…>`, typed by what
-     * every render of the class guarantees: declared property types expanded against the class,
-     * and a method's runtime wrapper. A property with no declared type, or one declared by a
+     * every render of the class guarantees: declared property types (`self`/`parent` resolved against
+     * the class declaring the property), and a method's runtime wrapper. A property with no declared type, or one declared by a
      * generic class, is left out rather than guessed.
      *
      * @return array<string, Union>|null null when the key set is not knowable: a userland
@@ -126,7 +128,10 @@ final class ComponentRenderData
         $guaranteed = [];
 
         foreach ($exposed as $name => $type) {
-            // A method variable is already expanded with `static` collapsed, so this pass leaves it as is.
+            // A property type arrives expanded against its declaring class, so this pass leaves it as is.
+            // It stays for the method variables: Psalm's own expansion does not recurse into everything
+            // (`public-properties-of<self>` keeps a raw `parent` inside its array), and a type seeded with
+            // one makes a call on it throw.
             $expanded = TypeExpander::expandUnion(
                 $codebase,
                 $type,
@@ -194,8 +199,6 @@ final class ComponentRenderData
      *
      * @return array<string, Union>|null null when a declaring class could not be resolved, which
      *         makes the exposed set unknowable rather than empty
-     *
-     * @psalm-capabilities read-props
      */
     private static function publicProperties(Codebase $codebase, ClassLikeStorage $storage, bool $typedOnly): ?array
     {
@@ -205,6 +208,9 @@ final class ComponentRenderData
             return null;
         }
 
+        // `forSource()` keeps an excluded name as supplied (a superset), but must not type it: Laravel then
+        // leaves the value the call passes in place. `guaranteedFor()` already declines on a userland `$except`.
+        $excepted = $typedOnly ? [] : self::exceptedNames($codebase, $storage);
         $properties = [];
 
         foreach ($declared as $name => [$declaring, $property]) {
@@ -212,10 +218,61 @@ final class ComponentRenderData
                 continue;
             }
 
-            $properties[$name] = $property->type ?? Type::getMixed();
+            if ($excepted === null || \in_array($name, $excepted, true)) {
+                $properties[$name] = Type::getMixed();
+
+                continue;
+            }
+
+            // `static` collapses to the class for the view's own seed and for `forSource()`; the
+            // `<x-…>` side keeps a non-final class's late-static marker, as its types always did.
+            $properties[$name] = ViewClassProperties::typeOf($codebase, $storage, $name, $declaring, $property, final: !$typedOnly || $storage->final)
+                ?? Type::getMixed();
         }
 
         return $properties;
+    }
+
+    /**
+     * The names a userland `$except` default lists, `[]` when the class does not redeclare it, and null when
+     * the list is not readable from storage: Psalm keeps a default only for an untyped property, as
+     * `list{'a', 'b'}`, so a `@var`-typed or computed default is unknown.
+     *
+     * @return list<string>|null
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function exceptedNames(Codebase $codebase, ClassLikeStorage $storage): ?array
+    {
+        $declaringClass = $storage->declaring_property_ids['except'] ?? self::COMPONENT;
+
+        if (\strtolower($declaringClass) === self::COMPONENT) {
+            return [];
+        }
+
+        $declaring = ViewClassProperties::storage($codebase, $declaringClass);
+        $default = $declaring?->properties['except']->suggested_type ?? null;
+        $atomic = $default?->isSingle() === true ? $default->getSingleAtomic() : null;
+
+        if ($atomic instanceof TArray && $atomic->isEmptyArray()) {
+            return [];
+        }
+
+        if (!$atomic instanceof TKeyedArray || $atomic->fallback_params !== null) {
+            return null;
+        }
+
+        $names = [];
+
+        foreach ($atomic->properties as $item) {
+            if (!$item->isSingleStringLiteral()) {
+                return null;
+            }
+
+            $names[] = $item->getSingleStringLiteral()->value;
+        }
+
+        return $names;
     }
 
     /**

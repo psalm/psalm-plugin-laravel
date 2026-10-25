@@ -8,7 +8,6 @@ use Illuminate\Mail\Message;
 use Illuminate\Mail\TextMessage;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\Internal\Type\TypeExpander;
 use Psalm\StatementsSource;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\PropertyStorage;
@@ -262,30 +261,10 @@ final class FrameworkViewData
         ClassLikeStorage $declaring,
         PropertyStorage $property,
     ): Union {
-        if (!$property->type instanceof \Psalm\Type\Union || $declaring->template_types !== null) {
+        if ($declaring->template_types !== null) {
             return Type::getMixed();
         }
 
-        // `self` and `parent` name the class that declares the property, which for a trait's property
-        // is the class the trait appears in; `static` is the rendered one.
-        $owner = $declaring;
-
-        if ($declaring->is_trait) {
-            $appearing = \strstr($storage->appearing_property_ids[$name] ?? '', '::', true);
-            $owner = $appearing === false ? null : ViewClassProperties::storage($codebase, $appearing);
-
-            if (!$owner instanceof ClassLikeStorage) {
-                return Type::getMixed();
-            }
-        }
-
-        return TypeExpander::expandUnion(
-            $codebase,
-            $property->type,
-            $owner->name,
-            $storage->name,
-            $owner->parent_class,
-            final: true,
-        );
+        return ViewClassProperties::typeOf($codebase, $storage, $name, $declaring, $property, final: true) ?? Type::getMixed();
     }
 }
