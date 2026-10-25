@@ -234,6 +234,21 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Callback consumers:** `RelationCallbackParamsHandler` keeps using the AST-only `relationType()` helper for relation objects passed to eager-load callbacks. It explicitly declines `MorphTo` before eager resolution, so removing raw MorphTo reconstruction does not change callback relation typing.
 
+#### Dynamic `where{Column}()` takes a variadic `mixed` (#2067)
+
+**Decision:** `Model::whereTitle($v)`, `$model->whereTitle($v)` and `$relation->whereTitle($v)` take a variadic `mixed`, like `where()`'s `$value` and Larastan's `DynamicWhereParameterReflection`. Variadic because a multi-segment call takes one argument per segment while a single-segment call ignores extras. Only the column segments are validated (`@property`, then the complete migration schema); the argument is never checked against the column type.
+
+**Why:** Laravel forwards the value to `Query\Builder::where()`, which accepts `null` (`whereNull`), `Closure`/`Builder` subqueries, `Expression`, `BackedEnum`, `DateTimeInterface` and arrays. A column-typed parameter reports such valid code.
+
+**Rejected:**
+- `scalar|null`: still rejects the forms above.
+- A parameter derived from the analyzed argument: the return-type and params providers both fire before arguments are analyzed (Psalm 7.0.0-rc10: `AtomicStaticCallAnalyzer` :633 before :647, `MissingMethodCallHandler` :89 before :113, `CallAnalyzer` :296 `getMethodParams()` before :338 `ArgumentsAnalyzer::analyze()`), and analyzing the argument inside the provider duplicates its data-flow nodes.
+- A single `$value` parameter: builder macros (including a local `$builder->macro()` inside `newEloquentBuilder()` that `MacroRegistry` cannot see) run with their own parameter names, and it rejected names on every shape that stays variadic (multi-segment, object and array columns, untyped schema columns).
+
+**Accepted limit:** named arguments are not checked. Laravel reads the values by position, so `whereName(name: $x)` fails at runtime (`DynamicWhereNamedArgumentKnownLimitation.phpt`).
+
+**See:** [#2067](https://github.com/psalm/psalm-plugin-laravel/issues/2067), [#928](https://github.com/psalm/psalm-plugin-laravel/issues/928), `tests/Type/tests/Relation/DynamicWhereArgumentTypingTest.phpt`.
+
 ### Pivot inference
 
 Pivot covariance of `TPivotModel` is a variance decision, recorded under [Variance](#variance).

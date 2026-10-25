@@ -93,6 +93,7 @@ final class EmissionAppTest extends TestCase
         'MixedAssignment',
         'InvalidScalarArgument',
         'InvalidArgument',
+        'InvalidNamedArgument',
         'ArgumentTypeCoercion',
         'InaccessibleMethod',
         'InvalidReturnType',
@@ -218,7 +219,7 @@ final class EmissionAppTest extends TestCase
     }
 
     #[Test]
-    public function dynamic_where_still_reports_unknown_unreachable_and_mistyped_columns(): void
+    public function dynamic_where_still_reports_unknown_and_unreachable_columns(): void
     {
         $findings = $this->scenarioFindings('DynamicWhereSchemaColumns', ...self::DYNAMIC_WHERE_ISSUES);
         $messages = [];
@@ -230,12 +231,10 @@ final class EmissionAppTest extends TestCase
 
         $joined = \implode("\n", $messages);
 
-        $this->assertCount(3, \array_filter($messages, static fn(string $m): bool => \str_starts_with($m, 'UndefinedMagicMethod') || \str_starts_with($m, 'InvalidScalarArgument')), $joined);
+        $this->assertCount(2, \array_filter($messages, static fn(string $m): bool => \str_starts_with($m, 'UndefinedMagicMethod')), $joined);
         // Unknown column, unreachable column, and a related-model union where one alternative lacks the
         // column, or a receiver union with one such alternative: none is claimed, so each returned chain stays mixed.
         $this->assertCount(4, \array_filter($messages, static fn(string $m): bool => \str_starts_with($m, 'MixedReturnStatement')), $joined);
-        $this->assertStringContainsString('InvalidArgument: Argument 1 of Illuminate\Database\Eloquent\Relations\HasMany::whereuserid', $joined);
-        $this->assertStringContainsString('InvalidScalarArgument: Argument 1 of DynamicWhereFixture\Models\UserFilter::whereuserid', $joined);
         $this->assertStringContainsString('UndefinedMagicMethod: Magic method DynamicWhereFixture\Models\UserFilter::wherenosuchcolumn', $joined);
         $this->assertStringContainsString('UndefinedMagicMethod: Magic method DynamicWhereFixture\Models\UserFilter::whereline1', $joined);
     }
