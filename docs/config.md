@@ -55,8 +55,6 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 - `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
 - `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (dynamic schema changes).
 
-For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-option=modelProperties.columnFallback=none` (see [Per-run overrides](#per-run-overrides)).
-
 ## `resolveDynamicWhereClauses`
 
 **default**: `true`
@@ -245,7 +243,7 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 **default**: `auto`
 
-Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt sink. See [LLM prompt injection](security.md#llm-prompt-injection-owasp-llm012025) for what is covered and for when the integration loads (`laravel/ai >=1.0.0 <2.0.0` only).
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt sink. See [LLM prompt injection](security.md#llm-integration) for what is covered and for when the integration loads (`laravel/ai >=1.0.0 <2.0.0` only).
 
 - element omitted (`auto`): enforced when the supported integration is installed, at Psalm's normal error level.
 - `value="false"`: explicit opt-out. Suppresses only `TaintedLlmPrompt`; model-output taint sources keep their ordinary `Tainted*` findings.
@@ -291,7 +289,7 @@ vendor/bin/psalm-laravel analyze --experimental --plugin-option=modelProperties.
 
 * Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`). `psalm-laravel analyze --help` lists every key with its values.
 * Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
-* Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
+* Path settings (`configDirectory`, `blade cacheDir`) are XML-only.
 * `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false` and `--experimental` for `experimental=true`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.
 * There is no environment-variable form for a bare `vendor/bin/psalm`; edit `psalm.xml` there.
 * `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless an override or the XML sets one of them explicitly.
@@ -355,8 +353,6 @@ An explicit `<PluginIssue>` entry takes complete ownership of that issue (base l
 ```
 
 Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.
-
-For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-option=experimental=true` (see [Per-run overrides](#per-run-overrides)).
 
 ## `failOnInternalError`
 

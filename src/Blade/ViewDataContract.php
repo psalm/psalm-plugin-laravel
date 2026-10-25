@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 /**
- * The part of a template's {@see TemplateContract} that a `view()` call site can be checked
+ * What `ContractParser` extracts from a Blade template that a `view()` call site can be checked
  * against: the declared variables, whether the template's `@props` were fully readable, and the
- * set of variables its compiled body reads.
- *
- * Split from TemplateContract because only these facts survive into the shadow manifest.
+ * set of variables its compiled body reads. Only these facts survive into the shadow manifest.
  *
  * @psalm-immutable
  * @internal

@@ -16,16 +16,17 @@ use Traversable;
  * `Component::createVariableFromMethod()` wraps a no-parameter public method,
  * so `TValue` is that method's return type.
  *
- * Sealed explicitly: a stub-declared class is not user-defined, so it would lose the
- * `sealAllMethods`/`sealAllProperties` defaults the vendor class gets. `@mixin TValue` types the
- * calls `__call` forwards; Psalm does not resolve templated mixins for property reads, so `__get` stays sealed.
+ * Methods are sealed explicitly: a stub-declared class is not user-defined, so it would lose the
+ * `sealAllMethods` default the vendor class gets. `@mixin TValue` types the calls `__call` forwards.
+ * Properties are deliberately not sealed: Psalm does not resolve a templated `@mixin` for property
+ * reads, so sealing would flag every property `__get` forwards to the resolved value. Those reads are `mixed`.
+ * A property-fetch handler answering from `TValue` would restore typed reads and typo detection.
  *
  * @template-covariant TValue
  *
  * @mixin TValue
  *
  * @psalm-seal-methods
- * @psalm-seal-properties
  */
 class InvokableComponentVariable implements DeferringDisplayableValue, IteratorAggregate, Stringable
 {

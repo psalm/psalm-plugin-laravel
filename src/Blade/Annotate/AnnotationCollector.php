@@ -18,6 +18,7 @@ use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
+use Psalm\LaravelPlugin\Handlers\Views\ViewClassProperties;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Internal\LateStatic;
@@ -203,7 +204,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $skip = [];
 
         if ($chain instanceof ViewCallChain) {
-            self::record($chain->viewName, $chain->supplied(), $chain->complete, self::site($expr, $event->getStatementsSource()));
+            self::record($chain->viewName, self::renderedData($chain, $event->getStatementsSource()), $chain->complete, self::site($expr, $event->getStatementsSource()));
             /** @psalm-var \WeakMap<Expr, true> $recorded a fresh WeakMap infers as WeakMap<object, mixed> */
             $recorded = self::$recorded ?? new \WeakMap();
 
@@ -245,7 +246,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         if ($include instanceof Expr\MethodCall && $chain instanceof ViewCallChain && $echoed instanceof Expr) {
             self::record(
                 $chain->viewName,
-                $chain->supplied(),
+                self::renderedData($chain, $source),
                 $chain->complete,
                 self::site($stmt, $source),
                 self::deferredKeys($include, $chain, $source),
@@ -260,6 +261,27 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 self::markUnreadable($viewName, self::site($stmt, $source));
             }
         }
+    }
+
+    /**
+     * The types the template receives: a top-level `Renderable` is rendered to a string before the
+     * template runs, so that is what the variable is declared as.
+     *
+     * @return array<string, Union>
+     */
+    private static function renderedData(ViewCallChain $chain, StatementsSource $source): array
+    {
+        $codebase = null;
+        $rendered = [];
+
+        foreach ($chain->supplied() as $name => $type) {
+            // Only an object can be a Renderable: scalar data never needs the Codebase.
+            $rendered[$name] = $type->hasNamedObjectType()
+                ? ViewClassProperties::renderablesAsString($type, $codebase ??= $source->getCodebase())
+                : $type;
+        }
+
+        return $rendered;
     }
 
     /**

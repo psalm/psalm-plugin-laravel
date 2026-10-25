@@ -112,6 +112,7 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * @return ($key is null ? null : ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue)))
      *
      * @psalm-flow ($default) -> return
+     * @psalm-taint-specialize
      */
     public function get($key, $default = null) {}
 
