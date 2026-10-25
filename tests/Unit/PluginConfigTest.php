@@ -151,7 +151,6 @@ final class PluginConfigTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Invalid {$element} value 'yes'");
 
-=======
         PluginConfig::fromXml(new \SimpleXMLElement("<pluginClass><{$element} value=\"yes\" /></pluginClass>"));
     }
 
