@@ -165,7 +165,7 @@ final class AnnotateCommand extends Command
         // The shape is this plugin's own, written back by AnnotateRequest::publish() in the child.
         // The is_array() guard below is the real check: a child that died mid-run leaves the
         // request JSON the command itself wrote, which carries no `changed` key.
-        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, unknown?: array<string, list<string>>, unreadable?: array<string, array{site: string, names: list<string>}>, disagreed?: array<string, array<string, list<string>>>, error?: string}|null $result */
+        /** @psalm-var array{dryRun?: bool, changed?: array<string, list<string>>, failures?: array<string, string>, diff?: string, unknown?: array<string, list<string>>, unreadable?: array<string, array{site: string, names: list<string>}>, disagreed?: array<string, array<string, list<string>>>, parseErrors?: array<string, string>, error?: string}|null $result */
         $result = \is_string($raw) ? \json_decode($raw, true) : null;
 
         $error = \is_array($result) ? $result['error'] ?? null : null;
@@ -199,6 +199,16 @@ final class AnnotateCommand extends Command
 
         foreach ($failures as $path => $reason) {
             $io->warning(\sprintf('Skipped %s: %s', $path, $reason));
+        }
+
+        // The views such a file names are listed as unreadable below; a file with no view literal in it
+        // changes nothing there, so the report is the only place the parse error shows up.
+        foreach ($result['parseErrors'] ?? [] as $path => $reason) {
+            $io->warning(OutputFormatter::escape(\sprintf(
+                'Psalm could not parse %s (%s). A view it names is left undeclared, since a call site there could not be read.',
+                $path,
+                $reason,
+            )));
         }
 
         $dryRun = ($result['dryRun'] ?? false) === true;

@@ -7,6 +7,7 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\Internal\Analyzer\IssueData;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotateRequest;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationCollector;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationWriter;
@@ -255,6 +256,43 @@ final class AnnotationWriterTest extends TestCase
         $this->assertSame($before, \md5_file($path));
     }
 
+    /**
+     * A file Psalm could not parse is a producer nobody can read: the views its string literals name
+     * are left undeclared, and the file is reported.
+     */
+    #[Test]
+    public function leaves_a_view_undeclared_when_a_file_that_names_it_has_a_parse_error(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        $broken = $this->tempDir . \DIRECTORY_SEPARATOR . 'Broken.php';
+        \file_put_contents($broken, "<?php\n\nreturn view(\n    'page',\n    ['title' => 42\n");
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString()], true);
+        $before = \md5_file($path);
+
+        AnnotationWriter::run($this->request(), [$broken => [$this->parseError($broken, 5, 'Syntax error, unexpected EOF')]]);
+
+        $this->assertSame($before, \md5_file($path));
+        $result = $this->publishedResult();
+        $this->assertSame([$path => ['site' => "{$broken}:4", 'names' => ['title']]], $result['unreadable'] ?? null);
+        $this->assertSame([$broken => 'line 5: Syntax error, unexpected EOF'], $result['parseErrors'] ?? null);
+    }
+
+    #[Test]
+    public function a_parse_error_in_a_file_naming_no_view_leaves_the_declarations_alone_but_is_still_reported(): void
+    {
+        $path = $this->registerTemplate("<h1>{{ \$title }}</h1>\n");
+        $broken = $this->tempDir . \DIRECTORY_SEPARATOR . 'Broken.php';
+        \file_put_contents($broken, "<?php\n\nreturn view(\n    'other',\n    ['title' => 42\n");
+        AnnotationCollector::markAnalyzed();
+        AnnotationCollector::record('page', ['title' => Type::getString()], true);
+
+        AnnotationWriter::run($this->request(), [$broken => [$this->parseError($broken, 5, 'Syntax error, unexpected EOF')]]);
+
+        $this->assertStringContainsString('@var string $title', (string) \file_get_contents($path));
+        $this->assertSame([$broken => 'line 5: Syntax error, unexpected EOF'], $this->publishedResult()['parseErrors'] ?? null);
+    }
+
     #[Test]
     public function refuses_to_write_when_the_control_file_is_no_longer_valid(): void
     {
@@ -471,5 +509,10 @@ final class AnnotationWriterTest extends TestCase
         \file_put_contents($path, $contents);
 
         return $path;
+    }
+
+    private function parseError(string $file, int $line, string $message): IssueData
+    {
+        return new IssueData(IssueData::SEVERITY_ERROR, $line, $line, 'ParseError', $message, $file, $file, '', '', 0, 0, 0, 0, 1, 1);
     }
 }

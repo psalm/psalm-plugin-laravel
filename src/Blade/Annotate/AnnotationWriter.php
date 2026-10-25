@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
+use Illuminate\View\ViewName;
+use Psalm\Internal\Analyzer\IssueData;
 use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
@@ -50,15 +52,17 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $request = self::$request;
 
         if ($request instanceof AnnotateRequest) {
-            self::run($request);
+            self::run($request, $event->getIssues());
         }
     }
 
     /**
      * The write itself, split from the hook so the single-threaded guard below is reachable from a
      * test without standing up an AfterAnalysisEvent.
+     *
+     * @param array<string, list<IssueData>> $issues what the analysis reported, by file path
      */
-    public static function run(AnnotateRequest $request): void
+    public static function run(AnnotateRequest $request, array $issues = []): void
     {
         // A parent that analysed nothing is a forked run: every producer type is in a worker that
         // has already exited, so every variable would be reported untyped — across the whole view
@@ -84,6 +88,7 @@ final class AnnotationWriter implements AfterAnalysisInterface
         $unknown = [];
         $unreadable = [];
         $diff = '';
+        $parseErrors = self::markUnparsedProducers($issues);
         [$plans, $disagreed] = self::plans();
 
         foreach ($plans as $templatePath => [$planned, $optional, $disagreeing, $site]) {
@@ -119,7 +124,63 @@ final class AnnotationWriter implements AfterAnalysisInterface
             $diff .= $hunk;
         }
 
-        $request->publish($changed, $failures, $diff, $unknown, $disagreed, $unreadable);
+        $request->publish($changed, $failures, $diff, $unknown, $disagreed, $unreadable, $parseErrors);
+    }
+
+    /**
+     * Psalm analyses the statements it could recover from a file it failed to parse, and the rest are
+     * invisible: any `view()` call there is a producer the pass never saw, which could contradict what it
+     * is about to write. So every view whose name appears as a string literal in such a file counts as
+     * rendered by a call site that cannot be read. Found by tokenizing, which needs no valid syntax.
+     *
+     * A `ParseError` is also what Psalm reports for some docblock mistakes: marking is then merely
+     * conservative, and the message names the file either way.
+     *
+     * @param array<string, list<IssueData>> $issues
+     *
+     * @return array<string, string> file path => the first parse error, as `line N: message`
+     */
+    private static function markUnparsedProducers(array $issues): array
+    {
+        $errors = [];
+
+        foreach ($issues as $reported) {
+            foreach ($reported as $issue) {
+                if ($issue->type === 'ParseError') {
+                    $errors[$issue->file_path] ??= "line {$issue->line_from}: {$issue->message}";
+                }
+            }
+        }
+
+        \ksort($errors);
+
+        foreach (\array_keys($errors) as $path) {
+            $source = @\file_get_contents($path);
+
+            if ($source === false) {
+                // Nothing can be said about what it renders: every view is then unreadable.
+                foreach (\array_keys(ViewReferenceRegistry::templates()) as $viewName) {
+                    AnnotationCollector::markUnreadable((string) $viewName, $path);
+                }
+
+                continue;
+            }
+
+            foreach (@\token_get_all($source) as $token) {
+                if (!\is_array($token) || $token[0] !== \T_CONSTANT_ENCAPSED_STRING) {
+                    continue;
+                }
+
+                // Under the name Laravel renders, as AnnotationCollector marks it.
+                $viewName = \trim(ViewName::normalize(\substr($token[1], 1, -1)));
+
+                if (ViewReferenceRegistry::templatePathFor($viewName) !== null) {
+                    AnnotationCollector::markUnreadable($viewName, "{$path}:{$token[2]}");
+                }
+            }
+        }
+
+        return $errors;
     }
 
     /**
