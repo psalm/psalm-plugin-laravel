@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792952775301,
+  "lastUpdate": 1792953142155,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16410,6 +16410,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b6f69ca11baadcaf2a4ebee188b3a4d4d85b836",
+          "message": "feat(taint): treat artisan commands, migrations and seeders as command-line-only code (#2068)\n\nPsalm 7 reads @psalm-cli-only only from the analyzed class itself, so the\nflag is set on the storage of every Command, Migration and Seeder subclass\nafter population. Their echo/print output is no longer TaintedHtml or\nTaintedTextWithQuotes; other sinks still apply.",
+          "timestamp": "2026-10-25T19:28:44+01:00",
+          "tree_id": "6f96576c6b04578ec5152133407d63a8674ed1b1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/1b6f69ca11baadcaf2a4ebee188b3a4d4d85b836"
+        },
+        "date": 1792953140785,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 41.76,
+            "range": "± 0.53",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
             "unit": "MB"
           }
         ]
