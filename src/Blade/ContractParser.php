@@ -416,9 +416,10 @@ final class ContractParser
                 continue;
             }
 
-            \preg_match_all('/@psalm-suppress\h+([A-Za-z][A-Za-z0-9_]*)/', $comment, $matched);
+            // The rule list is read the way Psalm reads it (`A, B`, trailing description allowed).
+            \preg_match_all('/@psalm-suppress\h+([^\r\n]+)/', $comment, $matched);
 
-            return [$matched[1], $blockLine];
+            return [\array_merge(...\array_map(SuppressionInjector::parseRuleList(...), $matched[1])), $blockLine];
         }
 
         return [[], $line];
