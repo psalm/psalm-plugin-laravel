@@ -803,6 +803,28 @@ final class ViewContractValidationTest extends TestCase
     }
 
     #[Test]
+    public function a_private_trait_method_adapted_to_public_is_still_reported_missing(): void
+    {
+        $reported = $this->forFile($this->contractIssues(), 'TraitAliasToPublic.php');
+
+        $this->assertSame([self::MISSING . ' $name'], $this->variablesOf($reported), \var_export($reported, true));
+    }
+
+    #[Test]
+    public function a_public_trait_method_adapted_to_private_is_not_reported_missing(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues(), 'TraitAliasToPrivate.php'));
+    }
+
+    #[Test]
+    public function a_private_trait_method_aliased_public_under_a_new_name_is_still_reported_missing(): void
+    {
+        $reported = $this->forFile($this->contractIssues(), 'TraitAliasNewName.php');
+
+        $this->assertSame([self::MISSING . ' $name'], $this->variablesOf($reported), \var_export($reported, true));
+    }
+
+    #[Test]
     public function a_raw_optional_marker_on_a_type_without_null_is_reported_at_the_declaration(): void
     {
         $reported = [];
