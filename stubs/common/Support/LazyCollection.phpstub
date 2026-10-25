@@ -116,6 +116,35 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     public function get($key, $default = null) {}
 
     /**
+     * `collapse()` yields the inner values without their keys, so the result keys are always ints,
+     * unlike `Collection::flatMap()` (`Arr::collapse()` keeps string keys).
+     *
+     * @template TFlatMapKey of array-key
+     * @template TFlatMapValue
+     *
+     * @param  callable(TValue, TKey): (\Illuminate\Support\Collection<TFlatMapKey, TFlatMapValue>|array<TFlatMapKey, TFlatMapValue>)  $callback
+     * @return static<int, TFlatMapValue>
+     */
+    public function flatMap(callable $callback) {}
+
+    /**
+     * A closure default only runs when nothing matches, so its result joins `TValue`; Laravel's
+     * single default template binds to the Closure itself when one is passed.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TFirstDefault
+     * @template TFirstDefaultFromClosure
+     *
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
+     * @return ($default is \Closure ? TFirstDefaultFromClosure|TValue : (TFirstDefault | TValue))
+     *
+     * @psalm-flow ($default) -> return
+     */
+    public function first(?callable $callback = null, $default = null) {}
+
+    /**
      * Get one or a specified number of items randomly from the collection.
      *
      * No argument → a single random element (TValue). With $number → a
