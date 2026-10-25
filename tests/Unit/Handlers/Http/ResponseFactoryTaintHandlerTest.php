@@ -171,6 +171,7 @@ final class ResponseFactoryTaintHandlerTest extends TestCase
         yield 'content type alongside an unrelated dynamic entry' => ['$r->make($c, 200, ["Content-Type" => "text/csv", "X-Custom" => $dynamic])', true];
         yield 'content type html' => ['$r->make($c, 200, ["Content-Type" => "text/html"])', false];
         yield 'content type svg xml' => ['$r->make($c, 200, ["Content-Type" => "image/svg+xml"])', false];
+        yield 'content type multipart' => ['$r->make($c, 200, ["Content-Type" => "multipart/form-data"])', false];
         yield 'content type javascript' => ['$r->make($c, 200, ["Content-Type" => "text/javascript"])', false];
         yield 'content type malformed' => ['$r->make($c, 200, ["Content-Type" => "not-a-media-type"])', false];
         // WHATWG MIME Sniffing falls through to sniffing, which CAN return text/html, for these essences.
