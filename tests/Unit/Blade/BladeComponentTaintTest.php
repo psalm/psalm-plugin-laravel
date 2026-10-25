@@ -97,6 +97,7 @@ final class BladeComponentTaintTest extends TestCase
         yield 'trait property, new' => ['resources/views/components/trait-d.blade.php'];
         yield '@component(Foo::class, ...)' => ['resources/views/components/compo.blade.php'];
         yield 'literal spread carrying the value last' => ['resources/views/components/spread-taint.blade.php'];
+        yield 'render() passing non-literal data' => ['resources/views/components/extra.blade.php'];
         yield 'view shared by two classes, first tainted' => ['resources/views/components/shared-x.blade.php'];
         yield 'view shared by two classes, second tainted' => ['resources/views/components/shared-y.blade.php'];
         // Accepted over-reports (docs/contributing/blade.md): a non-literal $except keeps every name, and a
@@ -128,6 +129,7 @@ final class BladeComponentTaintTest extends TestCase
         yield 'tag key that is not a constructor parameter' => ['resources/views/components/unbound.blade.php'];
         yield 'trait property of an unrelated component using the same trait' => ['resources/views/components/trait-b.blade.php'];
         yield 'literal $except hides the property' => ['resources/views/components/except-lit.blade.php'];
+        yield '$slot property, replaced by the rendered slot' => ['resources/views/components/holder.blade.php'];
         yield 'static property' => ['resources/views/components/static-prop.blade.php'];
         yield 'name Component::data() ignores' => ['resources/views/components/ignored-name.blade.php'];
         yield 'public method of the same name wins' => ['resources/views/components/method-wins.blade.php'];

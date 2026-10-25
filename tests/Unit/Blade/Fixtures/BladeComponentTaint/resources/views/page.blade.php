@@ -32,3 +32,5 @@
 @php($spread = \App\View\Components\SpreadArg::resolve(...[['message' => request('m')]]))
 @php($spreadSafe = \App\View\Components\SpreadSafe::resolve(['message' => request('m'), ...['message' => 'SAFE']]))
 @php($spreadTaint = \App\View\Components\SpreadTaint::resolve(['message' => 'SAFE', ...['message' => request('m')]]))
+<x-holder :slot="request('s')">Safe</x-holder>
+<x-extra :message="request('m')" />
