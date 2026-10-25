@@ -17,7 +17,8 @@ use PhpParser\Node\Scalar\String_;
  *    `$__env->slot('name', …)`;
  *  - which views a template renders by NAME (`@include`, `@includeIf`/`When`/`Unless`/`First`,
  *    `@each`, `@extends`, `@component('view')`): all compile to a `$__env->` call carrying the
- *    name as a literal. Such a render never runs `Component::data()`.
+ *    name as a literal. Such a render never runs `Component::data()`. So does a class-less
+ *    `<x-name>` tag: it compiles to `AnonymousComponent::resolve(['view' => 'name', …])`.
  *
  * The first two are lower bounds. `<x-dynamic-component>`, `Blade::renderComponent()`, package
  * views under a vendor hint root, and a slot whose name is an expression are invisible here. The
@@ -33,6 +34,9 @@ final class ComponentTagCollector
     private const INSIGNIFICANT = [\T_WHITESPACE => true, \T_COMMENT => true, \T_DOC_COMMENT => true];
 
     private const CLASS_NAME_TOKENS = [\T_STRING => true, \T_NAME_QUALIFIED => true, \T_NAME_FULLY_QUALIFIED => true];
+
+    /** The class an anonymous `<x-…>` tag compiles to, lowercased. */
+    private const ANONYMOUS = 'illuminate\view\anonymouscomponent';
 
     /** `Factory` methods the by-name render directives compile to. */
     private const RENDER_BY_NAME = [
@@ -75,6 +79,15 @@ final class ComponentTagCollector
                     $classes[$class] = true;
                 }
 
+                // A class-less `<x-name>` renders its view with no `data()` at all: by name, like an `@include`.
+                if ($class === self::ANONYMOUS) {
+                    $view = self::anonymousView($significant, $i + 2);
+
+                    if ($view !== null) {
+                        $views[\trim(ViewName::normalize($view))] = true;
+                    }
+                }
+
                 continue;
             }
 
@@ -106,6 +119,37 @@ final class ComponentTagCollector
             \array_map(\strval(...), \array_keys($slots)),
             \array_map(\strval(...), \array_keys($views)),
         ];
+    }
+
+    /**
+     * The literal view of `AnonymousComponent::resolve(['view' => 'name', 'data' => […]] + …)`, the
+     * first array's own `'view'` entry (a nested `'data'` array can spell the key too). Null for the
+     * `mail::` form, which resolves its view through the factory at run time.
+     *
+     * @param list<array{0: int, 1: string, 2: int}|string> $tokens
+     */
+    private static function anonymousView(array $tokens, int $at): ?string
+    {
+        $depth = 0;
+        $count = \count($tokens);
+
+        for ($i = $at; $i < $count; $i++) {
+            $token = $tokens[$i];
+
+            if ($token === '(' || $token === '[') {
+                $depth++;
+            } elseif ($token === ')' || $token === ']') {
+                $depth--;
+
+                if ($depth <= 0) {
+                    return null;
+                }
+            } elseif ($depth === 2 && self::literal($token) === 'view' && self::is($tokens[$i + 1] ?? null, \T_DOUBLE_ARROW)) {
+                return self::literal($tokens[$i + 2] ?? null);
+            }
+        }
+
+        return null;
     }
 
     /**

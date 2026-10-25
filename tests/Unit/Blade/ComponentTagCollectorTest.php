@@ -65,4 +65,17 @@ final class ComponentTagCollectorTest extends TestCase
             ComponentTagCollector::collect(\token_get_all($php))[2],
         );
     }
+
+    /**
+     * A class-less `<x-name>` tag renders its view by name, so it counts like an `@include`. Only the
+     * tag's own `'view'` entry does: a `'view'` key inside its `'data'` array is the author's.
+     */
+    #[Test]
+    public function an_anonymous_tag_renders_its_view_by_name(): void
+    {
+        $php = "<?php \$component = Illuminate\\View\\AnonymousComponent::resolve(['view' => 'components.card', 'data' => ['view' => 'nested']] + []); ?>"
+            . "<?php \$component = Illuminate\\View\\AnonymousComponent::resolve(['view' => \$__env->getContainer()->make(F::class)->make('mail::x'), 'data' => []] + []); ?>";
+
+        $this->assertSame(['components.card'], ComponentTagCollector::collect(\token_get_all($php))[2]);
+    }
 }

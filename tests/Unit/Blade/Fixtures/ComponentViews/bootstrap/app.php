@@ -17,4 +17,9 @@ $app->register(new class ($app) extends ServiceProvider {
     }
 });
 
+// A view composer, as an application's service provider would register one.
+$app->booted(static function () use ($app): void {
+    $app->make('view')->composer('components.composed', \App\View\Composers\LabelComposer::class);
+});
+
 return $app;

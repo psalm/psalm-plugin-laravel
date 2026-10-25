@@ -109,6 +109,10 @@ final class ComponentViewTypingTest extends TestCase
         yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];
         // `ViewName::normalize()` makes `components/linked` the view `components.linked`.
         yield 'also rendered by @include, spelled with a slash' => ['linked.blade.php', ['$title: mixed']];
+        // An anonymous `<x-shared-card>` renders the same view without `data()`: a rival renderer.
+        yield 'also rendered by an anonymous tag' => ['shared-card.blade.php', ['$caption: mixed']];
+        // A composer may overwrite what `data()` hands the view, so a key it supplies is not typed.
+        yield 'a key the view composer supplies' => ['composed.blade.php', ['$count: int', '$label: mixed']];
         yield 'a returned string with three :: segments is inline Blade' => ['suffixed.blade.php', ['$title: mixed']];
     }
 

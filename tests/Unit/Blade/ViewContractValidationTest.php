@@ -218,6 +218,23 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A `with()` whose key is not a literal, or whose array has no known keys, may replace any
+     * earlier-bound key, so the earlier type is not what the template receives and is not checked.
+     * The final case pins that only EARLIER-run contributions are widened: a literal `with()` that
+     * runs after the dynamic one still wins its key.
+     */
+    #[Test]
+    public function a_dynamic_with_call_widens_the_types_it_may_overwrite(): void
+    {
+        $issues = $this->contractIssues();
+        $reported = $this->forFile($issues, 'WithDynamicKeyOverwrite.php');
+
+        $this->assertCount(1, $reported, \var_export($issues, true));
+        $this->assertSame(self::WRONG_TYPE, $reported[0]['type']);
+        $this->assertStringContainsString('passes 123', $reported[0]['message']);
+    }
+
+    /**
      * A MailMessage chain reaches `SimpleMessage::with($line)`, which appends a notification line
      * and binds no template data — so the chain's key set stays closed and the declared variable is
      * still reported as missing.
@@ -570,6 +587,52 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * Like Livewire, a class component's `data()` is merged into the view `render()` resolves only: a
+     * second view built by another method of the class still lacks `$count`.
+     */
+    #[Test]
+    public function class_component_properties_reach_only_the_view_render_returns(): void
+    {
+        $issues = $this->contractIssues();
+        $reported = $this->forFile($issues, 'ComponentForeignView.php');
+
+        $this->assertSame([self::MISSING . ' $count', self::MISSING . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
+
+        $messages = \implode("\n", \array_column($reported, 'message'));
+        $this->assertStringContainsString("View 'component-foreign-side' requires", $messages);
+        $this->assertStringContainsString("View 'component-foreign-mail' requires", $messages);
+        $this->assertStringNotContainsString("View 'component-foreign' requires", $messages);
+    }
+
+    /**
+     * A property typed by its class's template parameter has no type a template can be judged against
+     * (`T` is unbound at the call site), so it is left unchecked; a property of a plain type on the
+     * same generic class is still typed.
+     */
+    #[Test]
+    public function a_templated_component_property_is_not_type_checked(): void
+    {
+        $issues = $this->contractIssues();
+        $reported = $this->forFile($issues, 'ComponentGenericProperty.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
+    }
+
+    /**
+     * An overridden `Component::data()` or `MailMessage::toArray()` opens the key set, and may replace
+     * a key the call passes too, so no passed type is judged: the Mailable path already behaves so.
+     */
+    #[Test]
+    public function an_overridden_data_method_keeps_no_passed_type(): void
+    {
+        $issues = $this->contractIssues();
+
+        foreach (['ComponentDataOverrideTypes.php', 'MailMessageOverridePassed.php'] as $file) {
+            $this->assertSame([], $this->forFile($issues, $file), $file . \var_export($issues, true));
+        }
+    }
+
+    /**
      * #2043: `parent` in a class component's property type names the class declaring the property, and a
      * trait's `self` the class using the trait, not the component the view renders for.
      */
@@ -595,6 +658,7 @@ final class ViewContractValidationTest extends TestCase
 
         $this->assertSame([self::WRONG_TYPE . ' $count'], $this->variablesOf($excepted), \var_export($issues, true));
         $this->assertSame([], $this->forFile($issues, 'ComponentExceptedOpaque.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile($issues, 'ComponentExceptedMethod.php'), \var_export($issues, true));
     }
 
     /**
@@ -827,6 +891,16 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->contractIssues();
 
         $this->assertSame([], $this->forFile($issues, 'ComposedMissing.php'), \var_export($issues, true));
+    }
+
+    /**
+     * An opaque composer (a closure here) may read any key the call site passed, so a key the
+     * template does not read is not provably unused.
+     */
+    #[Test]
+    public function a_view_with_an_unreadable_composer_never_reports_unused_data(): void
+    {
+        $this->assertSame([], $this->forFile($this->unusedIssues(), 'ComposedUnusedKey.php'), \var_export($this->unusedIssues(), true));
     }
 
     /**

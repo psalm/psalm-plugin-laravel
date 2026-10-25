@@ -37,13 +37,13 @@ use Psalm\Type\Union;
  *  - no other project or tagged component's `render()` outside that shape spells the same view name;
  *  - a compiled `<x-…>` tag somewhere renders that class ({@see ComponentTagCollector}): the
  *    `data()` keys only exist on that path, never on a manual `$component->render()`;
- *  - no compiled template renders the view by name (`@include`, `@each`, `@extends`,
+ *  - no compiled template renders the view by name (`@include`, `@each`, `@extends`, a class-less `<x-name>` tag,
  *    `@component('view')`), which hands it none of the `data()` keys;
  *  - the key set is knowable ({@see ComponentRenderData::guaranteedFor()}).
  *
  * Then each guaranteed key is seeded, except a key `render()` itself passes (path A and B disagree
- * on it), a literal named-slot name (a caller's slot overrides the key), an ambient or
- * slot-owned name, and a name the template declares itself.
+ * on it), a key a view composer supplies, a literal named-slot name (a caller's slot overrides the
+ * key), an ambient or slot-owned name, and a name the template declares itself.
  *
  * Every view any component's `render()` may name, seeded or not, also gets each `@props` entry the
  * prelude typed from its literal default reset to `mixed`.
@@ -114,6 +114,11 @@ final class ComponentViewRegistry
     {
         self::$seeds = [];
         self::$propertyIds = [];
+
+        // Seeding reads the keys composers supply, and the contract handler's own resolution runs after
+        // this handler's: resolving here too is the same result, read once more.
+        ComposerKeyResolver::resolve($codebase);
+
         // Not skipped without a single `<x-…>` tag: a class's own view still needs its `@props`
         // defaults undone below, whichever way it is rendered.
         $templates = ViewReferenceRegistry::templates();
@@ -302,12 +307,27 @@ final class ComponentViewRegistry
             return [];
         }
 
+        // A composer runs after `data()` and may overwrite what it supplied; one that cannot be read
+        // may overwrite anything.
+        $composed = [];
+
+        foreach (ViewReferenceRegistry::namesFor($templatePath) as $viewName) {
+            $keys = ContractRegistry::composedKeys($viewName);
+
+            if ($keys === null) {
+                return [];
+            }
+
+            $composed += $keys;
+        }
+
         $contract = $parser->parseDeclarations($source)->vars;
         $raw = \array_flip(ContractParser::rawDeclaredNames($source));
         $vars = [];
 
         foreach ($guaranteed as $name => $type) {
             if (isset($renderKeys[$name])
+                || isset($composed[$name])
                 || isset(self::$namedSlots[$name])
                 || isset(self::SLOT_OWNED[$name])
                 || isset(PreludeBuilder::AMBIENT_TYPES[$name])
