@@ -156,6 +156,7 @@ final class BladeComponentTaintTest extends TestCase
         yield 'trait property' => ['resources/views/components/trait-a.blade.php'];
         yield 'constructor declared in a trait' => ['resources/views/components/trait-ctor.blade.php'];
         yield 'constructor declared in a trait of the parent class' => ['resources/views/components/trait-ctor-child.blade.php'];
+        yield 'literal $except default the constructor replaces' => ['resources/views/components/except-ctor.blade.php'];
         yield '@component(Foo::class, ...)' => ['resources/views/components/compo.blade.php'];
         yield 'render() passing non-literal data' => ['resources/views/components/extra.blade.php'];
         yield 'view shared by two classes, one tainted' => ['resources/views/components/shared-x.blade.php'];
