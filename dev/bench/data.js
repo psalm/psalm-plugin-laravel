@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792949743688,
+  "lastUpdate": 1792952775301,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16375,6 +16375,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "339e7a4b747b50022f16829924a7953cdcedaa32",
+          "message": "fix: mark MissingViewHandler::isProvenNonNull() as @psalm-pure\n\nSelf-analysis on 4.x reported MissingPureAnnotation after #1692.",
+          "timestamp": "2026-10-25T19:22:38+01:00",
+          "tree_id": "4412184013a3ecab2cf477c4d0be6e1f20d2c67e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/339e7a4b747b50022f16829924a7953cdcedaa32"
+        },
+        "date": 1792952773498,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.97,
+            "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
