@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792959565364,
+  "lastUpdate": 1792960074501,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16515,6 +16515,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1313,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9bba1d41754c3f01765843a49dd0f55bf2bccd3",
+          "message": "fix(stubs): stop sealing properties on InvokableComponentVariable #2076 (#2093)",
+          "timestamp": "2026-10-25T21:23:44+01:00",
+          "tree_id": "3e8457e068c44cef74de5627a3d2bb42422dff75",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d9bba1d41754c3f01765843a49dd0f55bf2bccd3"
+        },
+        "date": 1792960072536,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.14,
+            "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1314,
             "unit": "MB"
           }
         ]
