@@ -10,10 +10,14 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\Analyzer\FunctionAnalyzer;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
+use Psalm\Internal\Analyzer\MethodAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\StatementsSource;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
@@ -92,6 +96,11 @@ final class ViewCallChain
 
         if (!$chain instanceof self) {
             return null;
+        }
+
+        // No keys added, but the set is no longer closed: the helper's caller completes the view.
+        if (self::isInNonPublicHelper($source)) {
+            $chain = $chain->supplying([[], false]);
         }
 
         $merged = ComponentRenderData::forSource($source);
@@ -311,9 +320,44 @@ final class ViewCallChain
      */
     private static function isInRenderMethod(StatementsSource $source): bool
     {
-        $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;
+        $analyzer = self::enclosingFunctionLike($source);
 
         return $analyzer instanceof FunctionLikeAnalyzer && \strtolower((string) $analyzer->getMethodName()) === 'render';
+    }
+
+    /**
+     * A named function or a private/protected method is a helper its caller completes:
+     * `function greetingView(): View { return view('greeting'); }` is called as
+     * `greetingView()->with('name', $n)`. A closure stays checked (a route closure is the final
+     * handler), and so does a public method (a controller action, a Mailable's `build()`).
+     *
+     * @psalm-mutation-free
+     */
+    private static function isInNonPublicHelper(StatementsSource $source): bool
+    {
+        $analyzer = self::enclosingFunctionLike($source);
+
+        if ($analyzer instanceof FunctionAnalyzer) {
+            return true;
+        }
+
+        if (!$analyzer instanceof MethodAnalyzer) {
+            return false;
+        }
+
+        $storage = $analyzer->getStorage();
+
+        return $storage instanceof MethodStorage && $storage->visibility !== ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+    }
+
+    /**
+     * @psalm-pure
+     */
+    private static function enclosingFunctionLike(StatementsSource $source): ?FunctionLikeAnalyzer
+    {
+        $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;
+
+        return $analyzer instanceof FunctionLikeAnalyzer ? $analyzer : null;
     }
 
     private static function walk(Expr $expr, StatementsSource $source, bool $trimName): ?self
