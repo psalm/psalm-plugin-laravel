@@ -613,7 +613,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      * (whose bound may admit null, e.g. an unbounded `T`) fail the proof, as does
      * anything else not understood here.
      *
-     * @psalm-mutation-free
+     * @psalm-pure
      */
     private static function isProvenNonNull(Union $type): bool
     {
