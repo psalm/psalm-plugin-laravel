@@ -6,48 +6,26 @@ nav_order: 12
 
 # MissingViewData
 
-Emitted when a Blade template declares a variable that the call site rendering it never passes.
+Emitted when a Blade template declares a variable that the call site rendering it never passes. The variable is undefined at render time, and Laravel's `HandleExceptions` turns the warning into an `ErrorException` in every environment, so `{{ $subtitle }}` fails instead of printing nothing.
 
-A template declares its variables with a `@var` docblock or a `@props` entry, both read by [Blade template analysis](../blade.md):
+A template declares variables with a `@var` docblock or a `@props` entry. Every declared variable is required, including `T|null` and `mixed`; a declaration ending in `= null` is optional. See [Declaring view variables](../blade.md#declaring-view-variables).
 
-```blade
-<?php /** @var \App\Models\User $user */ ?>
-@props(['title' => 'Untitled', 'subtitle'])
-```
-
-Every declared variable is required, including `T|null` and `mixed` (a nullable type means "pass `null` explicitly"). A declaration ending in `= null` is optional: `@var string|null $subtitle = null`. A name Blade supplies (`$errors`, `$slot`) or the template binds itself (a `@foreach` alias, an assignment target) is not a declaration. See [Declaring view variables](../blade.md#declaring-view-variables).
-
-## Why this is a problem
-
-The variable is undefined at render time. Laravel's `HandleExceptions` turns the undefined-variable
-warning into an `ErrorException` in every environment, so rendering `{{ $subtitle }}` fails instead of
-producing an empty string.
-
-## Examples
+## Example
 
 ```blade
 {{-- resources/views/profile.blade.php --}}
-<?php
-/**
- * @var string $name
- * @var int $age
- */
-?>
-<p>{{ $name }} ({{ $age }})</p>
+<?php /** @var string $name */ ?>
+<p>{{ $name }}</p>
 ```
 
 ```php
-// Bad: the template declares two variables, the call passes neither
-view('profile', []); // MissingViewData, twice
+view('profile', []);                                  // MissingViewData
 
-// Good
-view('profile', ['name' => 'Ada', 'age' => 36]);
-
-// Good: a with() chain counts, the whole chain is read at once
-view('profile', ['name' => 'Ada'])->with('age', 36);
+view('profile', ['name' => 'Ada']);                   // OK
+view('profile', [])->with('name', 'Ada');             // OK: the whole with() chain is read at once
 ```
 
-In a template, `@includeIsolated('profile', [...])` is checked the same way, and so is `@includeIsolated('profile')`, which passes no data. An ordinary `@include` never reports a missing variable, because the included template also inherits the including one's scope. See [Included templates](../contributing/blade.md#included-templates).
+In a template, `@includeIsolated('profile', [...])` is checked the same way, and so is `@includeIsolated('profile')`, which passes no data. An ordinary `@include` never reports a missing variable, because the included template also inherits the including one's scope.
 
 ## How to fix
 
@@ -55,145 +33,25 @@ In a template, `@includeIsolated('profile', [...])` is checked the same way, and
 2. Declare it optional if it genuinely is: give it a default in the template's `@props([...])`, or end the declaration with `= null` (`@var string|null $subtitle = null`).
 3. Drop the declaration if the template no longer reads that variable.
 
-## Reporting level
-
-Runs whenever [Blade analysis](../blade.md) is on. Without an explicit issue handler, it is reported as `info` by default: hidden unless Psalm runs with `--show-info=true`, never failing the run, and left out of a baseline. Promote that default to an error in `psalm.xml`:
-
-```xml
-<pluginClass class="Psalm\LaravelPlugin\Plugin">
-    <blade />
-    <experimental value="true" />
-</pluginClass>
-```
-
-Or promote this issue alone:
-
-```xml
-<issueHandlers>
-    <PluginIssue name="MissingViewData" errorLevel="error" />
-</issueHandlers>
-```
-
-Any explicit `<PluginIssue>` entry owns this issue's complete reporting policy, regardless of `<experimental>`.
-
 ## Limitations
 
-The check declines rather than guess. It is silent when:
+The check declines rather than guess. On top of the shared [supported call sites](../blade.md#supported-call-sites) (literal view name, analyzed template, recognized chain), it is silent when:
 
-- The view name is not a string literal, or names a template that is not analyzed: a namespace hint (`pkg::view`) under your vendor directory, or an unknown namespace.
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
 - The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
 - The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
-- The variable is one a view composer or creator supplies (see [Composers and creators](#composers-and-creators)). The other declared variables of that view are still checked; when a composer cannot be read, the whole view is skipped.
-- The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public, and a caller can chain `->with([...])` on its result.
-- The call site is in a named function or a `private` / `protected` method (static and trait methods included): `function greetingView(): View { return view('greeting'); }`. Its caller can complete the view, as in `$this->greetingView()->with('name', $name)`, or a mailable (`$this->buildBase()->subject('Hi')`), so the key set is open and this issue is off there, whether the call is returned or only a statement such as `$this->view('greeting');` in a protected helper. [InvalidViewData](InvalidViewData.md) and [UnusedViewData](UnusedViewData.md) still run. Public methods (controller actions, a Mailable's `build()` and `content()`) and closures (route closures, including one inside a private helper) are still checked. A method of a trait counts with the visibility the using class gives it: `use Helpers { helper as private; }` makes a public trait method a helper, while `use Helpers { helper as public; }` (or an alias such as `helper as public action`) keeps a private trait method checked. Two residuals: a private helper that is itself the rendering end is no longer checked for missing keys, and a `public` helper method that its callers complete still reports.
+- The variable is supplied by a view composer or creator. The other declared variables of that view are still checked, but when a composer cannot be read, the whole view is skipped. See [Composers and creators](../blade.md#composers-and-creators).
+- The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public and a caller can chain `->with([...])` on its result. Its framework-supplied properties still take part in [InvalidViewData](InvalidViewData.md). See [Framework-supplied data](../blade.md#framework-supplied-data), which also lists the Mailable, MailMessage and Livewire receivers with an open key set.
+- The call site is in a named function or a `private` / `protected` method (static and trait methods included), returned or not: its caller can complete the view, as in `$this->greetingView()->with('name', $name)`. A trait method counts with the visibility its using classes give it (`use T { helper as public; }` keeps it checked). [InvalidViewData](InvalidViewData.md) and [UnusedViewData](UnusedViewData.md) still run there. Public methods and closures (a closure inside a private helper included) are still checked. Residuals: a private helper that is itself the rendering end is not checked for missing keys, and a `public` helper whose callers complete the view still reports.
 - The supplied key set cannot be proven closed: a spread in the data array, a dynamic `with()` key, a `$mergeData` argument, or a data argument whose type is not a single sealed keyed array.
-- The rendering expression is not the whole of an expression or `return` statement, or its chain carries a method this check does not model. Recognized chains are `view()`, `Factory::make()`, `response()->view()`, `Mailable::view()` / `markdown()`, `MailMessage`'s equivalents, and any number of `with()` / `withErrors()` calls on top of them. `with()` is read the way Laravel dispatches it, on `is_array($key)` rather than on the argument count — except on a `MailMessage` chain, where `with()` appends a notification line and binds no template data.
 
-A view rendered from the `render()` of an `Illuminate\View\Component` subclass IS handled: Laravel
-merges `Component::data()` — every public non-static property, every public method minus
-`ignoredMethods()`, and `$attributes` — into the view's data, so those names count as supplied even
-though the `render()` passes only `['component' => $this]`. Property types are kept, so
-[InvalidViewData](InvalidViewData.md) still checks them against the template's
-declarations. A component with its own `data()` override can add names nothing can enumerate, so its
-supplied set is treated as open and this check declines for it.
+## Known false positive: variables bound outside the call site
 
-Three more receivers have framework-supplied keys, which count as supplied. They are never "passed", so [UnusedViewData](UnusedViewData.md) ignores them. [InvalidViewData](InvalidViewData.md) checks a Mailable or Livewire property against its declared type; an untyped property is `mixed` and exempt:
-
-- **Mailable** (`$this->view()` / `->markdown()`, or `$mailable->view()` on a receiver typed as one
-  `Mailable` subclass): every public property, static ones included, that the subclass declares
-  (promoted, defaulted or assigned), plus `$message`. A receiver typed as `Mailable` itself, a
-  contract, a union or an intersection has an unknowable key set, so this issue is off for it (passed keys are still type-checked by InvalidViewData, and UnusedViewData still runs). So does an
-  abstract Mailable, since a concrete subclass can add public properties its base does not declare.
-  A property the call also passes by name is `mixed`: at runtime the passed value can win. `mailer`
-  and `__laravel_mailable` count too (`mixed`). A Mailable overriding `buildViewData()` or
-  `additionalMessageData()` has an open key set too: this issue is off, and its passed keys are `mixed`.
-- **MailMessage** (`(new MailMessage)->view()` / `->markdown()`): `level`, `subject`, `greeting`,
-  `salutation`, `introLines`, `outroLines`, `actionText`, `actionUrl`, `displayableActionUrl`,
-  `$message`, `mailer` and the `__laravel_notification*` keys. A key the call passes wins over its own entry here. The property keys are `mixed`
-  (Laravel's own docblocks are coarser than the real values); `displayableActionUrl` is a `string`.
-  A subclass overriding `data()` or `toArray()` has an open key set: this issue is off, and the passed keys are still type-checked.
-- **Livewire** (`view()` or `View::make()` inside `render()` of a `Livewire\Component` subclass): every
-  public, non-static property the component declares. Only the view `render()` returns gets them: a
-  mail view built on the side inside `render()` does not. An abstract component has an open key set,
-  so this issue is off for it.
-
-The type of `$message` depends on the path, because `Mailer::send()` sets it after merging the data on
-the `view()` path and the markdown renderers merge the data over it:
-
-- `view()` (Mailable or MailMessage): always `Illuminate\Mail\Message`, whatever a property, a passed
-  key or an extraction override says.
-- Mailable `markdown()`: a property named `message` wins, then a passed `message`, each with its own
-  type. Otherwise it is `mixed` when the data is not fully known or an override is present, and
-  `Illuminate\Mail\Message|Illuminate\Mail\TextMessage` when not, because the text pass wraps the
-  message in `TextMessage`, which is not a `Message` subclass.
-- MailMessage `markdown()`: a passed `message` wins with its own type. Otherwise it is `mixed` when
-  the data is not fully known, and `Illuminate\Mail\Message` when it is.
-
-## Composers and creators
-
-A composer or creator registered for the view (exact name or a wildcard such as `admin.*`) can
-supply any key. A creator runs inside `view()` (`Factory::make()`), after the data array is set but
-before any chained `->with()`; a composer runs at render time, after the whole call site. The plugin
-reads the method instead of running it and exempts only the keys it passes; every other declared
-variable is checked as usual. [InvalidViewData](InvalidViewData.md) skips those keys
-too, since the composer or creator may overwrite the passed value (a chained `->with()` beats a
-creator, so skipping it there is merely conservative).
-
-What is read:
-
-- Class composers and creators: `View::composer('x', Foo::class)`, `'Foo@method'`, `View::creator(...)`, wildcard names included. The method may be inherited or come from a trait. The keys of several composers on one view are unioned.
-- Every `$view->with('key', ...)` and `$view->with(['key' => ..., ...])` with string literal keys, chained or not, as a statement of its own.
-- `$view->name()`, `$view->getName()` and `$view->getPath()`, which only read the view: a composer may compute a value from them and pass it to `with()`.
-
-The whole view is skipped, as if every key were composer-supplied, when any composer reaching it:
-
-- is a closure, or a listener registered straight on the event dispatcher for the exact view name (`Event::listen('composing: x', ...)`);
-- passes a key that is not a string literal: a variable, `with($array)`, a spread or named arguments;
-- uses `$view` any other way: passes it on (`$this->decorate($view)`, `parent::compose($view)`), assigns, returns or captures it, uses the result of `with()`, sets a property or offset on it, calls another method on it (`withTitle()`, `nest()`, `getData()`), or calls it through `?->`;
-- calls `share()`, `extract()`, `get_defined_vars()`, `func_get_args()` or `func_get_arg()`, or a `compact()` naming `$view` or a name that is not a string literal (they reach `$view` by name or position), uses a variable variable, or calls a method or function through a computed name;
-- has no method body the plugin can find.
-
-Wildcard listeners registered straight on the dispatcher (`Event::listen('composing:*', ...)`,
-`Event::listen('*', ...)`) are ignored: the composer API never registers one, and debugging and
-monitoring packages such as Ray, Telescope or Debugbar use them to watch every view.
-
-**Accepted residual.** The composer class is read as written. A class the container rebinds, extends
-or hooks before resolving, a view factory or dispatcher subclass, a constructor that shares data, a
-protected method served by `__call()`, data reaching the view through `call_user_func()` or an
-`include`, and a wildcard dispatcher listener that adds view data are not modelled. If the keys the
-view really receives differ from what the composer's method shows, the call site reports; the fix is
-`= null` on the declaration or a suppression (below).
-
-**Limitation: composers registered after boot.** Only composers registered while the application
-boots (service providers) are read. A composer registered later, in a middleware or a controller, is
-invisible: a view whose only composer is registered at runtime is checked as if it had none, and a
-view with a boot composer plus a runtime one is checked against the boot composer's keys only. A
-`share()` inside a method the composer calls, or inside a dependency it receives, is not seen either.
-
-### Known false positive: variables bound outside the call site
-
-The check reads the data one call site passes. It does not know about the ways Laravel binds a
-variable into a view somewhere else entirely:
-
-- A composer or creator that is not registered by the time the plugin boots the application (one added lazily at runtime).
-- `@inject('metrics', 'App\Services\Metrics')` inside the template, which resolves from the container rather than from the data array.
-
-A variable that arrives that way is declared by the template but never passed by the call
-site, so it is reported. Either drop its `@var` declaration, or silence the rule for the
-call sites it affects:
+A variable can reach a view without the call site passing it: a composer or creator registered after boot, or `@inject('metrics', 'App\Services\Metrics')` inside the template. It is declared by the template but never passed, so it is reported. Drop its `@var` declaration, or suppress the issue at the affected statement:
 
 ```php
 /** @psalm-suppress MissingViewData */
 return view('profile', []);
 ```
 
-Application wide, suppress it through `issueHandlers` in your `psalm.xml`:
-
-```xml
-<issueHandlers>
-    <MissingViewData errorLevel="suppress" />
-</issueHandlers>
-```
-
-Teaching the check to read `share()` and `@inject` bindings is tracked as a follow-up.
+For application-wide suppression and promotion, see the shared [reporting level](../blade.md#reporting-level).
