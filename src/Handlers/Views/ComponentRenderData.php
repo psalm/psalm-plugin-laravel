@@ -216,8 +216,6 @@ final class ComponentRenderData
      * Empty when a declaring class could not be resolved: nothing is connected rather than guessed.
      *
      * @return array<string, string> variable name => property id
-     *
-     * @psalm-capabilities read-props
      */
     public static function exposedPropertyIds(Codebase $codebase, ClassLikeStorage $storage): array
     {
@@ -307,8 +305,6 @@ final class ComponentRenderData
      * `list{'a', 'b'}`, so a `@var`-typed or computed default is unknown.
      *
      * @return list<string>|null
-     *
-     * @psalm-capabilities read-props
      */
     private static function exceptedNames(Codebase $codebase, ClassLikeStorage $storage): ?array
     {
@@ -351,8 +347,6 @@ final class ComponentRenderData
     /**
      * Whether a constructor the class runs (its own, or one a parent declares) touches `$this->except`.
      * A constructor Psalm cannot locate in source (a trait's) is not read.
-     *
-     * @psalm-capabilities read-props
      */
     private static function constructorMentionsExcept(Codebase $codebase, ClassLikeStorage $storage): bool
     {
