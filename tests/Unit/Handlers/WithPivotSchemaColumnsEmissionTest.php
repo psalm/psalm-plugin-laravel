@@ -274,13 +274,8 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         $this->assertContains($this->stampedRelation("{$immutable}|null"), $traces);
         $this->assertSame([], \array_diff($this->modelDates($immutable), $traces));
 
-        // A callable builds the dates: nothing is proven. `immutable_*` casts name their class regardless.
-        // So does a class that is no Carbon: `Date::createFromFormat()` and friends may return anything.
-        foreach (['callable', 'plain'] as $mode) {
-            $traces = $this->runPsalm(['WITH_PIVOT_DATE' => $mode]);
-            $this->assertContains($this->stampedRelation('mixed'), $traces, $mode);
-            $this->assertSame([], \array_diff($this->modelDates('mixed'), $traces), $mode);
-        }
+        // The `mixed` outcomes (a callable, a factory, a class that is no Carbon) need no Psalm run: CastResolverTest
+        // covers them in process, and the pivot timestamps share that resolver.
     }
 
     /**
@@ -292,12 +287,10 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
      */
     private function modelDates(string $date): array
     {
-        $nullable = $date === 'mixed' ? 'mixed' : "{$date}|null";
-
         return [
             "\$_published_at: {$date}",
-            "\$_reviewed_on: {$nullable}",
-            "\$_deleted_at: {$nullable}",
+            "\$_reviewed_on: {$date}|null",
+            "\$_deleted_at: {$date}|null",
             '$_archived_at: Carbon\\CarbonImmutable|null',
         ];
     }
