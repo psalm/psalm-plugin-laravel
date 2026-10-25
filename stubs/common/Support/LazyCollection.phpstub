@@ -225,8 +225,8 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     /**
      * @template TWhenEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
      * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
      */
     public function whenEmpty(callable $callback, ?callable $default = null) {}
@@ -234,8 +234,8 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     /**
      * @template TWhenNotEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
      * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
      */
     public function whenNotEmpty(callable $callback, ?callable $default = null) {}
@@ -243,8 +243,8 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     /**
      * @template TUnlessEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
      * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
      */
     public function unlessEmpty(callable $callback, ?callable $default = null) {}
@@ -252,8 +252,8 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
     /**
      * @template TUnlessNotEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\LazyCollection<TKey, TValue>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Support\LazyCollection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
      * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
      */
     public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
