@@ -1,1 +1,2 @@
-@php /** @psalm-trace $heading */ $probe = [$heading]; @endphp
+@props(['size' => 'lg'])
+@php /** @psalm-trace $heading $size */ $probe = [$heading, $size]; @endphp

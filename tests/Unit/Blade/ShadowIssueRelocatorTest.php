@@ -745,7 +745,7 @@ final class ShadowIssueRelocatorTest extends TestCase
      * above: without a booted ProjectAnalyzer `getSnippet()` throws, and an issue whose callee and
      * argument position both match the gate must still come back relocated rather than dropped.
      * The discriminating behaviour needs a real compiled shadow and is pinned by
-     * {@see EchoUnionArgumentTest}; the string rule itself by {@see TemplateSnippetMatcherTest}.
+     * {@see BladeTemplatesTest}; the string rule itself by {@see TemplateSnippetMatcherTest}.
      */
     #[Test]
     public function an_echo_position_argument_issue_is_kept_when_its_snippet_cannot_be_read(): void
