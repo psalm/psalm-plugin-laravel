@@ -309,6 +309,32 @@ final class AnnotationCollectorTest extends TestCase
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
     }
 
+    /**
+     * `Factory::first()` renders whichever candidate exists, reached through the facade or the helper.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function firstProducers(): iterable
+    {
+        yield 'facade' => ["return View::first(['home', 'fallback'], ['title' => 42]);"];
+        yield 'fully qualified facade' => ["return \\Illuminate\\Support\\Facades\\View::first(['home', 'fallback'], ['title' => 42]);"];
+        yield 'helper' => ["return view()->first(['home', 'fallback'], ['title' => 42]);"];
+    }
+
+    #[Test]
+    #[DataProvider('firstProducers')]
+    public function marks_every_candidate_of_a_first_call_unreadable(string $code): void
+    {
+        // The second array literal is the candidate list, not data.
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\nview('fallback', ['title' => 'text']);\n{$code}",
+            [['title' => Type::getString()], ['title' => Type::getString()], ['x' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+        $this->assertNull(AnnotationCollector::typeFor('fallback', 'title'));
+    }
+
     #[Test]
     public function records_an_isolated_include_site_as_a_producer_of_the_included_view(): void
     {
