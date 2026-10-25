@@ -10,7 +10,8 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
-use Psalm\Context;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitorAbstract;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
@@ -99,12 +100,12 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     private static array $resolving = [];
 
     /**
-     * Per analysed file, the variable names it tests or writes without making them locals, see
-     * {@see self::isTouched()}.
+     * Per analysed file, what {@see self::scan()} found: whether it may write variables by name, and the
+     * variable names it uses in any way but forwarding them to an include.
      *
-     * @var array<string, array<string, true>>
+     * @var array<string, array{0: bool, 1: array<string, true>}>
      */
-    private static array $touched = [];
+    private static array $scans = [];
 
     /**
      * What {@see self::observations()} answered per pair, so a diamond of includes resolves each pair
@@ -148,7 +149,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         self::$alwaysSupplied = [];
         self::$edges = [];
         self::$resolving = [];
-        self::$touched = [];
+        self::$scans = [];
         self::$resolved = [];
         self::$analyzed = false;
         self::$recorded = null;
@@ -183,7 +184,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $stmt = $event->getStmt();
 
         if ($stmt instanceof Stmt\Echo_) {
-            self::recordEcho($stmt, $event->getStatementsSource(), $event->getContext());
+            self::recordEcho($stmt, $event->getStatementsSource());
 
             return null;
         }
@@ -230,7 +231,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      * controller's type gets declared that the include then passes something else for. One that
      * passes the including scope (`@include`, `@extends`) leaves the data set open.
      */
-    private static function recordEcho(Stmt\Echo_ $stmt, StatementsSource $source, Context $context): void
+    private static function recordEcho(Stmt\Echo_ $stmt, StatementsSource $source): void
     {
         $echoed = $stmt->exprs[0] ?? null;
 
@@ -247,7 +248,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 $chain->supplied(),
                 $chain->complete,
                 self::site($stmt, $source),
-                self::deferredKeys($include, $chain, $source, $context),
+                self::deferredKeys($include, $chain, $source),
             );
             $skip = self::spine($echoed);
         }
@@ -265,14 +266,14 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      * The keys of an `@includeIsolated` whose value is a bare variable of the including template that
      * Psalm saw as exactly `mixed`, with where to ask for its real type once that template is planned.
      *
-     * Psalm keeps the type id `mixed` through `$x !== null` and `isset($x)`, so a variable a clause in
-     * force or the file itself narrows is declined: the parent's `Member|null` would be declared where
-     * a second run narrows it to `Member`. Locals and unknown reads are declined later, by the plan
-     * ({@see AnnotationWriter::fileVariable()}). Any other expression (`$m->team`) is never followed.
+     * The including template may do nothing with the variable but forward it ({@see self::isOnlyForwarded()}):
+     * any other use may change what Psalm knows about it once it is typed, which it is not yet. Locals and
+     * unknown reads are declined later, by the plan ({@see AnnotationWriter::fileVariable()}). Any other
+     * expression (`$m->team`) is never followed.
      *
      * @return array<string, array{0: string, 1: string}> key => including template path, variable name
      */
-    private static function deferredKeys(Expr\MethodCall $include, ViewCallChain $chain, StatementsSource $source, Context $context): array
+    private static function deferredKeys(Expr\MethodCall $include, ViewCallChain $chain, StatementsSource $source): array
     {
         $entry = ShadowRegistry::entryFor($source->getFilePath());
 
@@ -288,8 +289,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             if ($value instanceof Expr\Variable
                 && \is_string($value->name)
                 && ($chain->data[$key] ?? null)?->getId(false) === 'mixed'
-                && !self::hasClause($context, $value->name)
-                && !self::isTouched($source, $value->name)
+                && self::isOnlyForwarded($source, $value->name)
             ) {
                 $keys[$key] = [$entry->templatePath, $value->name];
             }
@@ -299,71 +299,144 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * Whether any clause in force mentions the variable, or something reached through it (`$x->y`, `$x['k']`).
+     * Whether the including template uses the variable ONLY as the value of an item in the data array of
+     * an include at its top level (`$__env->make('child', ['post' => $post])`). Any other occurrence of
+     * the name anywhere in the file declines every include of it: no use of a variable can be shown unable
+     * to change what Psalm knows of it once it is typed (a condition, a loop between the test and the
+     * include, a receiver, an argument, `isset`, an assignment either way, a reference), while a forwarded
+     * one is passed on untouched. An occurrence inside a function, closure or class the template declares
+     * is that scope's own local.
+     *
+     * A template that may write variables by name declines for every variable, as such a write has no
+     * variable node to find: a call through `extract`, `call_user_func` or `call_user_func_array`, one
+     * whose callee is not a plain name, any `use function` import (which can alias them), `include`,
+     * `require` and `eval`, and more than one namespace block.
+     */
+    private static function isOnlyForwarded(StatementsSource $source, string $variable): bool
+    {
+        [$writesByName, $used] = self::scan($source);
+
+        return !$writesByName && !isset($used[$variable]);
+    }
+
+    /**
+     * One pass over a file, memoized: whether it may write variables by name, and the variable names it uses
+     * in any way but forwarding them.
+     *
+     * @return array{0: bool, 1: array<string, true>}
+     */
+    private static function scan(StatementsSource $source): array
+    {
+        $path = $source->getFilePath();
+
+        if (isset(self::$scans[$path])) {
+            return self::$scans[$path];
+        }
+
+        $statements = $source->getCodebase()->getStatementsForFile($path);
+        $visitor = new class extends NodeVisitorAbstract {
+            public bool $writesByName = false;
+
+            /** @var array<string, true> */
+            public array $used = [];
+
+            /** @var list<Node> the ancestors of the node being entered, outermost first */
+            private array $parents = [];
+
+            #[\Override]
+            public function enterNode(Node $node): null
+            {
+                if ($node instanceof Expr\Variable) {
+                    if (\is_string($node->name) && !AnnotationCollector::isForwarded($node, $this->parents)) {
+                        $this->used[$node->name] = true;
+                    }
+                } elseif (AnnotationCollector::mayWriteByName($node)) {
+                    $this->writesByName = true;
+                }
+
+                $this->parents[] = $node;
+
+                return null;
+            }
+
+            /** @psalm-capabilities read-props|write-this-props|write-refs */
+            #[\Override]
+            public function leaveNode(Node $node): null
+            {
+                \array_pop($this->parents);
+
+                return null;
+            }
+        };
+
+        (new NodeTraverser($visitor))->traverse($statements);
+
+        // More than one namespace block: each call would need its own imports to be judged.
+        $writesByName = $visitor->writesByName
+            || \count(\array_filter($statements, static fn(Stmt $statement): bool => $statement instanceof Stmt\Namespace_)) > 1;
+
+        return self::$scans[$path] = [$writesByName, $visitor->used];
+    }
+
+    /**
+     * Whether the variable is the value of a by-value item of an array that is an argument of the `Factory`
+     * call a compiled `@includeIsolated`, `@include` and the rest of that family make with their data, and
+     * no function, method, closure or class the template declares encloses it.
+     *
+     * @param list<Node> $parents the ancestors of `$node`, outermost first
+     *
+     * @internal for the scan's visitor
+     */
+    public static function isForwarded(Node $node, array $parents): bool
+    {
+        foreach ($parents as $ancestor) {
+            if ($ancestor instanceof Node\FunctionLike || $ancestor instanceof Stmt\ClassLike) {
+                return false;
+            }
+        }
+
+        $tail = \array_slice($parents, -4);
+        $call = $tail[0] ?? null;
+        $arg = $tail[1] ?? null;
+        $array = $tail[2] ?? null;
+        $item = $tail[3] ?? null;
+
+        return $item instanceof Node\ArrayItem && !$item->byRef && !$item->unpack && $item->value === $node
+            && $array instanceof Expr\Array_ && $arg instanceof Node\Arg
+            && $call instanceof Expr\MethodCall && $call->name instanceof Node\Identifier
+            && \in_array($call->name->toLowerString(), ['make', 'renderwhen', 'renderunless', 'first'], true);
+    }
+
+    /**
+     * Whether the node may write variables of the including scope by name, see {@see self::isOnlyForwarded()}.
+     *
+     * @internal for the scan's visitor
+     */
+    public static function mayWriteByName(Node $node): bool
+    {
+        return match (true) {
+            $node instanceof Expr\Include_, $node instanceof Expr\Eval_ => true,
+            $node instanceof Expr\FuncCall => !$node->name instanceof Node\Name
+                || \in_array(\strtolower($node->name->getLast()), ['extract', 'call_user_func', 'call_user_func_array'], true),
+            $node instanceof Stmt\Use_, $node instanceof Stmt\GroupUse => self::importsFunction($node->type, $node->uses),
+            default => false,
+        };
+    }
+
+    /**
+     * @param array<Node\UseItem> $uses
      *
      * @psalm-capabilities read-props
      */
-    private static function hasClause(Context $context, string $variable): bool
+    private static function importsFunction(int $type, array $uses): bool
     {
-        $pattern = '/^\$' . \preg_quote($variable, '/') . '(?![\w\x80-\xff])/';
-
-        foreach ($context->clauses as $clause) {
-            foreach (\array_keys($clause->possibilities) as $id) {
-                if (\preg_match($pattern, $id) === 1) {
-                    return true;
-                }
+        foreach ($uses as $use) {
+            if ($type === Stmt\Use_::TYPE_FUNCTION || $use->type === Stmt\Use_::TYPE_FUNCTION) {
+                return true;
             }
         }
 
         return false;
-    }
-
-    /**
-     * Whether the file tests the variable with `isset()`/`empty()`, unsets it, writes it with a
-     * compound assignment (`??=`) or binds it by reference (`$alias =& $x`, either side, `[&$x]`),
-     * anywhere. Psalm leaves no clause for `isset()` once the name was read, keeps `mixed` through
-     * the writes, and a condition on an alias names the alias, so the include cannot tell. A plain assignment makes
-     * the name a local, which the plan never declares. One scan per file.
-     */
-    private static function isTouched(StatementsSource $source, string $variable): bool
-    {
-        $path = $source->getFilePath();
-
-        if (!isset(self::$touched[$path])) {
-            $finder = new NodeFinder();
-            $names = [];
-
-            foreach ($finder->find($source->getCodebase()->getStatementsForFile($path), static fn(Node $node): bool => self::touchedBy($node) !== []) as $node) {
-                foreach ($finder->findInstanceOf(self::touchedBy($node), Expr\Variable::class) as $touched) {
-                    if (\is_string($touched->name)) {
-                        $names[$touched->name] = true;
-                    }
-                }
-            }
-
-            self::$touched[$path] = $names;
-        }
-
-        return isset(self::$touched[$path][$variable]);
-    }
-
-    /**
-     * The expressions a node tests or writes, see {@see self::isTouched()}; empty for any other node.
-     *
-     * @return list<Node>
-     *
-     * @psalm-capabilities read-props
-     */
-    private static function touchedBy(Node $node): array
-    {
-        return match (true) {
-            $node instanceof Expr\Isset_, $node instanceof Stmt\Unset_ => \array_values($node->vars),
-            $node instanceof Expr\Empty_ => [$node->expr],
-            $node instanceof Expr\AssignOp => [$node->var],
-            $node instanceof Expr\AssignRef => [$node->var, $node->expr],
-            $node instanceof Node\ArrayItem && $node->byRef => [$node->value],
-            default => [],
-        };
     }
 
     /**

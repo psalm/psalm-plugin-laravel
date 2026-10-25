@@ -19,8 +19,8 @@ use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
  * template is declared with in the same run. Every case reads the same two runs over a private copy
  * of `Fixtures/AnnotateIncludes`: a dry run, then a writing run.
  *
- * The expected templates are the fixpoint that rerunning the command until nothing changes reaches,
- * except the declines, which a rerun may still type differently and so stay undeclared.
+ * The expected templates are the fixpoint that rerunning the command until nothing changes reaches, except
+ * the declines, which a rerun may still type differently (from the typed parent) and so stay undeclared.
  */
 #[CoversClass(AnnotationCollector::class)]
 #[Group('subprocess')]
@@ -28,7 +28,9 @@ final class AnnotateIncludeChainTest extends TestCase
 {
     use CopiesFixtureDirectories;
 
-    private const POST = '\\AnnotateIncludesFixture\\Post';
+    private const NS = '\\AnnotateIncludesFixture\\';
+
+    private const POST = self::NS . 'Post';
 
     private static ?string $copy = null;
 
@@ -70,19 +72,33 @@ final class AnnotateIncludeChainTest extends TestCase
             'opt-top' => $declare($optional, 'member', ' = null'),
             'opt-leaf' => $declare($optional, 'member'),
             'narrow-top' => $declare($optional, 'member', ' = null'),
-            'narrow-plain' => $declare($optional, 'member'),
             'isset-top' => $declare($optional, 'member', ' = null'),
             'coalesce-top' => $declare($optional, 'x', ' = null'),
             'spread-top' => $declare(self::POST, 'member'),
             'ref-alias-top' => $declare(self::POST, 'x'),
             'ref-array-top' => $declare(self::POST, 'x'),
+            // The parents of the declines below are typed like any template.
+            'guard-top' => $declare('null|string', 'x'),
+            'nullcall-top' => $declare(self::NS . 'Box<string>|null', 'x'),
+            'thisout-top' => $declare(self::NS . 'Box<string>', 'x'),
+            'assert-top' => $declare('null|string', 'x'),
+            'byref-top' => $declare('string', 'x'),
+            'generic-top' => $declare(self::NS . 'ProbeBox<never>', 'x'),
+            'hydrate-top' => $declare('string', 'x'),
+            'cuf-top' => $declare('string', 'x'),
+            'dyn-top' => $declare('string', 'x'),
+            'scope-top' => $declare('string', 'x'),
+            'magic-top' => $declare(self::NS . 'Box<string>', 'x'),
         ];
 
         foreach ($runs['before'] as $name => $source) {
-            // Declined, and left as they were: a cycle; an include under `$member !== null`, under
-            // `@isset`, after `??=` or a reference binding (`=&`, `[&$x]`), or before a spread that may
-            // overwrite it (each narrows or replaces what the parent declares); a loop alias; a parent
-            // that reads names it cannot list; a parent whose call sites disagree.
+            // Declined, and left as they were: a cycle; a loop alias; a parent that reads names it cannot list;
+            // a parent whose call sites disagree; an include before a spread that may overwrite it; and a
+            // parent that does more with the variable than forward it (a condition or a loop, `@isset`, `??=`,
+            // a reference, a receiver or magic access, a by-reference, asserting or generic-coercing
+            // argument), writes variables by name (`extract` aliased, through `call_user_func` or a dynamic
+            // callee) or includes from a function it declares: each may change what Psalm knows of the
+            // variable once the parent is typed.
             $this->assertSame(($expected[$name] ?? '') . $source, $runs['after'][$name] ?? null, $name);
         }
     }
