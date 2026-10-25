@@ -194,6 +194,22 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
+    public function does_not_list_a_disagreement_on_a_key_a_view_composer_owns(): void
+    {
+        // Call sites that disagree on a key the composer writes are not the user's to settle.
+        foreach (['title', 'other'] as $name) {
+            AnnotationCollector::record('home', [$name => $this->objects('App\Post')], true);
+            AnnotationCollector::record('home', [$name => Type::getMixed()], true);
+        }
+
+        ContractRegistry::registerComposerSources(['home' => [['App\\Composer', 'compose']]]);
+        ContractRegistry::registerComposedKeys(['home' => ['title' => true]]);
+
+        $this->assertNull(AnnotationCollector::disagreeingTypes('home', 'title'));
+        $this->assertSame(['App\Post', 'mixed'], AnnotationCollector::disagreeingTypes('home', 'other'), 'a key no composer writes still lists');
+    }
+
+    #[Test]
     public function declines_every_key_when_a_view_composer_cannot_be_read(): void
     {
         AnnotationCollector::record('home', ['title' => Type::getString()], true);
