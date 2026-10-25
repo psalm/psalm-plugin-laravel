@@ -67,6 +67,10 @@ trait RunsAnnotateFixture
         'framed-nested' => "{{ json_encode(\$row) }}\n",
         'fragment' => "<p>fragment</p>\n",
         'private-helper' => "{{ \$text }}\n",
+        'edge-cond' => "{{ \$title }}\n",
+        'edge-first' => "{{ \$title }}\n",
+        'edge-first-fallback' => "{{ \$title }}\n",
+        'edge-composed' => "{{ \$title }} {{ \$extra }}\n",
     ];
 
     /**

@@ -107,6 +107,12 @@ final class AnnotateEndToEndTest extends TestCase
             self::TEMPLATES['collections'],
         )];
 
+        // The composer writes `title` after the call site passes it, so only `extra` has a type to declare.
+        yield 'a key a view composer writes is left to the composer' => ['edge-composed', $declare(
+            " * @var string \$extra\n",
+            self::TEMPLATES['edge-composed'],
+        )];
+
         // The callback's own statement records the producer; the enclosing chain is declined, and
         // its scan for nested view names must not count that same call a second time as unreadable.
         foreach (['modal-arrow', 'modal-closure', 'modal-nested'] as $name) {
@@ -154,6 +160,11 @@ final class AnnotateEndToEndTest extends TestCase
         // passing another type there.
         yield 'a respelled producer blocks the template it really renders (spelled)' => ['pkg:spelled'];
         yield 'a respelled producer blocks the template it really renders (padded)' => ['pkg:padded'];
+        // The second producer is the condition of an `if`, which no statement of its own records.
+        yield 'a producer in a condition' => ['edge-cond'];
+        // `View::first()` renders whichever candidate exists, with another type than the call site that is read.
+        yield 'a View::first() candidate (the first)' => ['edge-first'];
+        yield 'a View::first() candidate (the fallback)' => ['edge-first-fallback'];
     }
 
     #[Test]
