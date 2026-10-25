@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792947409047,
+  "lastUpdate": 1792949298363,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16300,6 +16300,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.51,
             "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "39223e59a7d3eff9969cebbe072902d7e3c8b272",
+          "message": "fix(blade): type an annotate include edge only where the including template just forwards the variable #2065 (#2066)\n\nThe eligibility of a deferred @includeIsolated edge was a clause check plus a file scan for\nisset, empty, unset, ??= and reference bindings. Psalm leaves no trace of what a loop that\ndrops a clause, a receiver method with @psalm-this-out, a magic accessor, a by-value\n@psalm-assert, a generic parameter coercion, a by-reference argument, an aliased extract(),\ncall_user_func('extract') or a dynamic callee, or an include inside a function the template\ndeclares does to a variable while it is still mixed, so each wrote a child declaration the\ntyped parent contradicts.\n\nThe variable may now occur in the including shadow only as a by-value item value in the data\narray of a top-level Factory make call, and a shadow that may write variables by name\ndeclines every name.",
+          "timestamp": "2026-10-25T18:24:38+01:00",
+          "tree_id": "6190aa57547057dbf9266ddb828a5ad0f0e599d0",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/39223e59a7d3eff9969cebbe072902d7e3c8b272"
+        },
+        "date": 1792949297054,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.03,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
