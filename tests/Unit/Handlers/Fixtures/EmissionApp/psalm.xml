@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <psalm
     errorLevel="1"
+    findUnusedCode="true"
     autoloader="autoload.php"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns="https://getpsalm.org/schema/config"
@@ -10,7 +11,9 @@
     </projectFiles>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
-            <findUnregisteredRouteNames value="true" />
+            <!-- Arms the opt-in rules (disks, route names) and promotes UnknownModelAttribute and
+                 UndefinedModelRelation to errors. -->
+            <experimental value="true" />
         </pluginClass>
     </plugins>
 </psalm>

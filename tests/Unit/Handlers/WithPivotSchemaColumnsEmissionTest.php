@@ -25,6 +25,9 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
 
     private const MODELS = 'WithPivotFixture\Models\\';
 
+    /** @var array<string, list<string>> `@psalm-trace` messages per env variant */
+    private static array $traces = [];
+
     #[Test]
     public function it_types_pivot_columns_from_the_pivot_table_migration(): void
     {
@@ -287,6 +290,12 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
      */
     private function runPsalm(array $env = []): array
     {
+        // Every case but the date-class one reads the same default run: one psalm process per distinct env.
+        $key = \json_encode($env, \JSON_THROW_ON_ERROR);
+        if (isset(self::$traces[$key])) {
+            return self::$traces[$key];
+        }
+
         $fixtureDir = __DIR__ . '/Fixtures/WithPivotSchemaColumns';
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
 
@@ -312,6 +321,6 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
             }
         }
 
-        return $traces;
+        return self::$traces[$key] = $traces;
     }
 }

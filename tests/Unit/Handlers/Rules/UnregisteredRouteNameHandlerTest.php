@@ -16,7 +16,7 @@ use Psalm\LaravelPlugin\Handlers\Rules\UnregisteredRouteNameHandler;
  * Guards the conditions under which {@see UnregisteredRouteNameHandler::init()} must NOT arm the
  * rule, since arming against an untrustworthy route table turns every `route()` call into a false
  * positive. The positive emission is guarded end-to-end by
- * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnregisteredRouteNameEmissionTest}; the
+ * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\EmissionAppTest}; the
  * positive control below only proves the fixture still arms the rule, so each decline test
  * cannot pass because the fixture stopped resolving routes.
  */
@@ -116,7 +116,7 @@ final class UnregisteredRouteNameHandlerTest extends TestCase
         $originalCwd = \getcwd();
         \assert(\is_string($originalCwd));
 
-        \chdir(__DIR__ . '/../Fixtures/UnregisteredRouteName');
+        \chdir(__DIR__ . '/../Fixtures/EmissionApp');
 
         try {
             ApplicationProvider::bootApp();

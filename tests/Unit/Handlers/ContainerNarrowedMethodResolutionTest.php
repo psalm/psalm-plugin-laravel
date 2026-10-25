@@ -24,7 +24,7 @@ use Symfony\Component\Process\Process;
  * file argument, and in that single-file mode Psalm scans the narrowed-to vendor class anyway, so a
  * phpt resolves the methods with or without the fix and would guard nothing. Each case points Psalm
  * at a self-contained fixture project the way a real application runs it, where the regression
- * actually reproduces.
+ * actually reproduces. The cases share one run, memoized per process.
  *
  * The fix in both cases replaced a full-class stub (`SessionGuard.phpstub` / `TokenGuard.phpstub`,
  * `Encryption/Encrypter.phpstub`), which shadowed a whole class to host its taint methods, with a
@@ -39,10 +39,13 @@ use Symfony\Component\Process\Process;
 #[Group('subprocess')]
 final class ContainerNarrowedMethodResolutionTest extends TestCase
 {
+    /** @var list<array{type: string, message: string}>|null */
+    private static ?array $findings = null;
+
     #[Test]
     public function it_resolves_encrypter_methods_reached_only_through_container_narrowing(): void
     {
-        $findings = $this->findings('EncrypterMethodResolution');
+        $findings = $this->findings();
 
         // The regression was a flood of UndefinedMethod on Illuminate\Encryption\Encrypter. None must
         // remain — assert on the class so an unrelated UndefinedMethod elsewhere can't mask it.
@@ -71,7 +74,7 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
     #[Test]
     public function it_resolves_session_guard_methods_reached_only_through_auth_narrowing(): void
     {
-        $findings = $this->findings('GuardMethodResolution');
+        $findings = $this->findings();
         $joined = \implode("\n", $this->messagesOfType($findings, 'UndefinedMethod'));
 
         // The regression was a flood of UndefinedMethod on Illuminate\Auth\SessionGuard. None must
@@ -91,7 +94,7 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
         // #1616: a stub that re-declares a class shadowed its vendor file when nothing else queued
         // it, so `hasListeners()` resolved through Macroable `__call` to `mixed`. No issue names the
         // gap, so the fixture pins the return type and any CheckType mismatch is the regression.
-        $typeMismatches = $this->messagesOfType($this->findings('StubbedClassMethodResolution'), 'CheckType');
+        $typeMismatches = $this->messagesOfType($this->findings(), 'CheckType');
 
         $this->assertSame(
             [],
@@ -105,7 +108,7 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
     {
         // The plugin instantiates the container's bindings once at init and queues each resolved class.
         // 'composer' resolves to a class no stub and no source names, so it narrows only if queued.
-        $findings = $this->findings('BoundClassResolution');
+        $findings = $this->findings();
         $problems = [
             ...$this->messagesOfType($findings, 'CheckType'),
             ...$this->messagesOfType($findings, 'MixedMethodCall'),
@@ -142,19 +145,23 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
     }
 
     /**
-     * One Psalm run over a fixture project. The two fixtures are separate projects, so each case
-     * needs its own run; only the harness is shared.
+     * One Psalm run over a single fixture project shared by every case: the four entry files each
+     * name no concrete Laravel class, so they cannot mask one another's narrowing.
      *
      * @return list<array{type: string, message: string}>
      */
-    private function findings(string $fixture): array
+    private function findings(): array
     {
+        if (self::$findings !== null) {
+            return self::$findings;
+        }
+
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
             [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            __DIR__ . '/Fixtures/' . $fixture,
+            __DIR__ . '/Fixtures/ContainerNarrowedMethodResolution',
         );
         $process->setTimeout(300);
         // Psalm exits non-zero when it reports issues; that is expected here, so do not mustRun().
@@ -176,6 +183,6 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
             }
         }
 
-        return $findings;
+        return self::$findings = $findings;
     }
 }
