@@ -20,3 +20,4 @@
 <x-sib-b message="lit" />
 <x-holder :slot="request('s')">Safe</x-holder>
 <x-extra :message="request('m')" />
+<x-slashed :message="request('m')" />
