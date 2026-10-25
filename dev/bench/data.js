@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792929832525,
+  "lastUpdate": 1792933655085,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16195,6 +16195,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 21.66,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ed002c469fefa8fb890a21e4d1bc7c063a55dd4",
+          "message": "Fold type-test Psalm groups and drop redundant phpts (#2056)\n\n* test: fold type-test Psalm groups and drop redundant phpts\n\n* docs: drop inaccurate fixture citation in ResponseFactoryTaintHandler",
+          "timestamp": "2026-10-25T14:04:20+01:00",
+          "tree_id": "01ec8aa647c9fa81eb5ed444ad30c5e212e701e4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2ed002c469fefa8fb890a21e4d1bc7c063a55dd4"
+        },
+        "date": 1792933652962,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.21,
+            "range": "± 0.58",
             "unit": "s"
           },
           {
