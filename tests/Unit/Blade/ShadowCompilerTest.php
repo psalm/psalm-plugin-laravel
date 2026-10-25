@@ -139,7 +139,6 @@ final class ShadowCompilerTest extends TestCase
         );
 
         $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertSame(1, $result->extendsLine);
 
         $lastShadowLine = \array_key_last($result->lineMap);
         $this->assertSame(1, $result->lineMap[$lastShadowLine]);

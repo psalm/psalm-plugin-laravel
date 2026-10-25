@@ -68,7 +68,7 @@ final class ShadowCompiler
         $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap, $markerPrefix);
         $content = $this->suppressionInjector->inject($content, $source, $lineMap, $markerPrefix);
 
-        return new ShadowResult($content, $lineMap, MarkerPrePass::extendsLine($source), $suppressions);
+        return new ShadowResult($content, $lineMap, $suppressions);
     }
 
     /**
