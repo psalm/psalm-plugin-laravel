@@ -376,15 +376,15 @@ Multiple parameters can be sinks:
 public function jsonp($callback, $data = []) {}
 ```
 
-#### Unsafe reflection (CWE-470) — container resolution
+#### Unsafe reflection (CWE-470): container resolution
 
 A user-controlled class name resolved through the container lets an attacker
 instantiate arbitrary classes (constructor side effects, gadget chains). The
 container entry points reuse the built-in `callable` kind, the same kind Psalm
 applies to `new $var()` and dynamic invocation:
 
-- `app($abstract)` / `resolve($name)` — `stubs/common/Foundation/helpers.phpstub`
-- `Container::make($abstract)` / `Container::makeWith($abstract)` — `stubs/common/Container/Container.phpstub`
+- `app($abstract)` / `resolve($name)`: `stubs/common/Foundation/helpers.phpstub`
+- `Container::make($abstract)` / `Container::makeWith($abstract)`: `stubs/common/Container/Container.phpstub`
 
 ```php
 /**
@@ -399,7 +399,7 @@ still produced by `ContainerHandler`. The bare `new $var()`, `$callback()`, and
 `callable` sink combined with the plugin's `Request` taint sources, so no stub
 is needed for those.
 
-The `App::make(...)` facade form does **not** propagate taint — see
+The `App::make(...)` facade form does **not** propagate taint, see
 [Known limitation: Facade static calls](#known-limitation-facade-static-calls).
 Use the `app()` / `resolve()` helpers or an instance typed as
 `Illuminate\Container\Container` for analyzable code.
@@ -454,9 +454,9 @@ This creates two distinct annotation responsibilities:
 
 ```php
 /**
- * @psalm-taint-sink sql $column           -- column names go into SQL identifiers; warn if tainted
- * @psalm-taint-escape sql                 -- values are PDO-bound; strip sql taint from return value
- * @psalm-flow ($operator, $value) -> return  -- preserve other taint kinds (html, shell, etc.)
+ * @psalm-taint-sink sql $column          , column names go into SQL identifiers; warn if tainted
+ * @psalm-taint-escape sql                , values are PDO-bound; strip sql taint from return value
+ * @psalm-flow ($operator, $value) -> return , preserve other taint kinds (html, shell, etc.)
  */
 public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 ```
@@ -475,11 +475,11 @@ if (is_numeric($key) && is_array($value)) {
 }
 ```
 
-So only two positions still reach SQL as a raw identifier: the array KEY on the `else` branch, and — on the nested branch — `array_values()` ordinal 0 (`$column`). `Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler` removes the `sql` taint from ordinals 1 and 2 and from the `else`-branch value (#734/#733, #1300), CALL-SITE-SCOPED: a `BeforeExpressionAnalysis` hook records the nodes of where-family first arguments, and only those exact nodes are stripped (so an array that merely happens to have that shape elsewhere, in an assignment, a return, or an element read, keeps its taint). An array LITERAL is walked element-wise; any other argument falls back to a coarse type check that accepts only a sealed `TKeyedArray` with all-string keys.
+So only two positions still reach SQL as a raw identifier: the array KEY on the `else` branch, and, on the nested branch, `array_values()` ordinal 0 (`$column`). `Psalm\LaravelPlugin\Handlers\Eloquent\WhereColumnTaintHandler` removes the `sql` taint from ordinals 1 and 2 and from the `else`-branch value (#734/#733, #1300), CALL-SITE-SCOPED: a `BeforeExpressionAnalysis` hook records the nodes of where-family first arguments, and only those exact nodes are stripped (so an array that merely happens to have that shape elsewhere, in an assignment, a return, or an element read, keeps its taint). An array LITERAL is walked element-wise; any other argument falls back to a coarse type check that accepts only a sealed `TKeyedArray` with all-string keys.
 
-Both the element-wise and whole-argument strips gate on the receiver being Laravel's own — a project's own class can name a `where()` method without going through `addArrayOfWheres()`. For a `MethodCall`/`NullsafeMethodCall` receiver this is a type check (`isLaravelBuilder`) run at strip time, once the receiver's type exists. A `StaticCall` receiver (`Model::where(...)`) is a class NAME, not a typed expression, and DOES route through the same stub sink via the pseudo-method (`__callStatic`) path, so it needs the same gate: resolved eagerly at record time (`isStaticReceiverLaravelBound`), accepting only a class that is or extends `Illuminate\Database\Eloquent\Model` or one of the builder classes, and recording nothing at all for an unresolved dynamic class (`$class::where(...)`) or a non-Laravel one (#1300).
+Both the element-wise and whole-argument strips gate on the receiver being Laravel's own, a project's own class can name a `where()` method without going through `addArrayOfWheres()`. For a `MethodCall`/`NullsafeMethodCall` receiver this is a type check (`isLaravelBuilder`) run at strip time, once the receiver's type exists. A `StaticCall` receiver (`Model::where(...)`) is a class NAME, not a typed expression, and DOES route through the same stub sink via the pseudo-method (`__callStatic`) path, so it needs the same gate: resolved eagerly at record time (`isStaticReceiverLaravelBound`), accepting only a class that is or extends `Illuminate\Database\Eloquent\Model` or one of the builder classes, and recording nothing at all for an unresolved dynamic class (`$class::where(...)`) or a non-Laravel one (#1300).
 
-Ancestry alone is not enough for a `StaticCall`, though: a Model subclass can declare its OWN concrete static `where()`, which PHP dispatches to directly, never reaching `__callStatic`/`addArrayOfWheres` — so its own sink, if any, must survive. `isStaticReceiverLaravelBound` additionally requires `Codebase::getDeclaringMethodId()` (default `with_pseudo: false`, so the plugin's own `@mixin`-injected forwarding is invisible to it) to find no REAL declaration outside `Illuminate\` for the called method name. Because the `StaticCall` gate is resolved eagerly at record time rather than at strip time from a re-inferred type, a trait method's `static::where([...])` — reanalysed once per class using the trait, reusing the SAME AST nodes each time — needs one more safeguard: a failed gate actively clears any ids an earlier pass (under a different `$context->self`) recorded for those same nodes, rather than merely skipping the record, so a later non-Model pass can never inherit a stale strip (#1300).
+Ancestry alone is not enough for a `StaticCall`, though: a Model subclass can declare its OWN concrete static `where()`, which PHP dispatches to directly, never reaching `__callStatic`/`addArrayOfWheres`, so its own sink, if any, must survive. `isStaticReceiverLaravelBound` additionally requires `Codebase::getDeclaringMethodId()` (default `with_pseudo: false`, so the plugin's own `@mixin`-injected forwarding is invisible to it) to find no REAL declaration outside `Illuminate\` for the called method name. Because the `StaticCall` gate is resolved eagerly at record time rather than at strip time from a re-inferred type, a trait method's `static::where([...])`, reanalysed once per class using the trait, reusing the SAME AST nodes each time, needs one more safeguard: a failed gate actively clears any ids an earlier pass (under a different `$context->self`) recorded for those same nodes, rather than merely skipping the record, so a later non-Model pass can never inherit a stale strip (#1300).
 
 The strip covers `where`, `orWhere`, `whereNot`, `orWhereNot`, and `firstWhere` (exactly the methods whose array form routes through `addArrayOfWheres()`). It does **not** cover `having`/`orHaving`: despite sharing the flow pattern above, their array form never reaches `addArrayOfWheres()` (there is no `is_array($column)` branch), so an array column compiles raw and the sink must stand (issue #734 wrongly proposed including them). See the handler docblock. Do **not** "fix" it by dropping the sink (the string form is a real vector) or by adding `@psalm-taint-specialize` to these stubs, which silently breaks the non-SQL `@psalm-flow` on the value positions (see the specialize note below).
 
@@ -487,9 +487,9 @@ The strip covers `where`, `orWhere`, `whereNot`, `orWhereNot`, and `firstWhere` 
 
 ```php
 /**
- * @psalm-taint-escape sql       -- id is PDO-bound; strip sql taint from return value
- * @psalm-flow ($id) -> return   -- preserve other taint kinds
- * @psalm-taint-specialize       -- track taint per call-site (see note below)
+ * @psalm-taint-escape sql      , id is PDO-bound; strip sql taint from return value
+ * @psalm-flow ($id) -> return  , preserve other taint kinds
+ * @psalm-taint-specialize      , track taint per call-site (see note below)
  */
 public function find($id, $columns = ['*']) {}
 ```
@@ -508,7 +508,7 @@ Raw SQL methods accept a string that is interpolated verbatim into the query wit
 
 ```php
 /**
- * @psalm-taint-sink sql $sql   -- raw SQL goes directly into the query string
+ * @psalm-taint-sink sql $sql  , raw SQL goes directly into the query string
  */
 public function whereRaw($sql, $bindings = [], $boolean = 'and') {}
 ```
@@ -652,7 +652,7 @@ Tag semantics and the trust model are the class-level ones described above: bare
 
 Some taint sinks are not expressible as `@psalm-taint-sink` docblocks because they target language constructs (comparison operators) or call shapes that the stub parser cannot annotate. These sinks are registered programmatically by handlers in `src/Handlers/Rules/`.
 
-### `TimingUnsafeComparisonHandler` — CWE-208
+### `TimingUnsafeComparisonHandler`: CWE-208
 
 Detects timing-unsafe comparisons of secret-tainted values. The handler registers a taint sink (matching `USER_SECRET | SYSTEM_SECRET`) at every:
 
@@ -662,7 +662,7 @@ Detects timing-unsafe comparisons of secret-tainted values. The handler register
 
 Comparisons against a literal scalar (`null`, `''`, `'sentinel'`, `42`, `false`) are skipped: the literal IS the known half of the comparison, so no character-by-character information about the secret leaks. Idiomatic defensive checks (`if ($token === null)`, `if ($apiKey === '')`) do not trigger the handler.
 
-The literal carve-out matches by **AST shape**, not by Psalm's inferred type. Integer/float/string scalars, magic constants (`__FILE__`, `__LINE__`, ...), `null`/`true`/`false`, unary `+`/`-` over a literal, and concatenation of two literals all count. Class constants (`Foo::BAR`) and enum cases (`Status::Active`) are **not** exempt — an attacker-controlled indirection could resolve to one at runtime, so the handler errs on flagging.
+The literal carve-out matches by **AST shape**, not by Psalm's inferred type. Integer/float/string scalars, magic constants (`__FILE__`, `__LINE__`, ...), `null`/`true`/`false`, unary `+`/`-` over a literal, and concatenation of two literals all count. Class constants (`Foo::BAR`) and enum cases (`Status::Active`) are **not** exempt, an attacker-controlled indirection could resolve to one at runtime, so the handler errs on flagging.
 
 When a value carrying `user_secret` or `system_secret` taint flows into one of these sinks, Psalm emits `TaintedUserSecret` or `TaintedSystemSecret`. The fix is to use `hash_equals()` for constant-time comparison.
 
@@ -672,7 +672,7 @@ function check(\Illuminate\Foundation\Auth\User $user, string $given): bool {
     return $user->getAuthPassword() === $given;
 }
 
-// Safe — hash_equals() is not watched as a sink
+// Safe: hash_equals() is not watched as a sink
 function checkSafe(\Illuminate\Foundation\Auth\User $user, string $given): bool {
     return hash_equals($user->getAuthPassword(), $given);
 }
@@ -686,8 +686,8 @@ function checkSafe(\Illuminate\Foundation\Auth\User $user, string $given): bool 
 
 **Known gaps.** These shapes are NOT currently watched, even when one operand carries secret taint:
 
-- `switch ($secret) { case $candidate: }` — `switch`/`case` uses `==` semantics but lives in `Stmt\Switch_`/`Stmt\Case_`, not a `BinaryOp` node, so it bypasses the operator branch.
-- `match ($secret) { 'literal' => ... }` — same reason. Note: `match` against a literal arm would be exempt by the literal carve-out anyway, but `match` against a variable arm would slip through.
+- `switch ($secret) { case $candidate: }`: `switch`/`case` uses `==` semantics but lives in `Stmt\Switch_`/`Stmt\Case_`, not a `BinaryOp` node, so it bypasses the operator branch.
+- `match ($secret) { 'literal' => ... }`: same reason. Note: `match` against a literal arm would be exempt by the literal carve-out anyway, but `match` against a variable arm would slip through.
 - Partial-leak operations: `str_starts_with`, `str_ends_with`, `str_contains` on a secret; `preg_match` with an attacker-controlled pattern; `in_array($secret, $list, false)` / `array_search($secret, $list, false)`; fluent chains like `Str::of($secret)->is($candidate)`.
 
 These are tracked as follow-ups. Until they are covered, treat the handler as a high-signal first-line check rather than a complete CWE-208 audit.
@@ -699,7 +699,7 @@ These are tracked as follow-ups. Until they are covered, treat the handler as a 
 3. **Choose the correct annotation type and confirm it applies at that scope**: source, sink, escape, or flow. See [Annotations quick reference](#annotations-quick-reference). A tag on the wrong scope is ignored silently, never reported.
 4. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
 5. **If the escape depends on an argument value**: use the conditional form, and check first that the stub is a free function or a static method. Instance methods parse it and silently never apply it. See [Conditional escapes](#conditional-escapes-psalm-taint-escape-conditional)
-6. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution, then run the existing `Tainted<NonEscapedKind>*` test for the stub to confirm within-callsite flow still propagates. The combination is not mechanically safe on every stub shape in Psalm 7 — see [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the empirical-verification protocol
+6. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution, then run the existing `Tainted<NonEscapedKind>*` test for the stub to confirm within-callsite flow still propagates. The combination is not mechanically safe on every stub shape in Psalm 7, see [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the empirical-verification protocol
 7. **Match parameter types exactly** to Laravel's signatures. Do not narrow types.
 8. **Place in `stubs/common/`** under a path matching the Laravel namespace
 9. **Keep taint and type annotations together**. If a method already has type stubs, add taint annotations to the same file (see [Stub merging](README.md#stub-merging-how-psalm-combines-annotations))
@@ -768,7 +768,7 @@ Same shape is used on `Promptable::stream()`, `queue()`, `broadcast*()`, the `\L
 
 ### Property-source pattern: `$response->text` (handler required)
 
-Psalm honors `@psalm-taint-source` on **method return types** but not on **properties**: `PropertyStorage` carries no taint fields at all, so the annotation is dropped at scan time rather than misapplied. The model's `$text` output is downstream of every untrusted input that reached the prompt (indirect prompt injection via web pages, RAG corpora, tool output, attacker emails — see EchoLeak CVE-2025-32711), so we need to taint property reads programmatically.
+Psalm honors `@psalm-taint-source` on **method return types** but not on **properties**: `PropertyStorage` carries no taint fields at all, so the annotation is dropped at scan time rather than misapplied. The model's `$text` output is downstream of every untrusted input that reached the prompt (indirect prompt injection via web pages, RAG corpora, tool output, attacker emails, see EchoLeak CVE-2025-32711), so we need to taint property reads programmatically.
 
 `src/Handlers/Ai/LlmOutputTaintHandler.php` subscribes to `AfterExpressionAnalysisEvent`, matches the read, and calls `Codebase::addTaintSource()` to add the input taints (`Codebase::getInputTaints()`) to the expression's type. `TAINTED_PROPERTIES` maps each property name to the classes that declare it, rather than crossing one class list with one property list, because the two properties sit on different parts of the hierarchy:
 
@@ -804,4 +804,4 @@ Note the mechanism split: this handler re-sources from `AfterExpressionAnalysisE
 
 `Tool::description()` and `Agent::instructions()` produce values that the framework later concatenates into the LLM prompt (the static signature of MCP-style tool poisoning, CVE-2025-54136). The natural annotation shape is "the return value is a sink," but Psalm's docblock scanner only matches **parameter names** for `@psalm-taint-sink`. The `return` token is silently dropped; the annotation is inert.
 
-These return-value sinks are intentionally not annotated in stubs today (the comment in the stub says so). Coverage requires a dedicated `AfterMethodCallAnalysisInterface` / `MethodReturnTypeProvider`-style handler that wires the return expression into a synthetic sink — tracked in `#484`.
+These return-value sinks are intentionally not annotated in stubs today (the comment in the stub says so). Coverage requires a dedicated `AfterMethodCallAnalysisInterface` / `MethodReturnTypeProvider`-style handler that wires the return expression into a synthetic sink, tracked in `#484`.

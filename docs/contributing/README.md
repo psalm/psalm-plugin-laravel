@@ -11,7 +11,7 @@ has_children: true
 The plugin boots a Laravel application, then hooks into Psalm's event system to override type inference for Laravel APIs.
 
 The app is needed at boot time to read config values (e.g. `auth.php` guards), resolve facade aliases via `AliasLoader`, and load service providers.
-When run inside a Laravel project, the plugin loads the project's own `bootstrap/app.php` — so it sees the real config, routes, and providers.
+When run inside a Laravel project, the plugin loads the project's own `bootstrap/app.php`, so it sees the real config, routes, and providers.
 When no `bootstrap/app.php` is found (e.g. analyzing a Laravel package, or running the plugin's own tests), it falls back to [Orchestra Testbench](https://github.com/orchestral/testbench) which provides a minimal Laravel app skeleton.
 
 See `ApplicationProvider::doGetApp()` for the resolution logic.
@@ -118,9 +118,9 @@ composer rector # run rector refactoring
 
 Stubs override Laravel's type signatures. Place them in:
 
-- `stubs/common/` — shared across Laravel versions (includes both type stubs and taint annotations)
-- `stubs/<version>/` — version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work
-- `stubs/integrations/<package>/` — optional stubs for third-party packages, gated on the package being installed. Carbon uses the `shared/` + `pre-3.12/` conditional-directory pattern in `src/Stubs/CarbonStubProvider.php`; `laravel-ai/` is one flat directory, see [the gate](#the-laravelai-integration-gate).
+- `stubs/common/`: shared across Laravel versions (includes both type stubs and taint annotations)
+- `stubs/<version>/`: version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work
+- `stubs/integrations/<package>/`: optional stubs for third-party packages, gated on the package being installed. Carbon uses the `shared/` + `pre-3.12/` conditional-directory pattern in `src/Stubs/CarbonStubProvider.php`; `laravel-ai/` is one flat directory, see [the gate](#the-laravelai-integration-gate).
 
 Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
@@ -149,7 +149,7 @@ When **multiple stub files declare the same method on the same class**, Psalm re
 
 Splitting annotations for the same method across two stub files is therefore fragile: which type and which sinks survive depends on load order. Always put all of them in the same file, and have an override restate every `@psalm-taint-sink` of the declaration it replaces.
 
-When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects -- one per class/trait. There is no cross-merging: if `Connection.phpstub` overrides a method defined in `ManagesTransactions.phpstub`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
+When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects, one per class/trait. There is no cross-merging: if `Connection.phpstub` overrides a method defined in `ManagesTransactions.phpstub`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
 
 Registration order (`Plugin::registerStubs()`): all `common` files, then version dirs ascending (`array_merge`). Since type annotations are last-loaded-wins, this order (not alphabetical path) decides overrides.
 
@@ -229,20 +229,20 @@ Do not add user-facing feature names or handler-registration gates. Do not overw
 ### Psalm hooks used by the plugin
 
 Psalm processes code in phases. Each hook fires at a specific phase and has different data available.
-Analysis hooks are hot paths — they fire on every matching expression. Scanning hooks fire once per class or once total.
+Analysis hooks are hot paths, they fire on every matching expression. Scanning hooks fire once per class or once total.
 Source of truth for which handler implements which hook: `Plugin::registerHandlers()` plus each handler's `implements` clause.
 
 ```mermaid
 flowchart TD
-    subgraph P1["Phase 1 — Scanning (per class/trait/interface)"]
+    subgraph P1["Phase 1: Scanning (per class/trait/interface)"]
         A1["AfterClassLikeVisitInterface"]
     end
 
-    subgraph P2["Phase 2 — Codebase populated (fires once)"]
+    subgraph P2["Phase 2: Codebase populated (fires once)"]
         B1["AfterCodebasePopulatedInterface"]
     end
 
-    subgraph P3["Phase 3 — Analysis (hot path, per file)"]
+    subgraph P3["Phase 3: Analysis (hot path, per file)"]
         direction TB
         C1["BeforeFileAnalysisInterface"] --> C2
 
@@ -265,13 +265,13 @@ flowchart TD
         C7 --> C8["AfterFileAnalysisInterface"]
     end
 
-    subgraph P3B["Phase 3b — Taint graph resolved (main process, after the workers exit)"]
+    subgraph P3B["Phase 3b: Taint graph resolved (main process, after the workers exit)"]
         E1["BeforeAddIssueInterface
         fires here for every taint issue,
         and inside the workers above for every type issue"]
     end
 
-    subgraph P4["Phase 4 — Run complete (fires once)"]
+    subgraph P4["Phase 4: Run complete (fires once)"]
         D1["AfterAnalysisInterface"]
     end
 
@@ -283,7 +283,7 @@ flowchart TD
 There are two ways to register:
 
 1. **Class-level** (most handlers): implement the interface, register via `$registration->registerHooksFromClass(MyHandler::class)` in `Plugin::registerHandlers()`
-2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)` — used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated
+2. **Closure-level** (model property handlers): register via `$providers->property_type_provider->registerClosure(...)`, used by `ModelRegistrationHandler` to bind property handlers per-model after codebase is populated
 
 Every class registration keeps the matching `require_once` beside
 `registerHooksFromClass()`.

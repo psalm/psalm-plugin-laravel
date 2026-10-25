@@ -139,7 +139,18 @@ final class ShadowCompilerTest extends TestCase
         );
 
         $this->assertInstanceOf(ShadowResult::class, $result);
-        $this->assertSame(1, $result->extendsLine);
+
+        $lastShadowLine = \array_key_last($result->lineMap);
+        $this->assertSame(1, $result->lineMap[$lastShadowLine]);
+    }
+
+    #[Test]
+    public function extends_footer_marker_does_not_claim_the_last_line_of_a_source_without_trailing_newline(): void
+    {
+        $result = $this->compiler->compile('view.blade.php', "@extends('layout')\n{{ MissingClass::run() }}");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame(2, $this->bladeLineOf($result, 'MissingClass::run()'));
 
         $lastShadowLine = \array_key_last($result->lineMap);
         $this->assertSame(1, $result->lineMap[$lastShadowLine]);

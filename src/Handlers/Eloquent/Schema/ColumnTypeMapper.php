@@ -53,6 +53,28 @@ final class ColumnTypeMapper
     }
 
     /**
+     * Non-nullable type of the value PDO returns for an UNCAST column, which {@see mapBaseType()} (the cast-style
+     * mapping) does not model. bool: PostgreSQL returns bool, SQLite and MySQL tinyint(1) return the stored int,
+     * which the column does not restrict to 0/1. float: DECIMAL comes back as a string, SQLite stores integral
+     * NUMERIC as int, and pdo_pgsql before PHP 8.4 returns floats as strings. vector: pgvector and MySQL VECTOR
+     * return text or binary strings that nothing decodes without a cast.
+     *
+     * Accepted limits: SQL Server (pdo_sqlsrv without numeric fetching) and PDO::ATTR_STRINGIFY_FETCHES return
+     * strings, and PostgreSQL NaN/Infinity come back as non-numeric strings for numeric/decimal columns (for
+     * real/double precision only before PHP 8.4, where pdo_pgsql returns floats). These stay outside the type, as they
+     * do for int columns and the aggregate rule in {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelAggregatePropertyHandler}.
+     */
+    public static function mapRawType(ColumnInfo $column): Union
+    {
+        return match ($column->sqlType) {
+            SchemaColumn::TYPE_BOOL => new Union([new Type\Atomic\TBool(), new Type\Atomic\TInt()]),
+            SchemaColumn::TYPE_FLOAT => new Union([new Type\Atomic\TInt(), new Type\Atomic\TFloat(), new Type\Atomic\TNumericString()]),
+            SchemaColumn::TYPE_ARRAY => Type::getString(),
+            default => self::mapBaseType($column),
+        };
+    }
+
+    /**
      * Build a literal-string union from a column's options list. Shared by ENUM and SET
      * because both store their option set the same way in {@see ColumnInfo::$options}
      * and benefit from the same narrowing (with the SET caveat documented at the caller).

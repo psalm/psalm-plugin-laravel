@@ -12,8 +12,8 @@ Decisions made during development of the plugin. Contributors should follow thes
 
 ## Principles and Compatibility Policy
 
-1. Silence over false positives — never report an issue the plugin isn't certain about
-2. Cover the 80% — Laravel offers many ways to do the same thing; support the common patterns, not every edge case
+1. Silence over false positives: never report an issue the plugin isn't certain about
+2. Cover the 80%: Laravel offers many ways to do the same thing; support the common patterns, not every edge case
 3. Complexity is fine when it's well isolated
 4. Stubs vs. handlers: prefer stubs when they cover 95% of cases (incl. using [conditional types](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/type_syntax/conditional_types.md))
 5. DX > micro-optimisations
@@ -76,9 +76,9 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Why:**
 - `modelProperties` says what is being configured (properties on models), not an internal concept (discovery)
-- `migrations` is concrete — a Laravel dev immediately knows what it means
+- `migrations` is concrete: a Laravel dev immediately knows what it means
 - `static` was ambiguous in a static analysis tool context (static analysis? unchanging? parsed from code?)
-- Config names should not collide with related concepts — "Model directories" config (which *is* about discovery) sits right below
+- Config names should not collide with related concepts: "Model directories" config (which *is* about discovery) sits right below
 
 ## Class Loading and Discovery
 
@@ -98,11 +98,11 @@ Plugin lifecycle: per-invocation state, handler class loading, and how model and
 
 Initialization has a different boundary. `PluginConfig::fromXml()` is called before any init helper, so this plugin already requires its own namespace to be autoloadable at invocation time. Direct static calls in an `init*Handler()` method can then use ordinary Composer autoloading. `loadInitializationHandlers()` is consequently a source-order convention: it makes the explicit loads happen before every optional init path, but it is not an autoloader bootstrap.
 
-**Sister plugins follow the same pattern:** `psalm-plugin-symfony` keeps `require_once` for every handler. `psalm-plugin-phpunit` and `Lctrs/psalm-psr-container-plugin` use `class_exists($fqcn, true)` instead, but each has only one handler — the failure mode is harder to miss.
+**Sister plugins follow the same pattern:** `psalm-plugin-symfony` keeps `require_once` for every handler. `psalm-plugin-phpunit` and `Lctrs/psalm-psr-container-plugin` use `class_exists($fqcn, true)` instead, but each has only one handler, the failure mode is harder to miss.
 
 **Why PHAR CI does not remove this constraint:** [#895](https://github.com/psalm/psalm-plugin-laravel/issues/895) was closed as not planned. Installing this plugin pulls Psalm into `vendor/`, so running `psalm.phar` creates a dual-Psalm collision in the natural setup. The workaround still registers the project's autoloader, and would not change Psalm's current non-autoloading handler-registration API.
 
-**Contributor rule:** every new handler added to `Plugin::registerHandlers()` MUST keep its paired `require_once` line. If `Plugin::__invoke()` or an `init*Handler()` method makes a static call before registration, add that file to `loadInitializationHandlers()` as well—before its first static touch, on every configuration branch. The latter maintains source order; the former satisfies Psalm's registration precondition.
+**Contributor rule:** every new handler added to `Plugin::registerHandlers()` MUST keep its paired `require_once` line. If `Plugin::__invoke()` or an `init*Handler()` method makes a static call before registration, add that file to `loadInitializationHandlers()` as well, before its first static touch, on every configuration branch. The latter maintains source order; the former satisfies Psalm's registration precondition.
 
 ### Event-driven model discovery via `AfterCodebasePopulated`
 
@@ -120,17 +120,17 @@ Initialization has a different boundary. `PluginConfig::fromXml()` is called bef
 - The plugin duplicated work Psalm already does (finding PHP classes in project files)
 
 **Why `AfterCodebasePopulated` instead of `AfterClassLikeVisit`?**
-- `AfterClassLikeVisit` fires during scanning — at that point, `parent_classes` only contains the **direct** parent, not the full ancestor chain
+- `AfterClassLikeVisit` fires during scanning: at that point, `parent_classes` only contains the **direct** parent, not the full ancestor chain
 - A model extending `BaseModel extends Model` would be missed because `Model` isn't in `parent_classes` yet
 - `AfterCodebasePopulated` fires after the populator resolves the full inheritance hierarchy
 
 **Why not `get_declared_classes()` without scanning?**
 - `get_declared_classes()` only returns classes already loaded into the PHP process
-- Model classes are typically NOT loaded during Laravel bootstrap — they're autoloaded on demand
+- Model classes are typically NOT loaded during Laravel bootstrap, they're autoloaded on demand
 - Would require directory scanning anyway to force-load classes, defeating the purpose
 
 **Trade-off:** Vendor Model subclasses (e.g. `Laravel\Sanctum\PersonalAccessToken`) will also be discovered if they appear in Psalm's scanned files.
-This is acceptable — the handlers gracefully handle any Model subclass.
+This is acceptable: the handlers gracefully handle any Model subclass.
 
 **Handler registration:** Property handlers (`ModelRelationshipPropertyHandler`, `ModelPropertyAccessorHandler`, etc.) no longer implement Psalm's `PropertyExistenceProviderInterface` etc.
 Instead, `ModelRegistrationHandler` registers their static methods as closures via `registerClosure()`.
@@ -164,7 +164,7 @@ Registration order is preserved (relationship > factory > accessor > column).
 
 **Decision:** When a user declares `@property` on their model class, plugin handlers must defer to it by returning `null`.
 
-**Applies to:** All three model property handlers — `ModelPropertyHandler`, `ModelRelationshipPropertyHandler`, `ModelPropertyAccessorHandler`. Check `pseudo_property_get_types['$' . $propertyName]` before doing any inference.
+**Applies to:** All three model property handlers, `ModelPropertyHandler`, `ModelRelationshipPropertyHandler`, `ModelPropertyAccessorHandler`. Check `pseudo_property_get_types['$' . $propertyName]` before doing any inference.
 
 **Why:** Users who write `@property` annotations are explicitly declaring the type they want.
 The plugin should respect that consistently across all handlers rather than overriding it with inferred types.
@@ -179,7 +179,7 @@ The plugin should respect that consistently across all handlers rather than over
 
 **Decision:** Migration-inferred columns are registered as `pseudo_property_set_types` on the model's `ClassLikeStorage` during `afterCodebasePopulated`. The property handlers (`doesPropertyExist`, `isPropertyVisible`, `getPropertyType`) remain read-only. The write type is `mixed` (permissive).
 
-**Why:** Psalm's internal `InstancePropertyAssignmentAnalyzer` assumes that any property claimed as existing by a plugin has a `PropertyStorage` entry. Returning `true` from `doesPropertyExist()` for writes causes crashes because plugin-provided properties don't have backing storage. Using `pseudo_property_set_types` is Psalm's intended mechanism — it's how `@property` annotations work natively. The write type is `mixed` rather than the column type because the actual accepted type depends on casts (e.g., a `datetime`-cast column accepts `Carbon`, not just `string`), and casts from the `casts()` method are not fully resolvable during `afterCodebasePopulated`.
+**Why:** Psalm's internal `InstancePropertyAssignmentAnalyzer` assumes that any property claimed as existing by a plugin has a `PropertyStorage` entry. Returning `true` from `doesPropertyExist()` for writes causes crashes because plugin-provided properties don't have backing storage. Using `pseudo_property_set_types` is Psalm's intended mechanism, it's how `@property` annotations work natively. The write type is `mixed` rather than the column type because the actual accepted type depends on casts (e.g., a `datetime`-cast column accepts `Carbon`, not just `string`), and casts from the `casts()` method are not fully resolvable during `afterCodebasePopulated`.
 
 **See:** [#446](https://github.com/psalm/psalm-plugin-laravel/issues/446)
 
@@ -187,7 +187,7 @@ The plugin should respect that consistently across all handlers rather than over
 
 **Decision:** `registerWriteTypesForMethods` (which registers `pseudo_property_set_types` for relationship properties, legacy mutators, and new-style `Attribute` accessors) runs for all models regardless of the `modelProperties` config. Only `registerWriteTypesForColumns` (migration-inferred columns) is gated behind `useMigrations`.
 
-**Why:** Accessor and relationship properties are discovered from the model's own method signatures — they don't depend on migration files. A user with `columnFallback="none"` still expects `$user->roles = $collection` to work when Psalm's own `sealAllProperties` option is enabled. This is consistent with the read-side handlers, which are also unconditional (see below).
+**Why:** Accessor and relationship properties are discovered from the model's own method signatures, they don't depend on migration files. A user with `columnFallback="none"` still expects `$user->roles = $collection` to work when Psalm's own `sealAllProperties` option is enabled. This is consistent with the read-side handlers, which are also unconditional (see below).
 
 **See:** [#446](https://github.com/psalm/psalm-plugin-laravel/issues/446)
 
@@ -257,7 +257,7 @@ Why the shape repeats X's own answer. Probed on Psalm 7.0.0-rc10: a native prope
 1. X's own answer in Psalm's read order: native property, `@property` / `@property-read`, accessor, then the cast or column of X's DEFAULT table. Exact precedence and the incomplete-registry `mixed` gate: `PivotColumnResolver::columnTypes()` and `ownType()`.
 2. A cast on a column X's default table lacks: the cast's type, nullable when the relation table's column is nullable or unknown (casts pass `null` through).
 3. The parent's created/updated column: the date type once the raw-hydration gate is proven, else `mixed`.
-4. The relation table's raw schema type, only on a visible chain whose table is known.
+4. The relation table's raw schema type, only on a visible chain whose table is known. It is the raw driver value, not the cast-style mapping: bool is `bool|int` (SQLite and MySQL tinyint(1) return the stored int, not restricted to 0/1), decimal and float are `int|float|numeric-string`, vector is `string` (`ColumnTypeMapper::mapRawType()`). Accepted limits: SQL Server (pdo_sqlsrv without numeric fetching) and `PDO::ATTR_STRINGIFY_FETCHES` return strings, and PostgreSQL `NaN` / `Infinity` come back as non-numeric strings for `numeric` / `decimal` columns (for `real` / `double precision` only before PHP 8.4, where pdo_pgsql returns floats); these stay outside the type, as they already do for int columns and the aggregate rule (see "Column-aware min/max/sum/avg").
 5. `mixed`.
 
 Laravel's read order, probed on SQLite with Laravel 13.38 (same code on 12.20): accessor, then cast, then `getDates()` (`asDateTime`, non-null only), then the raw value. Any `using()`, `Pivot::class` included, hydrates through `AsPivot::fromRawAttributes()`: no `forceFill()` date normalization, and the timestamps switch on only when the PARENT's created column is selected (`hasTimestampAttributes()` with the parent already attached), so a default-named `created_at` / `updated_at` is no special case there (it reads its raw string when the parent renamed its timestamps). The gate (rule 3) is proven only on a visible chain with known parent timestamps, the parent's created column selected, and X keeping the stock `getDates`, `usesTimestamps`, `hasTimestampAttributes`, `getCreatedAtColumn`, `getUpdatedAtColumn`, `asDateTime`, `fromRawAttributes`, `fromAttributes`; a class overriding any of them gets `mixed` for rules 3 and 4. Probed but not emitted: with the parent's created column NOT selected the dates read as raw strings, yet the answer stays `mixed` (rule 3 is "proven or `mixed`").
@@ -405,7 +405,7 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Decision:** When Laravel's generated facade `@method` tag returns `mixed` but the underlying root method is templated (and would infer a precise type), add a real static method to `stubs/<layer>/Support/Facades/<Facade>.phpstub` copying the root signature. `FacadeStubPrecedenceHandler` then drops the pseudo-method, so Psalm uses the typed stub. Covered: `Cache::remember`, `rememberForever`, `flexible`, `sear`; `Cookie::queued`; `Context::scope` (#1368, #1737).
 
-**Why:** A targeted stub is surgical and safe. The rejected alternative — generically promoting the root's `MethodStorage` over any `mixed` pseudo in `FacadeMethodHandler` or via `AtomicStaticCallAnalyzer::checkPseudoMethod()` — was probed in #1737 and ruled out for two reasons: (a) a full census of first-party facade `@method` tags found only four `mixed` pseudos with a more-precise templated root (all four are now stubbed); the remaining `mixed` pseudos are `mixed` in the root too, so generic promotion changes nothing for them; (b) root params are often narrower than pseudo params — `Cache::get`'s pseudo accepts `\UnitEnum|array|string $key` while the root is untyped — so swapping them would introduce new false-positive `ArgumentTypeCoercion` errors. `FacadeMethodHandler` is also not an alternative: it is wired only for app facades and returns the raw declared return without template inference.
+**Why:** A targeted stub is surgical and safe. The rejected alternative, generically promoting the root's `MethodStorage` over any `mixed` pseudo in `FacadeMethodHandler` or via `AtomicStaticCallAnalyzer::checkPseudoMethod()`, was probed in #1737 and ruled out for two reasons: (a) a full census of first-party facade `@method` tags found only four `mixed` pseudos with a more-precise templated root (all four are now stubbed); the remaining `mixed` pseudos are `mixed` in the root too, so generic promotion changes nothing for them; (b) root params are often narrower than pseudo params, `Cache::get`'s pseudo accepts `\UnitEnum|array|string $key` while the root is untyped, so swapping them would introduce new false-positive `ArgumentTypeCoercion` errors. `FacadeMethodHandler` is also not an alternative: it is wired only for app facades and returns the raw declared return without template inference.
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
@@ -505,24 +505,24 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 Only mark reads from genuinely external/untrusted sources (HTTP request input, external HTTP responses, route parameters).
 
 **Why:** Psalm tracks taint within a single analysis pass. It cannot follow data across requests (write in request A, read in request B). Marking `Cache::get()` or `Session::get()` as taint sources is a workaround for this limitation, but in practice 95%+ of cache/session reads contain trusted data (config, computed values, framework state).
-The false positive rate is high enough to cause alert fatigue, which leads developers to either suppress taint issues globally or disable taint analysis — losing coverage on the real vulnerabilities.
+The false positive rate is high enough to cause alert fatigue, which leads developers to either suppress taint issues globally or disable taint analysis, losing coverage on the real vulnerabilities.
 
 **What to do instead:** Use `@psalm-flow` annotations on methods like `Cache::remember()` / `Session::put()` that pass data through callbacks or accept input.
 This catches the most dangerous pattern (user input flowing through storage in the same analysis pass) without false positives.
 
 **Applies to:** Cache\Repository, Session\Store, Queue job payloads, and similar internal persistence layers.
-Does NOT apply to genuinely external data — `Http\Client\Response` (external API responses) and `Request::input()` (user input) remain legitimate taint sources.
+Does NOT apply to genuinely external data, `Http\Client\Response` (external API responses) and `Request::input()` (user input) remain legitimate taint sources.
 
 ### No taint-sink on low-severity internal writes
 
 **Decision:** Do not mark internal write operations as taint sinks when the write itself is not the vulnerability.
-Logging (`Log::info()`), broadcasting (`event->broadcast()`), and cache writes (`Cache::put()`) are internal operations — the vulnerability happens when tainted data eventually reaches a dangerous output (HTML, SQL, shell), not when it enters an internal store.
+Logging (`Log::info()`), broadcasting (`event->broadcast()`), and cache writes (`Cache::put()`) are internal operations, the vulnerability happens when tainted data eventually reaches a dangerous output (HTML, SQL, shell), not when it enters an internal store.
 
-**Why:** Marking `Log::info($message)` as a taint sink (for log injection) or broadcast payloads as HTML sinks fires on extremely common patterns — every app logs request data for debugging/auditing.
+**Why:** Marking `Log::info($message)` as a taint sink (for log injection) or broadcast payloads as HTML sinks fires on extremely common patterns, every app logs request data for debugging/auditing.
 The signal-to-noise ratio is too low for a general-purpose plugin.
 Dedicated security scanners (Snyk, Semgrep) with configurable severity thresholds are better suited for these low-severity findings.
 
-**Exception:** Sinks for high-severity, targeted operations remain valid — e.g., `Redis::eval($script)` (Lua injection) or `DB::unprepared($sql)` (SQL injection), because user input reaching this is almost always a real vulnerability.
+**Exception:** Sinks for high-severity, targeted operations remain valid, e.g., `Redis::eval($script)` (Lua injection) or `DB::unprepared($sql)` (SQL injection), because user input reaching this is almost always a real vulnerability.
 
 ### Mail: only sender and recipient addresses are header sinks (#1958)
 
@@ -573,6 +573,10 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Constraint:** `ReturnAnalyzer` accumulates the removal returned for a returned expression into the enclosing function's removed taints, which then apply to every return path of that function. A handler that answered on that dispatch would silence `return $tainted;` in the same function. The handler answers only while the call's type is still unset, which is true for the dispatch that writes the edge and false for the return and argument dispatches. This is an internal-ordering heuristic, not counting, and it fails toward a retained finding if Psalm reorders it. The same leak exists in core for `htmlspecialchars()`.
 
+### Collection default lookups carry `@psalm-taint-specialize` (#2071)
+
+`first()`, `get()`, `last()`, `pull()`, `value()` and `LazyCollection::get()` pair `@psalm-flow ($default) -> return` with `@psalm-taint-specialize`: Psalm 7 only speculatively specializes non-overridable project methods, so a stub flow otherwise pools across call sites (rule: taint-analysis.md, checklist item 6). Receiver taint does not reach these returns (#2107, `TaintedHtmlRequestCollectKnownLimitation.phpt`).
+
 ### `NamedArgumentTaintHandler` strips only named arguments bound to a variadic
 
 **Decision:** Strip taint from a named-argument value only when Psalm binds it to the callee's variadic and the callee resolves exactly. Everything else is left to Psalm.
@@ -616,18 +620,19 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 - A `ShouldQueue`-only class (no bus trait) gets no `handle` parameter injection: it may be a listener, and `CallQueuedListener` passes the event positionally. `make:job` always adds `Queueable`.
 - Used traits are read from the class and its parents only, not from traits composed of other traits, and a `class_alias()`ed trait is not recognised.
 
+
 ## Blade Template Analysis
 
 ### `$attributes`/`$slot` classify a component view from its own SOURCE, not its render path or view location
 
-**Decision:** `PreludeBuilder::componentTypesFor()` declares `$attributes`/`$slot` only when the template's own source writes `@props(...)`, `@aware(...)`, or mentions either name — never from where the view lives (`components/` or a registered anonymous namespace) or how it is reached (`<x-*>` vs `@component('view', [...])`). `$component` is not view data; compiler-bookkeeping declarations are described in [Blade Analysis Internals](blade.md).
+**Decision:** `PreludeBuilder::componentTypesFor()` declares `$attributes`/`$slot` only when the template's own source writes `@props(...)`, `@aware(...)`, or mentions either name, never from where the view lives (`components/` or a registered anonymous namespace) or how it is reached (`<x-*>` vs `@component('view', [...])`). `$component` is not view data; compiler-bookkeeping declarations are described in [Blade Analysis Internals](blade.md).
 
-**Why:** `AMBIENT_TYPES` unconditionally declared `$attributes`/`$component`/`$slot` non-nullable in EVERY shadow, so Laravel's own compiled guards on those names (`isset()`, `??=`, `instanceof`) collapsed into `RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction` — 84% of all template findings on a measured real-world app (#1525). The source-based classifier is exact for the case that matters most (a `<x-*>` caller never writes any of the four markers itself) and is free: `ShadowManifest::fingerprint()` already hashes `$source`, so no manifest slot is needed and the classification cannot go stale independently of a recompile.
+**Why:** `AMBIENT_TYPES` unconditionally declared `$attributes`/`$component`/`$slot` non-nullable in EVERY shadow, so Laravel's own compiled guards on those names (`isset()`, `??=`, `instanceof`) collapsed into `RedundantCondition`/`RedundantConditionGivenDocblockType`/`DocblockTypeContradiction`, 84% of all template findings on a measured real-world app (#1525). The source-based classifier is exact for the case that matters most (a `<x-*>` caller never writes any of the four markers itself) and is free: `ShadowManifest::fingerprint()` already hashes `$source`, so no manifest slot is needed and the classification cannot go stale independently of a recompile.
 
 **Rejected alternatives:**
 - **Blanket nullable typing** (`?ComponentAttributeBag` / `?ComponentSlot` everywhere). Fixes the over-typing but adds a new false positive: `PossiblyNullReference` on an author's own `$attributes->merge()` in a class-component view that never writes `@props`, since `Component::data()` / `AnonymousComponent::data()` already guarantee the key there.
-- **Directory/view-name classifier** (a view name under `components.` or a registered anonymous-component namespace/path, `ComponentTagCompiler::guessAnonymousComponentUsingNamespaces()`/`guessAnonymousComponentUsingPaths()`). More "principled" — it reflects how `<x-*>` actually resolves — but strictly worse in practice: it needs the view name threaded from `BladeBootstrapper` into `ShadowCompiler::compile()`, it cannot see class-component views outside `components/` (Laravel's own published `vendor/mail/**` overrides are exactly that shape, reached via `@component('mail::message')` **and** `<x-mail::message>`), and the view roots it would depend on are not part of `CompilerEnvironment::describe()`'s cache fingerprint, so a view-path config change would not invalidate cached shadows.
-- **A `$slot` render-path union** (`ComponentSlot|HtmlString`). Laravel has not produced `HtmlString` slots anywhere in this plugin's supported range (`illuminate/view: ^12.27 || ^13.20`) — `ManagesComponents::componentData()` builds a `ComponentSlot` on both the `<x-*>` and `@component` paths, verified byte-identical across Laravel 12.27, 12.55, and 13.20. The union would be strictly weaker (losing `$slot->isEmpty()`/`$slot->attributes`) for no soundness gain; only `$attributes` is genuinely render-path-sensitive (absent on the `@component` path), and that distinction cannot be told apart statically from the template source alone — accepted as a documented gap rather than chased with cross-template tracking.
+- **Directory/view-name classifier** (a view name under `components.` or a registered anonymous-component namespace/path, `ComponentTagCompiler::guessAnonymousComponentUsingNamespaces()`/`guessAnonymousComponentUsingPaths()`). More "principled", it reflects how `<x-*>` actually resolves, but strictly worse in practice: it needs the view name threaded from `BladeBootstrapper` into `ShadowCompiler::compile()`, it cannot see class-component views outside `components/` (Laravel's own published `vendor/mail/**` overrides are exactly that shape, reached via `@component('mail::message')` **and** `<x-mail::message>`), and the view roots it would depend on are not part of `CompilerEnvironment::describe()`'s cache fingerprint, so a view-path config change would not invalidate cached shadows.
+- **A `$slot` render-path union** (`ComponentSlot|HtmlString`). Laravel has not produced `HtmlString` slots anywhere in this plugin's supported range (`illuminate/view: ^12.27 || ^13.20`), `ManagesComponents::componentData()` builds a `ComponentSlot` on both the `<x-*>` and `@component` paths, verified byte-identical across Laravel 12.27, 12.55, and 13.20. The union would be strictly weaker (losing `$slot->isEmpty()`/`$slot->attributes`) for no soundness gain; only `$attributes` is genuinely render-path-sensitive (absent on the `@component` path), and that distinction cannot be told apart statically from the template source alone, accepted as a documented gap rather than chased with cross-template tracking.
 
 ### Class component views are seeded at analysis time from `ClassLikeStorage` (#1804)
 
@@ -687,7 +692,7 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 **Why:** Psalm's cache key hashes the config file, `composer.lock` and Psalm's own storage classes, and the providers are built before any plugin runs, so a per-run override cannot change it. That only matters for state Psalm PERSISTS, and it persists storage only at scan time (`Scanner.php`, `ReflectorVisitor` via `Codebase`). Every handler this plugin gates on a setting runs at analysis time or in `AfterCodebasePopulated` (after the scan, never persisted); all `AfterClassLikeVisit` handlers register unconditionally and read no setting; stub selection depends on no setting except the plugin cache path.
 
 Evidence (Psalm 7.0.0-rc1, laravel/framework 13.34, `--threads=1` and `--threads=4 --scan-threads=4`; each state compared with its own `--no-cache` run, sorted output):
-- Every key flipped on/off/on/off against one cache dir (both directions; the reference diffs were 120–190 lines, so the comparison is sensitive): identical to `--no-cache` at every step, except `blade`.
+- Every key flipped on/off/on/off against one cache dir (both directions; the reference diffs were 120 to 190 lines, so the comparison is sensitive): identical to `--no-cache` at every step, except `blade`.
 - Positive control: a probe `AfterClassLikeVisit` handler gated on an env var went stale on the first warm run, so the method can detect a storage-affecting key.
 - `blade` on→off→on with `<blade />` and dead-code detection: the off run (warm) loses `UnusedClass` for classes only templates reference. The ON run persists the shadows' references (they are analysed through `addFilesToAnalyze`); the OFF run does not analyse the shadows, nothing overwrites those references, and dead-code consolidation still counts the classes as used. Fixed only by `--no-reference-cache` (not `--no-file-cache`, not `--no-reflection-cache`). `blade` is the sole key that changes the ANALYSED FILE SET under an identical config hash.
 

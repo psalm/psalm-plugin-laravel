@@ -9,7 +9,7 @@ nav_order: 7
 Plugin self-analysis must report `Psalm was able to infer types for 100% of the codebase`. The Psalm workflow fails a pull request that drops below 100%. Verify locally with:
 
 ```bash
-composer psalm -- --no-progress --no-suggestions --stats 2>&1 | grep -E "mixed\)" | grep -vE '\b0 mixed'
+composer psalm, --no-progress --no-suggestions --stats 2>&1 | grep -E "mixed\)" | grep -vE '\b0 mixed'
 ```
 
 Empty output means 100%. Any printed line names a file with mixed expressions. An empty result also appears when psalm itself failed, so confirm the run succeeded before trusting it.
