@@ -349,7 +349,9 @@ final class AnnotationWriter implements AfterAnalysisInterface
 
         return \array_values(\array_filter(
             $contract->readVariables,
-            static fn(string $name): bool => !isset($contract->vars[$name]) && !isset($localNames[$name]),
+            // A `$__data['…']` read can name any key; only a valid identifier can be declared as `$name`.
+            static fn(string $name): bool => !isset($contract->vars[$name]) && !isset($localNames[$name])
+                && \preg_match('/^[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*$/D', $name) === 1,
         ));
     }
 

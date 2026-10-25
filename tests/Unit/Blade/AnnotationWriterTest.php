@@ -89,6 +89,18 @@ final class AnnotationWriterTest extends TestCase
         $this->assertSame(['body' => null], AnnotationWriter::plan('home', $contract));
     }
 
+    /**
+     * A `$__data` read can name a key that is no variable (one holding a docblock terminator, say):
+     * declaring it would close the template's docblock early.
+     */
+    #[Test]
+    public function never_plans_a_read_key_that_is_not_a_variable_name(): void
+    {
+        $contract = new ViewDataContract([], false, ['title', 'label*/', 'first-name', '9lives', 'née'], false);
+
+        $this->assertSame(['title' => null, 'née' => null], AnnotationWriter::plan('home', $contract));
+    }
+
     #[Test]
     public function skips_a_template_whose_compiled_body_hides_which_names_it_reads(): void
     {
