@@ -1,5 +1,5 @@
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm-experimental-issues.xml
+--no-progress --no-diff --config=./tests/Type/psalm-with-optin-custom-issues.xml
 --FILE--
 <?php declare(strict_types=1);
 
@@ -15,14 +15,14 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 Customer::with('nonExistentRelation');
 
 // Magic static call (has() forwards through Model::__callStatic).
-Customer::has('missingHasRelation');
+Customer::query()->has('missingHasRelation');
 
 // Instance builder call.
 Customer::query()->with('typoWith');
 
 // without() still accepts relationship names; an unknown key is usually a typo
 // even though Laravel treats removing an absent eager-load key as a no-op.
-Customer::without('typoWithout');
+Customer::query()->without('typoWithout');
 
 // whereHas on a builder.
 Customer::query()->whereHas('typoWhereHas');
@@ -62,9 +62,9 @@ Customer::query()->with(callback: fn (Relation $query) => $query, relations: 've
 
 // Relationship existence queries never parse ':columns' (the name is looked up verbatim), so the
 // suffix is reported with a hint to remove it.
-Customer::has('vehicles:id');
+Customer::query()->has('vehicles:id');
 Customer::query()->whereHas('vehicles:id', fn (Relation $q) => $q);
-Customer::has('vehicles.workOrders:id');
+Customer::query()->has('vehicles.workOrders:id');
 Customer::query()->whereRelation('vehicles:id', 'make', 'x');
 Customer::query()->whereHas(relation: 'vehicles:id');
 

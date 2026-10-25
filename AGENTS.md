@@ -118,7 +118,7 @@ Prefer Type over Unit when both fit (suite overview: `tests/README.md`). A test 
 
 Regression phpts use minimal abstracted fixtures (house style), but reduce toward them FROM the reported shape while the test stays red: simplifying before the first honest failure can delete the trigger (a trait, a docblock, a magic `__get` is often load-bearing).
 
-- Taint and opt-in-rule phpts need an `--ARGS--` section (`--taint-analysis` or an alternate `tests/Type/psalm-*.xml` config), or they pass vacuously under plain defaults.
+- Taint and opt-in-rule phpts need one of the two `--ARGS--` strings from `tests/Type/README.md` (taint, or `tests/Type/psalm-with-optin-custom-issues.xml`), or they pass vacuously under plain defaults. Never invent a variant: each distinct `--ARGS--` string is its own Psalm boot.
 - Unit tests gate version-dependent behavior on capability probes (`class_exists` + `markTestSkipped`), never version numbers; phpts use `--SKIPIF--`.
 - A deliberately accepted soundness gap gets a `*KnownLimitation.phpt` test pointing at the source caveat docblock.
 

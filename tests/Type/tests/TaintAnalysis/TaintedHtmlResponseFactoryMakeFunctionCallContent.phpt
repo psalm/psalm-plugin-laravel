@@ -1,5 +1,7 @@
+--CONFLICTS--
+taint-TaintedHtmlResponseFactoryMakeFunctionCallContent
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1 --no-cache
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 
@@ -9,8 +11,8 @@ use Illuminate\Support\Facades\Response;
 /**
  * A `@psalm-flow` callee without `@psalm-taint-specialize`, mirroring `decrypt()`. The body
  * returns a constant so the only taint route is the flow edge Psalm adds per call site — the
- * edge a leaked html removal would poison. The unique ARGS line above runs this file in its own
- * single-file batch: a shared batch lets a sibling file rewrite the callee's edge after this
+ * edge a leaked html removal would poison. The unique CONFLICTS key above runs this file in its own
+ * single-file Psalm run: a shared run lets a sibling file rewrite the callee's edge after this
  * file, or crowd the sink's path budget, and either masks the regression.
  *
  * @psalm-flow ($value) -> return
@@ -30,7 +32,7 @@ function frameValue(string $value): string
  * exempted call analysed AFTER the unrelated flow does such a regression silence the `echo`
  * finding — the cross-flow leak rather than a merely local strip.
  *
- * The `%d` placeholders are a repo-wide convention enforced by CI; the single-file batch and
+ * The `%d` placeholders are a repo-wide convention enforced by CI; the single-file run and
  * the fixed kind order keep an unrelated finding from standing in for a silenced flow.
  */
 function echoUnrelatedFramedBanner(Request $request): void
