@@ -1,0 +1,56 @@
+<?php
+
+namespace Illuminate\Database\Eloquent;
+
+use Illuminate\Contracts\Queue\QueueableCollection;
+use Illuminate\Support\Collection as BaseCollection;
+
+/**
+ * From Laravel 13.3.0, sliding() rejects a non-positive size or step, split()/splitIn() reject a
+ * non-positive group count, and times() forwards extra arguments to the constructor. These
+ * overrides of the common stub restate the stricter signatures; the return shapes are the
+ * ones documented in common (the outer collection widened to Support\Collection).
+ *
+ * The class header is copied verbatim from common because re-declaring the class resets
+ * Psalm's interface list; everything else merges from common.
+ *
+ * @template TKey of array-key
+ * @template TModel of \Illuminate\Database\Eloquent\Model
+ * @extends \Illuminate\Support\Collection<TKey, TModel>
+ */
+class Collection extends BaseCollection implements QueueableCollection
+{
+    /**
+     * @param  int  $numberOfGroups
+     * @return ($numberOfGroups is positive-int ? \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> : never)
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function split($numberOfGroups) {}
+
+    /**
+     * @param  int  $numberOfGroups
+     * @return ($numberOfGroups is positive-int ? \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> : never)
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function splitIn($numberOfGroups) {}
+
+    /**
+     * @param  positive-int  $size
+     * @param  positive-int  $step
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Collection<TKey, TModel>>
+     *
+     * @throws \InvalidArgumentException
+     */
+    public function sliding($size = 2, $step = 1) {}
+
+    /**
+     * @template TTimesValue
+     *
+     * @param  int  $number
+     * @param  (callable(int): TTimesValue)|null  $callback
+     * @return \Illuminate\Support\Collection<int, TTimesValue>
+     */
+    public static function times($number, ?callable $callback = null, ...$args) {}
+}

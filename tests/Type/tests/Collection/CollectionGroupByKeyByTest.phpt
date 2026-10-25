@@ -52,14 +52,13 @@ function key_by_on_eloquent_collection(EloquentCollection $items): void
 function group_by_on_eloquent_collection(): void
 {
     $_result = CollectionGroupingModel::all()->groupBy('foreign_id');
-    /** @psalm-check-type-exact $_result = EloquentCollection<int, EloquentCollection<int, CollectionGroupingModel>&static>&static */
+    /** @psalm-check-type-exact $_result = Collection<int, EloquentCollection<int, CollectionGroupingModel>> */
 
-    // EloquentCollection constrains TValue to Model even though groupBy() necessarily
-    // nests collections. The one InvalidTemplateParam below is Laravel's known contract
-    // conflict (#1229); this chained shape guards against accidentally emitting it twice.
+    // The groups are collections, which cannot sit in EloquentCollection's `TModel of Model` slot (#1229),
+    // so the outer collection is a Support\Collection; this chain guards against the bound error returning.
     CollectionGroupingModel::with([])->get()->groupBy('foreign_id')->each(
         static function ($_group, $_foreignId): void {
-            /** @psalm-check-type-exact $_group = EloquentCollection<int, CollectionGroupingModel>&static */
+            /** @psalm-check-type-exact $_group = EloquentCollection<int, CollectionGroupingModel> */
             /** @psalm-check-type-exact $_foreignId = int */
         },
     );
@@ -90,4 +89,3 @@ function ambiguous_custom_collection_pluck_defers(AmbiguousCollectionGroupingCol
 }
 ?>
 --EXPECTF--
-InvalidTemplateParam on line %d: Extended template param TModel of Illuminate\Database\Eloquent\Collection<int, Illuminate\Database\Eloquent\Collection<int, App\Models\CollectionGroupingModel>&static>&static expects type Illuminate\Database\Eloquent\Model, type Illuminate\Database\Eloquent\Collection<int, App\Models\CollectionGroupingModel>&static given
