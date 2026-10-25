@@ -1040,6 +1040,7 @@ final class Plugin implements PluginEntryPointInterface
             $pluginConfig->bladeCacheDir,
             collectDataIncludes: true,
             failOnInternalError: $pluginConfig->failOnInternalError,
+            reportUndeclaredVariables: $pluginConfig->bladeReportUndeclaredVariables,
         );
 
         if (!$bootstrapper->boot()) {

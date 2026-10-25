@@ -16,7 +16,7 @@ use Psalm\Config;
  */
 final readonly class PluginConfig
 {
-    private const BLADE_ATTRIBUTES = ['value', 'cacheDir'];
+    private const BLADE_ATTRIBUTES = ['value', 'cacheDir', 'reportUndeclaredVariables'];
 
     /**
      * @param list<string> $configDirectories
@@ -56,6 +56,8 @@ final readonly class PluginConfig
         public bool $bladeEnabled,
         /** Directory the compiled Blade shadow files live in. Absolute, or relative to the working directory. */
         public string $bladeCacheDir,
+        /** Opt-in: a contract template's undeclared reads are left undefined for Psalm to report (`<blade reportUndeclaredVariables="true" />`). */
+        public bool $bladeReportUndeclaredVariables,
         public bool $experimental,
         public bool $failOnInternalError,
     ) {}
@@ -98,6 +100,7 @@ final readonly class PluginConfig
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
         $xmlBladeEnabled = self::xmlBladeEnabled($config);
+        $bladeReportUndeclaredVariables = self::xmlBoolAttr($config?->blade, 'blade reportUndeclaredVariables', false, 'reportUndeclaredVariables');
         $cachePath = self::resolveCachePath();
 
         return new self(
@@ -116,6 +119,7 @@ final readonly class PluginConfig
             cachePath: $cachePath,
             bladeEnabled: $overrides->bool('blade') ?? $xmlBladeEnabled,
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
+            bladeReportUndeclaredVariables: $overrides->bool('blade.reportUndeclaredVariables') ?? $bladeReportUndeclaredVariables,
             experimental: $experimental,
             failOnInternalError: $overrides->bool('failOnInternalError') ?? $failOnInternalError,
         );
@@ -179,17 +183,17 @@ final readonly class PluginConfig
     }
 
     /**
-     * Read a boolean attribute of an XML element's `value`.
+     * Read a boolean attribute of an XML element, `value` unless $attribute says otherwise.
      * Expects `<element value="true" />` or `<element value="false" />`.
      * Returns $default when the element or the attribute is absent.
      */
-    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false): bool
+    private static function xmlBoolAttr(?\SimpleXMLElement $element, string $name, bool $default = false, string $attribute = 'value'): bool
     {
         if (!$element instanceof \SimpleXMLElement) {
             return $default;
         }
 
-        $value = (string) ($element['value'] ?? ($default ? 'true' : 'false'));
+        $value = (string) ($element[$attribute] ?? ($default ? 'true' : 'false'));
 
         if (!\in_array($value, ['true', 'false'], true)) {
             throw new \InvalidArgumentException("Invalid {$name} value '{$value}'. Valid values: 'true', 'false'.");

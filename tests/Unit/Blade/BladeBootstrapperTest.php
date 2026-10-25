@@ -456,6 +456,90 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertSame(['closure' => null, 'mixed' => null, 'raw' => null], $sources);
     }
 
+    private function reportingBootstrapper(Container $app, RecordingShadowRegistrar $registrar): BladeBootstrapper
+    {
+        return new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, reportUndeclaredVariables: true);
+    }
+
+    /** @return list<string> the template-owned names (`$read_<name>`) a boot left out of its shadows' `mixed` net */
+    private function namesLeftUndeclared(RecordingShadowRegistrar $registrar, string ...$names): array
+    {
+        $shadows = \implode("\n", \array_map(static fn(string $path): string => (string) \file_get_contents($path), $registrar->analyzedShadows));
+
+        return \array_values(\array_filter($names, static fn(string $name): bool => !\str_contains($shadows, "@var mixed \$read_{$name} ")));
+    }
+
+    /** A view a composer or creator reaches keeps its net, an observer on the dispatcher is no composer. */
+    #[Test]
+    public function with_the_flag_on_a_composer_or_creator_keeps_the_net_but_an_observer_does_not(): void
+    {
+        $app = $this->appWithViewFactory();
+        $view = $app->make('view');
+        $view->composer('composed', 'App\\ProfileComposer');
+        $view->creator('created', 'App\\Maker');
+        $view->composer('admin.*', 'App\\AdminComposer');
+        $view->composer('closure', static fn(): null => null);
+        $view->getDispatcher()->listen('composing:*', static fn(): null => null);
+
+        foreach (['composed', 'created', 'admin/page' => 'admin', 'closure', 'plain'] as $file => $name) {
+            $file = \is_string($file) ? $file : $name;
+            $this->writeTemplate("{$file}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }} {{ \$read_{$name} }}</p>\n");
+        }
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->assertTrue($this->reportingBootstrapper($app, $registrar)->boot(), $this->progress->warningText());
+
+        $this->assertSame(['plain'], $this->namesLeftUndeclared($registrar, 'composed', 'created', 'admin', 'closure', 'plain'));
+    }
+
+    /** `class_exists()` would autoload each alias target, and an autoloader that throws would take Blade down with it. */
+    #[Test]
+    public function component_alias_targets_are_never_autoloaded(): void
+    {
+        $autoloader = static function (string $class): void {
+            if (\str_starts_with($class, 'Fixture\\Unloadable\\')) {
+                throw new \RuntimeException("autoloaded {$class}");
+            }
+        };
+        $app = $this->appWithViewFactory();
+        $app->make('blade.compiler')->component('Fixture\\Unloadable\\Badge', 'badge');
+        $this->writeTemplate('profile.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+
+        \spl_autoload_register($autoloader, true, true);
+
+        try {
+            $booted = $this->reportingBootstrapper($app, new RecordingShadowRegistrar())->boot();
+        } finally {
+            \spl_autoload_unregister($autoloader);
+        }
+
+        $this->assertTrue($booted, $this->progress->warningText());
+    }
+
+    /** A joined name list would hash `bar,foo` and `bar` plus `foo` alike, and reuse a shadow built for the other. */
+    #[Test]
+    public function shared_names_that_differ_only_by_a_separator_do_not_share_a_shadow(): void
+    {
+        $shadows = [];
+
+        foreach ([['bar,foo'], ['bar', 'foo']] as $names) {
+            $app = $this->appWithViewFactory();
+
+            foreach ($names as $name) {
+                $app->make('view')->share($name, 1);
+            }
+
+            $this->writeTemplate('profile.blade.php', "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+            $registrar = new RecordingShadowRegistrar();
+            $this->reportingBootstrapper($app, $registrar)->boot();
+            $shadows[] = $registrar->analyzedShadows;
+        }
+
+        $this->assertCount(1, $shadows[0]);
+        $this->assertCount(1, $shadows[1]);
+        $this->assertNotSame($shadows[0][0], $shadows[1][0]);
+    }
+
     /**
      * #1505: a compiled shadow's PHP string literal naming a class (the shape a vendor directive
      * that writes `app('Vendor\Package\Class')::method()` compiles to) must be handed to the

@@ -211,6 +211,7 @@ final class PluginConfigTest extends TestCase
             'findOctaneIncompatibleBinding=true',
             'findPromptInjection=false',
             'blade=true',
+            'blade.reportUndeclaredVariables=true',
             'experimental=true',
             'failOnInternalError=true',
         ])));
@@ -227,6 +228,7 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->findOctaneIncompatibleBinding);
         $this->assertFalse($config->findPromptInjection);
         $this->assertTrue($config->bladeEnabled);
+        $this->assertTrue($config->bladeReportUndeclaredVariables);
         $this->assertTrue($config->experimental);
         $this->assertTrue($config->failOnInternalError);
     }
@@ -285,7 +287,7 @@ final class PluginConfigTest extends TestCase
     public function blade_rejects_an_unknown_attribute(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("<blade>: unknown attribute 'cacheDirectory'. Supported attributes: value, cacheDir.");
+        $this->expectExceptionMessage("<blade>: unknown attribute 'cacheDirectory'. Supported attributes: value, cacheDir, reportUndeclaredVariables.");
 
         PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><blade cacheDirectory="x" /></pluginClass>'));
     }

@@ -85,6 +85,27 @@ final class ShadowManifestTest extends TestCase
     }
 
     #[Test]
+    public function a_salt_changes_only_its_own_templates_fingerprint_and_an_empty_one_changes_nothing(): void
+    {
+        $manifest = new ShadowManifest($this->shadowDir);
+        $plain = $manifest->shadowPathFor('/a.blade.php', 'source');
+        $other = $manifest->shadowPathFor('/b.blade.php', 'source');
+
+        $manifest->salt('/a.blade.php', '');
+        $this->assertSame($plain, $manifest->shadowPathFor('/a.blade.php', 'source'));
+
+        $manifest->salt('/a.blade.php', 'undeclared:declined');
+        $this->assertNotSame($plain, $manifest->shadowPathFor('/a.blade.php', 'source'));
+        $this->assertSame($other, $manifest->shadowPathFor('/b.blade.php', 'source'));
+
+        $manifest->store('/a.blade.php', 'source', new ShadowResult('<?php echo 1;', [1 => 1], null), $this->emptyContract());
+        $this->assertTrue($manifest->isFresh('/a.blade.php', 'source'));
+
+        $manifest->salt('/a.blade.php', 'undeclared:other');
+        $this->assertFalse($manifest->isFresh('/a.blade.php', 'source'));
+    }
+
+    #[Test]
     public function load_tolerates_a_corrupt_manifest(): void
     {
         \file_put_contents($this->shadowDir . '/manifest.php', '<?php not valid php {{{');

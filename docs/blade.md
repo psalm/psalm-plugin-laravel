@@ -81,6 +81,12 @@ Keys the framework adds at render time count as supplied, and `UnusedViewData` n
 
 [`BladeCompileError`](issues/BladeCompileError.md) is not experimental: a template that fails to compile is skipped and reported as an error.
 
+## Undeclared variables
+
+Opt-in with [`reportUndeclaredVariables`](config.md#reportundeclaredvariables). A template that declares at least one view variable with a native `@var` docblock then treats its declarations as its whole interface: a read of any other variable it does not bind itself is reported as Psalm's own `UndefinedGlobalVariable` (`UndefinedVariable` inside an arrow function), so `{{ $titel }}` next to `<?php /** @var string $title */ ?>` is caught. The rule assumes an exhaustive contract, such as the one [`blade:annotate`](#onboarding) writes: a template whose `@var` is only an IDE hint for one variable reports every other read, data that arrives through an `@include` included. Component, mail markdown and Livewire views, and views a composer reaches, are skipped.
+
+The plugin sees boot-time data only. A name added at runtime (`View::share()` in a middleware or controller) is reported until the template declares it, as `@var T|null $name = null` when call sites do not pass it.
+
 ## Taint through view data
 
 A value a controller passes to `view()` carries its taint into the template, so `{!! $q !!}` reports `TaintedHtml` on the template line, with or without a `@var` declaration:
@@ -137,7 +143,7 @@ A value given to a class component reaches the unescaped echoes of the component
 ## Known limits
 
 * **Each template is analyzed alone.** `@include`, `@extends` and components are not followed for typing, and a layout's declarations are not checked at its children's call sites.
-* **Undeclared variables are silently `mixed`**, so a typo'd variable name is not caught. A `Mixed*` issue from a declared value (`@var array $data`, then `{{ $data['x']->foo() }}`) is hidden too.
+* **Undeclared variables are silently `mixed`** by default, so a typo'd variable name is not caught, unless [`reportUndeclaredVariables`](#undeclared-variables) is on. A `Mixed*` issue from a declared value (`@var array $data`, then `{{ $data['x']->foo() }}`) is hidden too.
 * **Taint from view data follows only the calls listed above.** `View::share()`, composers, `Route::view()`, Livewire, mail views and a variable the includer never names are not connected ([details](#taint-through-view-data)). The HTML context (attribute, script, markup) is not considered.
 * **Taint from a class component reaches its own view through its public properties** only from a template tag or `new` in PHP code, and only when `render()` returns one literal view; the flow belongs to the class, not to one tag ([details](#taint-through-class-component-properties)).
 * **Component tags can fail to compile** when the standalone compile pass cannot resolve them. The template is skipped with a `BladeCompileError`.

@@ -269,7 +269,7 @@ An explicit `<TaintedLlmPrompt errorLevel="..." />` in `issueHandlers` always wi
 
 Analyze `*.blade.php` templates as PHP files at their own paths. Omit the element, or write `<blade value="false" />`, to turn it off; `psalm-laravel analyze --blade` / `--no-blade` switches it for one run. User guide: [Blade Template Analysis](blade.md).
 
-`value` and `cacheDir` are the only attributes. Any other one aborts the run like an unknown `--plugin-option` key.
+`value`, `cacheDir` and `reportUndeclaredVariables` are the only attributes. Any other one aborts the run like an unknown `--plugin-option` key.
 
 ### `cacheDir`
 
@@ -280,6 +280,45 @@ Analyze `*.blade.php` templates as PHP files at their own paths. Omit the elemen
 ```
 
 Where compiled templates are cached. Absolute, or relative to the directory Psalm runs in. A directory inside the project must be gitignored and kept out of `<projectFiles>`.
+
+### `reportUndeclaredVariables`
+
+**default**: off
+
+```xml
+<blade reportUndeclaredVariables="true" />
+```
+
+Also `--plugin-option=blade.reportUndeclaredVariables=true`. In a template that declares at least one view variable with a native `@var` docblock (see [Declaring view variables](blade.md#declaring-view-variables); a name the application shares into every view, and `$message`, do not count), report every read of a variable the template neither declares nor binds itself. Psalm reports it as `UndefinedGlobalVariable` (`UndefinedVariable` inside an arrow function) at the template line, on each read. A typo such as `{{ $titel }}` next to `/** @var string $title */` is caught. A template without a declaration stays silent.
+
+The rule takes the declarations as the template's whole interface, so it fits an exhaustive contract, such as the one `blade:annotate` writes. A template whose `@var` is only an IDE hint for one variable reports every other read, data that arrives through an `@include` included.
+
+Never reported:
+
+- a name the template declares with any `@var`, or binds itself in its own scope (`@foreach` aliases, assignments, `catch`, a by-reference argument such as `parse_str($query, $parts)`), or captures in a closure `use (...)` clause. A closure or arrow-function parameter binds the name inside that function only;
+- Blade's own names, `$message` (mail views), `$app`, and every `View::share()` key the booted application registered;
+- `$key` in a view another template renders with `@each`, which Laravel passes alongside the item;
+- a read guarded by `isset()`, `??` or `empty()`, which Psalm itself never reports.
+
+A declaration still counts when the template reassigns the name from itself (`$title = $title ?? ''`). One on a name the template only binds itself (a `@foreach` alias, a `parse_str()` result) types a local and activates nothing.
+
+A whole template is skipped when something outside it can supply data the plugin cannot list:
+
+- a component view: the source writes `@props`, `@aware`, `$attributes` or `$slot`, or the view is named under `components.` (or `ns::components.`), under a registered anonymous component path or namespace, by a `Blade::component()` alias whose target is a view rather than a class, or by another template's `@component('view')` / `@componentFirst([...])`, whose `@slot`s become its variables;
+- a mail markdown component: a template under a `mail.markdown.paths` directory (`<x-mail::button>`, `@component('mail::button')`);
+- a Livewire view: a `livewire.` or `livewire::` view name, a template under Livewire's configured `view_path` (and, on Livewire 4, `component_locations` and `component_namespaces`), or a `wire:` attribute, `$wire`, `@this`, `@entangle`, `$this`, an inline `new class` or a functional Volt `Livewire\Volt\` import in the source;
+- a view a composer or creator reaches, wildcard composers (`View::composer('admin.*', ...)`) included. A wildcard listener registered directly on the event dispatcher, such as a debugging tool's view watcher, is no composer and skips nothing;
+- a template whose reads cannot be listed: a variable variable (`$$name`), `extract()`, a `compact()` with a non-literal argument, `include`, `require` or `eval`, or a body the PHP parser rejects.
+
+A marker counts only where Blade compiles it, not inside a `{{-- --}}` comment or an `@verbatim` body, and not as escaped `@@this` or mid-word (`help@this.example`).
+
+A by-reference out-argument to a callee Psalm cannot see is reported too: `{{ $obj->fill($out) }}` on a `mixed` receiver reports `PossiblyUndefinedVariable` for `$out`, because Psalm cannot tell whether the call assigns it. Assign the name first (`@php $out = null; @endphp`) or declare it with `@var mixed $out = null`.
+
+Only boot-time data is known. A share registered at runtime (a middleware, a controller), data a class component hands a view outside the component prefixes above, a Livewire class component's properties in a view outside Livewire's directories that carries no Livewire markup, and a key a base class adds to every view it renders (a `MailMessage` subclass overriding `data()`) are reported unless the template declares the name, as `@var T|null $name = null` when call sites do not pass it, so the [view data checks](blade.md#view-data-checks) do not require it there.
+
+Each flip of the flag recompiles every template once, because the flag's decision is part of every template's cache key. Afterwards a change to the shared names recompiles every template not skipped, and registering or removing a composer, a Livewire or mail directory, or an `@component`/`@each` call recompiles the views it reaches.
+
+Has no effect under `<blade value="false" />`: the shadows it changes only exist once the compile pass has run.
 
 ## Per-run overrides
 
