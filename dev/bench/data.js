@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792960074501,
+  "lastUpdate": 1792960295103,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16545,6 +16545,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.14,
             "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1314,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3baef4353d44304534d142173aac35ffbe6f65e1",
+          "message": "fix(cli): refuse attached -f=<path> in blade:annotate #2073 (#2090)",
+          "timestamp": "2026-10-25T21:27:28+01:00",
+          "tree_id": "fff4785addbf94c8505012c656d7b5cce59a6419",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3baef4353d44304534d142173aac35ffbe6f65e1"
+        },
+        "date": 1792960293664,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.6,
+            "range": "± 0.21",
             "unit": "s"
           },
           {
