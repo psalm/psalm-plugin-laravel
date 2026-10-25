@@ -379,8 +379,12 @@ final class ComponentViewRegistry
     private static function viewOf(Codebase $codebase, Expr $expr): ?array
     {
         // `Component::resolveView()` treats a returned string naming an existing view as that view.
+        // It is checked RAW (`Factory::exists()`, no normalizing) and the finder rejects a hinted name
+        // with more than one `::`, so Laravel renders such a string as inline Blade, not as a view.
         if ($expr instanceof String_) {
-            return $expr->value === '' ? null : [$expr->value, [], false];
+            $invalid = \strpos($expr->value, '::') > 0 && \substr_count($expr->value, '::') > 1;
+
+            return $expr->value === '' || $invalid ? null : [$expr->value, [], false];
         }
 
         $viaThis = $expr instanceof Expr\MethodCall

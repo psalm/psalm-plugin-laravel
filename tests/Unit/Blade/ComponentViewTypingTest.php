@@ -109,6 +109,8 @@ final class ComponentViewTypingTest extends TestCase
         yield 'render() spelling its view with a slash' => ['slash-render.blade.php', ['$title: string']];
         yield 'also rendered by an @include spelled with a slash' => ['slash-included.blade.php', ['$title: mixed']];
         yield 'another render() outside the shape spelling the view with a slash' => ['slash-gallery.blade.php', ['$caption: mixed']];
+        // `Component::resolveView()` checks a returned string raw: two `::` is an invalid name, so Laravel renders it as inline Blade.
+        yield 'a returned string that is an invalid view name' => ['inline.blade.php', ['$title: mixed']];
     }
 
     /**
