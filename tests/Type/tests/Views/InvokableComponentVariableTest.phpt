@@ -37,12 +37,40 @@ function invokable_component_variable_of_a_void_closure(): void
     /** @psalm-check-type-exact $_value = null */
 }
 
-/** The stub keeps the sealing Laravel's own class gets as user code: `__get`/`__call` forward blindly. */
-function invokable_component_variable_magic_members_stay_sealed(): void
+/** The stub keeps `__call` sealed: only the resolved value's own methods forward. */
+function invokable_component_variable_unknown_methods_stay_sealed(): void
 {
     $variable = new InvokableComponentVariable(static fn(): \stdClass => new \stdClass());
     $variable->missing();
-    echo (string) $variable->missing;
+}
+
+/** `__get` forwards to the resolved value, so property reads are not an error: `{{ $user->name }}` in a view. */
+function invokable_component_variable_property_reads_are_not_sealed(): void
+{
+    $variable = new InvokableComponentVariable(static fn(): \stdClass => new \stdClass());
+    $_name = $variable->name;
+    /** @psalm-check-type-exact $_name = mixed */
+}
+
+final class InvokableComponentVariableUser
+{
+    public string $name = 'Ada';
+}
+
+/**
+ * Property reads resolve through `__get(): mixed`; the templated `@mixin` is not consulted for them, so a
+ * declared `string` property of the wrapped class is not seen either.
+ *
+ * @param InvokableComponentVariable<InvokableComponentVariableUser> $user
+ * @param InvokableComponentVariable<\Illuminate\Database\Eloquent\Model> $model
+ */
+function invokable_component_variable_property_reads_resolve_through_get(InvokableComponentVariable $user, InvokableComponentVariable $model): void
+{
+    $_name = $user->name;
+    /** @psalm-check-type-exact $_name = mixed */
+
+    $_attribute = $model->title;
+    /** @psalm-check-type-exact $_attribute = mixed */
 }
 
 /** @param InvokableComponentVariable<list<string>> $variable */
@@ -101,5 +129,4 @@ function invokable_component_variable_is_covariant(): void
 ?>
 --EXPECTF--
 UndefinedMagicMethod on line %d: Magic method Illuminate\View\InvokableComponentVariable::missing does not exist
-UndefinedMagicPropertyFetch on line %d: Magic instance property Illuminate\View\InvokableComponentVariable::$missing is not defined
 InvalidArgument on line %d: Argument 1 of takes_invokable_component_variable_of_string expects Illuminate\View\InvokableComponentVariable<string>, but Illuminate\View\InvokableComponentVariable<1> provided
