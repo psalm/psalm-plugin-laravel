@@ -82,6 +82,28 @@ final class ShadowCompilerTest extends TestCase
     }
 
     #[Test]
+    public function directives_and_precompilers_see_the_template_path(): void
+    {
+        $bladeCompiler = new BladeCompiler(new Filesystem(), \sys_get_temp_dir());
+        $seen = [];
+        $bladeCompiler->directive('where', static function () use ($bladeCompiler, &$seen): string {
+            $seen[] = $bladeCompiler->getPath();
+
+            return '';
+        });
+        $bladeCompiler->precompiler(static function (string $value) use ($bladeCompiler, &$seen): string {
+            $seen[] = $bladeCompiler->getPath();
+
+            return $value;
+        });
+
+        $result = (new ShadowCompiler($bladeCompiler))->compile('/views/page.blade.php', "@where\n");
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame(['/views/page.blade.php', '/views/page.blade.php'], $seen);
+    }
+
+    #[Test]
     public function author_marker_text_cannot_change_the_line_map(): void
     {
         $source = "{!! '/* blade:999 */' . request()->input('q') !!}\n<?php /* blade:1 */ strlen([]); ?>\n/* blade:999 */\n";
@@ -142,6 +164,20 @@ final class ShadowCompilerTest extends TestCase
 
         $lastShadowLine = \array_key_last($result->lineMap);
         $this->assertSame(1, $result->lineMap[$lastShadowLine]);
+    }
+
+    #[Test]
+    public function suppression_above_extends_binds_to_the_extends_footer_not_the_next_compiled_statement(): void
+    {
+        $result = $this->compiler->compile(
+            'view.blade.php',
+            "{{-- @psalm-suppress UndefinedVariable --}}\n@extends('layout')\n@section('content')\n{{ \$foo }}\n@endsection\n",
+        );
+
+        $this->assertInstanceOf(ShadowResult::class, $result);
+        $this->assertSame([2 => ['UndefinedVariable']], $result->suppressions);
+        $this->assertStringNotContainsString('/** @psalm-suppress UndefinedVariable */ $__env->startSection', $result->contents);
+        $this->assertStringContainsString('/** @psalm-suppress UndefinedVariable */ echo $__env->make(\'layout\'', $result->contents);
     }
 
     #[Test]

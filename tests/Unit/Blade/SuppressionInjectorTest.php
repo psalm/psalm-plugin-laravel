@@ -121,4 +121,21 @@ final class SuppressionInjectorTest extends TestCase
             (new SuppressionInjector())->inject($shadow, $bladeSource, $lineMap),
         );
     }
+
+    #[Test]
+    public function a_footer_target_does_not_displace_a_later_comments_earlier_statement(): void
+    {
+        // Shadow order is body (line 4), then the `@extends` footer (line 2). The comment above
+        // `@extends` targets the footer, the one above line 4 the body: both must still land.
+        $shadow = "prelude\n<?php /* blade:4 */ ?><?php echo e(\$a); ?>\n<?php /* blade:2 */ ?>\n<?php echo \$__env->make('l'); ?>";
+        $bladeSource = "{{-- @psalm-suppress A --}}\n@extends('l')\n{{-- @psalm-suppress B --}}\n{{ \$a }}\n";
+        $lineMap = [1 => 0, 2 => 4, 3 => 2, 4 => 2];
+        $injector = new SuppressionInjector();
+
+        $result = $injector->inject($shadow, $bladeSource, $lineMap);
+
+        $this->assertStringContainsString('<?php /** @psalm-suppress B */ echo e($a); ?>', $result);
+        $this->assertStringContainsString('<?php /** @psalm-suppress A */ echo $__env->make', $result);
+        $this->assertSame([4 => ['B'], 2 => ['A']], $injector->resolve($shadow, $bladeSource, $lineMap));
+    }
 }

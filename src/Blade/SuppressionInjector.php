@@ -113,14 +113,27 @@ final class SuppressionInjector
 
         $targets = [];
         foreach ($suppressions as $bladeLine => $rules) {
+            // The statement on the nearest template line after the comment, not the first one in shadow
+            // order: Laravel moves `@extends` into a footer at the end of the compiled output, so
+            // the shadow lists the section bodies below it first.
+            $target = null;
+            $targetLine = \PHP_INT_MAX;
             foreach ($openTags as $openTag) {
-                if (($lineMap[$openTag['line']] ?? 0) > $bladeLine) {
-                    $existing = $targets[$openTag['offset']]['rules'] ?? [];
-                    $targets[$openTag['offset']] = [...$openTag, 'rules' => \array_values(\array_unique([...$existing, ...$rules]))];
-                    break;
+                $templateLine = $lineMap[$openTag['line']] ?? 0;
+                if ($templateLine > $bladeLine && $templateLine < $targetLine) {
+                    $target = $openTag;
+                    $targetLine = $templateLine;
                 }
             }
+
+            if ($target !== null) {
+                $existing = $targets[$target['offset']]['rules'] ?? [];
+                $targets[$target['offset']] = [...$target, 'rules' => \array_values(\array_unique([...$existing, ...$rules]))];
+            }
         }
+
+        // inject() splices from the last offset back, which a footer target can put out of order.
+        \ksort($targets);
 
         return \array_values($targets);
     }

@@ -591,7 +591,15 @@ final class ContractParserTest extends TestCase
     {
         $source = "<h1>x</h1>\n<?php\n/**\n * @psalm-suppress InvalidDocblock, Foo\n * @var string \$a = null\n */\n?>\n";
 
-        $this->assertSame([['InvalidDocblock'], 2], ContractParser::suppressionContext($source, 5));
+        $this->assertSame([['InvalidDocblock', 'Foo'], 2], ContractParser::suppressionContext($source, 5));
         $this->assertSame([[], 9], ContractParser::suppressionContext($source, 9));
+    }
+
+    #[Test]
+    public function the_suppression_context_reads_every_tag_and_list_entry_like_psalm(): void
+    {
+        $source = "<?php\n/**\n * @psalm-suppress A,B because of x\n * @psalm-suppress Mixed-Foo , C_2\n * @var string \$a\n */\n?>\n";
+
+        $this->assertSame([['A', 'B', 'Mixed-Foo', 'C_2'], 1], ContractParser::suppressionContext($source, 5));
     }
 }
