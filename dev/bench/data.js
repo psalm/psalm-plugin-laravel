@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792961575765,
+  "lastUpdate": 1792967867300,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16720,6 +16720,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.32,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1314,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b3cf03905ff0edc28b6476ddcd15aeb9eda8fd2",
+          "message": "Fix Blade shadow compiler path and template suppression edge cases (#2121)\n\n* fix(blade): set the template path before compiling shadows like Laravel's compile()\n\nDirectives and precompilers that read getPath() saw null during shadow compilation.\n\n* fix(blade): bind a suppression above @extends to the extends footer #2083\n\n* fix(blade): read every rule of a comma-separated template suppress tag #2083",
+          "timestamp": "2026-10-25T23:34:16+01:00",
+          "tree_id": "2ba18d615f73e255f149fbf5aadbcd89d89f4984",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0b3cf03905ff0edc28b6476ddcd15aeb9eda8fd2"
+        },
+        "date": 1792967865980,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.99,
+            "range": "± 0.1",
             "unit": "s"
           },
           {
