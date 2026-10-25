@@ -24,3 +24,6 @@
 @include('components/linked', ['title' => 42])
 <x-suffixed/>
 <x-frame/>
+<x-rival/>
+<x-shared-card/>
+<x-composed/>
