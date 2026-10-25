@@ -63,22 +63,7 @@ trait AnalysesFixtureApp
     {
         $key = $fixture . "\0" . \implode("\0", $arguments);
 
-        if (isset(self::$fixtureRuns[$key])) {
-            return self::$fixtureRuns[$key];
-        }
-
-        $shadowDir = $this->startFixtureRun($fixture);
-
-        $process = new Process([\PHP_BINARY, $this->psalmBinary(), ...$arguments], $fixture);
-        $process->setTimeout($timeout);
-        // Not mustRun(): these fixtures report issues on purpose.
-        $process->run();
-
-        return self::$fixtureRuns[$key] = [
-            'output' => $process->getOutput(),
-            'errorOutput' => $process->getErrorOutput(),
-            'shadows' => $this->snapshotShadows($shadowDir, $key),
-        ];
+        return self::$fixtureRuns[$key] ??= $this->runFixture($fixture, [$arguments], $timeout, $key);
     }
 
     /**
@@ -87,13 +72,29 @@ trait AnalysesFixtureApp
      *
      * Deliberately outside the memo. A case pinning warm-manifest behaviour needs the later
      * subprocess to actually happen against the state its predecessor left behind, which is exactly
-     * what serving a memoized report, or wiping the directory for a second config, would destroy.
+     * what serving a memoized report, or wiping the directory for a second config, would destroy. A
+     * class that wants one such sequence shared by its cases memoizes it itself.
      *
      * @param non-empty-list<list<string>> $argumentSets the Psalm arguments of each step, in order
      *
      * @return array{output: string, errorOutput: string, shadows: string} the final step's run
      */
     private function analyzeFixtureSequence(string $fixture, array $argumentSets, int $timeout = 300): array
+    {
+        $key = $fixture . "\0sequence\0" . \implode("\1", \array_map(
+            static fn(array $arguments): string => \implode("\0", $arguments),
+            $argumentSets,
+        ));
+
+        return $this->runFixture($fixture, $argumentSets, $timeout, $key);
+    }
+
+    /**
+     * @param non-empty-list<list<string>> $argumentSets
+     *
+     * @return array{output: string, errorOutput: string, shadows: string} the last step's run
+     */
+    private function runFixture(string $fixture, array $argumentSets, int $timeout, string $key): array
     {
         $shadowDir = $this->startFixtureRun($fixture);
         $process = null;
@@ -106,11 +107,6 @@ trait AnalysesFixtureApp
         }
 
         $this->assertInstanceOf(Process::class, $process, 'a run sequence needs at least one step.');
-
-        $key = $fixture . "\0sequence\0" . \implode("\1", \array_map(
-            static fn(array $arguments): string => \implode("\0", $arguments),
-            $argumentSets,
-        ));
 
         return [
             'output' => $process->getOutput(),

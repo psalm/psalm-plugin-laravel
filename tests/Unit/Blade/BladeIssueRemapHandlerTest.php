@@ -118,7 +118,7 @@ final class BladeIssueRemapHandlerTest extends TestCase
         // Proof that nothing short-circuits on the graph: the handler runs past it into target
         // resolution, which reaches for the live Config this bare harness deliberately has none of.
         // That is all this pins — that the graph is not a decline. The relocation it goes on to
-        // perform is covered against a real taint run by {@see BladeTaintRemapTest}.
+        // perform is covered against a real taint run by {@see BladeViewDataTaintTest}.
         $this->registerShadow();
 
         $this->expectException(\UnexpectedValueException::class);

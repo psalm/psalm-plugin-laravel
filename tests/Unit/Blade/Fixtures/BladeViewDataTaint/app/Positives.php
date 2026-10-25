@@ -89,11 +89,6 @@ final class Positives
         return view('merge-helper', [], ['q' => $request->input('q')]);
     }
 
-    public function mergeDataHelperNamed(Request $request): View
-    {
-        return view('merge-helper-named', mergeData: ['q' => $request->input('q')]);
-    }
-
     public function mergeDataFacade(Request $request): View
     {
         return ViewFacade::make('merge-facade', [], ['q' => $request->input('q')]);
