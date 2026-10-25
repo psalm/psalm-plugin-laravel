@@ -306,8 +306,6 @@ final class ComponentRenderData
      * A class template parameter is unbound at a call site, so each is replaced by its upper bound (an
      * unbounded one is `mixed`): nothing narrower can be claimed, but a definite mismatch with the bound
      * still shows.
-     *
-     * @psalm-capabilities read-props
      */
     private static function withoutTemplates(Codebase $codebase, ClassLikeStorage $declaring, Union $type): Union
     {
