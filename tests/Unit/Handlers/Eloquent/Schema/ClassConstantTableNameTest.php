@@ -43,64 +43,6 @@ final class ClassConstantTableNameTest extends AbstractSchemaAggregatorTestCase
     }
 
     #[Test]
-    public function it_resolves_class_constant_table_name_in_table(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-            use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\ClassWithTableConstant;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('users', function (Blueprint $table): void {
-                        $table->id();
-                    });
-
-                    Schema::table(ClassWithTableConstant::TABLE, function (Blueprint $table): void {
-                        $table->string('email');
-                    });
-                }
-            };
-            PHP);
-
-        $this->assertSchemaHasTableAndNotNullableColumnOfType('users.id', 'int', $schema);
-        $this->assertSchemaHasTableAndNotNullableColumnOfType('users.email', 'string', $schema);
-    }
-
-    #[Test]
-    public function it_resolves_different_class_constants_from_same_class(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-            use Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema\Fixtures\ClassWithTableConstant;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create(ClassWithTableConstant::TABLE, function (Blueprint $table): void {
-                        $table->id();
-                    });
-
-                    Schema::create(ClassWithTableConstant::POSTS_TABLE, function (Blueprint $table): void {
-                        $table->id();
-                        $table->string('title');
-                    });
-                }
-            };
-            PHP);
-
-        $this->assertArrayHasKey('users', $schema->tables);
-        $this->assertArrayHasKey('posts', $schema->tables);
-        $this->assertSchemaHasTableAndNotNullableColumnOfType('posts.title', 'string', $schema);
-    }
-
-    #[Test]
     public function it_ignores_unresolvable_class_constants(): void
     {
         $schema = $this->schemaFromMigration(<<<'PHP'

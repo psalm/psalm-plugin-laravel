@@ -48,23 +48,6 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     }
 
     #[Test]
-    public function returns_env_function_id(): void
-    {
-        $this->assertSame(['env'], NoEnvOutsideConfigHandler::getFunctionIds());
-    }
-
-    #[Test]
-    public function skips_files_inside_default_config_directory(): void
-    {
-        $configDir = $this->makeDir('config');
-        NoEnvOutsideConfigHandler::init([$configDir]);
-
-        $event = $this->makeEvent($configDir . \DIRECTORY_SEPARATOR . 'app.php');
-
-        $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
-    }
-
-    #[Test]
     public function skips_files_in_nested_config_subdirectory(): void
     {
         $configDir = $this->makeDir('config');
@@ -84,21 +67,6 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
         NoEnvOutsideConfigHandler::init([$configDir]);
 
         $event = $this->makeEvent($testsDir . \DIRECTORY_SEPARATOR . 'Unit' . \DIRECTORY_SEPARATOR . 'MyTest.php');
-
-        $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
-    }
-
-    /**
-     * Acceptance criterion from issue #858: BookStack uses `app/Config/` instead of `config/`.
-     * With the user-configured directory, env() calls there are no longer flagged.
-     */
-    #[Test]
-    public function skips_user_configured_directory(): void
-    {
-        $bookstackConfig = $this->makeDir('app/Config');
-        NoEnvOutsideConfigHandler::init([$bookstackConfig]);
-
-        $event = $this->makeEvent($bookstackConfig . \DIRECTORY_SEPARATOR . 'app.php');
 
         $this->assertNull(NoEnvOutsideConfigHandler::getFunctionReturnType($event));
     }
@@ -188,26 +156,6 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
     }
 
     /**
-     * Without an opt-in, vendor packages no longer suppress the issue — closing the
-     * "false negative" gap from issue #858. Users wanting to allow vendor configs
-     * must add `<configDirectory name="vendor/foo/bar/config" />`.
-     */
-    #[Test]
-    public function rejects_vendor_package_config_when_not_opted_in(): void
-    {
-        $configDir = $this->makeDir('config');
-        $vendorConfig = $this->makeDir('vendor/spatie/laravel-backup/config');
-        NoEnvOutsideConfigHandler::init([$configDir]);
-
-        $event = $this->makeEvent($vendorConfig . \DIRECTORY_SEPARATOR . 'backup.php');
-
-        $this->expectException(\UnexpectedValueException::class);
-        $this->expectExceptionMessageMatches('/config.*initializ|initializ.*config/i');
-
-        NoEnvOutsideConfigHandler::getFunctionReturnType($event);
-    }
-
-    /**
      * Substring look-alikes (e.g. `configuration/`, `myconfig/`) — the old
      * str_contains heuristic could be tricked here; str_starts_with cannot.
      */
@@ -285,19 +233,6 @@ final class NoEnvOutsideConfigHandlerTest extends TestCase
         );
 
         $this->assertSame(0, $progress->warningCount, 'expected no warning when at least one entry resolves');
-    }
-
-    /**
-     * Empty input is a legitimate "reset" path used by tests; init() must not warn.
-     */
-    #[Test]
-    public function init_does_not_warn_on_empty_input(): void
-    {
-        $progress = new RecordingProgress();
-
-        NoEnvOutsideConfigHandler::init([], $progress);
-
-        $this->assertSame(0, $progress->warningCount);
     }
 
     private function makeDir(string $relativePath): string

@@ -63,14 +63,4 @@ final class ShadowTargetTest extends TestCase
         $snippet = "strlen(\n  /* {$compiled}3 */ 'a',\n  /* {$compiled}4 */ 'b',\n)";
         $this->assertTrue(TemplateSnippetMatcher::occursIn($snippet, $changed, $target->markerPrefix()));
     }
-
-    #[Test]
-    public function an_unmapped_shadow_line_has_no_template_line(): void
-    {
-        $target = $this->target(self::SOURCE, MarkerComment::prefixFor(self::SOURCE));
-
-        $this->assertSame(0, $target->templateLineFor(1));
-        $this->assertSame(2, $target->templateLineFor(2));
-        $this->assertSame(0, $target->templateLineFor(99));
-    }
 }

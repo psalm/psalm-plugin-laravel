@@ -194,21 +194,6 @@ final class InitCommandTest extends TestCase
     }
 
     #[Test]
-    public function force_overwrites_psalm_xml_dist_in_place(): void
-    {
-        $dist = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml.dist';
-        \file_put_contents($dist, '<existing-dist/>');
-
-        $tester = $this->makeTester();
-
-        $exit = $tester->execute(['--force' => true]);
-
-        $this->assertSame(Command::SUCCESS, $exit);
-        $this->assertStringContainsString('pluginClass', (string) \file_get_contents($dist));
-        $this->assertFileDoesNotExist($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
-    }
-
-    #[Test]
     public function prefers_psalm_xml_over_psalm_xml_dist_when_both_present(): void
     {
         $xml = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml';

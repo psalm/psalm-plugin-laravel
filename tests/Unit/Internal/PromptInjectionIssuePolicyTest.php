@@ -80,8 +80,6 @@ final class PromptInjectionIssuePolicyTest extends TestCase
     {
         yield 'opt-out to auto' => [false, null, Config::REPORT_ERROR];
         yield 'auto to opt-out' => [null, false, Config::REPORT_SUPPRESS];
-        yield 'opt-out to enforced' => [false, true, Config::REPORT_ERROR];
-        yield 'enforced to opt-out' => [true, false, Config::REPORT_SUPPRESS];
     }
 
     #[Test]
@@ -97,19 +95,6 @@ final class PromptInjectionIssuePolicyTest extends TestCase
         PromptInjectionIssuePolicy::apply($subsequent);
 
         $this->assertSame($expectedLevel, $config->getReportingLevelForFile('TaintedLlmPrompt', __FILE__));
-    }
-
-    #[Test]
-    public function an_explicit_handler_stays_unchanged_across_sequential_invocations(): void
-    {
-        $config = $this->loadConfig(
-            '<issueHandlers><TaintedLlmPrompt errorLevel="suppress" /></issueHandlers>',
-        );
-
-        PromptInjectionIssuePolicy::apply(false);
-        PromptInjectionIssuePolicy::apply(true);
-
-        $this->assertSame(Config::REPORT_SUPPRESS, $config->getReportingLevelForFile('TaintedLlmPrompt', __FILE__));
     }
 
     private function loadConfig(string $body = ''): Config

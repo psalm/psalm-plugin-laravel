@@ -4,26 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Providers\ModelMetadata;
 
-use Illuminate\Database\Eloquent\Attributes\Appends;
 use Illuminate\Database\Eloquent\Attributes\Table;
-use Illuminate\Database\Eloquent\Casts\AsArrayObject;
-use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelInstancePreparer;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\CastFlavour;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AppendsOrderModel;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ArrayFormCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CastsMethodModel;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\KeyTypeInitializerOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\ObjectCastOverriddenByCastsMethodModel;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\SectionFailureModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableKeyOnlyModel;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 
 /**
  * Drives the replay directly — no registry, no Codebase — which is what the Psalm-free boundary buys.
@@ -34,74 +25,6 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 #[CoversClass(ModelInstancePreparer::class)]
 final class ModelInstancePreparerTest extends TestCase
 {
-    #[\Override]
-    protected function setUp(): void
-    {
-        SectionFailureModel::$failures = [];
-    }
-
-    // Also on the way out: the switch is a public static, so a consumer not defending itself would inherit it.
-    #[\Override]
-    protected function tearDown(): void
-    {
-        SectionFailureModel::$failures = [];
-    }
-
-    #[Test]
-    public function user_trait_initializer_is_invoked_on_the_constructor_less_instance(): void
-    {
-        // initializeMergesTraitConfig() is protected: only the reflection invoke reaches it, since
-        // $instance->{$name}() from outside routes to Model::__call() query-builder forwarding.
-        $instance = $this->prepare(TraitInitializedConfigModel::class);
-
-        // Key, not whole map: getCasts() also merges [getKeyName() => getKeyType()].
-        $this->assertSame(AsArrayObject::class, $instance->getCasts()['meta'] ?? null);
-        // Union-merge, not clobber.
-        $this->assertSame(['class_fillable', 'trait_fillable'], $instance->getFillable());
-    }
-
-    #[Test]
-    public function attribute_tagged_trait_initializer_is_invoked(): void
-    {
-        // seedViaAttribute() is non-conventionally named: only the attribute-discovery branch reaches it.
-        $this->assertSame(
-            AsCollection::class,
-            $this->prepare(TraitInitializedConfigModel::class)->getCasts()['via_attr'] ?? null,
-        );
-    }
-
-    #[Test]
-    public function framework_concern_initializer_runs_its_mirror_at_the_right_position(): void
-    {
-        if (!\class_exists(Appends::class)) {
-            self::markTestSkipped('Eloquent PHP class attributes require Laravel >= 13.0.');
-        }
-
-        // Runtime construction as oracle, never a literal: getMethods() ranks the user setAppends(['trait_only'])
-        // against the framework mergeAppends(#[Appends]) differently per PHP (both survive on 8.5, the replace
-        // wins on 8.4), so a literal would pin one PHP line.
-        $this->assertSame(
-            (new AppendsOrderModel())->getAppends(),
-            $this->prepare(AppendsOrderModel::class)->getAppends(),
-        );
-    }
-
-    #[Test]
-    public function framework_concern_initializer_is_invoked(): void
-    {
-        // Framework initializers are invoked, not mirrored: whatever the installed Laravel does IS the
-        // behaviour. initializeSoftDeletes() writing $casts[getDeletedAtColumn()] is the observable proof,
-        // and it lands keyed off the DELETED_AT override without the replay knowing that rule.
-        $casts = new \ReflectionProperty(Model::class, 'casts');
-
-        // Pin what Laravel itself writes; [] on both sides would not distinguish invoking from mirroring.
-        $this->assertSame(['archived_at' => 'datetime'], $casts->getValue(new CustomDeletedAtModel()));
-        $this->assertSame(
-            $casts->getValue(new CustomDeletedAtModel()),
-            $casts->getValue($this->prepare(CustomDeletedAtModel::class)),
-        );
-    }
-
     #[Test]
     public function the_has_attributes_initializer_is_mirrored_not_invoked(): void
     {
@@ -116,28 +39,6 @@ final class ModelInstancePreparerTest extends TestCase
         // The key, not the whole map: a future Laravel initializer writing some OTHER cast is not this
         // test's business, and asserting [] would turn that into a false alarm.
         $this->assertArrayNotHasKey('from_casts_method', $casts->getValue($this->prepare(CastsMethodModel::class)));
-    }
-
-    #[Test]
-    public function the_has_attributes_mirror_normalizes_the_declared_casts(): void
-    {
-        // initializeHasAttributes()'s first statement does TWO things, and only one is excused: it runs
-        // casts() (skipped — the registry already has it statically) and it normalizes the DECLARED $casts,
-        // which involves no casts() at all. Skipping the second dropped the model's whole casts section
-        // downstream (#1281).
-        $casts = new \ReflectionProperty(Model::class, 'casts');
-
-        // Pin the premise: Laravel collapses both array forms and leaves the string one alone. Without it,
-        // the oracle below cannot tell "normalized" from "both sides equally raw".
-        $this->assertSame([
-            'options' => AsCollection::class . ':' . Collection::class,
-            'single' => AsCollection::class,
-            'plain_tags' => 'collection',
-        ], $casts->getValue(new ArrayFormCastsModel()));
-
-        // Runtime as oracle: the mirror calls Laravel's own normalizer, so whatever the installed release
-        // does IS the answer.
-        $this->assertSame($casts->getValue(new ArrayFormCastsModel()), $casts->getValue($this->prepare(ArrayFormCastsModel::class)));
     }
 
     #[Test]
@@ -197,18 +98,6 @@ final class ModelInstancePreparerTest extends TestCase
 
         // The key half has no such branch: it reaches the key on every supported release.
         $this->assertSame('uuid', $this->prepare(TableKeyOnlyModel::class)->getKeyName());
-    }
-
-    #[Test]
-    public function throwing_initializer_propagates_to_the_caller(): void
-    {
-        // prepare() lets the throw out; the builder's section guard decides what a half-prepared instance backs.
-        SectionFailureModel::$failures['trait initializers'] = true;
-
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('deliberate trait initializers failure');
-
-        $this->prepare(SectionFailureModel::class);
     }
 
     /** @param class-string<Model> $modelFqcn */

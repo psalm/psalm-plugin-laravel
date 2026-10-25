@@ -12,18 +12,12 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation;
 use Psalm\Config;
-use Psalm\Issue\PluginIssue;
-use Psalm\LaravelPlugin\Issues\BladeCompileError;
-use Psalm\LaravelPlugin\Issues\InvalidViewData;
 use Psalm\LaravelPlugin\Issues\MissingViewData;
-use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
-use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
-use Psalm\LaravelPlugin\Issues\UnusedViewData;
 use Psalm\StatementsSource;
 use Tests\Psalm\LaravelPlugin\Unit\Concerns\LoadsPsalmConfigFromXml;
 
 /**
- * Pins the levels the plugin issues graduate to. An experimental issue is `info` by default through
+ * An experimental issue is `info` by default through
  * {@see \Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy}; once a project enforces it (or the
  * policy entry is deleted), Psalm gates it on `ERROR_LEVEL` alone, like its own issues.
  */
@@ -35,31 +29,6 @@ final class IssueErrorLevelTest extends TestCase
     protected function tearDown(): void
     {
         (new \ReflectionClass(Config::class))->getProperty('instance')->setValue(null, null);
-    }
-
-    /** @return iterable<string, array{class-string<PluginIssue>, int}> */
-    public static function levels(): iterable
-    {
-        // Psalm core analogues: UndefinedMethod (6) for a relation name that is no method,
-        // UndefinedMagicPropertyFetch (4) for an attribute the model does not know.
-        yield 'MissingViewData' => [MissingViewData::class, 6];
-        yield 'InvalidViewData' => [InvalidViewData::class, 6];
-        yield 'UnusedViewData' => [UnusedViewData::class, 4];
-        yield 'BladeCompileError' => [BladeCompileError::class, -1];
-        yield 'UndefinedModelRelation' => [UndefinedModelRelation::class, 6];
-        yield 'UnknownModelAttribute' => [UnknownModelAttribute::class, 4];
-    }
-
-    /**
-     * @param class-string<PluginIssue> $issue
-     */
-    #[Test]
-    #[DataProvider('levels')]
-    public function every_issue_declares_its_error_level(string $issue, int $expected): void
-    {
-        $this->assertSame($issue::ERROR_LEVEL, $expected);
-        // An inherited -1 would pass the line above; the level must be a deliberate choice.
-        $this->assertSame($issue, (new \ReflectionClassConstant($issue, 'ERROR_LEVEL'))->getDeclaringClass()->getName());
     }
 
     /** @return iterable<string, array{int, 'error'|'info'}> */

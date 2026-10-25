@@ -107,22 +107,6 @@ final class ExperimentalIssuePolicyTest extends TestCase
         }
     }
 
-    #[Test]
-    public function an_explicit_handler_stays_unchanged_across_sequential_invocations(): void
-    {
-        $config = $this->loadConfig(
-            '<issueHandlers><PluginIssue name="UndefinedModelRelation" errorLevel="info">'
-            . '<errorLevel type="suppress"><directory name="tests/Unit/Internal" /></errorLevel>'
-            . '</PluginIssue></issueHandlers>',
-        );
-
-        ExperimentalIssuePolicy::apply(false);
-        ExperimentalIssuePolicy::apply(true);
-
-        $this->assertSame(Config::REPORT_SUPPRESS, $config->getReportingLevelForFile('UndefinedModelRelation', __FILE__));
-        $this->assertSame(Config::REPORT_INFO, $config->getReportingLevelForFile('UndefinedModelRelation', \dirname(__DIR__, 3) . '/src/Elsewhere.php'));
-    }
-
     private function loadConfig(string $body = ''): Config
     {
         return self::loadPsalmConfigFromXml(

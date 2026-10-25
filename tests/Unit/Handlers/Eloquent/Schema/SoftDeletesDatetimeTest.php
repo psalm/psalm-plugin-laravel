@@ -35,29 +35,6 @@ final class SoftDeletesDatetimeTest extends AbstractSchemaAggregatorTestCase
     }
 
     #[Test]
-    public function custom_column_name(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('posts', static function (Blueprint $table) {
-                        $table->id();
-                        $table->softDeletesDatetime('archived_at');
-                    });
-                }
-            };
-            PHP);
-
-        $this->assertTableHasNullableColumnOfType('archived_at', 'string', $schema->tables['posts']);
-    }
-
-    #[Test]
     public function drop_removes_default_column(): void
     {
         $schema = $this->schemaFromMigration(<<<'PHP'

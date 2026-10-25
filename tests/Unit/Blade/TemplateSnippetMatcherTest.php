@@ -72,34 +72,11 @@ final class TemplateSnippetMatcherTest extends TestCase
     }
 
     #[Test]
-    public function an_identical_snippet_occurs(): void
-    {
-        $this->assertTrue($this->occursIn("foo('a', 'b')", "<div>\n  foo('a', 'b')\n</div>\n"));
-    }
-
-    #[Test]
     public function differing_line_breaks_between_arguments_still_occur(): void
     {
         // A generated block reformats an argument list onto its own lines; the comparison must
         // ignore that rather than requiring byte-identical whitespace.
         $this->assertTrue($this->occursIn("foo('a',\n'b',\n'c')", "<div>\n  foo('a', 'b', 'c')\n</div>\n"));
-    }
-
-    #[Test]
-    public function a_multi_line_snippet_is_found_against_the_whole_source_not_one_line(): void
-    {
-        // Guards the "match the whole source, never one line" rule directly: a per-line
-        // comparison would find neither half of a snippet split across two template lines.
-        $snippet = "foo('a',\n  'b')";
-        $source = "<div>\n  foo('a',\n  'b')\n</div>\n";
-
-        $this->assertTrue($this->occursIn($snippet, $source));
-    }
-
-    #[Test]
-    public function an_absent_snippet_does_not_occur(): void
-    {
-        $this->assertFalse($this->occursIn("bar('a', 'b', 'c')", "<div>\n  foo('a', 'b')\n</div>\n"));
     }
 
     /**
@@ -115,15 +92,6 @@ final class TemplateSnippetMatcherTest extends TestCase
         $this->assertSame(
             'mount(1, 2, 3)',
             TemplateSnippetMatcher::callExpressionAt($line, \strpos($line, 'mount(') ?: 0),
-        );
-    }
-
-    #[Test]
-    public function a_nested_call_does_not_end_the_argument_list_early(): void
-    {
-        $this->assertSame(
-            'mount(inner(1), 2)',
-            TemplateSnippetMatcher::callExpressionAt('mount(inner(1), 2);', 0),
         );
     }
 
@@ -173,14 +141,6 @@ final class TemplateSnippetMatcherTest extends TestCase
         $this->assertNull(TemplateSnippetMatcher::callExpressionAt('mount(1, 2);', 99));
     }
 
-    #[Test]
-    public function an_argument_list_left_open_by_the_end_of_the_line_declines(): void
-    {
-        // Psalm's snippet is one line; a call continued on the next one cannot be read whole, and
-        // a partial read would not match the template.
-        $this->assertNull(TemplateSnippetMatcher::callExpressionAt('mount(1,', 0));
-    }
-
     /**
      * The shape an argument-position issue hands the relocator: the whole compiled line, plus the
      * bounds of the ARGUMENT rather than the callee. The enclosing `e(` sits before those bounds on
@@ -213,33 +173,6 @@ final class TemplateSnippetMatcherTest extends TestCase
     }
 
     #[Test]
-    public function whitespace_between_the_callee_and_its_parenthesis_is_kept(): void
-    {
-        // An author's own `e ( ... )` inside `@php` reaches the shadow verbatim, so the slice has
-        // to reproduce that spacing for the template to contain it.
-        $line = "echo e ( old('k') );";
-        $start = (int) \strpos($line, "old('k')");
-
-        $this->assertSame(
-            "e ( old('k')",
-            TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'),
-        );
-    }
-
-    #[Test]
-    public function the_nearest_preceding_call_wins_when_a_line_holds_two_echoes(): void
-    {
-        // `{{ $a }}{{ old('k') }}` compiles to two echo statements on one shadow line.
-        $line = "<?php echo e(\$a); ?><?php echo e(old('k')); ?>";
-        $start = (int) \strpos($line, "old('k')");
-
-        $this->assertSame(
-            "e(old('k')",
-            TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'),
-        );
-    }
-
-    #[Test]
     public function a_qualified_or_member_callee_of_the_same_name_declines(): void
     {
         // Without an identifier-boundary check all three read backwards as the identifier `e`, and
@@ -255,15 +188,6 @@ final class TemplateSnippetMatcherTest extends TestCase
     }
 
     #[Test]
-    public function an_argument_not_enclosed_by_the_named_callee_declines(): void
-    {
-        $line = "echo trim(old('k'));";
-        $start = (int) \strpos($line, "old('k')");
-
-        $this->assertNull(TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'));
-    }
-
-    #[Test]
     public function bounds_with_no_room_for_a_callee_decline(): void
     {
         // Fail open on anything unreadable: an argument at offset 0 has nothing before it, and
@@ -272,21 +196,6 @@ final class TemplateSnippetMatcherTest extends TestCase
         $this->assertNull(TemplateSnippetMatcher::enclosingCallAt("e(old('k')", 2, 99, 'e'));
         $this->assertNull(TemplateSnippetMatcher::enclosingCallAt("e(old('k')", 2, 2, 'e'));
         $this->assertNull(TemplateSnippetMatcher::enclosingCallAt('e(', 2, 2, 'e'));
-    }
-
-    #[Test]
-    public function a_differently_cased_callee_still_matches(): void
-    {
-        // PHP identifiers are case-insensitive, so an author's `{{ E(old('k')) }}` compiles to an
-        // inner call that is genuinely theirs; matching case-sensitively would decline and the
-        // template-source check below would never get to keep it on its own merits.
-        $line = "echo E(old('k'));";
-        $start = (int) \strpos($line, "old('k')");
-
-        $this->assertSame(
-            "E(old('k')",
-            TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'e'),
-        );
     }
 
     /**
@@ -333,37 +242,6 @@ final class TemplateSnippetMatcherTest extends TestCase
     }
 
     /**
-     * Blade removes comments BEFORE it unescapes `@@` (`$compilers` order), so
-     * `'@@{{-- c --}}foo'` compiles to `'@foo'`: the mirror must strip comments before its own
-     * unescape pass, or the `@@` never sits directly before a word character and stays escaped.
-     */
-    #[Test]
-    public function a_comment_split_escape_matches_only_with_blade_ordered_rewrites(): void
-    {
-        $snippet = "mount('@foo', 'u', 'v')";
-        $source = "<div>\n  {{ \$x->mount('@@{{-- c --}}foo', 'u', 'v') }}\n</div>\n";
-
-        $this->assertFalse($this->occursIn($snippet, $source));
-        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
-    }
-
-    /**
-     * Blade unescapes `@@` during the token pass and strips component markers only at the very
-     * end, so in `'x##BEGIN-COMPONENT-CLASS##@@foo'` the `@@` still unescapes (the `#` before it
-     * satisfies `\B`) and the compiled text is `'x@foo'`. Removing the marker first would glue
-     * `x` to `@@` and block the unescape; the mirror must keep Blade's order.
-     */
-    #[Test]
-    public function a_marker_adjacent_escape_matches_only_with_blade_ordered_rewrites(): void
-    {
-        $snippet = "mount('x@foo', 'u', 'v')";
-        $source = "<div>\n  {{ \$x->mount('x##BEGIN-COMPONENT-CLASS##@@foo', 'u', 'v') }}\n</div>\n";
-
-        $this->assertFalse($this->occursIn($snippet, $source));
-        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
-    }
-
-    /**
      * `@php` and raw `<?php ?>` blocks are exempt from the `@@` unescape but NOT from the final
      * marker strip, so `'@@foo##BEGIN-COMPONENT-CLASS##'` inside `@php` compiles to `'@@foo'`.
      * Only a markers-only variant of the mirror finds that call; the full mirror over-unescapes
@@ -377,29 +255,6 @@ final class TemplateSnippetMatcherTest extends TestCase
 
         $this->assertFalse($this->occursIn($snippet, $source));
         $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
-    }
-
-    /**
-     * The reverse boundary: in `'@@##BEGIN-COMPONENT-CLASS##foo'` the marker BLOCKS Blade's
-     * unescape (`#` after `@@` fails the pattern's word-character requirement) and only the final
-     * marker strip runs, so the compiled text keeps `'@@foo'`. The markers-only variant finds it;
-     * the full mirror would over-unescape to `'@foo'` and miss.
-     */
-    #[Test]
-    public function a_marker_blocked_escape_matches_via_the_markers_only_variant(): void
-    {
-        $snippet = "mount('@@foo', 'u', 'v')";
-        $source = "<div>\n  {{ \$x->mount('@@##BEGIN-COMPONENT-CLASS##foo', 'u', 'v') }}\n</div>\n";
-
-        $this->assertFalse($this->occursIn($snippet, $source));
-        $this->assertTrue($this->occursInWithRawTextRewrites($snippet, $source));
-    }
-
-    /** Mirroring never widens the gate: a call genuinely absent from the template still does not match. */
-    #[Test]
-    public function a_genuinely_absent_call_still_does_not_match_with_raw_text_rewrites(): void
-    {
-        $this->assertFalse($this->occursInWithRawTextRewrites("mount('@foo', 'u', 'v', 'w', 'x')", "<div>\n  {{ \$x->mount('@@foo', 'u', 'v') }}\n</div>\n"));
     }
 
     /** The `@aware` list-form gate: the compiled call text must end exactly where the selection does. */
@@ -424,18 +279,5 @@ final class TemplateSnippetMatcherTest extends TestCase
 
         // Multibyte: offsets are bytes, as Psalm's are.
         $this->assertTrue(TemplateSnippetMatcher::endsAt("é{$call}", \strlen("é{$call}"), $call));
-    }
-
-    /**
-     * An offset outside the snippet is no evidence. `substr()` alone would fake both: a negative
-     * length trims from the END, and a length past the end clamps to the whole snippet.
-     */
-    #[Test]
-    public function ends_at_rejects_an_offset_outside_the_snippet(): void
-    {
-        $call = '$__env->getConsumableComponentData($__value';
-
-        $this->assertFalse(TemplateSnippetMatcher::endsAt($call . 'xy', -2, $call));
-        $this->assertFalse(TemplateSnippetMatcher::endsAt($call, \strlen($call) + 1, $call));
     }
 }

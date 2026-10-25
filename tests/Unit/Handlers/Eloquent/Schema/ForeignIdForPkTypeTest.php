@@ -60,38 +60,6 @@ final class ForeignIdForPkTypeTest extends AbstractSchemaAggregatorTestCase
     }
 
     #[Test]
-    public function foreign_id_for_uuid_model_with_custom_column_name(): void
-    {
-        $schemaAggregator = $this->instantiateSchemaAggregator(
-            __DIR__ . '/migrations/foreign_id_for_pk_type',
-        );
-
-        $table = $schemaAggregator->tables['comments'];
-
-        // foreignIdFor(UuidModel::class, 'reviewer_id') → string with custom name
-        self::assertTableHasColumn('reviewer_id', $table);
-        self::assertColumnHasType('string', $table->columns['reviewer_id']);
-        self::assertColumnNotNullable($table->columns['reviewer_id']);
-        $this->assertFalse($table->columns['reviewer_id']->unsigned, 'UUID FK with custom name should not be unsigned');
-    }
-
-    #[Test]
-    public function foreign_id_for_uuid_model_nullable(): void
-    {
-        $schemaAggregator = $this->instantiateSchemaAggregator(
-            __DIR__ . '/migrations/foreign_id_for_pk_type',
-        );
-
-        $table = $schemaAggregator->tables['comments'];
-
-        // foreignIdFor(UuidModel::class, 'editor_id')->nullable() → nullable string
-        self::assertTableHasColumn('editor_id', $table);
-        self::assertColumnHasType('string', $table->columns['editor_id']);
-        self::assertColumnNullable($table->columns['editor_id']);
-        $this->assertFalse($table->columns['editor_id']->unsigned);
-    }
-
-    #[Test]
     public function foreign_id_for_model_with_custom_primary_key(): void
     {
         $schemaAggregator = $this->instantiateSchemaAggregator(

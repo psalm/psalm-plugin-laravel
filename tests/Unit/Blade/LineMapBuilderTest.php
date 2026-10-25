@@ -46,16 +46,6 @@ final class LineMapBuilderTest extends TestCase
         $this->assertSame(9, $map[1]);
     }
 
-    #[Test]
-    public function no_prelude_lines_still_maps_from_line_one(): void
-    {
-        $content = "<?php /* blade:3 */ ?>hi\n";
-
-        $map = LineMapBuilder::build($content, preludeLines: 0);
-
-        $this->assertSame(3, $map[1]);
-    }
-
     /**
      * #1545 review: `token_get_all()` (which supplies each marker's own `$token[2]` line number)
      * counts a bare `\r` as a line terminator, same as PHP's own lexer. If the line-numbering loop

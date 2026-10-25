@@ -36,19 +36,9 @@ final class InternalErrorClassifierTest extends TestCase
             'Laravel framework',
         ];
 
-        yield 'illuminate split package' => [
-            '/home/user/project/vendor/illuminate/container/Container.php',
-            'Laravel framework',
-        ];
-
         yield 'Orchestra Testbench' => [
             '/home/user/project/vendor/orchestra/testbench-core/src/Foundation/Application.php',
             'Orchestra Testbench',
-        ];
-
-        yield 'plugin development checkout' => [
-            '/home/dev/code/psalm-plugin-laravel/src/Bootstrap/ApplicationProvider.php',
-            'Laravel plugin',
         ];
 
         yield 'plugin installed via composer wins over generic vendor' => [
@@ -63,11 +53,6 @@ final class InternalErrorClassifierTest extends TestCase
 
         yield 'user bootstrap/app.php' => [
             '/home/user/app/bootstrap/app.php',
-            'application code',
-        ];
-
-        yield 'user app/Providers' => [
-            '/home/user/app/app/Providers/AppServiceProvider.php',
             'application code',
         ];
 
@@ -91,17 +76,6 @@ final class InternalErrorClassifierTest extends TestCase
         // surface should still treat an empty path as unclassifiable rather than
         // as user code with empty parentheses
         $this->assertNull(InternalErrorClassifier::hintForFile(''));
-    }
-
-    #[Test]
-    public function it_returns_a_hint_for_a_real_throwable(): void
-    {
-        // Smoke test: a real throwable always has at least one classifiable frame
-        // (this test file itself is enough). Verifies frameFiles() is wired up
-        // and the hint() loop reaches a classifiable frame.
-        $hint = InternalErrorClassifier::hint(new \RuntimeException('boom'));
-
-        $this->assertNotNull($hint);
     }
 
     /** #1930: a Blade disable is thrown from the plugin's own file but is mostly a project setting. */

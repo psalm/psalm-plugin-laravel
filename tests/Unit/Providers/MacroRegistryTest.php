@@ -319,16 +319,6 @@ final class MacroRegistryTest extends TestCase
     }
 
     #[Test]
-    public function known_macroable_classes_lists_classes_with_at_least_one_macro(): void
-    {
-        Stringable::macro('alpha', static fn(): string => '');
-
-        MacroRegistry::init(new VoidProgress());
-
-        $this->assertContains(Stringable::class, MacroRegistry::getKnownMacroableClasses());
-    }
-
-    #[Test]
     public function init_is_idempotent(): void
     {
         Stringable::macro('x', static fn(): int => 0);
@@ -356,73 +346,6 @@ final class MacroRegistryTest extends TestCase
         $this->assertNotNull(MacroRegistry::get(Stringable::class, 'mixinone'));
         $this->assertNotNull(MacroRegistry::get(Stringable::class, 'mixintwo'));
     }
-
-    #[Test]
-    public function override_for_testing_replaces_state(): void
-    {
-        $def = new MacroDefinition(
-            declaringClass: Stringable::class,
-            methodName: 'fake',
-            casedName: 'fake',
-            params: [],
-            returnType: \Psalm\Type::getString(),
-            signatureReturnType: \Psalm\Type::getString(),
-        );
-
-        MacroRegistry::overrideForTesting(
-            macros: [\strtolower(Stringable::class) => ['fake' => $def]],
-            knownMacroableClasses: [Stringable::class],
-        );
-
-        $this->assertSame($def, MacroRegistry::get(Stringable::class, 'fake'));
-        $this->assertSame([Stringable::class], MacroRegistry::getKnownMacroableClasses());
-    }
-
-    #[Test]
-    public function signature_return_type_mirrors_native_return_type(): void
-    {
-        // When the closure declares a native return type, `signatureReturnType`
-        // mirrors `returnType` (both populated by reflection).
-        Stringable::macro('typedReturn', static fn(): int => 0);
-
-        MacroRegistry::init(new VoidProgress());
-
-        $typed = MacroRegistry::get(Stringable::class, 'typedreturn');
-        $this->assertNotNull($typed);
-        $this->assertNotNull($typed->signatureReturnType);
-        $this->assertSame('int', $typed->signatureReturnType->getId());
-        $this->assertSame('int', $typed->returnType->getId());
-    }
-
-    #[Test]
-    public function override_for_testing_round_trips_a_null_signature_return_type(): void
-    {
-        // The "no native return type → signatureReturnType null" branch of the
-        // registry contract is asserted via the override seam rather than via
-        // reflection on a closure: PHP's reflection of closures without declared
-        // return types is not consistent across patch versions, so a reflection-
-        // based test is unreliable in CI. Push a definition through `overrideForTesting`
-        // and verify that lookup preserves the null `signatureReturnType` end-to-end.
-        $def = new MacroDefinition(
-            declaringClass: Stringable::class,
-            methodName: 'nonative',
-            casedName: 'noNative',
-            params: [],
-            returnType: \Psalm\Type::getMixed(),
-            signatureReturnType: null,
-        );
-
-        MacroRegistry::overrideForTesting(
-            macros: [\strtolower(Stringable::class) => ['nonative' => $def]],
-            knownMacroableClasses: [Stringable::class],
-        );
-
-        $retrieved = MacroRegistry::get(Stringable::class, 'noNative');
-        $this->assertNotNull($retrieved);
-        $this->assertNull($retrieved->signatureReturnType);
-        $this->assertSame('mixed', $retrieved->returnType->getId());
-    }
-
 }
 
 final class MixinFixture

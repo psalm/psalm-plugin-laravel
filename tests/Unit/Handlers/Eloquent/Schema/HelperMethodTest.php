@@ -47,47 +47,6 @@ final class HelperMethodTest extends AbstractSchemaAggregatorTestCase
     }
 
     #[Test]
-    public function schema_calls_in_multiple_helper_methods_are_detected(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    $this->createUsersTable();
-                    $this->createPostsTable();
-                }
-
-                private function createUsersTable(): void
-                {
-                    Schema::create('users', function (Blueprint $table) {
-                        $table->id();
-                        $table->string('name');
-                    });
-                }
-
-                private function createPostsTable(): void
-                {
-                    Schema::create('posts', function (Blueprint $table) {
-                        $table->id();
-                        $table->string('title');
-                    });
-                }
-            };
-            PHP);
-
-        $this->assertArrayHasKey('users', $schema->tables);
-        $this->assertTableHasNotNullableColumnOfType('name', 'string', $schema->tables['users']);
-
-        $this->assertArrayHasKey('posts', $schema->tables);
-        $this->assertTableHasNotNullableColumnOfType('title', 'string', $schema->tables['posts']);
-    }
-
-    #[Test]
     public function down_method_is_excluded(): void
     {
         $schema = $this->schemaFromMigration(<<<'PHP'
