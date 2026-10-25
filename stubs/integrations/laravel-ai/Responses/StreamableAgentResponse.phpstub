@@ -42,6 +42,8 @@ class StreamableAgentResponse implements IteratorAggregate, Responsable
 
     public Collection $events;
 
+    public Collection $citations;
+
     public ?string $conversationId = null;
 
     public ?object $conversationUser = null;
