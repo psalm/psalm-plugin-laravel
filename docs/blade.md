@@ -246,5 +246,8 @@ A value given to a class component reaches the unescaped echoes of the component
 * **Component tags can fail to compile** when the standalone compile pass cannot resolve them. The template is skipped with a `BladeCompileError`.
 * **Multi-line constructs report on their opening line**: a multi-line `{{ }}`, directive argument list, `<x-...>` tag or heredoc.
 * **Dynamic view names** (`view($name)`) are not connected to a template.
+* **Concurrent runs sharing one `cacheDir`** are not isolated from each other. A run that prunes a deleted template's shadow can remove a file another run is about to scan, and when the plugin cannot fingerprint the compiler (it reports that once per run) every run recompiles to the same shadow path, so overlapping runs can scan each other's bytes. Give each concurrent run its own `cacheDir`, or run them one after another.
+* **Templates inside `<projectFiles>`** are scanned a second time as raw PHP. Keep `resources/views` out of `<projectFiles>` (see [Enabling it](#enabling-it)); the plugin cannot take them out of Psalm's own file list, so a raw `<?php class X {} ?>` in a template reports `DuplicateClass` otherwise.
+* **Helper and constant visibility is captured once per boot.** A second application boot in the same process (a long-lived language server) sees no helper function or constant an earlier boot already declared. A file that only `define()`s constants, with no function in it, is never made visible to templates.
 
 Behaviour reference (cache invalidation, compiler-generated code, ambient variables, class components, the full limits list): [contributing/blade.md](contributing/blade.md).
