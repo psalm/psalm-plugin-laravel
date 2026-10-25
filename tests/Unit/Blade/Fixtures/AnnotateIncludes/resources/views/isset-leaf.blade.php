@@ -1,0 +1,1 @@
+<p>{{ $member?->slug }}</p>
