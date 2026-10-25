@@ -132,7 +132,7 @@ final class TemplateAnnotatorTest extends TestCase
         $result = TemplateAnnotator::annotate($source, ['title' => 'string']);
 
         $this->assertSame($header . self::NEW_TITLE_BLOCK . "<p>{{ \$title }}</p>\n", $result);
-        $this->assertNull(TemplateAnnotator::annotate((string) $result, ['title' => 'string']), 'the new block is read back, so a rerun is a no-op');
+        $this->assertNull(TemplateAnnotator::annotate($result, ['title' => 'string']), 'the new block is read back, so a rerun is a no-op');
     }
 
     #[Test]

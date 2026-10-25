@@ -246,7 +246,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      * The expressions a compound statement evaluates itself, outside any body: `if`/`elseif` tests, loop
      * headers, the `switch` subject and its `case` values.
      *
-     * @return list<Expr>
+     * @return array<Expr>
      *
      * @psalm-capabilities read-props
      */
@@ -709,6 +709,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
             // The facade (`View::first(...)`, whatever the import or alias spelling) forwards to the Factory.
             // Psalm leaves an imported name as written and records what it resolves to on the node.
+            /** @psalm-var ?string $resolved */
             $resolved = $node->class->getAttribute('resolvedName');
             $class = \is_string($resolved) ? new Node\Name($resolved) : $node->class;
 

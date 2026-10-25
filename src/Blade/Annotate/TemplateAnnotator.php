@@ -96,7 +96,7 @@ final class TemplateAnnotator
         // it, the statement's docblock would change meaning. A new `<?php` block would land before a `declare`.
         if ($ignored) {
             throw new \RuntimeException(
-                'the template\'s header docblock carries @psalm-ignore-var and its PHP block never closes, so no declaration can be placed. Declare the variables by hand.',
+                "the template's header docblock carries @psalm-ignore-var and its PHP block never closes, so no declaration can be placed. Declare the variables by hand.",
             );
         }
 
