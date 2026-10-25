@@ -34,7 +34,7 @@ A key read or declared by any template reached through an ordinary `@include` or
 
 Every gate below silences the check for that call site rather than guessing:
 
-- **The template's read set must be provable.** A `$$name` write, `extract()`, or a `compact()` with a non-literal argument anywhere in the compiled output makes the set a lower bound. `@props` and `@aware` both compile to `$$name` writes, so **component templates are never checked**.
+- **The template's read set must be provable.** A `$$name` write, `extract()`, a `compact()` with a non-literal argument, or a use of the engine's `$__data` array other than a literal key anywhere in the compiled output makes the set a lower bound. `$__data['name']` counts as a read of `name`. `@props` and `@aware` both compile to `$$name` writes, so **component templates are never checked**.
 - **The include chain must be literal.** A dynamic `@include($name)` at any depth declines for the whole chain. `@includeIsolated` and `@each` render with a fresh scope, so a key only their template reads is still reported, which is correct.
 - **`@props` must be readable.** A `@props($array)` the plugin cannot read as a literal list makes the declared set a lower bound, so nothing is reported for that template.
 - **Ambient and framework-supplied names are never reported.** `$errors`, `$slot`, `$attributes`, `$component`, `$loop` and `$__env` are Blade's own; see also [Framework-supplied data](../blade.md#framework-supplied-data).

@@ -768,7 +768,23 @@ final class ContractParser
                     }
                 }
 
+                // `$__data` is the engine's own array of the view's data: a literal key reads that name.
+                // The parent is entered before its variable, so the mark is set in time.
+                if ($node instanceof Node\Expr\ArrayDimFetch
+                    && $node->var instanceof Node\Expr\Variable
+                    && $node->var->name === '__data'
+                    && $node->dim instanceof Node\Scalar\String_
+                ) {
+                    $node->var->setAttribute('contractSkip', true);
+                    $this->readName($node->dim->value);
+                }
+
                 if ($node instanceof Node\Expr\Variable) {
+                    if ($node->name === '__data' && $node->getAttribute('contractSkip') !== true) {
+                        // Any other use can reach every name the call passed.
+                        $this->unknown = true;
+                    }
+
                     if (!\is_string($node->name)) {
                         // `$$name`: what Blade's own `@props` / `@aware` output compiles to, and the
                         // one shape that reads (or injects) a name no static walk can enumerate.
@@ -819,6 +835,17 @@ final class ContractParser
             }
 
             /**
+             * @psalm-external-mutation-free
+             */
+            private function readName(string $name): void
+            {
+                // An all-digit name is never a variable, and PHP would cast most to an int key.
+                if (\preg_match('/^-?\d+$/D', $name) !== 1) {
+                    $this->names[$name] = true;
+                }
+            }
+
+            /**
              * @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
              *
              * @psalm-external-mutation-free
@@ -839,10 +866,7 @@ final class ContractParser
 
                 foreach ($args as $arg) {
                     if ($arg instanceof Node\Arg && $arg->value instanceof Node\Scalar\String_) {
-                        // An all-digit name is never a variable, and PHP would cast most to an int key.
-                        if (\preg_match('/^-?\d+$/D', $arg->value->value) !== 1) {
-                            $this->names[$arg->value->value] = true;
-                        }
+                        $this->readName($arg->value->value);
 
                         continue;
                     }

@@ -311,6 +311,24 @@ final class ContractParserTest extends TestCase
         $this->assertTrue($contract->readsUnknown);
     }
 
+    /** `$__data` is the engine's own array of the view's data, so a literal key reads that name. */
+    #[Test]
+    public function a_literal_key_of_the_engine_data_array_is_a_read(): void
+    {
+        $contract = $this->dataContract("{{ \$__data['name'] }}\n");
+
+        $this->assertFalse($contract->readsUnknown);
+        $this->assertSame(['name'], $contract->readVariables);
+    }
+
+    /** Any other use of `$__data` can reach every name, which no static walk can enumerate. */
+    #[Test]
+    public function any_other_use_of_the_engine_data_array_makes_the_read_set_unknown(): void
+    {
+        $this->assertTrue($this->dataContract("{{ \$__data[\$key] }}\n")->readsUnknown);
+        $this->assertTrue($this->dataContract("{{ count(\$__data) }}\n")->readsUnknown);
+    }
+
     /**
      * A parse failure returning an empty read set would read as "the template reads nothing", turning
      * every key the call site passes into a false positive.
