@@ -92,6 +92,20 @@ Chains are walked from the terminal call inward: past a retrieval method (`first
 
 **Column-aware min/max/sum/avg:** Laravel casts only the `exists` alias, so the attribute holds the raw PDO value. The type comes from the RELATED model's migration schema ONLY (not casts, not `@property`: `withMax('orders', 'created_at')` is a string, never Carbon). The schema maps `decimal` to float while PDO returns DECIMAL as a string (and MySQL `SUM`/`AVG` over exact values is DECIMAL), so float columns also admit `numeric-string`; `SUM(int)` is int on SQLite/PostgreSQL-bigint but a DECIMAL string on MySQL, `AVG(int)` a float (SQLite) or numeric string (MySQL, PostgreSQL). Cells and the unresolvable-column fallback: `ModelAggregatePropertyHandler` class docblock.
 
+### Dynamic `where{Column}()` argument is `mixed`, not the column type (#2067)
+
+**Decision:** `Model::whereTitle($v)`, `$model->whereTitle($v)` and `$relation->whereTitle($v)` take a variadic `mixed`: the value is `mixed` like `where()`'s `$value` and Larastan's `DynamicWhereParameterReflection`, and variadic because multi-segment calls take one argument per segment while a single-segment call ignores the extras. Only the column segments are validated (`@property`, then the complete migration schema); the argument is never checked against the column type.
+
+**Why:** Laravel forwards the value to `Query\Builder::where()`, which accepts `null` (`whereNull`), `Closure`/`Builder` subqueries, `Expression`, `BackedEnum`, `DateTimeInterface` and arrays. The column-typed parameter introduced for #928 reported such valid code as errors.
+
+**Rejected:**
+- `scalar|null`: still rejects the Closure, Builder, Expression, BackedEnum, DateTimeInterface and array forms above.
+- Argument-type-aware typing (derive the parameter from the analyzed argument): the return-type and params providers both fire before the arguments are analyzed in Psalm 7.0.0-rc10 (`AtomicStaticCallAnalyzer` :633 before :647, `MissingMethodCallHandler` :89 before :113, `CallAnalyzer` :296 `getMethodParams()` before :338 `ArgumentsAnalyzer::analyze()`). Analyzing the argument inside the provider duplicates its data-flow nodes.
+
+**Known gap:** named arguments are not checked. Laravel reads the values by position, so `whereName(name: $x)` fails at runtime. A single `$value` parameter was tried and rejected: builder macros, including a local `$builder->macro()` inside `newEloquentBuilder()` that `MacroRegistry` cannot see, run with their own parameter names, and the single parameter also rejected names on every shape that used to stay variadic (multi-segment, object and array columns, untyped schema columns). Pinned by `DynamicWhereNamedArgumentKnownLimitation.phpt`.
+
+**See:** [#2067](https://github.com/psalm/psalm-plugin-laravel/issues/2067), [#928](https://github.com/psalm/psalm-plugin-laravel/issues/928), `tests/Type/tests/Relation/DynamicWhereArgumentTypingTest.phpt`.
+
 ## Config
 
 ### Naming: describe what is configured, not how it works internally

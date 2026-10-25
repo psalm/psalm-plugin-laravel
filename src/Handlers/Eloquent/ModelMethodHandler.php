@@ -421,17 +421,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
-        // Mirrors the relation-chain fallback: typed single param when the return-type
-        // provider resolved a scalar column (issue #928 hand-off), variadic mixed
-        // otherwise so Psalm doesn't raise TooManyArguments on multi-segment forms
+        // Variadic mixed, so Psalm doesn't raise TooManyArguments on multi-segment forms
         // like whereFirstNameAndLastName($a, $b).
         if (DynamicWhereResolver::isEnabled() && DynamicWhereResolver::isDynamicWhereMethod($methodName)) {
-            return (
-                DynamicWhereResolver::consumeTypedParams(
-                    $methodName,
-                    $event->getCallArgs(),
-                ) ?? DynamicWhereResolver::variadicMixedParams()
-            );
+            return DynamicWhereResolver::variadicMixedParams();
         }
 
         return null;
@@ -507,10 +500,9 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // directly, the fake-call path resolves it with the method's actual return type
         // instead of unconditionally substituting Builder<TModel>.
         //
-        // Strict camel-cased validation (`resolveColumnType`) decides whether to queue the
-        // typed-param hand-off for #928 and gates the final return: a `false` result means
-        // the lowercase backtracker over-accepted (e.g. `wherefoobar` with @property `foo`
-        // and `bar` only matches via lowercase, not the camel-cased And/Or split that
+        // Strict camel-cased validation (`acceptsDynamicWhere`) gates the final return: a `false`
+        // result means the lowercase backtracker over-accepted (e.g. `wherefoobar` with @property
+        // `foo` and `bar` only matches via lowercase, not the camel-cased And/Or split that
         // Laravel's runtime requires). Returning null in that case avoids claiming
         // Builder<TModel> for a call Laravel would parse differently — existence remains
         // confirmed so Psalm doesn't raise UndefinedMagicMethod, but the return type stays
@@ -521,23 +513,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             && !$codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))
             && !$codebase->methodExists(new MethodIdentifier($builderClass, $methodName))
         ) {
-            $stmt = $event->getStmt();
-            $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
-            $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
+            $originalMethodName = DynamicWhereResolver::originalMethodName($event->getStmt(), $methodName);
 
-            if ($columnType === false) {
+            if (!DynamicWhereResolver::acceptsDynamicWhere($codebase, $modelClass, $originalMethodName)) {
                 return null;
-            }
-
-            // Queue typed param hand-off (issue #928) only when the producer/consumer
-            // contract holds: single-segment scalar column + exactly one argument. Mirrors
-            // {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler::resolveDynamicWhereOnRelation}.
-            if ($columnType instanceof Union) {
-                $args = $stmt->getArgs();
-
-                if (\count($args) === 1) {
-                    DynamicWhereResolver::storePendingColumnType($methodName, $args[0], $columnType);
-                }
             }
 
             return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
@@ -628,9 +607,9 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // doesn't raise UndefinedMagicMethod (issue #1000).
         //
         // The match is lowercase-only because the existence hook receives no AST node
-        // (so we can't reconstruct the original camel-cased suffix here). The return-
-        // type and params providers still run the strict camel-cased validation via
-        // DynamicWhereResolver::resolveColumnType when they fire on the confirmed call.
+        // (so we can't reconstruct the original camel-cased suffix here). The return-type
+        // provider still runs the strict camel-cased validation via
+        // DynamicWhereResolver::acceptsDynamicWhere when it fires on the confirmed call.
         //
         // A PUBLIC real method declared on the concrete model (own, trait, or parent) is dispatched by
         // PHP before __callStatic/__call, so it is never a dynamic where; an inaccessible one is not.
