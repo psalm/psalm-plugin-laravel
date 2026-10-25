@@ -66,6 +66,12 @@ final class Merger
         ]);
     }
 
+    /** The one call site of `merge-control`, whose declaration the end-to-end test contradicts on purpose. */
+    public function control(): View
+    {
+        return view('merge-control', ['flag' => true]);
+    }
+
     public function emptyLabels(): View
     {
         return view('arrays', ['labels' => [], 'params' => ['a' => $this->text()]]);

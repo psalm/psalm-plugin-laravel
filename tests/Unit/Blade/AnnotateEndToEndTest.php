@@ -19,7 +19,8 @@ use Psalm\LaravelPlugin\Blade\Annotate\TemplateAnnotator;
  * `view()` call sites pass. A real `vendor/bin/psalm` run is the only way to pin it: the producer
  * types exist only during an analysis, which is the whole reason the codemod is driven by one.
  *
- * Every case reads the one memoized annotate run ({@see RunsAnnotateFixture}); the splice mechanics
+ * Every case but one reads the one memoized annotate run ({@see RunsAnnotateFixture}), the exception
+ * being an ordinary re-run over the annotated templates; the splice mechanics
  * themselves are unit-tested in TemplateAnnotatorTest and AnnotationWriterTest, so what is pinned
  * here is the producer types a real analysis feeds them. The no-write modes (dry run, a control file
  * this CLI did not write, a project with Blade off) live in {@see AnnotateSafetyTest}.
@@ -225,35 +226,35 @@ final class AnnotateEndToEndTest extends TestCase
     }
 
     /**
-     * Declarations the pass wrote must hold at the call sites that produced them. The control: the
-     * same run does report a declaration the producers contradict, so the empty list is not a check
-     * that never ran.
+     * Declarations the pass wrote must hold at the call sites that produced them, checked with one
+     * ordinary run over the annotated templates. The control rides in the same run: `merge-control`
+     * is given a declaration its call site contradicts, so a report free of the other views' issues
+     * is not a check that never ran.
      */
     #[Test]
     public function a_merged_declaration_holds_at_every_call_site_that_produced_it(): void
     {
         $this->assertStringContainsString('@var bool $flag', $this->analyse('annotate')['templates']['merged'], 'the merge must have been written');
 
-        $this->assertSame([], $this->viewIssuesAtMerger());
+        \file_put_contents(self::fixture() . '/resources/views/merge-control.blade.php', "<?php\n/**\n * @var int \$flag\n */\n?>\n{{ \$flag }}\n");
 
-        $path = self::fixture() . '/resources/views/merged.blade.php';
-        \file_put_contents($path, \str_replace('@var bool $flag', '@var int $flag', (string) \file_get_contents($path)));
-
-        $this->assertNotSame([], $this->viewIssuesAtMerger());
-    }
-
-    /** @return list<mixed> InvalidViewData and MissingViewData reported at the merge fixture's call sites */
-    private function viewIssuesAtMerger(): array
-    {
         $report = \json_decode($this->analyseUncached(null)['output'], true);
         $this->assertIsArray($report, 'the ordinary run must report JSON');
 
-        return \array_values(\array_filter(
-            $report,
-            static fn(mixed $issue): bool => \is_array($issue)
+        $viewsWithIssues = [];
+
+        foreach ($report as $issue) {
+            if (
+                \is_array($issue)
                 && \in_array($issue['type'] ?? null, ['InvalidViewData', 'MissingViewData'], true)
-                && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php'),
-        ));
+                && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php')
+                && \preg_match("/^View '([^']+)'/", (string) ($issue['message'] ?? ''), $matches) === 1
+            ) {
+                $viewsWithIssues[$matches[1]] = true;
+            }
+        }
+
+        $this->assertSame(['merge-control'], \array_keys($viewsWithIssues), 'only the deliberately contradicted view may report');
     }
 
     /**
