@@ -125,6 +125,114 @@ function fluent_chain_widens(string $name, int $count): void
     consume($chain);
 }
 
+/** @param Collection<string, int> $_ints */
+function accepts_string_int_collection(Collection $_ints): void {}
+
+/** @param Collection<string, int> $ints */
+function get_or_put_closure_default_keeps_receiver(Collection $ints): void
+{
+    $value = $ints->getOrPut('k', static fn (): int => 1);
+    /** @psalm-check-type-exact $value = int */
+    /** @psalm-check-type-exact $ints = Collection<string, int>&static */
+    consume($value);
+    accepts_string_int_collection($ints);
+}
+
+/** @param Collection<string, int> $ints */
+function get_or_put_untyped_closure_binds_closure_return(Collection $ints): void
+{
+    $value = $ints->getOrPut('k', fn () => 1);
+    /** @psalm-check-type-exact $value = int */
+    /** @psalm-check-type-exact $ints = Collection<string, int>&static */
+    consume($value);
+    accepts_string_int_collection($ints);
+}
+
+/** @param Collection<string, int> $ints */
+function get_or_put_closure_default_widens_by_closure_return(Collection $ints, string $label): void
+{
+    $value = $ints->getOrPut('k', static fn (): string => $label);
+    /** @psalm-check-type-exact $value = int|string */
+    /** @psalm-check-type-exact $ints = Collection<string, int|string>&static */
+    consume($value);
+    consume($ints);
+}
+
+/**
+ * @template T of string
+ * @param Collection<string, T> $items
+ * @param T $fallback
+ * @return T
+ */
+function get_or_put_bounded_template_default_stays_precise(Collection $items, string $fallback): string
+{
+    return $items->getOrPut('key', $fallback);
+}
+
+/** @param Collection<string, string> $_items */
+function accepts_string_string_collection(Collection $_items): void {}
+
+/**
+ * @template T of string
+ * @param Collection<string, T> $items
+ * @param T $fallback
+ */
+function get_or_put_bounded_template_default_keeps_receiver(Collection $items, string $fallback): void
+{
+    $items->getOrPut('key', $fallback);
+    accepts_string_string_collection($items);
+}
+
+/**
+ * @param Collection<string, iterable<int, int>> $lists
+ * @param iterable<int, int> $fallback
+ */
+function get_or_put_iterable_value_stays_precise(Collection $lists, iterable $fallback): void
+{
+    $value = $lists->getOrPut('k', $fallback);
+    /** @psalm-check-type-exact $value = iterable<int, int> */
+    /** @psalm-check-type-exact $lists = Collection<string, iterable<int, int>>&static */
+    consume($value);
+    consume($lists);
+}
+
+/** @param Collection<string, Countable> $items */
+function get_or_put_interface_value_stays_precise(Collection $items, Countable $fallback): void
+{
+    $value = $items->getOrPut('k', $fallback);
+    /** @psalm-check-type-exact $value = Countable */
+    /** @psalm-check-type-exact $items = Collection<string, Countable>&static */
+    consume($value);
+    consume($items);
+}
+
+/**
+ * @template T of \stdClass
+ * @param Collection<string, T> $items
+ * @param T $fallback
+ * @return T
+ */
+function get_or_put_object_bounded_template_stays_precise(Collection $items, \stdClass $fallback): \stdClass
+{
+    return $items->getOrPut('key', $fallback);
+}
+
+final class GetOrPutPropertyReceiver
+{
+    /** @var Collection<string, int> */
+    private Collection $items;
+
+    public function __construct()
+    {
+        $this->items = new Collection();
+    }
+
+    public function cached(string $key): int
+    {
+        return $this->items->getOrPut($key, static fn (): int => 1);
+    }
+}
+
 /** @param Collection<int, Dog> $dogs */
 function array_access_write_stays_strict(Collection $dogs): void
 {

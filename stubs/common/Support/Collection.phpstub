@@ -326,13 +326,19 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * The key is deliberately unbounded: Laravel declares `mixed`, and null, bool and float keys are
      * accepted at runtime (coerced by PHP). A non-array-key argument widens the key type to `array-key`.
      *
+     * Psalm cannot decide `\Closure` against interfaces, iterables or templates, so the guards first rule
+     * out non-callable values and only then split on `\Closure`. An unbounded template argument stays
+     * silent although it may hold a Closure, and an invokable-interface value gains `|mixed` (Psalm does not treat
+     * `Closure` as final in conditional types); see GetOrPutClosureDefaultKnownLimitation.phpt.
+     *
      * @template TGetOrPutKey
      * @template TGetOrPutValue
+     * @template TGetOrPutClosureReturn
      *
      * @param  TGetOrPutKey  $key
-     * @param  TGetOrPutValue|(\Closure(): TGetOrPutValue)  $value
-     * @psalm-this-out static<TKey|(TGetOrPutKey is array-key ? TGetOrPutKey : array-key), TValue|TGetOrPutValue>
-     * @return TValue|TGetOrPutValue
+     * @param  TGetOrPutValue|(\Closure(): TGetOrPutClosureReturn)  $value
+     * @psalm-this-out static<TKey|(TGetOrPutKey is array-key ? TGetOrPutKey : array-key), TValue|($value is scalar|array|null ? TGetOrPutValue : ($value is callable ? ($value is \Closure ? TGetOrPutClosureReturn : TGetOrPutValue) : TGetOrPutValue))>
+     * @return TValue|($value is scalar|array|null ? TGetOrPutValue : ($value is callable ? ($value is \Closure ? TGetOrPutClosureReturn : TGetOrPutValue) : TGetOrPutValue))
      */
     public function getOrPut($key, $value) {}
 
