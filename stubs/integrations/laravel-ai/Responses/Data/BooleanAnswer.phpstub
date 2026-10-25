@@ -15,6 +15,7 @@ class BooleanAnswer extends Answer
 
     /**
      * @psalm-taint-source input
+     * @return array{probability: float}
      */
     public function toArray(): array {}
 }
