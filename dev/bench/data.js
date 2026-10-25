@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792953142155,
+  "lastUpdate": 1792958794975,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16445,6 +16445,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1312,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f93cb400f25cbfb600ba43f28cf02062ccb5a1ed",
+          "message": "fix(blade): keep the @extends footer marker off the last template line #2078 (#2099)",
+          "timestamp": "2026-10-25T21:02:18+01:00",
+          "tree_id": "1f47f6c41714f87d7504d61be70da5aa911bad5c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f93cb400f25cbfb600ba43f28cf02062ccb5a1ed"
+        },
+        "date": 1792958792843,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.83,
+            "range": "± 0.39",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1311,
             "unit": "MB"
           }
         ]
