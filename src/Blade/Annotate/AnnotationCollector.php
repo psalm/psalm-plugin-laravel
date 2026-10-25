@@ -276,7 +276,9 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     {
         $entry = ShadowRegistry::entryFor($source->getFilePath());
 
-        if (!$entry instanceof ShadowEntry) {
+        // A spread or computed key may overwrite a literal entry, which ownEntries() keeps anyway.
+        if (!$entry instanceof ShadowEntry || (new NodeFinder())->findFirst($include->getArgs(), static fn(Node $node): bool => $node instanceof Node\ArrayItem
+            && ($node->unpack || ($node->key instanceof Expr && !$node->key instanceof String_))) instanceof Node) {
             return [];
         }
 

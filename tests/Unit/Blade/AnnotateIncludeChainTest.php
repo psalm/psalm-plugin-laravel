@@ -73,12 +73,13 @@ final class AnnotateIncludeChainTest extends TestCase
             'narrow-plain' => $declare($optional, 'member'),
             'isset-top' => $declare($optional, 'member', ' = null'),
             'coalesce-top' => $declare($optional, 'x', ' = null'),
+            'spread-top' => $declare(self::POST, 'member'),
         ];
 
         foreach ($runs['before'] as $name => $source) {
             // Declined, and left as they were: a cycle; an include under `$member !== null`, under
-            // `@isset`, or after `??=` (each narrows or rewrites what the parent declares); a loop
-            // alias; a parent that reads names it cannot list; a parent whose call sites disagree.
+            // `@isset`, after `??=`, or before a spread that may overwrite it (each narrows or replaces
+            // what the parent declares); a loop alias; a parent that reads names it cannot list; a parent whose call sites disagree.
             $this->assertSame(($expected[$name] ?? '') . $source, $runs['after'][$name] ?? null, $name);
         }
     }

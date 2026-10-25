@@ -64,6 +64,11 @@ final class Renderer
         return view('loop-top', ['member' => $this->post()]);
     }
 
+    public function spread(): View
+    {
+        return view('spread-top', ['member' => $this->post()]);
+    }
+
     public function readsUnknown(): View
     {
         return view('reads-top', ['member' => $this->post()]);
