@@ -7,12 +7,18 @@ class Cookie extends Facade
     /**
      * Get a queued cookie instance.
      *
+     * Psalm cannot decide `\Closure` against interfaces, iterables or templates, so the guards first rule
+     * out non-callable defaults and only then split on `\Closure`. An unbounded template argument stays
+     * silent although it may hold a Closure, and an invokable-interface default gains `|mixed` (Psalm does not treat
+     * `Closure` as final in conditional types); see GetOrPutClosureDefaultKnownLimitation.phpt.
+     *
      * @template TQueuedDefault
+     * @template TQueuedClosureReturn
      *
      * @param  string  $key
-     * @param  TQueuedDefault|(\Closure(): TQueuedDefault)  $default
+     * @param  TQueuedDefault|(\Closure(): TQueuedClosureReturn)  $default
      * @param  string|null  $path
-     * @return \Symfony\Component\HttpFoundation\Cookie|TQueuedDefault
+     * @return \Symfony\Component\HttpFoundation\Cookie|($default is scalar|array|null ? TQueuedDefault : ($default is callable ? ($default is \Closure ? TQueuedClosureReturn : TQueuedDefault) : TQueuedDefault))
      */
     public static function queued($key, $default = null, $path = null) {}
 }
