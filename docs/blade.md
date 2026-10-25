@@ -104,37 +104,12 @@ The trace runs from the request input through the controller to the template lin
 
 ## Taint through class component properties
 
-A value given to a class component reaches the `{!! !!}` echoes of the component's own view as tainted data, so `{!! $message !!}` reports `TaintedHtml` on the view line while `{{ $message }}` does not:
+A value given to a class component reaches the unescaped echoes of the component's own view: with `<x-alert :message="request('m')" />` and `public function __construct(public string $message) {}` on a class whose `render()` returns `view('components.alert')`, `{!! $message !!}` in that view reports `TaintedHtml` and `{{ $message }}` does not.
 
-```blade
-<x-alert :message="request('m')" />
-```
-
-```php
-final class Alert extends Component
-{
-    public function __construct(public string $message) {}
-
-    public function render(): View
-    {
-        return view('components.alert');
-    }
-}
-```
-
-```blade
-{!! $message !!} {{-- components/alert.blade.php: TaintedHtml --}}
-```
-
-* **What flows in:** the literal-keyed attributes of an `<x-alert>` tag, `@component(Alert::class, ...)`, `Alert::resolve([...])`, `$container->make(Alert::class, [...])` (including `app()->make(...)`) and `new Alert($input)` in PHP code. A data key binds the constructor parameter of the same name, so the value then runs through the constructor body exactly as for `new`: a parameter stored under another property name (`$this->text = $label`) reaches the view, and one the constructor escapes (`e($message)`) or replaces does not. A key that is not a constructor parameter writes nothing.
-* **What flows out:** the public, non-static properties of the class that `Component::data()` would hand the view, read in the view whose literal name the class's `render()` returns. Not connected: a `protected` property, a name in a literal `$except` list, a name a public method of the class also takes (the method wins), the names `data()` always ignores, a class whose `render()` names no single literal view, and a class that is not an `Illuminate\View\Component`.
-* **`make()` is Laravel's own:** `make()` on a container is followed only while it is still Laravel's (`Illuminate\Container\Container`, `Illuminate\Foundation\Application` or the container contract); a userland override, a non-container `make()`, a named or spread argument, and an array held in a variable are not followed. Inside the data array a literal-array spread is flattened in PHP's order, so a later key overwrites an earlier one; a spread that is not a literal array is not read and keeps the earlier keys.
-* **What over-reports:**
-  * the flow belongs to the class, not to one tag: one tainted `<x-alert>` anywhere reports every unescaped read of `$message` in the component's view, and a literal-attribute tag of the same class does not clear it;
-  * a property declared by a shared base class is one node for every subclass, so a tainted `<x-sib-a>` also reports `<x-sib-b message="literal">`'s view (a property declared in a trait is a node per using class, so unrelated components using the trait do not share it);
-  * a non-literal `$except` (a docblock-typed list, a constant) keeps every name;
-  * a `data()` override that drops a name is not detected.
-* **What is skipped:** public methods, `<x-dynamic-component>`, Livewire, mail, and the helper form `app(Foo::class, [...])`.
+* **What flows in:** the literal-keyed attributes of an `<x-alert>` tag or `@component(Alert::class, ...)` in a template, and `new Alert($input)` in PHP code. A key binds the constructor parameter of that name, so the constructor body applies: a value it escapes (`e($message)`) or replaces stays clean.
+* **What flows out:** the public, non-static properties `Component::data()` hands the view, in the view whose literal name `render()` returns (whatever data `render()` passes along). Not connected: `protected` and static properties, names in a literal `$except`, the names `data()` ignores, and `$slot`, which the rendered slot replaces.
+* **What over-reports:** the flow belongs to the class, not to a tag, so one tainted `<x-alert>` reports every `{!! $message !!}` in its view. A property of a shared base class is one node for every subclass. A public method sharing a property's name, a non-literal `$except` and a `data()` override are not detected.
+* **What is skipped:** `Alert::resolve([...])` and `app()->make(Alert::class, [...])` in PHP code, public methods as view data, `<x-dynamic-component>`, Livewire and mail.
 
 [Behaviour reference](contributing/blade.md#taint-through-class-component-properties).
 
@@ -164,7 +139,7 @@ final class Alert extends Component
 * **Each template is analyzed alone.** `@include`, `@extends` and components are not followed for typing, and a layout's declarations are not checked at its children's call sites.
 * **Undeclared variables are silently `mixed`**, so a typo'd variable name is not caught. A `Mixed*` issue from a declared value (`@var array $data`, then `{{ $data['x']->foo() }}`) is hidden too.
 * **Taint from view data follows only the calls listed above.** `View::share()`, composers, `Route::view()`, Livewire, mail views and a variable the includer never names are not connected ([details](#taint-through-view-data)). The HTML context (attribute, script, markup) is not considered.
-* **Taint from a class component reaches its own view through its public properties.** Public methods, a component whose `render()` is not one literal view, `app(Foo::class, [...])`, and data a class `resolve()`s through a userland container are not connected; the flow belongs to the class, not to one tag ([details](#taint-through-class-component-properties)).
+* **Taint from a class component reaches its own view through its public properties** only from a template tag or `new` in PHP code, and only when `render()` returns one literal view; the flow belongs to the class, not to one tag ([details](#taint-through-class-component-properties)).
 * **Component tags can fail to compile** when the standalone compile pass cannot resolve them. The template is skipped with a `BladeCompileError`.
 * **Multi-line constructs report on their opening line**: a multi-line `{{ }}`, directive argument list, `<x-...>` tag or heredoc.
 * **Dynamic view names** (`view($name)`) are not connected to a template.
