@@ -94,14 +94,53 @@ final class CollectionCallbackParamsTest
         $_n = $customers->unlessNotEmpty(fn ($_c) => null)->count();
     }
 
+    /**
+     * Non-closure callables are not arity-adapted by Psalm, so a one-parameter callable must match the stub as-is.
+     *
+     * @param Collection<int, Customer> $customers
+     * @param callable(Collection<int, Customer>): void $void
+     * @param callable(Collection<int, Customer>): int $int
+     * @param EloquentCollection<int, Customer> $eloquent
+     * @param callable(EloquentCollection<int, Customer>): void $eloquentCallback
+     * @param LazyCollection<int, Customer> $lazy
+     * @param callable(LazyCollection<int, Customer>): void $lazyCallback
+     */
+    public function singleParameterCallables(
+        Collection $customers,
+        callable $void,
+        callable $int,
+        EloquentCollection $eloquent,
+        callable $eloquentCallback,
+        LazyCollection $lazy,
+        callable $lazyCallback,
+    ): void {
+        $_n = $customers->whenEmpty($void)->count();
+        $_n = $customers->whenNotEmpty($void, $void)->count();
+        $_n = $customers->unlessEmpty([$this, 'handle'])->count();
+        $_n = $customers->unlessNotEmpty($this->handle(...))->count();
+
+        $result = $customers->whenEmpty($int);
+        if (!$result instanceof Collection) {
+            /** @psalm-check-type-exact $result = int */
+        }
+
+        $_n = $eloquent->whenEmpty($eloquentCallback)->count();
+        $_n = $lazy->whenNotEmpty($lazyCallback)->count();
+    }
+
+    /** @param Collection<int, Customer> $_customers */
+    public function handle(Collection $_customers): void {}
+
     /** @param Collection<int, Customer> $customers */
     public function wrongShapesStayReported(Collection $customers): void
     {
         $customers->tap(fn (Customer $_c): int => 1);
         $customers->whenEmpty(fn ($_c, $_value, int $_extra) => 1);
+        $customers->whenEmpty(fn ($_c, array $value): int => \count($value));
     }
 }
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::tap expects callable[impure](Illuminate\Support\Collection<int, App\Models\Customer>):mixed, but Closure[pure](App\Models\Customer):1 provided
-InvalidScalarArgument on line %d: Argument 1 of Illuminate\Support\Collection::whenEmpty expects callable[impure](Illuminate\Support\Collection<int, App\Models\Customer>, bool):(1|null), but Closure[pure](Illuminate\Support\Collection<int, App\Models\Customer>, bool, int):1 provided
+InvalidScalarArgument on line %d: Argument 1 of Illuminate\Support\Collection::whenEmpty expects callable[impure](Illuminate\Support\Collection<int, App\Models\Customer>):(1|null)|callable[impure](Illuminate\Support\Collection<int, App\Models\Customer>, bool):(1|null), but Closure[pure](Illuminate\Support\Collection<int, App\Models\Customer>, bool, int):1 provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::whenEmpty expects %s, but Closure[pure](Illuminate\Support\Collection<int, App\Models\Customer>, array<array-key, mixed>):int<0, max> provided

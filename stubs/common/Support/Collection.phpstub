@@ -429,11 +429,16 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * The whenEmpty() family runs `when($condition, $callback, $default)`, which passes the condition
      * as the second argument and returns `$callback(...) ?? $this`. The callable return is
      * `T|null` so a null or void callback leaves only `$this`.
+     * Each callable is declared with and without the `bool` parameter because Psalm rejects a non-closure
+     * callable with fewer params than the declared one (UnionTypeComparator arity rule). Caveat: the
+     * single-param arm also accepts a callable with an optional non-bool 2nd param, which Laravel then
+     * calls with a bool. That arm is listed first on purpose: the order decides which issue type Psalm
+     * reports for a mismatched 2nd param (InvalidArgument, not InvalidScalarArgument).
      *
      * @template TWhenEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
      * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
      */
     public function whenEmpty(callable $callback, ?callable $default = null) {}
@@ -441,8 +446,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * @template TWhenNotEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
      * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
      */
     public function whenNotEmpty(callable $callback, ?callable $default = null) {}
@@ -450,8 +455,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * @template TUnlessEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
      * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
      */
     public function unlessEmpty(callable $callback, ?callable $default = null) {}
@@ -459,8 +464,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * @template TUnlessNotEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
      * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
      */
     public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
