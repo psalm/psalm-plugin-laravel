@@ -92,6 +92,12 @@ final class AnnotateEndToEndTest extends TestCase
             " * @var list<string> \$labels\n",
             self::TEMPLATES['arrays'],
         )];
+        // `View::gatherData()` renders a top-level Renderable before the template runs, so the
+        // template reads the string, not the View a nested `view()` call returns.
+        yield 'a view() call passed as data is declared as the string it renders to' => ['framed', $declare(
+            " * @var string \$content\n",
+            self::TEMPLATES['framed'],
+        )];
         // A template has no class scope, so `&static` would bind to nothing. It must also not make
         // a `static` Collection and a plain one disagree about the same name.
         yield 'a collection without the late-static marker' => ['collections', $declare(
@@ -223,6 +229,29 @@ final class AnnotateEndToEndTest extends TestCase
         }
 
         $this->assertNull($this->unknownFor($this->annotateResult(), 'inner'));
+    }
+
+    #[Test]
+    public function a_view_passed_to_an_include_is_declared_as_the_string_it_renders_to(): void
+    {
+        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+            $this->markTestSkipped('@includeIsolated needs Laravel 12.47+');
+        }
+
+        $this->assertSame(
+            "<?php\n/**\n * @var string \$content\n */\n?>\n" . self::TEMPLATES['framed-included'],
+            $this->analyse('annotate')['templates']['framed-included'] ?? null,
+        );
+    }
+
+    /** Laravel renders only top-level Renderables: a View inside an array reaches the template as an object. */
+    #[Test]
+    public function a_view_nested_in_an_array_keeps_its_object_type(): void
+    {
+        $this->assertMatchesRegularExpression(
+            '/@var array\{v: \\\\Illuminate\\\\(?:Contracts\\\\)?View\\\\View\} \$row/',
+            $this->analyse('annotate')['templates']['framed-nested'] ?? '',
+        );
     }
 
     /**

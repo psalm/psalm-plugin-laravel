@@ -30,6 +30,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\CastResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic;
@@ -199,13 +200,16 @@ final class PivotColumnResolver
             return null;
         }
 
+        $args = [];
         foreach ($call->args as $arg) {
             if (!$arg instanceof Arg || $arg->unpack) {
                 return false;
             }
+
+            $args[] = $arg;
         }
 
-        $table = self::argument($call, $position, 'table');
+        $table = ArgUtil::boundTo($args, 'table', $position)?->value;
         if ($table instanceof String_) {
             return \str_contains($table->value, '\\') ? false : $table->value;
         }
@@ -216,7 +220,7 @@ final class PivotColumnResolver
 
         if ($factory !== 'belongstomany') {
             // HasRelationships::morphToMany(): the morph name with its last `_` segment pluralized.
-            $name = self::argument($call, 1, 'name');
+            $name = ArgUtil::boundTo($args, 'name', 1)?->value;
             if (!$name instanceof String_) {
                 return null;
             }
@@ -340,16 +344,19 @@ final class PivotColumnResolver
      */
     private static function timestampColumns(Codebase $codebase, MethodCall $call, ?string $parentClass): array
     {
+        $args = [];
         foreach ($call->args as $arg) {
             if (!$arg instanceof Arg || $arg->unpack) {
                 return [];
             }
+
+            $args[] = $arg;
         }
 
         $parent = $parentClass === null ? null : self::parentTimestamps($codebase, $parentClass);
         $columns = [];
         foreach ([['createdAt', Model::CREATED_AT], ['updatedAt', Model::UPDATED_AT]] as $index => [$name, $default]) {
-            $value = self::argument($call, $index, $name);
+            $value = ArgUtil::boundTo($args, $name, $index)?->value;
             if ($value instanceof String_) {
                 $column = $value->value;
             } elseif ($parent !== null && (!$value instanceof Expr || $value instanceof Expr\ConstFetch && $value->name->toLowerString() === 'null')) {
@@ -432,20 +439,6 @@ final class PivotColumnResolver
     private static function isColumnName(string $name): bool
     {
         return $name !== '' && !\str_contains($name, '.');
-    }
-
-    /** @psalm-mutation-free */
-    private static function argument(MethodCall $call, int $position, string $name): ?Expr
-    {
-        foreach ($call->args as $arg) {
-            if ($arg instanceof Arg && $arg->name instanceof Identifier && $arg->name->name === $name) {
-                return $arg->value;
-            }
-        }
-
-        $arg = $call->args[$position] ?? null;
-
-        return $arg instanceof Arg && !$arg->name instanceof Identifier ? $arg->value : null;
     }
 
     /** @psalm-capabilities read-props */

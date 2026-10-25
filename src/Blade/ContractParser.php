@@ -15,10 +15,9 @@ use Psalm\Internal\Type\ParseTreeCreator;
 use Psalm\Internal\Type\TypeTokenizer;
 
 /**
- * Extracts a {@see TemplateContract} from a Blade template: `@var` declarations (raw PHPDoc
+ * Extracts a {@see ViewDataContract} from a Blade template: `@var` declarations (raw PHPDoc
  * docblocks in `<?php` / `@php` blocks, for names the template does not bind itself), `@props`
- * entries, and the set of top-level variables the compiled body reads. Read-only; wiring the
- * result into shadow compilation is a separate step.
+ * entries, and the set of top-level variables the compiled body reads. Read-only.
  *
  * @psalm-api
  */
@@ -65,16 +64,6 @@ final class ContractParser
 
     private ?Parser $parser = null;
 
-    public function parse(string $source, string $compiled): TemplateContract
-    {
-        [$vars, $propsUnknown] = $this->parseSource($source);
-        [$names, $locals] = $this->walkReads($compiled);
-
-        $vars += $this->rawContractVars($source, $this->filterNames($locals, []));
-
-        return new TemplateContract($vars, $this->filterNames($names, $locals), $propsUnknown);
-    }
-
     /**
      * {@see self::parseDeclarations()} plus the read set, for the UnusedViewData rule: a key the
      * call site passes that neither `$vars` nor `$readVariables` mentions is passed for nothing.
@@ -96,9 +85,10 @@ final class ContractParser
     }
 
     /**
-     * The declaration half of {@see self::parse()}: `@props` entries and, when the compiled output is
-     * given, the raw `@var` docblocks that are view data. Telling view data from a type hint on a
-     * local needs the compiled body, which is only walked when the source mentions a `@var` at all.
+     * The declaration half of {@see self::parseDataContract()}: `@props` entries and, when the
+     * compiled output is given, the raw `@var` docblocks that are view data. Telling view data
+     * from a type hint on a local needs the compiled body, which is only walked when the source
+     * mentions a `@var` at all.
      */
     public function parseDeclarations(string $source, ?string $compiled = null): ViewDataContract
     {
@@ -677,10 +667,9 @@ final class ContractParser
     }
 
     /**
-     * The read set the UnusedViewData rule consumes. Two differences from {@see self::parse()}'s read set:
-     * locally bound names stay in (the question is "does the template use this name at all", and
-     * dropping them would report the very name a `@foreach` binds), and an unknowable body is
-     * flagged rather than reported as an empty set.
+     * The read set the UnusedViewData rule consumes: locally bound names stay in (the question is
+     * "does the template use this name at all", and dropping them would report the very name a
+     * `@foreach` binds), and an unknowable body is flagged rather than reported as an empty set.
      *
      * @return array{0: list<string>, 1: bool, 2: list<string>} names read, whether the set is only a
      *         lower bound, and the names the template binds for itself
@@ -689,18 +678,17 @@ final class ContractParser
     {
         [$names, $locals, $unknown] = $this->walkReads($compiled);
 
-        return [$this->filterNames($names, []), $unknown, $this->filterNames($locals, [])];
+        return [$this->filterNames($names), $unknown, $this->filterNames($locals)];
     }
 
     /**
      * @param array<string, true> $names
-     * @param array<string, true> $excluded
      *
      * @return list<string>
      *
      * @psalm-pure
      */
-    private function filterNames(array $names, array $excluded): array
+    private function filterNames(array $names): array
     {
         $filtered = [];
 
@@ -708,7 +696,6 @@ final class ContractParser
             if ($name === 'this'
                 || \str_starts_with($name, '__')
                 || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])
-                || isset($excluded[$name])
             ) {
                 continue;
             }
@@ -722,7 +709,7 @@ final class ContractParser
     }
 
     /**
-     * One walk of the compiled body, feeding both read-set consumers.
+     * One walk of the compiled body.
      *
      * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
      *         the body binds for itself, and whether it hides which names it reads

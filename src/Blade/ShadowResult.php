@@ -19,7 +19,6 @@ final class ShadowResult
     public function __construct(
         public readonly string $contents,
         public readonly array $lineMap,
-        public readonly ?int $extendsLine,
         public readonly array $suppressions = [],
     ) {}
 }

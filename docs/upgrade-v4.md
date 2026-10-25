@@ -10,8 +10,8 @@ nav_order: 5
 | Dependency | v3           | v4         |
 |------------|--------------|------------|
 | PHP        | ^8.2         | **^8.2**   |
-| Laravel    | 11, 12       | **12, 13** |
-| Psalm      | 6, 7 (beta)  | **7 only** |
+| Laravel    | 11, 12, 13   | **12, 13** |
+| Psalm      | ^6.16.1      | **7 only** |
 
 Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
@@ -19,13 +19,7 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.0.0-rc10` or later. Upgrade Psalm and the plugin in one command (v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6):
-
-```bash
-composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-all-dependencies
-```
-
-Psalm 7 is currently a release candidate. The `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched.
+v4 requires `vimeo/psalm ^7.0.0-rc10` or later. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 is currently a release candidate: the root `vimeo/psalm:^7.0@RC` requirement allows that one package to be pre-release without lowering your project's `minimum-stability`.
 
 Psalm 7 introduces new issue types that may surface in your codebase:
 

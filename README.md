@@ -39,7 +39,7 @@ Requires PHP 8.2+ and Laravel 12.x or 13.x.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
 * [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently a release candidate. The `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
-* Want zero pre-release packages? The 3.x line runs on stable Psalm 6 and needs no stability flags at all: `composer require --dev psalm/plugin-laravel:^3`. It carries the same security checks, and additionally supports Laravel 11.
+* For stable Psalm 6 or Laravel 11 support, use `composer require --dev psalm/plugin-laravel:^3`; the 3.x line provides the same security checks.
 * `init` writes a `psalm.xml` at the project root with the plugin enabled, `errorLevel="4"` by default (`--level 1` is strictest, `--level 8` the most lenient), Laravel-friendly issue handler defaults, and `runTaintAnalysis="true"`. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 * `analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can invoke `./vendor/bin/psalm` directly instead.
 * `analyze --plugin-option=KEY=VALUE` (repeatable) overrides a bool or enum plugin setting for one run. See [per-run overrides](docs/config.md#per-run-overrides).
@@ -125,7 +125,7 @@ Maintained versions:
 
 | Laravel Psalm Plugin                 | PHP  |      Laravel |   Psalm | Plugin Status |
 |--------------------------------------|------|-------------:|--------:|---------------|
-| **4.x** (recommended)                | 8.2+ |       12, 13 |  7-beta | Stable        |
+| **4.x** (recommended)                | 8.2+ |       12, 13 |  7 (RC) | Stable        |
 | 3.x ([upgrade](UPGRADING.md#3x--4x)) | 8.2+ |   11, 12, 13 |       6 | Stable        |
 | 2.x ([upgrade](UPGRADING.md#2x--3x)) | 8.0+ | 8, 9, 10, 11 | 4, 5, 6 | Unmaintained  |
 | 1.x ([upgrade](UPGRADING.md#1x--2x)) | 7.1+ |   5, 6, 7, 8 |    3, 4 | Unmaintained  |
