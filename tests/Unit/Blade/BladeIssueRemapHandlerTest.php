@@ -106,4 +106,39 @@ final class BladeIssueRemapHandlerTest extends TestCase
             $this->event($this->issueOn(self::SHADOW), null),
         ));
     }
+
+    /**
+     * A shadow that cannot be loaded yet answers "no suppressions" for that call only: caching the empty
+     * answer would hide a suppression the same shadow carries once it can be read.
+     */
+    #[Test]
+    public function a_failed_statement_load_is_not_cached(): void
+    {
+        $fileProvider = new \Psalm\Internal\Provider\FileProvider();
+        $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
+
+        // Initialised from the class's own scope: some of these properties are readonly or `protected(set)`.
+        \Closure::bind(function () use ($fileProvider): void {
+            $this->statements_provider = new \Psalm\Internal\Provider\StatementsProvider($fileProvider);
+            $this->file_reference_provider = new \Psalm\Internal\Provider\FileReferenceProvider($fileProvider);
+            $this->progress = new \Psalm\Progress\VoidProgress();
+            $this->analysis_php_version_id = \PHP_VERSION_ID;
+            $this->diff_methods = false;
+            $this->diff_run = false;
+            $this->language_server = false;
+        }, $codebase, Codebase::class)();
+
+        $shadow = \sys_get_temp_dir() . '/blade-remap-late-' . \uniqid() . '.php';
+        $nodes = new \ReflectionMethod(BladeIssueRemapHandler::class, 'suppressingNodes');
+
+        try {
+            $this->assertSame([], $nodes->invoke(null, $codebase, $shadow));
+
+            \file_put_contents($shadow, "<?php\n/** @psalm-suppress UndefinedVariable */\necho \$x;\n");
+
+            $this->assertCount(1, $nodes->invoke(null, $codebase, $shadow));
+        } finally {
+            @\unlink($shadow);
+        }
+    }
 }

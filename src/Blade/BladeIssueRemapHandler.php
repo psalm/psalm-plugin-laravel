@@ -214,7 +214,8 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
             $statements = $codebase->getStatementsForFile($shadowPath);
         } catch (\InvalidArgumentException|\UnexpectedValueException) {
             // Unregistered or unreadable shadow: no suppressions provable, never a crash mid-emission.
-            return self::$suppressingNodes[$shadowPath] = [];
+            // Not cached: a failure is not a fact about the shadow, and a later call may read it.
+            return [];
         }
 
         $nodes = [];
