@@ -53,6 +53,16 @@ final class UnionProxyReversed extends Collection
 {
 }
 
+/**
+ * @template K of array-key
+ * @template Meta
+ * @template V
+ * @extends Collection<K, V>
+ */
+final class UnionProxyShifted extends Collection
+{
+}
+
 /** @extends Collection<int, UnionProxyB> */
 final class UnionProxyListB extends Collection
 {
@@ -146,6 +156,30 @@ final class HigherOrderProxyUnionReceiverTest
         $_first = $items->first->enabled();
         /** @psalm-check-type-exact $_first = mixed */
 
+        $_each = $items->each->enabled();
+        /** @psalm-check-type-exact $_each = mixed */
+    }
+
+    /**
+     * Equal instantiated values do not prove which template slot feeds TKey/TValue: the branch
+     * class's own declaration does.
+     *
+     * @param Collection<string, UnionProxyA>|UnionProxyReversed<string, string> $items
+     */
+    public function unionWithReorderedTemplatesOfEqualValues($items): void
+    {
+        $_each = $items->each->enabled();
+        /** @psalm-check-type-exact $_each = mixed */
+    }
+
+    /**
+     * A subclass with an extra template is not a plain two-slot collection, even when a slot
+     * happens to equal the projected item type.
+     *
+     * @param Collection<int, UnionProxyA>|UnionProxyShifted<string, UnionProxyB, UnionProxyB> $items
+     */
+    public function unionWithExtraTemplate($items): void
+    {
         $_each = $items->each->enabled();
         /** @psalm-check-type-exact $_each = mixed */
     }

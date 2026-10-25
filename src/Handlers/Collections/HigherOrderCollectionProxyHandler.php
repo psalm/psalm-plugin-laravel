@@ -12,6 +12,7 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
@@ -24,6 +25,7 @@ use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -493,22 +495,43 @@ final class HigherOrderCollectionProxyHandler implements
     }
 
     /**
-     * Whether the atomic's first two type params are exactly what it binds `Enumerable::TKey` and
-     * `TValue` to: the resolver rebuilds `Class<TKey, TValue>` positionally, which is wrong for a
-     * subclass that reorders or drops its templates.
+     * Whether the atomic's class is a plain two-slot collection: it declares exactly two templates
+     * and `Enumerable::TKey` / `TValue` resolve to the first / second of them. The resolver rebuilds
+     * `Class<TKey, TValue>` positionally, which is wrong for a subclass that reorders or adds
+     * templates. Decided from the class declaration alone, since equal instantiated params
+     * (`Reversed<string, string>`) do not prove which slot feeds which template.
      *
      * @psalm-capabilities read-props
      */
     private static function bindsKeyAndValuePositionally(TGenericObject $atomic, Codebase $codebase): bool
     {
-        if (\count($atomic->type_params) < 2) {
+        try {
+            $storage = $codebase->classlike_storage_provider->get($atomic->value);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return false;
         }
 
-        foreach (['TKey', 'TValue'] as $position => $template) {
-            $projected = ClassLineage::projectedTemplate($codebase, $atomic, Enumerable::class, $template);
+        $templates = $storage->template_types ?? [];
+        if (\count($atomic->type_params) !== 2 || \count($templates) !== 2) {
+            return false;
+        }
 
-            if (!$projected instanceof Union || $projected->getId() !== $atomic->type_params[$position]->getId()) {
+        $own = [];
+        foreach ($templates as $name => $boundByClass) {
+            $own[] = new TTemplateParam($name, \reset($boundByClass), $storage->name);
+        }
+
+        $ownParams = [new Union([$own[0]]), new Union([$own[1]])];
+        $probe = new TGenericObject($storage->name, $ownParams);
+
+        foreach (['TKey' => $own[0], 'TValue' => $own[1]] as $template => $expected) {
+            $projected = ClassLineage::projectedTemplate($codebase, $probe, Enumerable::class, $template);
+            $actual = $projected?->isSingle() === true ? $projected->getSingleAtomic() : null;
+
+            if (!$actual instanceof TTemplateParam
+                || $actual->param_name !== $expected->param_name
+                || $actual->defining_class !== $expected->defining_class
+            ) {
                 return false;
             }
         }
