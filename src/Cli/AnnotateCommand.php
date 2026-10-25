@@ -33,33 +33,6 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 final class AnnotateCommand extends Command
 {
     /**
-     * Psalm's long options that REQUIRE a value, so the token after one is that value and never a
-     * path to check. Mirrors the single-colon entries of `Psalm\Internal\Cli\Psalm::LONG_OPTIONS`;
-     * the double-colon ones are left out because getopt() binds an optional value only when it is
-     * attached (`--find-unused-code=x`), leaving a following token positional.
-     */
-    private const VALUE_TAKING_LONG_OPTIONS = [
-        'config',
-        'disable-extension',
-        'dump-taint-graph',
-        'error-level',
-        'find-references-to',
-        'generate-json-map',
-        'generate-stubs',
-        'memory-limit',
-        'output-format',
-        'php-version',
-        'plugin',
-        'report',
-        'report-show-info',
-        'root',
-        'scan-threads',
-        'show-info',
-        'threads',
-        'use-baseline',
-    ];
-
-    /**
      * @param string|null       $workingDirectory Override the target directory; defaults to the process CWD.
      *                                            Exposed for tests.
      * @param list<string>|null $argvOverride     Override the raw argv the psalm arguments are read
@@ -371,9 +344,11 @@ final class AnnotateCommand extends Command
                 continue;
             }
 
-            // `-c psalm.xml`, `-r <root>` and the long options that require a value take one that is
-            // not a path to check; every other bare token is one Psalm adds to its paths-to-check list.
-            if ($token === '-c' || $token === '-r' || $this->takesASeparateValue($token)) {
+            // Mirrors the values `CliUtils::getPathsToCheck()` skips: after `-c`, `-r`, `--config`,
+            // `--printer` and `--root` the next token is not a path. Psalm skips no other separate
+            // value, so `--memory-limit 2G` or `--report-show-info app/A.php` leaves the follower in
+            // its paths-to-check list (a path, or a "Cannot locate" error), and so it is refused here.
+            if (\in_array($token, ['-c', '-r', '--config', '--printer', '--root'], true)) {
                 $expectsValue = true;
 
                 continue;
@@ -385,17 +360,6 @@ final class AnnotateCommand extends Command
         }
 
         return $offending;
-    }
-
-    /**
-     * Whether the token is a long option spelled without its value, which the next token supplies.
-     *
-     * @psalm-pure
-     */
-    private function takesASeparateValue(string $token): bool
-    {
-        return \str_starts_with($token, '--')
-            && \in_array(\substr($token, 2), self::VALUE_TAKING_LONG_OPTIONS, true);
     }
 
     /**

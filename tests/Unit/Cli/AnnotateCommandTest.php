@@ -102,10 +102,10 @@ final class AnnotateCommandTest extends TestCase
     }
 
     #[Test]
-    public function takes_a_long_option_whose_value_is_spelled_as_a_separate_token(): void
+    public function skips_only_the_separate_values_psalm_itself_skips(): void
     {
-        // Psalm's getopt() accepts both `--config=psalm.xml` and `--config psalm.xml`; refusing the
-        // second form would reject every value-taking flag the user is entitled to pass.
+        // Psalm's getopt() accepts both `--config=psalm.xml` and `--config psalm.xml`, and its own
+        // path extraction skips the separate value of exactly these options.
         $command = new AnnotateCommand();
 
         $this->assertSame(
@@ -115,15 +115,16 @@ final class AnnotateCommandTest extends TestCase
                 'blade:annotate',
                 '--config',
                 'psalm.xml',
-                '--memory-limit',
-                '2G',
                 '--root',
                 '/srv/app',
-                '--error-level',
-                '3',
-                '--output-format',
-                'compact',
+                '--printer',
+                'Some\\Printer',
             ]),
+        );
+        // Any other separate value is a path to Psalm (or a "Cannot locate" error), never skipped.
+        $this->assertSame(
+            ['2G'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--memory-limit', '2G']),
         );
     }
 
@@ -140,6 +141,12 @@ final class AnnotateCommandTest extends TestCase
         $this->assertSame(
             ['app/Renderer.php'],
             $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--find-unused-code', 'app/Renderer.php']),
+        );
+        // Psalm's own path list skips a separate value only after -c/-f/-r/--config/--printer/--root,
+        // so a flag it does not know to be value-taking leaves its follower as a path to check.
+        $this->assertSame(
+            ['app/A.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--report-show-info', 'app/A.php']),
         );
     }
 
