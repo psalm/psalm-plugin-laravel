@@ -863,6 +863,7 @@ final class ViewCallChain
         // Once a contribution that may replace any key was seen (a computed key, an array of unknown
         // shape), every key recorded after it was bound BEFORE it ran, so its type is not provably
         // what the template receives.
+        /** @var bool|array<string, true> $mayOverwrite */
         $mayOverwrite = false;
 
         // The chain's contributions land before the binder's own data argument, because the walk ran
@@ -881,8 +882,9 @@ final class ViewCallChain
     /**
      * @param list<array{0: 'with'|'witherrors', 1: list<Arg>}> $pending
      * @param array<string, Union>                             $data
+     * @param bool|array<string, true>                         $mayOverwrite see {@see self::record()}
      */
-    private static function mergePending(array $pending, StatementsSource $source, array &$data, bool &$complete, bool &$mayOverwrite): bool
+    private static function mergePending(array $pending, StatementsSource $source, array &$data, bool &$complete, bool|array &$mayOverwrite): bool
     {
         foreach ($pending as [$methodName, $args]) {
             if ($methodName === 'witherrors') {
@@ -905,10 +907,11 @@ final class ViewCallChain
      * `with()` dispatches on `is_array($key)`, never on the argument count: `with('name')` really
      * does assign null to 'name', and `with(['name' => $n], $ignored)` still merges the array.
      *
-     * @param list<Arg>            $args
-     * @param array<string, Union> $data
+     * @param list<Arg>                $args
+     * @param array<string, Union>     $data
+     * @param bool|array<string, true> $mayOverwrite see {@see self::record()}
      */
-    private static function mergeWith(array $args, StatementsSource $source, array &$data, bool &$complete, bool &$mayOverwrite): bool
+    private static function mergeWith(array $args, StatementsSource $source, array &$data, bool &$complete, bool|array &$mayOverwrite): bool
     {
         $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
 
@@ -980,9 +983,10 @@ final class ViewCallChain
      * proves which names are present; any other shape leaves the set open rather than declining, so
      * keys contributed elsewhere in the chain still get type-checked.
      *
-     * @param array<string, Union> $data
+     * @param array<string, Union>     $data
+     * @param bool|array<string, true> $mayOverwrite see {@see self::record()}
      */
-    private static function mergeArrayArg(Arg $arg, StatementsSource $source, array &$data, bool &$complete, bool &$mayOverwrite): void
+    private static function mergeArrayArg(Arg $arg, StatementsSource $source, array &$data, bool &$complete, bool|array &$mayOverwrite): void
     {
         if ($arg->unpack) {
             $complete = false;
@@ -1022,14 +1026,17 @@ final class ViewCallChain
             $complete = false;
         }
 
+        $optional = [];
+
         foreach ($atomic->properties as $key => $valueType) {
             if (!\is_string($key)) {
                 continue;
             }
 
             if ($valueType->possibly_undefined) {
+                // A closed shape can replace only its own keys, optional ones included.
                 $complete = false;
-                $opensKeys = true;
+                $optional[$key] = true;
 
                 continue;
             }
@@ -1037,7 +1044,11 @@ final class ViewCallChain
             self::record($data, $key, $valueType, $mayOverwrite);
         }
 
-        $mayOverwrite = $mayOverwrite || $opensKeys;
+        if ($opensKeys) {
+            $mayOverwrite = true;
+        } elseif ($optional !== [] && $mayOverwrite !== true) {
+            $mayOverwrite = \is_array($mayOverwrite) ? $mayOverwrite + $optional : $optional;
+        }
     }
 
     /**
@@ -1045,13 +1056,14 @@ final class ViewCallChain
      * After a contribution that may replace any key, that write was bound earlier and is not
      * provably what the template receives: the key is still supplied, with an unknown type.
      *
-     * @param array<string, Union> $data
+     * @param array<string, Union>           $data
+     * @param bool|array<string, true> $mayOverwrite every key (true), only the listed ones, or none
      *
      * @psalm-capabilities read-props|write-this-props|write-refs
      */
-    private static function record(array &$data, string $key, Union $type, bool $mayOverwrite): void
+    private static function record(array &$data, string $key, Union $type, bool|array $mayOverwrite): void
     {
-        $data[$key] ??= $mayOverwrite ? Type::getMixed() : $type;
+        $data[$key] ??= $mayOverwrite === true || isset($mayOverwrite[$key]) ? Type::getMixed() : $type;
     }
 
     /**
