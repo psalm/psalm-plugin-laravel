@@ -15,6 +15,7 @@ use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Views\ComponentRenderData;
+use Psalm\LaravelPlugin\Handlers\Views\ViewClassProperties;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
@@ -315,7 +316,7 @@ final class ComponentViewRegistry
                 continue;
             }
 
-            $vars[$name] = $type;
+            $vars[$name] = ViewClassProperties::renderablesAsString($type, $codebase);
         }
 
         return $vars;

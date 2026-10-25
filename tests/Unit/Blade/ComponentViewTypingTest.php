@@ -81,6 +81,8 @@ final class ComponentViewTypingTest extends TestCase
         // A method's `public-properties-of<self>` keeps a raw `parent` inside its array: seeding it
         // unexpanded makes a call on `$snapshot()['owner']` throw instead of resolving.
         yield 'a method type Psalm expands only one level deep' => ['snapshot.blade.php', ['$named: Illuminate\View\Component&static']];
+        // `View::gatherData()` renders every top-level Renderable before the template runs.
+        yield 'Renderable and View properties arrive as the string they render to' => ['frame.blade.php', ['$content: string', '$inner: string']];
         yield 'view()->make(): a key render() passes stays mixed' => ['card.blade.php', ['$title: mixed', '$width: int']];
         yield "View::make(); a raw @var name stays the template's" => ['panel.blade.php', ['$heading: string', '$subtitle: mixed']];
         yield 'inherited render() returning a view name' => ['notice.blade.php', ['$message: string']];

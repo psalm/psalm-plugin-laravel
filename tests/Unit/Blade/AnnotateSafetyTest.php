@@ -48,7 +48,7 @@ final class AnnotateSafetyTest extends TestCase
 
         $this->assertTemplatesPristine($run['templates']);
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(17, $result['changed']);
+        $this->assertCount(20, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 

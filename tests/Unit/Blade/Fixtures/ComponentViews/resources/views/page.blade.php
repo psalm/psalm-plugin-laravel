@@ -20,3 +20,4 @@
 <x-toolbar/>
 <x-owned/>
 <x-snapshot/>
+<x-frame/>
