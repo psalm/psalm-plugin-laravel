@@ -605,6 +605,20 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A property typed by its class's template parameter has no type a template can be judged against
+     * (`T` is unbound at the call site), so it is left unchecked; a property of a plain type on the
+     * same generic class is still typed.
+     */
+    #[Test]
+    public function a_templated_component_property_is_not_type_checked(): void
+    {
+        $issues = $this->contractIssues();
+        $reported = $this->forFile($issues, 'ComponentGenericProperty.php');
+
+        $this->assertSame([self::WRONG_TYPE . ' $count'], $this->variablesOf($reported), \var_export($issues, true));
+    }
+
+    /**
      * #2043: `parent` in a class component's property type names the class declaring the property, and a
      * trait's `self` the class using the trait, not the component the view renders for.
      */

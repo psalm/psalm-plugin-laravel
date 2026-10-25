@@ -294,8 +294,10 @@ final class ComponentRenderData
 
             // `static` collapses to the class for the view's own seed and for `forSource()`; the
             // `<x-…>` side keeps a non-final class's late-static marker, as its types always did.
-            $properties[$name] = ViewClassProperties::typeOf($codebase, $storage, $name, $declaring, $property, final: !$typedOnly || $storage->final)
-                ?? Type::getMixed();
+            $type = ViewClassProperties::typeOf($codebase, $storage, $name, $declaring, $property, final: !$typedOnly || $storage->final);
+
+            // A class template parameter is unbound here: nothing a call site passes can be judged against it.
+            $properties[$name] = $type === null || $type->hasTemplate() ? Type::getMixed() : $type;
         }
 
         return $properties;
