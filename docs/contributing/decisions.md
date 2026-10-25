@@ -351,6 +351,10 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Constraint:** `ReturnAnalyzer` accumulates the removal returned for a returned expression into the enclosing function's removed taints, which then apply to every return path of that function. A handler that answered on that dispatch would silence `return $tainted;` in the same function. The handler answers only while the call's type is still unset, which is true for the dispatch that writes the edge and false for the return and argument dispatches. This is an internal-ordering heuristic, not counting, and it fails toward a retained finding if Psalm reorders it. The same leak exists in core for `htmlspecialchars()`.
 
+### Collection default lookups carry `@psalm-taint-specialize` (#2071)
+
+`first()`, `get()`, `last()`, `pull()`, `value()` and `LazyCollection::get()` pair `@psalm-flow ($default) -> return` with `@psalm-taint-specialize`: Psalm 7 only speculatively specializes non-overridable project methods, so a stub flow otherwise pools across call sites (rule: taint-analysis.md, checklist item 6). Receiver taint does not reach these returns (#2107, `TaintedHtmlRequestCollectKnownLimitation.phpt`).
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in
@@ -606,7 +610,7 @@ Why the shape repeats X's own answer. Probed on Psalm 7.0.0-rc10: a native prope
 1. X's own answer in Psalm's read order: a native property (declared type, else `mixed`), `@property` / `@property-read`, an accessor, then the cast or column of X's DEFAULT table. X missing from `ModelMetadataRegistry`, or with an incomplete methods or casts section, is `mixed` past the `@property`.
 2. A cast on a column X's default table lacks: the cast's type, nullable when the relation table's column is nullable or unknown (casts pass `null` through).
 3. The parent's created/updated column: the date type once the raw-hydration gate is proven, else `mixed`.
-4. The relation table's raw schema type, only on a visible chain whose table is known.
+4. The relation table's raw schema type, only on a visible chain whose table is known. It is the raw driver value, not the cast-style mapping: bool is `bool|int` (SQLite and MySQL tinyint(1) return the stored int, not restricted to 0/1), decimal and float are `int|float|numeric-string`, vector is `string` (`ColumnTypeMapper::mapRawType()`). Accepted limits: SQL Server (pdo_sqlsrv without numeric fetching) and `PDO::ATTR_STRINGIFY_FETCHES` return strings, and PostgreSQL `NaN` / `Infinity` come back as non-numeric strings for `numeric` / `decimal` columns (for `real` / `double precision` only before PHP 8.4, where pdo_pgsql returns floats); these stay outside the type, as they already do for int columns and the aggregate rule (see "Column-aware min/max/sum/avg").
 5. `mixed`.
 
 Laravel's read order, probed on SQLite with Laravel 13.38 (same code on 12.20): accessor, then cast, then `getDates()` (`asDateTime`, non-null only), then the raw value. Any `using()`, `Pivot::class` included, hydrates through `AsPivot::fromRawAttributes()`: no `forceFill()` date normalization, and the timestamps switch on only when the PARENT's created column is selected (`hasTimestampAttributes()` with the parent already attached), so a default-named `created_at` / `updated_at` is no special case there (it reads its raw string when the parent renamed its timestamps). The gate (rule 3) is proven only on a visible chain with known parent timestamps, the parent's created column selected, and X keeping the stock `getDates`, `usesTimestamps`, `hasTimestampAttributes`, `getCreatedAtColumn`, `getUpdatedAtColumn`, `asDateTime`, `fromRawAttributes`, `fromAttributes`; a class overriding any of them gets `mixed` for rules 3 and 4. Probed but not emitted: with the parent's created column NOT selected the dates read as raw strings, yet the answer stays `mixed` (rule 3 is "proven or `mixed`").

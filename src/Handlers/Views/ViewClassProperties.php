@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
+use Illuminate\Contracts\Support\Renderable;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Type\TypeExpander;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\PropertyStorage;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TString;
 use Psalm\Type\Union;
 
 /**
@@ -111,5 +115,26 @@ final class ViewClassProperties
         } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return null;
         }
+    }
+
+    /**
+     * What a template receives for a top-level data value: `View::gatherData()` swaps every
+     * `Renderable` for the string it renders to. A class Psalm never scanned is not proven
+     * `Renderable` and stays as is. Values nested in an array keep their objects, as in Laravel.
+     *
+     * @psalm-mutation-free
+     */
+    public static function renderablesAsString(Union $supplied, Codebase $codebase): Union
+    {
+        $atomics = [];
+
+        foreach ($supplied->getAtomicTypes() as $atomic) {
+            $atomics[] = $atomic instanceof TNamedObject
+                && ClassLineage::isA($codebase, $atomic->value, Renderable::class)
+                    ? new TString()
+                    : $atomic;
+        }
+
+        return new Union($atomics);
     }
 }

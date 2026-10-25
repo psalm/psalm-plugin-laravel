@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Illuminate\View\ViewName;
 use PhpParser\Node\Scalar\String_;
 
 /**
@@ -95,7 +96,7 @@ final class ComponentTagCollector
                 }
             } elseif (isset(self::RENDER_BY_NAME[$method])) {
                 foreach (self::literalsInArguments($significant, $i + 3) as $name) {
-                    $views[$name] = true;
+                    $views[\trim(ViewName::normalize($name))] = true;
                 }
             }
         }

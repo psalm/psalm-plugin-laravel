@@ -21,6 +21,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\AggregateCallParser;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
@@ -238,7 +239,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             return null;
         }
 
-        $args = $expr->getArgs();
+        $args = \array_values($expr->getArgs());
         $relationArg = self::relationArg($args);
         if (!$relationArg instanceof Arg) {
             return null;
@@ -256,7 +257,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
 
         $callbackArg = $methodNameLc === 'with' && $expr instanceof MethodCall
             && self::isBuilderReceiver($expr, $source, $codebase)
-            ? self::callbackArg($args)
+            ? ArgUtil::boundTo($args, 'callback', 1)
             : null;
 
         $methodParsesColumns = self::RELATION_NAME_METHODS[$methodNameLc];
@@ -310,23 +311,6 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
         foreach ($args as $index => $arg) {
             $name = $arg->name?->name;
             if ($name === null ? $index === 0 : ($name === 'relations' || $name === 'relation')) {
-                return $arg;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * The `$callback` argument of `with($relations, $callback)`: positional index 1 or named `callback`.
-     *
-     * @param array<array-key, Arg> $args
-     * @psalm-capabilities read-props
-     */
-    private static function callbackArg(array $args): ?Arg
-    {
-        foreach ($args as $index => $arg) {
-            if ($arg->name instanceof Identifier ? $arg->name->name === 'callback' : $index === 1) {
                 return $arg;
             }
         }
