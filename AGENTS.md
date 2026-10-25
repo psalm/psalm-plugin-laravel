@@ -27,7 +27,7 @@ These documents are maintained and source-verified. Consult them before explorin
 | Design rationale: handler loading, producer narrowing, suppression, version policy, taint philosophy, performance budget | `docs/contributing/decisions.md` |
 | How Laravel `__call` / `__callStatic` / macros / forwarding resolve, and the handlers modeling them | `docs/contributing/laravel-magic-call-patterns.md` |
 | Taint annotation authoring | `docs/contributing/taint-analysis.md` |
-| Blade template analysis behaviour (dropped compiler findings, ambient typing, cache, limits) | `docs/contributing/blade.md` (user guide: `docs/blade.md`) |
+| Blade template analysis: pipeline, handler registration, shadow cache, typing, contracts, taint bridge, remapping, limits | `docs/contributing/blade.md` (user guide: `docs/blade.md`) |
 | Psalm type syntax (every type expression, accepted-but-misleading forms) | `docs/contributing/types.md` |
 | Psalm docblock tags and their accepted spellings | `docs/contributing/annotations.md` |
 | Psalm 7 purity capabilities, legacy tag mapping, purity policy | `docs/contributing/purity.md` |
@@ -75,9 +75,9 @@ Gotchas:
 Each rule exists because violating it shipped a bug. The pointer holds the full story.
 
 1. Every handler in `Plugin::registerHandlers()` keeps its paired `require_once`. Rationale: decisions.md, "Class Loading and Discovery".
-2. A stub that re-declares a class must repeat its `implements` clause (for an interface stub, its `extends` list) verbatim from Laravel source: Psalm resets `class_implements` / `parent_interfaces` on re-declaration and silently strips the contracts. A class's `extends` and its trait `use` survive re-declaration; copy the full header anyway so the stub stays diffable against Laravel source. See "Stub merging" in the contributing README.
+2. A stub that re-declares a class must copy the full Laravel class header, above all the `implements` clause (for an interface stub, its `extends` list): Psalm resets `class_implements` / `parent_interfaces` on re-declaration and silently strips the contracts. See "Stub merging" in the contributing README.
 3. In template positions of relation stubs (the declaring-model argument of `HasRelationships` factory returns, the chainable branch of conditional returns), write `static`, and keep `TDeclaringModel` covariant (`@template-covariant`); do not make it invariant to match other tools. Psalm substitutes both `$this` and `static` there, but on a non-final receiver it keeps the late-static marker (`Order&static`), and an invariant slot then rejects a call-site `@return BelongsTo<..., self>`. Plain fluent `@return $this` on non-generic methods is fine. Full rationale: docblock of `stubs/common/Database/Eloquent/Relations/Relation.phpstub` and psalm/psalm-plugin-laravel#913.
-4. Across stub files that declare the same method, type annotations AND parameter-level taint annotations (`@psalm-taint-sink`, `@psalm-assert-untainted`) are last-loaded-wins; only method-level taint annotations (`@psalm-taint-source`, `@psalm-taint-escape`, `@psalm-taint-unescape`) accumulate. A version-dir override that redeclares a method must restate every `@psalm-taint-sink` of the earlier declaration, or the sink silently disappears. Keep all annotations for one method in the SAME file.
+4. Keep all annotations for one method in the SAME file. Across stub files, types and parameter-level taint annotations (`@psalm-taint-sink`, `@psalm-assert-untainted`) are last-loaded-wins, while method-level taints (`@psalm-taint-source`, `@psalm-taint-escape`, `@psalm-taint-unescape`) accumulate, so a version-dir override of a method must restate every `@psalm-taint-sink` of the earlier declaration or the sink silently disappears. See "Stub merging" in the contributing README.
 5. A regression test must fail before the fix. For trivial stub syncs a write-then-delete throwaway test suffices; commit a type test for the fragile cases (conditional returns, template tricks, version-gated behavior). New narrowing handlers need positive AND negative coverage (handler declines, fallback stays intact).
 6. Plugin self-analysis has no baseline and must never gain one. The only baseline is the Application-fixture snapshot `tests/Application/laravel-test-psalm-baseline.xml` (refresh via `tests/Application/laravel-test.sh -u`). Never `@psalm-suppress` before trying hard to fix the issue at its source.
 7. Grep the diff for `CLAUDE` before committing. Comments and docs state facts directly and never cite agent instruction files.
@@ -130,7 +130,7 @@ Regression phpts use minimal abstracted fixtures (house style), but reduce towar
 ## Policies
 
 - Upstream first: when plugin work reveals a bug in vimeo/psalm, laravel/framework, or another dependency, say so and name the correct layer BEFORE attempting a plugin-level workaround.
-- Doc pairing: any change to `Plugin::registerHandlers()`, `Plugin::registerStubs()`, or the stub directory layout updates `docs/contributing/README.md` in the same PR.
+- Doc pairing: any change to `Plugin::registerHandlers()`, `Plugin::registerStubs()`, or the stub directory layout updates `docs/contributing/README.md` in the same PR. A change to which Blade handlers register, or on which gate, updates the handler table in `docs/contributing/blade.md` ("Handler registration").
 - Every new class in `src/Issues/` ships its `docs/issues/<Name>.md` page plus an entry in `docs/issues/index.md` in the same PR. Opt-in issues also document their `PluginConfig` flag in `docs/config.md`; severity defaults go through the experimental lifecycle (contributing README).
 - Taint source/sink/escape changes update the detection table in `docs/security.md` in the same PR.
 - Code style is delegated to tooling: `composer rector` + `composer cs`.
