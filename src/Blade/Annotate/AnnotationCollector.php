@@ -14,6 +14,7 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
@@ -860,6 +861,11 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
+        // A key a composer owns is not for the call sites to settle: left out of the disagreement list, too.
+        if (self::composerMayWrite(self::canonical($viewName), $name)) {
+            return null;
+        }
+
         $ids = \array_map(strval(...), \array_keys($distinct));
         \sort($ids);
 
@@ -874,7 +880,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     {
         $viewName = self::canonical($viewName);
 
-        if (isset(self::$open[$viewName])) {
+        if (isset(self::$open[$viewName]) || self::composerMayWrite($viewName, $name)) {
             return null;
         }
 
@@ -922,6 +928,19 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         return $id;
+    }
+
+    /**
+     * Whether a view composer or creator may write the key after (or before) the call site passes it:
+     * the template then reads the composer's value, so the call site's type says nothing about it. An
+     * unreadable composer may write any key. Reuses what the call-site checks consult
+     * ({@see ContractRegistry::composedKeys()}).
+     */
+    private static function composerMayWrite(string $viewName, string $name): bool
+    {
+        $composed = ContractRegistry::composedKeys($viewName);
+
+        return $composed === null || isset($composed[$name]);
     }
 
     /**

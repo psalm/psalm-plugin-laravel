@@ -16,6 +16,7 @@ use PHPUnit\Framework\TestCase;
 use Psalm\Context;
 use Psalm\Internal\Provider\NodeDataProvider;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationCollector;
+use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type;
@@ -26,11 +27,13 @@ final class AnnotationCollectorTest extends TestCase
     protected function setUp(): void
     {
         AnnotationCollector::reset();
+        ContractRegistry::reset();
     }
 
     protected function tearDown(): void
     {
         AnnotationCollector::reset();
+        ContractRegistry::reset();
     }
 
     #[Test]
@@ -176,6 +179,27 @@ final class AnnotationCollectorTest extends TestCase
     public function recognises_an_id_blade_would_pair_with_a_block_closer(string $id, bool $pairs): void
     {
         $this->assertSame($pairs, (new \ReflectionMethod(AnnotationCollector::class, 'pairsWithBladeBlock'))->invoke(null, $id));
+    }
+
+    #[Test]
+    public function declines_a_key_a_view_composer_may_overwrite(): void
+    {
+        // The call site's type is not what the template reads once a composer writes the key.
+        AnnotationCollector::record('home', ['title' => Type::getString(), 'other' => Type::getString()], true);
+        ContractRegistry::registerComposerSources(['home' => [['App\\Composer', 'compose']]]);
+        ContractRegistry::registerComposedKeys(['home' => ['title' => true]]);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+        $this->assertSame('string', AnnotationCollector::typeFor('home', 'other'), 'a key no composer writes keeps its type');
+    }
+
+    #[Test]
+    public function declines_every_key_when_a_view_composer_cannot_be_read(): void
+    {
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        ContractRegistry::registerComposerSources(['home' => null]);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
     }
 
     #[Test]
