@@ -131,6 +131,12 @@ final class BladeIssueRemapHandlerTest extends TestCase
         $shadow = \sys_get_temp_dir() . '/blade-remap-late-' . \uniqid() . '.php';
         $nodes = new \ReflectionMethod(BladeIssueRemapHandler::class, 'suppressingNodes');
 
+        // Parsing reads the config singleton; a bare one is enough.
+        $config = new \ReflectionClass(\Psalm\Config::class);
+        $instance = $config->newInstanceWithoutConstructor();
+        $config->getProperty('eventDispatcher')->setValue($instance, new \Psalm\Internal\EventDispatcher());
+        $config->getProperty('instance')->setValue(null, $instance);
+
         try {
             $this->assertSame([], $nodes->invoke(null, $codebase, $shadow));
 
@@ -138,6 +144,7 @@ final class BladeIssueRemapHandlerTest extends TestCase
 
             $this->assertCount(1, $nodes->invoke(null, $codebase, $shadow));
         } finally {
+            $config->getProperty('instance')->setValue(null, null);
             @\unlink($shadow);
         }
     }
