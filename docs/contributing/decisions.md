@@ -351,6 +351,10 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Constraint:** `ReturnAnalyzer` accumulates the removal returned for a returned expression into the enclosing function's removed taints, which then apply to every return path of that function. A handler that answered on that dispatch would silence `return $tainted;` in the same function. The handler answers only while the call's type is still unset, which is true for the dispatch that writes the edge and false for the return and argument dispatches. This is an internal-ordering heuristic, not counting, and it fails toward a retained finding if Psalm reorders it. The same leak exists in core for `htmlspecialchars()`.
 
+### Collection default lookups carry `@psalm-taint-specialize` (#2071)
+
+`first()`, `get()`, `last()`, `pull()`, `value()` and `LazyCollection::get()` pair `@psalm-flow ($default) -> return` with `@psalm-taint-specialize`: Psalm 7 only speculatively specializes non-overridable project methods, so a stub flow otherwise pools across call sites (rule: taint-analysis.md, checklist item 6). Receiver taint does not reach these returns (#2107, `TaintedHtmlRequestCollectKnownLimitation.phpt`).
+
 ## Breaking Changes
 
 ### Breaking type changes require a major version bump or config opt-in
