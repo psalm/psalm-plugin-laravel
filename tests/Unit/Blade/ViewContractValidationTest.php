@@ -603,6 +603,18 @@ final class ViewContractValidationTest extends TestCase
     }
 
     /**
+     * A constructor that assigns `$this->except` decides the excluded names at run time, though the class
+     * never redeclares the property: its properties and methods keep the values the call passes.
+     */
+    #[Test]
+    public function a_constructor_assigned_except_leaves_properties_and_methods_untyped(): void
+    {
+        $issues = $this->contractIssues();
+
+        $this->assertSame([], $this->forFile($issues, 'ComponentCtorExcept.php'), \var_export($issues, true));
+    }
+
+    /**
      * #2043: `parent` in a class component's property type names the class declaring the property, and a
      * trait's `self` the class using the trait, not the component the view renders for.
      */

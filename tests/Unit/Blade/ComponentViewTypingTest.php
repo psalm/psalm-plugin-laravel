@@ -109,6 +109,8 @@ final class ComponentViewTypingTest extends TestCase
         yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];
         // `ViewName::normalize()` makes `components/linked` the view `components.linked`.
         yield 'also rendered by @include, spelled with a slash' => ['linked.blade.php', ['$title: mixed']];
+        // A constructor that assigns `$this->except` may drop any name at run time: the registry declines.
+        yield 'a constructor that assigns $except' => ['ctor-except.blade.php', ['$heading: mixed']];
         yield 'a returned string with three :: segments is inline Blade' => ['suffixed.blade.php', ['$title: mixed']];
     }
 
