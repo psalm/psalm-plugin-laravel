@@ -177,8 +177,21 @@ final class SuppressionInjector
 
         // Unanchored: PCRE's `^`/`$` only know `\n`, so under bare-CR endings an anchored `^.*` would
         // swallow every comment but the last on a run of CR-separated lines.
-        if (\preg_match_all('/\{\{--\s*@psalm-suppress\s+(.+?)\s*--\}\}/', $bladeSource, $matches, \PREG_OFFSET_CAPTURE) !== false) {
-            foreach ($matches[1] as [$ruleList, $offset]) {
+        if (\preg_match_all('/\{\{--\s*@psalm-suppress\s+(.+?)\s*--\}\}/', $bladeSource, $matches, \PREG_OFFSET_CAPTURE) !== false && $matches[0] !== []) {
+            // Live only when the compiler also reads the text as a Blade comment: not inside
+            // `@verbatim`, `@php` or a raw PHP tag, and not nested in a longer comment.
+            $liveComments = [];
+            foreach (MarkerPrePass::maskedRanges($bladeSource) as [$text, $start]) {
+                if (\str_starts_with($text, '{{--')) {
+                    $liveComments[$start] = true;
+                }
+            }
+
+            foreach ($matches[1] as $index => [$ruleList, $offset]) {
+                if (!isset($liveComments[$matches[0][$index][1]])) {
+                    continue;
+                }
+
                 $rules = self::parseRuleList($ruleList);
 
                 if ($rules !== []) {

@@ -138,4 +138,25 @@ final class SuppressionInjectorTest extends TestCase
         $this->assertStringContainsString('<?php /** @psalm-suppress A */ echo $__env->make', $result);
         $this->assertSame([4 => ['B'], 2 => ['A']], $injector->resolve($shadow, $bladeSource, $lineMap));
     }
+
+    /** @return iterable<string, array{string}> */
+    public static function inertSuppressionText(): iterable
+    {
+        yield 'verbatim' => ["@verbatim\n{{-- @psalm-suppress Foo --}}\n@endverbatim\n{{ \$a }}\n"];
+        yield 'php directive block' => ["@php\n/* x */ \$s = '{{-- @psalm-suppress Foo --}}';\n@endphp\n{{ \$a }}\n"];
+        yield 'raw php tag' => ["<?php \$s = '{{-- @psalm-suppress Foo --}}'; ?>\n{{ \$a }}\n"];
+        yield 'nested in a longer comment' => ["{{-- note {{-- @psalm-suppress Foo --}}\n{{ \$a }}\n"];
+    }
+
+    #[Test]
+    #[\PHPUnit\Framework\Attributes\DataProvider('inertSuppressionText')]
+    public function suppression_text_the_compiler_does_not_read_as_a_comment_is_ignored(string $bladeSource): void
+    {
+        $shadow = "prelude\n<?php /* blade:4 */ ?><?php echo e(\$a); ?>\n";
+        $lineMap = [1 => 0, 2 => 4];
+        $injector = new SuppressionInjector();
+
+        $this->assertSame([], $injector->resolve($shadow, $bladeSource, $lineMap));
+        $this->assertSame($shadow, $injector->inject($shadow, $bladeSource, $lineMap));
+    }
 }
