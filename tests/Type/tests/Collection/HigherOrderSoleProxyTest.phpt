@@ -49,14 +49,14 @@ final class HigherOrderSoleProxyTest
     }
 
     /**
-     * A receiver union of two collection types is not narrowed through the proxy.
+     * A receiver union of two collection types combines each branch's item type.
      *
      * @param Collection<int, SoleFlag>|LazyCollection<int, SoleOther> $items
      */
     public function unionReceiver($items): void
     {
         $_onlyFlag = $items->sole->onlyFlag();
-        /** @psalm-check-type-exact $_onlyFlag = mixed */
+        /** @psalm-check-type-exact $_onlyFlag = SoleFlag|SoleOther */
     }
 }
 ?>
