@@ -198,8 +198,8 @@ class Collection extends BaseCollection implements QueueableCollection
     /**
      * @template TWhenEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenEmptyReturnType|null))|null  $default
      * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
      */
     public function whenEmpty(callable $callback, ?callable $default = null) {}
@@ -207,8 +207,8 @@ class Collection extends BaseCollection implements QueueableCollection
     /**
      * @template TWhenNotEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenNotEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenNotEmptyReturnType|null))|null  $default
      * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
      */
     public function whenNotEmpty(callable $callback, ?callable $default = null) {}
@@ -216,8 +216,8 @@ class Collection extends BaseCollection implements QueueableCollection
     /**
      * @template TUnlessEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessEmptyReturnType|null))|null  $default
      * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
      */
     public function unlessEmpty(callable $callback, ?callable $default = null) {}
@@ -225,8 +225,8 @@ class Collection extends BaseCollection implements QueueableCollection
     /**
      * @template TUnlessNotEmptyReturnType
      *
-     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessNotEmptyReturnType|null))  $callback
-     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
      * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
      */
     public function unlessNotEmpty(callable $callback, ?callable $default = null) {}

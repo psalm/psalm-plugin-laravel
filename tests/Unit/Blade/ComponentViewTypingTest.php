@@ -107,6 +107,9 @@ final class ComponentViewTypingTest extends TestCase
         yield 'a data argument that is not a literal array' => ['compacted.blade.php', ['$title: mixed']];
         yield 'a ->with() link after the view call' => ['withed.blade.php', ['$title: mixed']];
         yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];
+        // `ViewName::normalize()` makes `components/linked` the view `components.linked`.
+        yield 'also rendered by @include, spelled with a slash' => ['linked.blade.php', ['$title: mixed']];
+        yield 'a returned string with three :: segments is inline Blade' => ['suffixed.blade.php', ['$title: mixed']];
     }
 
     /**

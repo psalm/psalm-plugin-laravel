@@ -407,7 +407,9 @@ final class MarkerPrePass
      * The trailing marker exists because Blade's addFooters() appends the
      * `@extends` footer after everything else, so without it the footer
      * would inherit the LAST content line's marker instead of the line the
-     * `@extends` directive actually appears on.
+     * `@extends` directive actually appears on. It always sits on its own
+     * line: a source without a trailing newline gets one prepended, so the
+     * marker cannot share (and win) the last statement's compiled line.
      *
      * @psalm-external-mutation-free
      */
@@ -437,7 +439,9 @@ final class MarkerPrePass
         $extendsLine = self::extendsLine($source, $masked);
 
         if ($extendsLine !== null) {
-            $out .= "<?php /* {$markerPrefix}{$extendsLine} */ ?>";
+            // Without a trailing newline the marker would share the last statement's compiled line and win there.
+            $separator = \str_ends_with($source, "\n") || \str_ends_with($source, "\r") ? '' : "\n";
+            $out .= "{$separator}<?php /* {$markerPrefix}{$extendsLine} */ ?>";
         }
 
         return $out;
