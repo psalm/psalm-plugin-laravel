@@ -15,6 +15,7 @@ use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
 use Psalm\Internal\DataFlow\DataFlowNode;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
@@ -315,7 +316,9 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
             return;
         }
 
-        $casedId = $codebase->methods->getCasedMethodId($constructor);
+        // A trait constructor's body is analyzed as the using class's own, so its parameter nodes are keyed by
+        // that class, not by the trait the storage comes from. No public Psalm API returns this id (#1978).
+        $casedId = FunctionLikeAnalyzer::getCasedBodyMethodId($codebase, new MethodIdentifier($class->name, '__construct'));
         $storage = $codebase->methods->getStorage($constructor);
         $offsets = [];
 
