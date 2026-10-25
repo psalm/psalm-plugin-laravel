@@ -54,7 +54,7 @@ jobs:
         run: bash bin/ci/check-phpt-conventions.sh
 
   unit_tests:
-    name: Unit test P${{ matrix.php }} | L${{ matrix.laravel || 'lockfile' }}
+    name: Unit test P${{ matrix.php }} | L${{ matrix.laravel || 'lockfile' }}${{ matrix.in_process && ' | in-process' || '' }}
     runs-on: ubuntu-latest
     env:
       COMPOSER_CACHE_DIR: ${{ github.workspace }}/.composer-cache
@@ -63,17 +63,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The lockfile cell covers the PHP 8.5 side of the 8.4/8.5 getMethods() initializer-order
-          # split; the 8.4 side is covered by the 8.4 + Laravel 13.20.0 floor cell below.
+          # `in_process` cells skip the `subprocess` group (tests forking a real vendor/bin/psalm, ~75% of
+          # unit CPU); the PHP 8.2 + 12.27.0 and 8.5 lockfile cells run the full suite.
+          # Newest PHP + latest Laravel 13 (lockfile). Also the 8.5 side of the 8.4/8.5 getMethods()
+          # initializer-order split, which is in-process (ModelMetadataRegistryTest).
           - php: '8.5'
-          # Declared framework floors.
+          # Declared Laravel 13 floor, on the middle PHP. Covers the 8.4 side of the getMethods() split in-process.
           - php: '8.4'
             laravel: '13.20.0'
+            in_process: true
+          # Oldest PHP + declared Laravel 12 floor.
           - php: '8.2'
             laravel: '12.27.0'
           # Highest 12.x: the enum $connection path is live since 12.28.
           - php: '8.2'
             laravel: '^12.27'
+            in_process: true
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -146,7 +151,10 @@ jobs:
         # paratest declares its own CLI options rather than proxying PHPUnit's, and only 7.19.0+ declares
         # --display-phpunit-notices. Constraint installs may resolve PHPUnit 11 (Testbench 10), which pins paratest 7.8.x.
         if: matrix.laravel
-        run: vendor/bin/paratest --processes=auto --testsuite=unit --display-deprecations --display-notices
+        env:
+          EXTRA_ARGS: ${{ matrix.in_process && '--exclude-group=subprocess' || '' }}
+        # ${VAR:+"$VAR"} passes the single flag when set and no argument at all when empty.
+        run: vendor/bin/paratest --processes=auto --testsuite=unit --display-deprecations --display-notices ${EXTRA_ARGS:+"$EXTRA_ARGS"}
 
 
   type_tests:
