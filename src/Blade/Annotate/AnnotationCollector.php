@@ -10,6 +10,7 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt;
 use PhpParser\NodeFinder;
+use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
@@ -80,6 +81,32 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     private static array $alwaysSupplied = [];
 
     /**
+     * Keys an `@includeIsolated` passes as a bare variable of the including template that Psalm saw
+     * as `mixed`: the including template has not declared it yet. Keyed by view name then key, then
+     * `templatePath\0variable`, each with the including template and its variable. Resolved from the
+     * including template's plan instead of being observed as `mixed`, see {@see self::observations()}.
+     *
+     * @var array<string, array<string, array<string, array{0: string, 1: string}>>>
+     */
+    private static array $edges = [];
+
+    /**
+     * The `view\0key` pairs {@see self::observations()} is resolving right now, so an include cycle
+     * answers `mixed` at the point it closes instead of recursing.
+     *
+     * @var array<string, true>
+     */
+    private static array $resolving = [];
+
+    /**
+     * Per analysed file, the variable names an `isset()` or `empty()` in it mentions, see
+     * {@see self::isTested()}.
+     *
+     * @var array<string, array<string, true>>
+     */
+    private static array $tested = [];
+
+    /**
      * Whether the statement hook ran at all in THIS process. Psalm forks its analysis workers once
      * the project is big enough, and a worker's statics never reach the parent that runs
      * AfterAnalysis — where, seeing nothing collected, the writer would report every variable of
@@ -108,6 +135,9 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         self::$observed = [];
         self::$open = [];
         self::$alwaysSupplied = [];
+        self::$edges = [];
+        self::$resolving = [];
+        self::$tested = [];
         self::$analyzed = false;
         self::$recorded = null;
     }
@@ -141,7 +171,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $stmt = $event->getStmt();
 
         if ($stmt instanceof Stmt\Echo_) {
-            self::recordEcho($stmt, $event->getStatementsSource());
+            self::recordEcho($stmt, $event->getStatementsSource(), $event->getContext());
 
             return null;
         }
@@ -188,7 +218,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      * controller's type gets declared that the include then passes something else for. One that
      * passes the including scope (`@include`, `@extends`) leaves the data set open.
      */
-    private static function recordEcho(Stmt\Echo_ $stmt, StatementsSource $source): void
+    private static function recordEcho(Stmt\Echo_ $stmt, StatementsSource $source, Context $context): void
     {
         $echoed = $stmt->exprs[0] ?? null;
 
@@ -199,8 +229,14 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         $chain = $include instanceof Expr\MethodCall ? ViewCallChain::fromInclude($include, $source) : null;
         $skip = [];
 
-        if ($chain instanceof ViewCallChain && $echoed instanceof Expr) {
-            self::record($chain->viewName, $chain->supplied(), $chain->complete, self::site($stmt, $source));
+        if ($include instanceof Expr\MethodCall && $chain instanceof ViewCallChain && $echoed instanceof Expr) {
+            self::record(
+                $chain->viewName,
+                $chain->supplied(),
+                $chain->complete,
+                self::site($stmt, $source),
+                self::deferredKeys($include, $chain, $source, $context),
+            );
             $skip = self::spine($echoed);
         }
 
@@ -211,6 +247,91 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 self::markUnreadable($viewName, self::site($stmt, $source));
             }
         }
+    }
+
+    /**
+     * The keys of an `@includeIsolated` whose value is a bare variable of the including template that
+     * Psalm saw as exactly `mixed`, with where to ask for its real type once that template is planned.
+     *
+     * Declined, so the key keeps being observed as `mixed`: a name the template binds for itself or
+     * reads unknowably is no input to type (a planned type never exists for one, see
+     * {@see AnnotationWriter::fileVariable()}), and a name a condition around the include narrows.
+     * Psalm keeps the type id `mixed` through `$x !== null` and `isset($x)` (`if ($x)` is already
+     * `non-empty-mixed`), so the parent's planned type (`Member|null` when a call site omits it) would
+     * be declared where a second run, with the parent typed, narrows it to `Member`. A value that is
+     * any other expression (`$m->team`, `$x ?? null`) is never followed either.
+     *
+     * @return array<string, array{0: string, 1: string}> key => including template path, variable name
+     */
+    private static function deferredKeys(Expr\MethodCall $include, ViewCallChain $chain, StatementsSource $source, Context $context): array
+    {
+        $entry = ShadowRegistry::entryFor($source->getFilePath());
+
+        if (!$entry instanceof ShadowEntry) {
+            return [];
+        }
+
+        $keys = [];
+
+        foreach (ViewCallChain::ownEntries($include, $chain->binder) as [$key, $value]) {
+            if ($value instanceof Expr\Variable
+                && \is_string($value->name)
+                && ($chain->data[$key] ?? null)?->getId(false) === 'mixed'
+                && !self::hasClause($context, $value->name)
+                && !self::isTested($source, $value->name)
+            ) {
+                $keys[$key] = [$entry->templatePath, $value->name];
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * Whether any clause in force mentions the variable, or something reached through it (`$x->y`, `$x['k']`).
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function hasClause(Context $context, string $variable): bool
+    {
+        $pattern = '/^\$' . \preg_quote($variable, '/') . '(?![\w\x80-\xff])/';
+
+        foreach ($context->clauses as $clause) {
+            foreach (\array_keys($clause->possibilities) as $id) {
+                if (\preg_match($pattern, $id) === 1) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether an `isset()` or `empty()` anywhere in the file mentions the variable. Psalm leaves no
+     * clause for one and keeps `mixed`, so the context cannot tell whether the include sits inside it;
+     * a file that tests the name at all is declined, which only costs a rerun.
+     */
+    private static function isTested(StatementsSource $source, string $variable): bool
+    {
+        $path = $source->getFilePath();
+
+        if (!isset(self::$tested[$path])) {
+            $finder = new NodeFinder();
+            $names = [];
+
+            foreach ($finder->find($source->getCodebase()->getStatementsForFile($path), static fn(Node $node): bool => $node instanceof Expr\Isset_ || $node instanceof Expr\Empty_) as $test) {
+                foreach ($finder->findInstanceOf($test, Expr\Variable::class) as $tested) {
+                    if (\is_string($tested->name)) {
+                        $names[$tested->name] = true;
+                    }
+                }
+            }
+
+            self::$tested[$path] = $names;
+        }
+
+        return isset(self::$tested[$path][$variable]);
     }
 
     /**
@@ -475,11 +596,13 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     }
 
     /**
-     * @param array<string, Union> $data     supplied variable name => the type passed for it
-     * @param bool                 $complete whether the producer's key set was proven closed
-     * @param string               $site     the producer's `path:line`, reported when it leaves the set open
+     * @param array<string, Union>                $data     supplied variable name => the type passed for it
+     * @param bool                                $complete whether the producer's key set was proven closed
+     * @param string                              $site     the producer's `path:line`, reported when it leaves the set open
+     * @param array<string, array{0: string, 1: string}> $deferred keys of `$data` whose type is that of a variable of
+     *        another template, not yet known: key => that template's path, the variable. Supplied, but not observed.
      */
-    public static function record(string $viewName, array $data, bool $complete, string $site = ''): void
+    public static function record(string $viewName, array $data, bool $complete, string $site = '', array $deferred = []): void
     {
         $viewName = self::canonical($viewName);
 
@@ -494,6 +617,12 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         foreach ($data as $name => $type) {
+            if (isset($deferred[$name])) {
+                self::$edges[$viewName][$name][\implode("\0", $deferred[$name])] = $deferred[$name];
+
+                continue;
+            }
+
             $seen = self::$observed[$viewName][$name] ?? null;
 
             if ($seen === false) {
@@ -506,14 +635,79 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
                 continue;
             }
 
-            $type = self::withoutUnboundedIntRange(LateStatic::strip($type));
-            $seen ??= [];
-            $key = $type->getId(false);
-            // Literals sharing an id (`1`, `100`) are combined, not replaced: the merge's containment
-            // check must see every value a call site passed.
-            $seen[$key] = isset($seen[$key]) ? Type::combineUnionTypes($seen[$key], $type) : $type;
-            self::$observed[$viewName][$name] = $seen;
+            self::$observed[$viewName][$name] = self::observe($seen ?? [], self::withoutUnboundedIntRange(LateStatic::strip($type)));
         }
+    }
+
+    /**
+     * @param array<string, Union> $seen
+     *
+     * @return array<string, Union>
+     *
+     * @psalm-capabilities read-props|write-this-props|write-refs
+     */
+    private static function observe(array $seen, Union $type): array
+    {
+        $key = $type->getId(false);
+        // Literals sharing an id (`1`, `100`) are combined, not replaced: the merge's containment
+        // check must see every value a call site passed.
+        $seen[$key] = isset($seen[$key]) ? Type::combineUnionTypes($seen[$key], $type) : $type;
+
+        return $seen;
+    }
+
+    /**
+     * What the producers of a view pass for a name: the types they observed, plus one per deferred
+     * include edge, taken from the including template's planned type. An edge that cannot be typed
+     * (the including template plans no type for it, or the edge closes a cycle) passes `mixed`, as it
+     * would have without edges. False when a producer passed a type no declaration can carry, null
+     * when nobody passed the name.
+     *
+     * @return array<string, Union>|false|null
+     */
+    private static function observations(string $viewName, string $name): array|false|null
+    {
+        $seen = self::$observed[$viewName][$name] ?? null;
+        $edges = self::$edges[$viewName][$name] ?? [];
+
+        if ($edges === [] || $seen === false) {
+            return $seen;
+        }
+
+        $pair = "{$viewName}\0{$name}";
+
+        if (isset(self::$resolving[$pair])) {
+            return self::observe([], Type::getMixed());
+        }
+
+        self::$resolving[$pair] = true;
+
+        try {
+            foreach ($edges as [$templatePath, $variable]) {
+                $seen = self::observe($seen ?? [], self::includedType($templatePath, $variable) ?? Type::getMixed());
+            }
+        } finally {
+            unset(self::$resolving[$pair]);
+        }
+
+        return $seen;
+    }
+
+    /**
+     * The type an include hands on for a variable of its including template: what that template will
+     * be declared as, with `null` added where it is declared `= null`.
+     */
+    private static function includedType(string $templatePath, string $variable): ?Union
+    {
+        $planned = AnnotationWriter::fileVariable($templatePath, $variable);
+
+        if ($planned === null || $planned[0] === null) {
+            return null;
+        }
+
+        $type = Type::parseString($planned[0]);
+
+        return $planned[1] ? Type::combineUnionTypes($type, Type::getNull()) : $type;
     }
 
     /**
@@ -525,7 +719,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
      */
     public static function disagreeingTypes(string $viewName, string $name): ?array
     {
-        $distinct = self::$observed[$viewName][$name] ?? null;
+        $distinct = self::observations($viewName, $name);
 
         if (isset(self::$open[$viewName]) || !\is_array($distinct) || \count($distinct) < 2 || self::merged($distinct) instanceof Union) {
             return null;
@@ -549,7 +743,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             return null;
         }
 
-        $distinct = self::$observed[$viewName][$name] ?? null;
+        $distinct = self::observations($viewName, $name);
 
         if (!\is_array($distinct)) {
             return null;

@@ -13,6 +13,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\Context;
 use Psalm\Internal\Provider\NodeDataProvider;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationCollector;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
@@ -616,13 +617,14 @@ final class AnnotationCollectorTest extends TestCase
         }
     }
 
-    /** Built field by field: the event's constructor also wants a Context and a Codebase this hook never reads. */
+    /** Built field by field: the event's constructor also wants a Codebase this hook never reads. */
     private function statementEvent(Stmt $statement, StatementsSource $source): AfterStatementAnalysisEvent
     {
         $class = new \ReflectionClass(AfterStatementAnalysisEvent::class);
         $event = $class->newInstanceWithoutConstructor();
 
         $class->getProperty('stmt')->setValue($event, $statement);
+        $class->getProperty('context')->setValue($event, new Context());
         $class->getProperty('statements_source')->setValue($event, $source);
 
         return $event;

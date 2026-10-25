@@ -190,32 +190,9 @@ final class AnnotationWriter implements AfterAnalysisInterface
      */
     public static function plan(string $viewName, ViewDataContract $contract): array
     {
-        // A body that hides which names it reads (`@props` and `@aware` both compile to `$$name`)
-        // gives a read set that is only a lower bound. Annotating part of a contract is worse than
-        // annotating none of it: the missing names become MissingViewData noise at call sites.
-        if ($contract->readsUnknown) {
-            return [];
-        }
-
         $plan = [];
 
-        // A name the template binds for itself — a `@foreach ($items as $item)` alias, a
-        // `@php ($heading = ...)` assignment, a `fn ($item) => ...` parameter — is read by the
-        // template but supplied by it too. It stays in the read set (UnusedViewData asks "is this
-        // name used at all") and must never be declared: declaring it reports MissingViewData
-        // at every correct call site, which is the check this codemod exists to feed.
-        //
-        // A name declared by a raw docblock that is not a contract var (a local's type hint) joins
-        // them: `TemplateAnnotator` reads that spelling back, so planning one produces no insertion
-        // anyway, and reporting it as changed would be a lie.
-        $localNames = \array_fill_keys($contract->localVariables, true)
-            + \array_fill_keys($contract->rawDeclaredVariables, true);
-
-        foreach ($contract->readVariables as $name) {
-            if (isset($contract->vars[$name]) || isset($localNames[$name])) {
-                continue;
-            }
-
+        foreach (self::plannedNames($contract) as $name) {
             // A name some closed call site omits is still declared, but as `T|null $x = null`
             // (see plans()): a plain declaration would report MissingViewData at that call site.
             $type = AnnotationCollector::typeFor($viewName, $name);
@@ -223,6 +200,73 @@ final class AnnotationWriter implements AfterAnalysisInterface
         }
 
         return $plan;
+    }
+
+    /**
+     * The type {@see self::plans()} would declare for one variable of a template file, and whether
+     * it would be declared `= null`: the answer an `@includeIsolated` in that file hands its child
+     * ({@see AnnotationCollector::typeFor()}). The file's view names must agree, as they do in
+     * plans(). Null when the file plans no such name; its type null when no type is proven.
+     *
+     * @return array{0: string|null, 1: bool}|null
+     */
+    public static function fileVariable(string $templatePath, string $name): ?array
+    {
+        $found = false;
+        $type = null;
+        $optional = false;
+
+        foreach (ViewReferenceRegistry::namesFor($templatePath) as $viewName) {
+            $contract = ContractRegistry::contractFor($viewName);
+
+            if (!$contract instanceof ViewDataContract || !\in_array($name, self::plannedNames($contract), true)) {
+                continue;
+            }
+
+            $planned = AnnotationCollector::typeFor($viewName, $name);
+            $planned = $planned === 'mixed' ? null : $planned;
+            $type = $found && $type !== $planned ? null : $planned;
+            $found = true;
+            $optional = $optional || AnnotationCollector::isOptional($viewName, $name);
+        }
+
+        return $found ? [$type, $optional] : null;
+    }
+
+    /**
+     * The names of a contract that still need a declaration.
+     *
+     * A body that hides which names it reads (`@props` and `@aware` both compile to `$$name`)
+     * gives a read set that is only a lower bound. Annotating part of a contract is worse than
+     * annotating none of it: the missing names become MissingViewData noise at call sites.
+     *
+     * A name the template binds for itself — a `@foreach ($items as $item)` alias, a
+     * `@php ($heading = ...)` assignment, a `fn ($item) => ...` parameter — is read by the
+     * template but supplied by it too. It stays in the read set (UnusedViewData asks "is this
+     * name used at all") and must never be declared: declaring it reports MissingViewData
+     * at every correct call site, which is the check this codemod exists to feed.
+     *
+     * A name declared by a raw docblock that is not a contract var (a local's type hint) joins
+     * them: `TemplateAnnotator` reads that spelling back, so planning one produces no insertion
+     * anyway, and reporting it as changed would be a lie.
+     *
+     * @return list<string>
+     *
+     * @psalm-pure
+     */
+    private static function plannedNames(ViewDataContract $contract): array
+    {
+        if ($contract->readsUnknown) {
+            return [];
+        }
+
+        $localNames = \array_fill_keys($contract->localVariables, true)
+            + \array_fill_keys($contract->rawDeclaredVariables, true);
+
+        return \array_values(\array_filter(
+            $contract->readVariables,
+            static fn(string $name): bool => !isset($contract->vars[$name]) && !isset($localNames[$name]),
+        ));
     }
 
     /**

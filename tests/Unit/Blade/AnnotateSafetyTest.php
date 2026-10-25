@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -44,8 +45,36 @@ final class AnnotateSafetyTest extends TestCase
 
         $this->assertTemplatesPristine($run['templates']);
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(16, $result['changed']);
+        // 16 for the templates that need no include; the chains add 10 where `@includeIsolated` compiles
+        // (pair 2, chain 3, opt 2, narrow 3), and only the 5 parents that read the name themselves
+        // (pair-top, chain-top, cyc-a, narrow-top, narrow-isset-top) where it stays text.
+        $this->assertCount(16 + (\method_exists(BladeCompiler::class, 'compileIncludeIsolated') ? 10 : 5), $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
+    }
+
+    /**
+     * The dry run prints the diff the writing run applies, includes typed along a chain included.
+     * The writing run is a real one of its own over the same pristine templates, which are put back
+     * afterwards for the cases that read the copy as the fixture wrote it.
+     */
+    #[Test]
+    public function prints_under_dry_run_the_diff_a_real_run_writes(): void
+    {
+        $dry = (string) ($this->annotateResult('dry-run')['diff'] ?? '');
+        $this->assertStringContainsString('+ * @var string $title', $dry);
+
+        try {
+            $written = \json_decode($this->analyseUncached('annotate')['control'], true);
+        } finally {
+            $this->restorePristineTemplates();
+        }
+
+        $this->assertIsArray($written);
+        $this->assertSame($dry, $written['diff'] ?? null);
+
+        if (\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+            $this->assertStringContainsString('+ * @var \AnnotateFixture\Post $entry', $dry);
+        }
     }
 
     #[Test]

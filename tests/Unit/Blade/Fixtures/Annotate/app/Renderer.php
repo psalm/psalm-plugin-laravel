@@ -131,6 +131,81 @@ final class Renderer
         return view('counter', ['showCount' => $this->flag()]);
     }
 
+    public function pairTop(): View
+    {
+        return view('pair-top', ['member' => $this->post()]);
+    }
+
+    public function chainTop(): View
+    {
+        return view('chain-top', ['member' => $this->post()]);
+    }
+
+    public function optGiven(): View
+    {
+        return view('opt-top', ['member' => $this->post()]);
+    }
+
+    public function optOmitted(): View
+    {
+        return view('opt-top', []);
+    }
+
+    public function cycle(): View
+    {
+        return view('cyc-a', ['x' => $this->post()]);
+    }
+
+    public function narrowGiven(): View
+    {
+        return view('narrow-top', ['member' => $this->post()]);
+    }
+
+    public function narrowOmitted(): View
+    {
+        return view('narrow-top', []);
+    }
+
+    public function narrowIssetGiven(): View
+    {
+        return view('narrow-isset-top', ['member' => $this->post()]);
+    }
+
+    public function narrowIssetOmitted(): View
+    {
+        return view('narrow-isset-top', []);
+    }
+
+    public function localLoop(): View
+    {
+        return view('local-loop', ['member' => $this->post()]);
+    }
+
+    public function localPhp(): View
+    {
+        return view('local-php', ['member' => $this->post()]);
+    }
+
+    public function readsTop(): View
+    {
+        return view('reads-top', ['member' => $this->post()]);
+    }
+
+    public function splitString(): View
+    {
+        return view('split-top', ['member' => $this->title()]);
+    }
+
+    public function splitInt(): View
+    {
+        return view('split-top', ['member' => 1]);
+    }
+
+    public function splitLeaf(): View
+    {
+        return view('split-leaf', ['member' => $this->title()]);
+    }
+
     /** @return list<string> */
     private function items(): array
     {
