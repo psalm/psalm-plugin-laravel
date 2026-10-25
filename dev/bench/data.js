@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792967867300,
+  "lastUpdate": 1792968340678,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16755,6 +16755,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 38.99,
             "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1314,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f9938e3146c5ba4ffc4af4611e79c012eed8da12",
+          "message": "Report undefined methods on laravel/ai `Tools\\Request` again (#2119)\n\n* fix(laravel-ai): report undefined methods on Tools\\Request again\n\nThe stub re-declaration of Laravel\\Ai\\Tools\\Request drops Psalm's\nmethod sealing, so calls such as $request->get() were silently accepted\nalthough Macroable::__call() throws without a registered macro. Restate\nthe seal with @psalm-seal-methods; registered macros still resolve as\nMacroHandler pseudo-methods.\n\n* fix(laravel-ai): honor sealAllMethods on Tools\\Request instead of forcing a seal\n\nA @psalm-seal-methods stub tag sealed the class even under sealAllMethods=\"false\"\nand propagated the explicit seal to user subclasses. RedeclaredClassSealHandler copies\nthe configured default onto stub-re-declared classes with a throwing __call instead.",
+          "timestamp": "2026-10-25T23:42:08+01:00",
+          "tree_id": "a27015111068666535e36b5626e36a0bde30f75a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f9938e3146c5ba4ffc4af4611e79c012eed8da12"
+        },
+        "date": 1792968338349,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.43,
+            "range": "± 0.32",
             "unit": "s"
           },
           {
