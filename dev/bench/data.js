@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792960295103,
+  "lastUpdate": 1792960520533,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16585,6 +16585,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1314,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c40432ec39df45be0c3b88b5ff03bad33cbfb63a",
+          "message": "fix(blade): skip MissingViewData for views returned by non-public helpers #2079 (#2096)",
+          "timestamp": "2026-10-25T21:30:59+01:00",
+          "tree_id": "0e3ab11a2a73a15e8925dd93c1cabcee86885a43",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c40432ec39df45be0c3b88b5ff03bad33cbfb63a"
+        },
+        "date": 1792960518484,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 41.43,
+            "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1313,
             "unit": "MB"
           }
         ]
