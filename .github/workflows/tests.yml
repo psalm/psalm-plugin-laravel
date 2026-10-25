@@ -94,14 +94,16 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel || 'lockfile' }}-${{ hashFiles('composer.json', 'composer.lock') }}
-          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel || 'lockfile' }}-
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel || 'lockfile' }}-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel || 'lockfile' }}-${{ hashFiles('composer.json') }}-
 
       - name: Check Composer configuration
         if: ${{ !matrix.laravel }}
@@ -174,14 +176,16 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel }}-${{ hashFiles('composer.json', 'composer.lock') }}
-          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel }}-
+          key: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel }}-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: composer-${{ runner.os }}-php${{ matrix.php }}-laravel-${{ matrix.laravel }}-${{ hashFiles('composer.json') }}-
 
       - name: Install dependencies from composer.json
         env:
@@ -238,14 +242,16 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ runner.os }}-php8.4-ai-${{ matrix.laravel_ai_version }}-${{ hashFiles('composer.json', 'composer.lock') }}
-          restore-keys: composer-${{ runner.os }}-php8.4-ai-${{ matrix.laravel_ai_version }}-
+          key: composer-${{ runner.os }}-php8.4-ai-${{ matrix.laravel_ai_version }}-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: composer-${{ runner.os }}-php8.4-ai-${{ matrix.laravel_ai_version }}-${{ hashFiles('composer.json') }}-
 
       - name: Install dependencies from composer.json
         run: composer install --no-interaction --no-progress --prefer-dist
@@ -335,14 +341,16 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ runner.os }}-php8.4-ai-dev-${{ hashFiles('composer.json', 'composer.lock') }}
-          restore-keys: composer-${{ runner.os }}-php8.4-ai-dev-
+          key: composer-${{ runner.os }}-php8.4-ai-dev-${{ hashFiles('composer.json') }}-${{ steps.composer-cache.outputs.week }}
+          restore-keys: composer-${{ runner.os }}-php8.4-ai-dev-${{ hashFiles('composer.json') }}-
 
       - name: Install dependencies from composer.json
         run: composer install --no-interaction --no-progress --prefer-dist
