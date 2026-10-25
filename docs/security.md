@@ -40,6 +40,8 @@ Security scanning runs automatically alongside type analysis, no extra configura
 
 Known gap: `json_encode()`'s own `"` delimiters still close a double-quoted attribute or JS string, so `<div data-x="@json($value)">` is an unreported attribute breakout. It is accepted because such markup is visibly broken for every string, array or object value, so it rarely survives manual testing. Ints, bools and null encode bare and render fine, so a field that is numeric during testing can hide it. Single-quoted attributes (`data-x='@json($value)'`) and `<script>` blocks are safe with these flags. `@js($value)` / `Js::from($value)` is a complete JavaScript expression (never wrap it in quotes) that fits a script or a double-quoted attribute.
 
+Artisan commands, migrations and seeders print to a terminal, not an HTML page, so their `echo`/`print`/`printf()`/`var_dump()` output is not reported as `TaintedHtml` or `TaintedTextWithQuotes` (Psalm 7's `@psalm-cli-only`, applied to every subclass of `Illuminate\Console\Command`, `Illuminate\Database\Migrations\Migration` and `Illuminate\Database\Seeder`). Values stay tainted for every other sink, and printed secrets are still reported. Not covered: trait methods, closure commands in `routes/console.php`, and scheduled closures. Known gap: a command run through `Artisan::call()` during an HTTP request writes raw `echo` output into the response.
+
 Blade template scanning is opt-in: enable it with `<blade />` to also get `TaintedHtml` findings on unescaped `{!! !!}` output inside `.blade.php` files. See [Blade template analysis](blade.md).
 
 ### `ResponseFactory::make()` and `new Response()` HTML responses

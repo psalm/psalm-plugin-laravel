@@ -557,6 +557,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
+        require_once __DIR__ . '/Handlers/Console/CliOnlyConsoleCodeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Console\CliOnlyConsoleCodeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
