@@ -31,6 +31,28 @@ final class UnionProxyModel extends Model
 {
 }
 
+final class UnionProxyOtherProxy
+{
+    public function enabled(): string
+    {
+        return '';
+    }
+}
+
+final class UnionProxyOther
+{
+    public function __construct(public UnionProxyOtherProxy $first) {}
+}
+
+/**
+ * @template V
+ * @template K of array-key
+ * @extends Collection<K, V>
+ */
+final class UnionProxyReversed extends Collection
+{
+}
+
 /** @extends Collection<int, UnionProxyB> */
 final class UnionProxyListB extends Collection
 {
@@ -69,6 +91,63 @@ final class HigherOrderProxyUnionReceiverTest
         // a proxy the handler does not model declines: Psalm's own @mixin result stays
         $_unmodelled = $items->when->enabled();
         /** @psalm-check-type-exact $_unmodelled = bool */
+    }
+
+    /**
+     * @param Collection<int, UnionProxyA>|LazyCollection<int, UnionProxyB> $items
+     */
+    public function unionLast($items): void
+    {
+        $_last = $items->last->enabled();
+        /** @psalm-check-type-exact $_last = UnionProxyA|UnionProxyB|null */
+    }
+
+    /**
+     * @param Collection<int, UnionProxyA>|LazyCollection<string, UnionProxyB> $items
+     */
+    public function unionWithDifferingKeys($items): void
+    {
+        $_each = $items->each->enabled();
+        /** @psalm-check-type-exact $_each = Collection<int, UnionProxyA>|LazyCollection<string, UnionProxyB> */
+
+        $_map = $items->map->enabled();
+        /** @psalm-check-type-exact $_map = Collection<int, bool>|LazyCollection<string, bool> */
+    }
+
+    /**
+     * A non-collection branch has its own proxy shape, so the receiver is not modelled: Psalm's
+     * result for every branch stays.
+     *
+     * @param Collection<int, UnionProxyA>|LazyCollection<int, UnionProxyB>|UnionProxyOther $items
+     */
+    public function unionWithNonCollectionBranch($items): void
+    {
+        $_first = $items->first->enabled();
+        /** @psalm-check-type-exact $_first = bool|string */
+    }
+
+    /**
+     * @template T of Collection<int, UnionProxyA>
+     * @param Collection<int, UnionProxyA>|LazyCollection<int, UnionProxyB>|T $items
+     */
+    public function unionWithTemplateBranch($items): void
+    {
+        $_first = $items->first->enabled();
+        /** @psalm-check-type-exact $_first = bool */
+    }
+
+    /**
+     * A subclass that reorders its templates is positionally unreadable, so the answer is mixed.
+     *
+     * @param Collection<int, UnionProxyA>|UnionProxyReversed<UnionProxyB, int> $items
+     */
+    public function unionWithReorderedTemplates($items): void
+    {
+        $_first = $items->first->enabled();
+        /** @psalm-check-type-exact $_first = mixed */
+
+        $_each = $items->each->enabled();
+        /** @psalm-check-type-exact $_each = mixed */
     }
 
     /**

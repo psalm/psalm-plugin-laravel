@@ -23,6 +23,7 @@ use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 
 /**
@@ -153,12 +154,12 @@ final class HigherOrderCollectionProxyHandler implements
 
             // A receiver union of several collections is resolved per branch. An unknown proxy
             // shape or name declines, keeping Psalm's own result.
-            $branches = $proxyExpr instanceof PropertyFetch
-                ? self::receiverCollectionBranches($source, $proxyExpr)
-                : [];
-            if (\count($branches) > 1) {
+            $receiverType = $proxyExpr instanceof PropertyFetch
+                ? $source->getNodeTypeProvider()->getType($proxyExpr->var)
+                : null;
+            if ($receiverType instanceof Union && \count(self::collectionAtomics($receiverType, $source->getCodebase())) > 1) {
                 $unionType = $proxyMethod === null ? null : self::resolveProxyReturnTypeForUnion(
-                    $branches,
+                    $receiverType,
                     $proxyMethod,
                     self::extractCalledMethodName($expr),
                     $source->getCodebase(),
@@ -247,10 +248,9 @@ final class HigherOrderCollectionProxyHandler implements
             return null;
         }
 
-        $branches = self::collectionAtomics($collectionType, $source->getCodebase());
-        if (\count($branches) > 1) {
+        if (\count(self::collectionAtomics($collectionType, $source->getCodebase())) > 1) {
             return self::resolveProxyReturnTypeForUnion(
-                $branches,
+                $collectionType,
                 $proxyMethod,
                 $event->getMethodNameLowercase(),
                 $source->getCodebase(),
@@ -442,24 +442,34 @@ final class HigherOrderCollectionProxyHandler implements
      * keeps what the proxied method adds (first/last add null) instead of Psalm's raw `@mixin
      * TValue` result.
      *
-     * Declines (null) for an unknown proxy name. A branch whose item type is not readable (a
-     * non-generic subclass) makes the whole answer mixed rather than a guess from the others.
+     * Declines (null) for an unknown proxy name, and for a union holding anything besides
+     * collections and null (a template or another class whose own `first` proxy would be overwritten).
+     * A branch whose TKey/TValue are not provably its first two type params (a non-generic
+     * subclass, reordered templates) makes the whole answer mixed rather than a guess.
      *
-     * @param list<TNamedObject> $branches the Enumerable atomics of the receiver, at least two
+     * @param Union $receiverType a union with at least two Enumerable atomics
      * @param lowercase-string $proxyMethod
      * @param lowercase-string $calledMethod
      */
     private static function resolveProxyReturnTypeForUnion(
-        array $branches,
+        Union $receiverType,
         string $proxyMethod,
         string $calledMethod,
         Codebase $codebase,
     ): ?Union {
+        $branches = self::collectionAtomics($receiverType, $codebase);
+
+        foreach ($receiverType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNull && !\in_array($atomic, $branches, true)) {
+                return null;
+            }
+        }
+
         $combined = null;
         $opaqueBranch = false;
 
         foreach ($branches as $branch) {
-            $readable = $branch instanceof TGenericObject && \count($branch->type_params) >= 2;
+            $readable = $branch instanceof TGenericObject && self::bindsKeyAndValuePositionally($branch, $codebase);
             $opaqueBranch = $opaqueBranch || !$readable;
 
             // An unreadable branch still resolves, with placeholders, so an unknown proxy name declines.
@@ -483,15 +493,27 @@ final class HigherOrderCollectionProxyHandler implements
     }
 
     /**
-     * The Enumerable atomics of the type the proxy property is read from.
+     * Whether the atomic's first two type params are exactly what it binds `Enumerable::TKey` and
+     * `TValue` to: the resolver rebuilds `Class<TKey, TValue>` positionally, which is wrong for a
+     * subclass that reorders or drops its templates.
      *
-     * @return list<TNamedObject>
+     * @psalm-capabilities read-props
      */
-    private static function receiverCollectionBranches(\Psalm\StatementsSource $source, PropertyFetch $proxyExpr): array
+    private static function bindsKeyAndValuePositionally(TGenericObject $atomic, Codebase $codebase): bool
     {
-        $receiverType = $source->getNodeTypeProvider()->getType($proxyExpr->var);
+        if (\count($atomic->type_params) < 2) {
+            return false;
+        }
 
-        return $receiverType instanceof Union ? self::collectionAtomics($receiverType, $source->getCodebase()) : [];
+        foreach (['TKey', 'TValue'] as $position => $template) {
+            $projected = ClassLineage::projectedTemplate($codebase, $atomic, Enumerable::class, $template);
+
+            if (!$projected instanceof Union || $projected->getId() !== $atomic->type_params[$position]->getId()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
