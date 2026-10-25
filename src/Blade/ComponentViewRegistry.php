@@ -234,7 +234,8 @@ final class ComponentViewRegistry
         }
 
         // Taint, not typing: every class whose `render()` names the view hands it its public properties,
-        // contested or not, so two classes sharing a view each contribute theirs.
+        // contested or not, so two classes sharing a view each contribute theirs. `componentData()`
+        // overwrites the slot names with the rendered slot, so a property of that name never arrives.
         foreach ($exposing as $templatePath => $classes) {
             $shadowPath = $shadowPaths[$templatePath] ?? null;
 
@@ -244,7 +245,9 @@ final class ComponentViewRegistry
 
             foreach ($classes as $storage) {
                 foreach (ComponentRenderData::exposedPropertyIds($codebase, $storage) as $name => $id) {
-                    self::$propertyIds[$shadowPath][$name][$id] = $id;
+                    if (!isset(self::SLOT_OWNED[$name])) {
+                        self::$propertyIds[$shadowPath][$name][$id] = $id;
+                    }
                 }
             }
         }
