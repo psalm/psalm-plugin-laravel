@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792969500531,
+  "lastUpdate": 1793002352175,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16825,6 +16825,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 40.13,
             "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1313,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e61b0b139f7011ed57f5fe52cb9f2d6b3a43d4c1",
+          "message": "fix(blade): compile shadows with livewire/blaze disabled (#2124)\n\nBlaze's earliest string preparation callback rewrites every <x-...> tag\ninto a require of its own compiled function, an unchecked\nltrim(ob_get_clean()) and slot stacks, and wraps Blaze component views\nin an untyped function. None of it is code the author wrote, and it\nreported UnresolvableInclude, MissingParamType, PossiblyFalseArgument\nand PossiblyUndefinedGlobalVariable on nearly every tag line.\n\nThe Blade bootstrapper now sets blaze.enabled and blaze.debug to false\nand calls BlazeManager::disable() before compiling, so Blade compiles\nthe tags as it does without Blaze. The manifest version is bumped so\nshadows cached with Blaze enabled recompile.",
+          "timestamp": "2026-10-26T09:08:57+01:00",
+          "tree_id": "8ad29c4c11275cb8146ed95bb64fe65e2cc2033f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/e61b0b139f7011ed57f5fe52cb9f2d6b3a43d4c1"
+        },
+        "date": 1793002350315,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.69,
+            "range": "± 0.1",
             "unit": "s"
           },
           {
