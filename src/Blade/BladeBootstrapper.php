@@ -594,8 +594,9 @@ final class BladeBootstrapper
      * function, code the author never wrote (UnresolvableInclude, MissingParamType, an unchecked
      * `ltrim(ob_get_clean())` per tag). Disabled, the callback returns its input unchanged and Blade
      * compiles the tags as it does without Blaze, Blaze's own `blaze.enabled = false` behavior.
-     * Runs before any shadow compiles; `BlazeManager` caches both flags on first read, so the
-     * config write only covers what the app has not already read or forced through `Blaze::debug()`.
+     * Runs before any shadow compiles. `BlazeManager` caches both flags on first read (Blaze reads
+     * `isDebugging()` at boot), so the config write alone is not enough: `disable()` and a reset of
+     * the cached debug flag override what the app already read or forced through `Blaze::debug()`.
      * Fails open: a Blaze that cannot be disabled keeps compiling as the app would.
      */
     private function disableBlaze(): void
@@ -615,6 +616,13 @@ final class BladeBootstrapper
 
             if (\method_exists($instance, 'disable')) {
                 \call_user_func([$instance, 'disable']);
+            }
+
+            // Blaze's own booted callback has already cached `isDebugging()` from `blaze.debug`, and a
+            // disabled-but-debugging Blaze still instruments every tag (`compileForDebug()`). No public
+            // setter clears it.
+            if (\property_exists($instance, 'debug')) {
+                (new \ReflectionProperty($instance, 'debug'))->setValue($instance, false);
             }
         } catch (\Throwable) {
             // Blaze stays enabled: its generated code is reported, as before this gate.

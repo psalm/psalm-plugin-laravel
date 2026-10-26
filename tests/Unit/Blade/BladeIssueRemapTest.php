@@ -291,8 +291,8 @@ final class BladeIssueRemapTest extends TestCase
     /**
      * livewire/blaze rewrites a component tag into a `require` of its compiled function and an
      * unchecked `ltrim(ob_get_clean())`, which reported UnresolvableInclude and
-     * PossiblyFalseArgument on the tag line. Shadows compile with Blaze disabled, and the author's
-     * own line 2 still reports.
+     * PossiblyFalseArgument on the tag line. Shadows compile with Blaze disabled, including a debug
+     * mode Blaze cached from config at boot, and the author's own line 2 still reports.
      */
     #[Test]
     public function blaze_compiled_tags_report_nothing_but_the_authors_code_still_reports(): void
