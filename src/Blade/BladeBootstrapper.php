@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Factory;
@@ -105,6 +106,8 @@ final class BladeBootstrapper
         if (!$compiler instanceof BladeCompiler) {
             return false;
         }
+
+        $this->disableBlaze();
 
         $viewPaths = $this->resolveViewPaths();
 
@@ -583,6 +586,39 @@ final class BladeBootstrapper
         }
 
         return $compiler;
+    }
+
+    /**
+     * livewire/blaze's earliest string preparation callback rewrites every `<x-...>` tag into a
+     * `require` of its own compiled function and wraps a Blaze component view in an untyped
+     * function, code the author never wrote (UnresolvableInclude, MissingParamType, an unchecked
+     * `ltrim(ob_get_clean())` per tag). Disabled, the callback returns its input unchanged and Blade
+     * compiles the tags as it does without Blaze, Blaze's own `blaze.enabled = false` behavior.
+     * Runs before any shadow compiles; `BlazeManager` caches both flags on first read, so the
+     * config write only covers what the app has not already read or forced through `Blaze::debug()`.
+     * Fails open: a Blaze that cannot be disabled keeps compiling as the app would.
+     */
+    private function disableBlaze(): void
+    {
+        $manager = 'Livewire\\Blaze\\BlazeManager';
+
+        if (!$this->app->bound($manager)) {
+            return;
+        }
+
+        try {
+            $config = $this->app->bound('config') ? $this->app->make(Repository::class) : null;
+            $config?->set(['blaze.enabled' => false, 'blaze.debug' => false]);
+
+            /** @var object $instance */
+            $instance = $this->app->make($manager);
+
+            if (\method_exists($instance, 'disable')) {
+                \call_user_func([$instance, 'disable']);
+            }
+        } catch (\Throwable) {
+            // Blaze stays enabled: its generated code is reported, as before this gate.
+        }
     }
 
     /**
