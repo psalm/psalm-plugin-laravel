@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793002352175,
+  "lastUpdate": 1793005763766,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16865,6 +16865,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1313,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c40cbb8ad8e7afc081e56a9f2ebd8abe140bde35",
+          "message": "fix(blade): reset Blaze's cached debug flag when disabling it (#2125)\n\nBlaze caches isDebugging() from blaze.debug at boot, and a disabled but\ndebugging Blaze still instruments every tag through compileForDebug().\nDocument that Blaze's compile time validation no longer runs.",
+          "timestamp": "2026-10-26T10:05:53+01:00",
+          "tree_id": "52c745ca1221c62dc217e61c4989c7267a94b8a1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c40cbb8ad8e7afc081e56a9f2ebd8abe140bde35"
+        },
+        "date": 1793005761735,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.59,
+            "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1314,
             "unit": "MB"
           }
         ]
