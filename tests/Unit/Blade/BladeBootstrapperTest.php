@@ -952,4 +952,68 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertStringContainsString('Blade template analysis is disabled for this run', $this->progress->warningText());
         $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
     }
+
+    // Issue #2126: a class a template declares must never replace, or switch off the analysis of, a
+    // class another file declares under the same FQCN.
+
+    #[Test]
+    public function a_template_class_redeclaring_a_project_class_is_blanked_for_psalm_and_reported_on_the_template(): void
+    {
+        $template = $this->writeTemplate('doc.blade.php', "<?php\nnamespace App;\n\nfinal class Foo\n{\n    public function f(): int\n    {\n        return 1;\n    }\n}\n?>\n<p>{{ \$x }}</p>\n");
+        $registrar = new RecordingShadowRegistrar(existingClassFiles: ['App\Foo' => '/project/app/Foo.php']);
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        [$shadow] = $registrar->analyzedShadows;
+        $onDisk = (string) \file_get_contents($shadow);
+        $this->assertStringContainsString('final class Foo', $onDisk, 'the shadow cache must stay pristine');
+
+        $this->assertSame([$shadow], \array_keys($registrar->overriddenShadows));
+        $blanked = $registrar->overriddenShadows[$shadow];
+        $this->assertStringNotContainsString('class Foo', $blanked);
+        $this->assertStringContainsString('$x', $blanked, 'code after the class is kept');
+        $this->assertSame(\substr_count($onDisk, "\n"), \substr_count($blanked, "\n"), 'every line number must survive');
+        $this->assertSame(\strlen($onDisk), \strlen($blanked));
+
+        $this->assertSame([[$template, 4, 'App\Foo', '/project/app/Foo.php', []]], $registrar->classCollisions);
+    }
+
+    #[Test]
+    public function the_first_template_in_path_order_owns_a_class_name_two_templates_declare(): void
+    {
+        $first = $this->writeTemplate('a-first.blade.php', "<?php\nclass Shared {}\n?>\n");
+        $second = $this->writeTemplate('b-second.blade.php', "<?php\nclass Shared {}\n?>\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertCount(1, $registrar->overriddenShadows);
+        $this->assertSame([[$second, 2, 'Shared', $first, []]], $registrar->classCollisions);
+    }
+
+    #[Test]
+    public function a_class_nothing_else_declares_is_left_for_psalm_to_analyze(): void
+    {
+        $this->writeTemplate('own.blade.php', "<?php\nclass OnlyHere {}\n?>\n");
+        $registrar = new RecordingShadowRegistrar(existingClassFiles: ['Other\Thing' => '/project/app/Thing.php']);
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertSame([], $registrar->overriddenShadows);
+        $this->assertSame([], $registrar->classCollisions);
+    }
+
+    /** The collision is decided from the shadow on disk, so a warm manifest run (no compile) decides the same. */
+    #[Test]
+    public function a_colliding_class_is_withheld_on_a_warm_manifest_run_too(): void
+    {
+        $this->writeTemplate('doc.blade.php', "<?php\nclass Foo {}\n?>\n");
+        $this->bootstrapper($this->app(), new RecordingShadowRegistrar())->boot();
+
+        $second = new RecordingShadowRegistrar(existingClassFiles: ['Foo' => '/project/Foo.php']);
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        $this->assertCount(1, $second->overriddenShadows);
+        $this->assertCount(1, $second->classCollisions);
+    }
 }

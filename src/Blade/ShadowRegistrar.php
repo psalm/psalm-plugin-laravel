@@ -83,4 +83,49 @@ interface ShadowRegistrar
      * @psalm-impure
      */
     public function reportCompileFailure(string $templatePath, string $source, string $message): void;
+
+    /**
+     * The file that already defines `$className` independently of any template (#2126): the one
+     * Composer would load it from, or the one the booted application loaded it from. A template
+     * declaring the same FQCN would make Psalm raise DuplicateClass and switch off the analysis of
+     * BOTH declarations, so the caller withholds the template's own.
+     *
+     * @param string $className fully-qualified, without a leading backslash
+     *
+     * @return string|null null when nothing outside the templates defines it (a class PHP itself
+     *                     declares has no file and counts as undefined here)
+     *
+     * @psalm-impure
+     */
+    public function existingClassFile(string $className): ?string;
+
+    /**
+     * Makes Psalm read `$contents` instead of the shadow on disk, which stays untouched: the shadow
+     * cache is keyed by template content and must never encode what else the project declares.
+     *
+     * @param string $contents the shadow with every line break kept, so its line map still applies
+     *
+     * @psalm-impure
+     */
+    public function overrideShadowContents(string $shadowPath, string $contents): void;
+
+    /**
+     * Reports `DuplicateClass` on a template line for a class whose declaration the shadow no
+     * longer carries. Only called after {@see self::markTemplatesReportable()} succeeded.
+     *
+     * @param string       $source     the template source, or empty when it could not be read
+     * @param string       $className  the declared FQCN
+     * @param string       $firstFile  the file that defines it first: a project file or another template
+     * @param list<string> $suppressed issue types the template suppressed on that line
+     *
+     * @psalm-impure
+     */
+    public function reportClassCollision(
+        string $templatePath,
+        string $source,
+        int $line,
+        string $className,
+        string $firstFile,
+        array $suppressed,
+    ): void;
 }

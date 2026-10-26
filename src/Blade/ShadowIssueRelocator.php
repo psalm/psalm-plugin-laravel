@@ -430,7 +430,8 @@ final class ShadowIssueRelocator
         }
 
         $templateLine = $target->templateLineFor($issue->code_location->getLineNumber());
-        $message = self::remapMessage($issue, $target) . self::namedSlotHint($issue, $target);
+        $message = self::rewriteShadowPaths(self::remapMessage($issue, $target), $issue->code_location->file_path, $resolve)
+            . self::namedSlotHint($issue, $target);
 
         if ($templateLine < 1) {
             // `ExistingAtomicMethodCallAnalyzer`'s `__get` handling re-checks `sealAllProperties`
@@ -540,6 +541,24 @@ final class ShadowIssueRelocator
         ) ?? $message;
 
         return JourneyRemapper::rewriteLocationSummaries($message, $issue->code_location->file_name, $target) ?? $message;
+    }
+
+    /**
+     * Any OTHER registered shadow a message names becomes its template's name (#2126): Psalm words
+     * `Class X has already been defined in <path>` with the first definition's path, which is a
+     * cache file whenever a template declared it. Every shadow sits in one directory, so the
+     * issue's own shadow path locates the rest; a path no template owns stays as Psalm wrote it.
+     * The issue's own `path:line` references were already rewritten by {@see self::remapMessage()}.
+     *
+     * @param \Closure(string): ?ShadowTarget $resolve
+     */
+    private static function rewriteShadowPaths(string $message, string $ownShadowPath, \Closure $resolve): string
+    {
+        return \preg_replace_callback(
+            '/' . \preg_quote(\dirname($ownShadowPath) . '/', '/') . '[^\s\/\'"]+?\.php/',
+            static fn(array $matches): string => $resolve($matches[0])?->templateName ?? $matches[0],
+            $message,
+        ) ?? $message;
     }
 
     /**

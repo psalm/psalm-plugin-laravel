@@ -79,6 +79,9 @@ final class BladeBootstrapper
     /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
     private array $compileFailures = [];
 
+    /** @var list<array{0: string, 1: string, 2: int, 3: string, 4: string}> template path, shadow path, shadow line, class, first file */
+    private array $classCollisions = [];
+
     private ?BladeDisabledException $disabled = null;
 
     /** Why boot() disabled Blade analysis, chaining the crash behind it; null when it activated or merely found nothing to analyze. */
@@ -218,8 +221,10 @@ final class BladeBootstrapper
         // tokens feed the class-component scan (#1804).
         $collector = new ClassLiteralCollector();
         $literalCandidates = [];
+        /** @var array<string, string> $claimedClasses lowercased FQCN => the template whose shadow declares it */
+        $claimedClasses = [];
 
-        foreach ($shadows as $shadowPath) {
+        foreach ($shadows as $templatePath => $shadowPath) {
             $shadowSource = @\file_get_contents($shadowPath);
 
             if ($shadowSource === false) {
@@ -227,6 +232,7 @@ final class BladeBootstrapper
             }
 
             $tokens = \token_get_all($shadowSource);
+            $this->withholdCollidingClasses($templatePath, $shadowPath, $shadowSource, $tokens, $claimedClasses);
 
             foreach ($collector->collectFromTokens($tokens) as $candidate) {
                 $literalCandidates[$candidate] = true;
@@ -260,6 +266,7 @@ final class BladeBootstrapper
         $this->publishTemplateFacts();
         ContractRegistry::registerComposerSources($composerSources);
         $this->reportCompileFailures();
+        $this->reportClassCollisions($manifest);
 
         return true;
     }
@@ -268,6 +275,63 @@ final class BladeBootstrapper
     {
         foreach ($this->compileFailures as $templatePath => [$source, $message]) {
             $this->registrar->reportCompileFailure($templatePath, $source, $message);
+        }
+    }
+
+    /**
+     * #2126: Psalm scans a shadow like a project file, so a class a template declares competes with
+     * the project's for its FQCN, and the loser's DuplicateClass switches off the analysis of BOTH
+     * declarations: the project class would lose its own findings, in an order that depends on scan
+     * scheduling. A declaration of a name another template or the project already defines is blanked
+     * out of what Psalm reads (the shadow on disk is untouched), and reported once on the template.
+     * Templates arrive sorted, so the first one in path order owns a shared name.
+     *
+     * @param array<array-key, array{0: int, 1: string, 2: int}|string> $tokens
+     * @param array<string, string>                                    $claimedClasses appended to
+     */
+    private function withholdCollidingClasses(
+        string $templatePath,
+        string $shadowPath,
+        string $shadowSource,
+        array $tokens,
+        array &$claimedClasses,
+    ): void {
+        $ranges = [];
+
+        foreach (TemplateClassDeclarations::find($shadowSource, $tokens) as $declaration) {
+            $key = \strtolower($declaration['name']);
+            $firstFile = $claimedClasses[$key] ?? $this->registrar->existingClassFile($declaration['name']);
+
+            if ($firstFile === null) {
+                $claimedClasses[$key] = $templatePath;
+
+                continue;
+            }
+
+            $ranges[] = [$declaration['start'], $declaration['end']];
+            $this->classCollisions[] = [$templatePath, $shadowPath, $declaration['line'], $declaration['name'], $firstFile];
+        }
+
+        if ($ranges !== []) {
+            $this->registrar->overrideShadowContents($shadowPath, TemplateClassDeclarations::blank($shadowSource, $ranges));
+        }
+    }
+
+    /** Needs the templates reportable and the shadow entries (line map, suppressions) published. */
+    private function reportClassCollisions(ShadowManifest $manifest): void
+    {
+        foreach ($this->classCollisions as [$templatePath, $shadowPath, $shadowLine, $className, $firstFile]) {
+            $entry = $manifest->shadowEntry($shadowPath);
+            $line = \max(1, $entry?->lineMap[$shadowLine] ?? 0);
+
+            $this->registrar->reportClassCollision(
+                $templatePath,
+                ShadowRegistry::templateSource($templatePath) ?? '',
+                $line,
+                $className,
+                $firstFile,
+                $entry?->suppressions[$line] ?? [],
+            );
         }
     }
 

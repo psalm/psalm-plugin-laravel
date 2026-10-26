@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Blade;
 use Psalm\CodeLocation\Raw;
 use Psalm\Config;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\Issue\DuplicateClass;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Issues\BladeCompileError;
 
@@ -105,6 +106,58 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
         );
     }
 
+    /** @inheritDoc */
+    #[\Override]
+    public function existingClassFile(string $className): ?string
+    {
+        $composerFile = $this->projectAnalyzer->getCodebase()->config->getComposerFilePathForClassLike($className);
+
+        if ($composerFile !== false) {
+            // Composer's loaders hand back `vendor/composer/../../app/Foo.php`, which would reach a message verbatim.
+            $resolved = \realpath($composerFile);
+
+            return $resolved === false ? $composerFile : $resolved;
+        }
+
+        if (!$this->isDeclaredInProcess($className)) {
+            return null;
+        }
+
+        /** @var class-string $declared proven by the check above */
+        $declared = $className;
+        $file = (new \ReflectionClass($declared))->getFileName();
+
+        return $file === false ? null : $file;
+    }
+
+    /** @inheritDoc */
+    #[\Override]
+    public function overrideShadowContents(string $shadowPath, string $contents): void
+    {
+        $this->projectAnalyzer->getCodebase()->addTemporaryFileChanges($shadowPath, $contents);
+    }
+
+    /** @inheritDoc */
+    #[\Override]
+    public function reportClassCollision(
+        string $templatePath,
+        string $source,
+        int $line,
+        string $className,
+        string $firstFile,
+        array $suppressed,
+    ): void {
+        $config = $this->projectAnalyzer->getCodebase()->config;
+        $name = $config->shortenFileName($templatePath);
+        $location = TemplateLocation::atLine($templatePath, $name, $source, $line)
+            ?? new Raw($source, $templatePath, $name, 0, 0);
+
+        IssueBuffer::accepts(
+            new DuplicateClass('Class ' . $className . ' has already been defined in ' . $config->shortenFileName($firstFile), $location),
+            $suppressed,
+        );
+    }
+
     /**
      * Whether Psalm could resolve `$candidate` to a file WITHOUT this method's own queueing being
      * the reason it can. Neither arm below triggers autoloading (`class_exists()` etc. are always
@@ -118,13 +171,14 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
      */
     private function isIndependentlyResolvable(Config $config, string $candidate): bool
     {
-        if ($config->getComposerFilePathForClassLike($candidate) !== false) {
-            return true;
-        }
+        return $config->getComposerFilePathForClassLike($candidate) !== false || $this->isDeclaredInProcess($candidate);
+    }
 
-        return \class_exists($candidate, false)
-            || \interface_exists($candidate, false)
-            || \trait_exists($candidate, false)
-            || \enum_exists($candidate, false);
+    private function isDeclaredInProcess(string $className): bool
+    {
+        return \class_exists($className, false)
+            || \interface_exists($className, false)
+            || \trait_exists($className, false)
+            || \enum_exists($className, false);
     }
 }

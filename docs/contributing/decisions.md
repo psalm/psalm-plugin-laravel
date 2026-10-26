@@ -687,6 +687,19 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 **Rejected alternatives:**
 - **A `string|null $key` stub.** Silences the `null` default from the original report, but hides a real `null` passed to a hand-written call in any PHP file. It also covers only `null`: `false`, `0`, `[]` defaults and the keyed arm's `NoValue` keep reporting.
 
+### A template's duplicate class is blanked in what Psalm reads, not dropped at the relocator (#2126)
+
+**Decision:** `BladeBootstrapper::withholdCollidingClasses()` overwrites a template-declared class-like whose FQCN another template or a Composer-resolvable or already loaded class owns with spaces (line breaks kept), hands that text to Psalm through `Codebase::addTemporaryFileChanges()` and reports `DuplicateClass` on the template line itself. Details: [Boot and registration](blade.md#boot-and-registration).
+
+**Why:** the damage happens at scan time, before any issue exists. `ClassLikeNodeScanner` flags BOTH declarations `has_visitor_issues` and the analyzer skips them, so the project class lost its findings, in an order set by scan scheduling. Only keeping the second declaration out of the scan fixes that, and doing it in the text Psalm reads leaves the shadow cache a pure function of the template.
+
+**Rejected alternatives:**
+- **Dropping `DuplicateClass` in the relocator.** Keyed on a name alone it silences the author's signal, and it does not bring the project class's findings back.
+- **Skipping the whole colliding template.** Loses every other finding of a template that is legitimate when its pages render in separate requests.
+- **Renaming the declaration to a shadow-private name.** References inside the template would need rewriting, and the private name would leak into every message.
+- **Rewriting the shadow file, or compiling with a reserved-name set.** The manifest is keyed on template content, so project state would go stale in the cache.
+- **Scanning the project's files for declarations first.** Unbounded cost on a large app for a rare shape; the residual is listed in [Known limits](blade.md#known-limits).
+
 ## Per-Run Overrides
 
 ### One internal transport, bool and enum keys only
