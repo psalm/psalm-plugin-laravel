@@ -416,6 +416,30 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #2127: Psalm caps a location's snippet at the selection end plus 50 bytes on a line longer
+     * than 200 characters, so the gates that read text FORWARD of the selection saw a call cut off
+     * mid-arguments and kept a compiler-generated finding.
+     *
+     * Line 2 is `@includeIf($view, $data)`, which compiles to `$__env->exists($view, $data)` (one
+     * argument more than `Factory::exists()` takes) next to a second copy of the arguments in
+     * `$__env->make(...)`, so its `)` lies past the cap and the generated call must still be
+     * dropped. Line 3 is an author-written over-arity call on an equally long line: its `)` is
+     * past the cap too, and it must survive the template provenance check once the call is read
+     * in full.
+     */
+    #[Test]
+    public function a_generated_over_arity_call_is_dropped_on_a_line_past_psalms_snippet_cap(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [3],
+            $this->linesFor($issues, 'TooManyArguments', 'resources/views/long-line-arity.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1499: `@lang('key')` / `@lang('key', $replace)` compile to
      * `app('translator')->get('key', $replace)`, which without a narrowing provider on
      * `Translator::get()` falls back to the vendor docblock's `string|array` union and

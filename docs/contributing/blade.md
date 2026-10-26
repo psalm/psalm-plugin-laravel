@@ -372,6 +372,8 @@ A registered Blade precompiler (Livewire's component tags are the common case, `
 
 The arity gate applies to `TooManyArguments` alone. A compiled `@include` or `@extends` chain also expands into calls (`$__env->make()`), and gating the whole family on the same rule would silently hide a real `MissingView`. The echo-position gate above reuses the same "does this piece of the shadow occur in the template?" mechanism but is anchored on two specific callees at one argument position, so it cannot reach any other call. Anything either gate cannot read, or cannot recognise as the call shape it expects, keeps its issue: the failure direction is extra noise rather than a lost finding.
 
+Gates that read text forward of an issue's position (the arity gate's call, the literal-receiver call) read it through `ShadowSelection`, which runs the snippet to the end of the shadow line however long the line is: Psalm's own snippet stops 50 bytes past the selection on a line over 200 characters, which cut a generated `$__env->exists($view, $data)` mid-arguments and kept its `TooManyArguments` (#2127). A call whose closing `)` is on a LATER shadow line than the selection is still not read and keeps its issue.
+
 A `match` follows Psalm's behavior on plain PHP (#1801). Inside an arm (its conditions and body) `RedundantCondition` and `RedundantConditionGivenDocblockType` are dropped, as Psalm drops them there; the `match` subject and a `match` used as an operand (`if (match (...) {...})`) still report them. Accepted residual: for a `match` without a default arm Psalm analyzes the arm conditions a second time outside that suppression and can report there, a template does not.
 
 ## Annotation implementation

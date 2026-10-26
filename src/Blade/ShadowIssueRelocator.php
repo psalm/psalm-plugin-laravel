@@ -619,8 +619,6 @@ final class ShadowIssueRelocator
      * "generated" (#1540). A rewrite an arbitrary precompiler or `prepareStringsForCompilationUsing()`
      * callback makes is NOT mirrored and still drops the issue; not fixable without knowing what
      * that rewrite does.
-     *
-     * @psalm-external-mutation-free
      */
     private static function isGeneratedArityMismatch(TooManyArguments $issue, ShadowTarget $target): bool
     {
@@ -663,8 +661,6 @@ final class ShadowIssueRelocator
      * what the gate drops. Caveat it accepts: when Blade rewrote the argument of a genuinely
      * GENERATED echo (`{{ old('@@foo') }}`), the callee can no longer be proven and the issue is
      * kept. Noise on a rare shape, the same direction every other decline here takes.
-     *
-     * @psalm-mutation-free
      */
     private static function isGeneratedEchoArgument(ArgumentIssue $issue, ShadowTarget $target): bool
     {
@@ -708,8 +704,6 @@ final class ShadowIssueRelocator
      * bug (a null key; PHP 8.5 deprecates it in `array_key_exists()`). Telling them apart would
      * mean reading the list literal back out of the `@aware(...)` directive, which this gate does
      * not do. The shape is rare. Pinned by `BladeIssueRemapTest::a_non_string_aware_list_item_stays_silent_known_limitation()`.
-     *
-     * @psalm-mutation-free
      */
     private static function isGeneratedAwareArgument(CodeIssue $issue, ShadowTarget $target): bool
     {
@@ -754,8 +748,6 @@ final class ShadowIssueRelocator
      * {@see self::callExpression()}.
      *
      * @return array{string, string}|null `[enclosing call, argument]`
-     *
-     * @psalm-pure
      */
     private static function echoArgumentSlice(CodeLocation $location, string $callee): ?array
     {
@@ -808,8 +800,6 @@ final class ShadowIssueRelocator
      * which Psalm judges against whatever `$value` the author has in scope (#1724). The statement
      * must be absent from the template, so an author who writes it keeps the finding; in that
      * template every compiled save keeps it too.
-     *
-     * @psalm-mutation-free
      */
     private static function isGeneratedValueSave(CodeIssue $issue, ShadowTarget $target): bool
     {
@@ -838,8 +828,6 @@ final class ShadowIssueRelocator
      * template as Blade rewrites it (comments and component-class markers removed), so an author
      * who writes it, even split by text Blade removes, keeps the finding. Residual: an author's
      * copy in text that never executes (`@verbatim`, plain markup) keeps every compiled copy too.
-     *
-     * @psalm-mutation-free
      */
     private static function isGeneratedAttributesCheck(CodeIssue $issue, ShadowTarget $target): bool
     {
@@ -856,8 +844,6 @@ final class ShadowIssueRelocator
      * template, so an author's own `{{ 'x'->value() }}` keeps the finding. Psalm positions the issue
      * on the method name, so the receiver is read back off the shadow text right before it; a
      * receiver on an earlier line is unreadable and keeps the finding.
-     *
-     * @psalm-external-mutation-free
      */
     private static function isGeneratedLiteralReceiverCall(InvalidMethodCall $issue, ShadowTarget $target): bool
     {
@@ -887,8 +873,6 @@ final class ShadowIssueRelocator
      * The called expression an issue points at, read out of the shadow, or null to decline —
      * fail open, since dropping a real author issue is the costly direction and an unreadable
      * location is no evidence of anything.
-     *
-     * @psalm-external-mutation-free
      */
     private static function callExpression(CodeLocation $location): ?string
     {
@@ -916,8 +900,6 @@ final class ShadowIssueRelocator
 
     /**
      * The source text an issue's location selects in the shadow, or null when unreadable.
-     *
-     * @psalm-pure
      */
     private static function selectedText(CodeLocation $location): ?string
     {
@@ -931,8 +913,6 @@ final class ShadowIssueRelocator
     /**
      * Whether the shadow text right after the selection starts with $next. False when unreadable
      * or when the selection ends the snippet.
-     *
-     * @psalm-pure
      */
     private static function selectionFollowedBy(CodeLocation $location, string $next): bool
     {
