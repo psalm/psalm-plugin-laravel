@@ -31,7 +31,7 @@ flowchart TD
         stubs/common/ (types + taint annotations)
         versioned dirs, ascending (e.g. stubs/12.42.0/, stubs/13.5.0/, stubs/13.8.0/)
         stubs/integrations/carbon/ (gated on installed nesbot/carbon version)
-        aliases.phpstub (generated here from AliasLoader)
+        aliases.phpstub (generated here from AliasLoader: one class_alias() line per alias)
     "]
 
     I["Psalm scans all project files"] -.->|afterCodebasePopulated| J["ModelRegistrationHandler"]
@@ -42,6 +42,7 @@ flowchart TD
     I -.->|afterCodebasePopulated| FTF["FacadeTaintForwardingHandler (copies taint sinks from a facade's forwarding target onto its @method pseudo-methods)"]
     I -.->|afterCodebasePopulated| RCS["RedeclaredClassSealHandler (restores the sealAllMethods default on stub-re-declared classes with a throwing __call)"]
     I -.->|afterCodebasePopulated| CLI["CliOnlyConsoleCodeHandler (sets Psalm's cli_only on every Command, Migration and Seeder subclass)"]
+    I -.->|afterCodebasePopulated| CAS["ClassAliasStorageHandler (registers each alias target's class storage under the alias name, so raw-name lookups such as Alias::Case cannot crash Psalm, #2128)"]
     J --- models["
         Discover Model subclasses
         Register per-model property/method closures:

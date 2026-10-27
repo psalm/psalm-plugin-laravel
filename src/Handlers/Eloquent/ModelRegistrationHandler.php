@@ -110,11 +110,12 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
             }
 
             // Laravel registers 'Eloquent' => Model::class in Facade::defaultAliases(), so
-            // AliasLoader::load() runs `class_alias(Model::class, 'Eloquent')` in every booted app.
-            // Psalm's alias stub declares "Eloquent" as an empty Model subclass (satisfying the
-            // parent_classes check above), but at runtime it IS Model — class_alias makes them the
-            // same class, which has no parent. A real model always has Model (or an app base class)
-            // as its runtime parent, so this is a reliable way to filter out the base class and any
+            // AliasLoader::load() runs `class_alias(Model::class, 'Eloquent')` in every booted app,
+            // and the alias stub is a `class_alias()` line too. A scanned `class Eloquent extends Model`
+            // declaration (laravel-ide-helper's `_ide_helper.php`) is the case that reaches this loop:
+            // Psalm keeps it as a real class with Model as parent, but at runtime `Eloquent` IS Model,
+            // which has no parent. A real model always has Model (or an app base class) as its
+            // runtime parent, so this is a reliable way to filter out the base class and any
             // alias of it without hardcoding alias names.
             if (\get_parent_class($storage->name) === false) {
                 continue;
