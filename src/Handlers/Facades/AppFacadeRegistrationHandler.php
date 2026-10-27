@@ -298,12 +298,11 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      * Forwarding needs two runtime facts, both read from what PHP dispatches because Psalm's storage
      * can disagree with it:
      * - The root's effective `__call` is not Macroable's, which throws `BadMethodCallException`
-     *   for anything but a registered macro. Psalm's `ClassLikeNodeScanner` ignores `insteadof`
-     *   precedence (vimeo/psalm#12113) and keeps the first-listed trait, so it can name either trait
-     *   wrongly in both directions: `use Forwarder, Macroable { Macroable::__call insteadof Forwarder; }`
-     *   is stored as the forwarder, `use Macroable, Forwarder { Forwarder::__call insteadof Macroable; }`
-     *   as Macroable. A root whose `__call` is not its own is therefore compared by reflected file and
-     *   start line, because `ReflectionMethod::getDeclaringClass()` names the using class for trait methods.
+     *   for anything but a registered macro. Storage cannot say which: `ClassLikeNodeScanner` ignores
+     *   `insteadof` precedence (vimeo/psalm#12113) and keeps the first-listed trait, and a class-level
+     *   stub can redeclare `__call` on a root that uses Macroable at runtime. The reflected file and
+     *   start line decide, because `ReflectionMethod::getDeclaringClass()` names the using class
+     *   for trait methods.
      * - The facade's effective `__callStatic` is Laravel's `Facade::__callStatic`, the only
      *   dispatcher that reaches the root's `__call`. `use Macroable` on the facade or an own
      *   `__callStatic` replaces it and throws first, even if it would forward.
@@ -336,9 +335,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
         if (
             $callMethodId === null
             || !self::facadeUsesLaravelDispatcher($facadeStorage->name)
-            // A `__call` the root declares itself always wins over trait methods; any other origin,
-            // Macroable included, is checked against what PHP runs.
-            || (\strcasecmp($callMethodId->fq_class_name, $rootClass) !== 0 && self::rootCallIsMacroable($rootClass))
+            || self::rootCallIsMacroable($rootClass)
         ) {
             return;
         }
