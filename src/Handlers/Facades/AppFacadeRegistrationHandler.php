@@ -45,8 +45,6 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
 {
     private const FACADE_FQCN = 'Illuminate\\Support\\Facades\\Facade';
 
-    private const MACROABLE_FQCN = 'Illuminate\\Support\\Traits\\Macroable';
-
     private const FACADE_FQCN_LOWER = 'illuminate\\support\\facades\\facade';
 
     /**
@@ -297,14 +295,15 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      * any call is accepted, with the unknown result typed `mixed`; methods the root really declares
      * still resolve exactly through {@see FacadeMethodHandler}.
      *
-     * Forwarding needs two runtime facts, both checked against what PHP dispatches rather than
-     * Psalm's storage where the two can disagree:
+     * Forwarding needs two runtime facts, both read from what PHP dispatches because Psalm's storage
+     * can disagree with it:
      * - The root's effective `__call` is not Macroable's, which throws `BadMethodCallException`
      *   for anything but a registered macro. Psalm's `ClassLikeNodeScanner` ignores `insteadof`
-     *   precedence (vimeo/psalm#12113), so `use Forwarder, Macroable { Macroable::__call insteadof
-     *   Forwarder; }` is stored as `Forwarder::__call` while PHP runs Macroable's. A root whose
-     *   `__call` is not its own is therefore compared by reflected file and start line, because
-     *   `ReflectionMethod::getDeclaringClass()` names the using class for trait methods.
+     *   precedence (vimeo/psalm#12113) and keeps the first-listed trait, so it can name either trait
+     *   wrongly in both directions: `use Forwarder, Macroable { Macroable::__call insteadof Forwarder; }`
+     *   is stored as the forwarder, `use Macroable, Forwarder { Forwarder::__call insteadof Macroable; }`
+     *   as Macroable. A root whose `__call` is not its own is therefore compared by reflected file and
+     *   start line, because `ReflectionMethod::getDeclaringClass()` names the using class for trait methods.
      * - The facade's effective `__callStatic` is Laravel's `Facade::__callStatic`, the only
      *   dispatcher that reaches the root's `__call`. `use Macroable` on the facade or an own
      *   `__callStatic` replaces it and throws first, even if it would forward.
@@ -336,10 +335,9 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
 
         if (
             $callMethodId === null
-            || \strcasecmp($callMethodId->fq_class_name, self::MACROABLE_FQCN) === 0
             || !self::facadeUsesLaravelDispatcher($facadeStorage->name)
-            // A `__call` the root declares itself always wins over trait methods; only a
-            // trait-provided one can be Macroable's under a stale storage entry.
+            // A `__call` the root declares itself always wins over trait methods; any other origin,
+            // Macroable included, is checked against what PHP runs.
             || (\strcasecmp($callMethodId->fq_class_name, $rootClass) !== 0 && self::rootCallIsMacroable($rootClass))
         ) {
             return;

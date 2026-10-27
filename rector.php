@@ -21,6 +21,7 @@ return RectorConfig::configure()
         \Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector::class => [
             'tests/Application/app/Services/PrecedenceMacroableService.php',
             'tests/Application/app/Services/AliasedMacroableService.php',
+            'tests/Application/app/Services/ReversedForwardingService.php',
         ],
         \Rector\DeadCode\Rector\ClassMethod\RemoveParentDelegatingClassMethodRector::class => ['tests/*'], // GetKeyOverrideModel
         // Rewrites `=== null` on a Psalm-typed nullable into `instanceof` a Psalm\Internal class, which silently

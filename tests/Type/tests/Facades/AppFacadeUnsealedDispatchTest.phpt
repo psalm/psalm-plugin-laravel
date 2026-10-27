@@ -8,6 +8,7 @@ use App\Facades\MacroableDispatchFacade;
 use App\Facades\OwnCallMacroableFacade;
 use App\Facades\OwnDispatchFacade;
 use App\Facades\PrecedenceMacroableFacade;
+use App\Facades\ReversedForwardingFacade;
 
 /**
  * Runtime dispatch decides whether an unknown facade call forwards to the root's `__call`
@@ -45,6 +46,12 @@ function test_own_call_beats_macroable_root_is_unsealed(): void
 function test_aliased_macroable_root_is_unsealed(): void
 {
     AliasedMacroableFacade::anything();
+}
+
+/** Positive control: Macroable is listed first, so Psalm names it, but `insteadof` makes the forwarder win. */
+function test_reversed_order_forwarding_root_is_unsealed(): void
+{
+    ReversedForwardingFacade::anything();
 }
 ?>
 --EXPECTF--
