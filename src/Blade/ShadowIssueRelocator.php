@@ -555,7 +555,7 @@ final class ShadowIssueRelocator
     private static function rewriteShadowPaths(string $message, string $ownShadowPath, \Closure $resolve): string
     {
         return \preg_replace_callback(
-            '/' . \preg_quote(\dirname($ownShadowPath) . '/', '/') . '[^\s\/\'"]+?\.php/',
+            '/' . \preg_quote(\dirname($ownShadowPath) . \DIRECTORY_SEPARATOR, '/') . '[^\s\\\\\/\'"]+?\.php/',
             static fn(array $matches): string => $resolve($matches[0])?->templateName ?? $matches[0],
             $message,
         ) ?? $message;

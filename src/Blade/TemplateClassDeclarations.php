@@ -25,9 +25,12 @@ final class TemplateClassDeclarations
      * @param array<array-key, array{0: int, 1: string, 2: int}|string> $tokens {@see \token_get_all()}
      *                                                                    output of `$shadowSource`
      *
-     * @return list<array{name: string, line: int, start: int, end: int}> `name` is the FQCN without a
-     *         leading backslash, `line` the shadow line of the declared name, `start` and `end` the
-     *         inclusive byte range of the whole statement; empty when the source does not parse
+     * @return list<array{name: string, line: int, start: int, end: int, suppressed: list<string>}>
+     *         `name` is the FQCN without a leading backslash, `line` the shadow line of the declared
+     *         name, `start` and `end` the inclusive byte range of the statement WITH the comments
+     *         attached to it (a left-behind docblock would attach to the next statement), and
+     *         `suppressed` the `@psalm-suppress` rules that cover the declared name; empty when the
+     *         source does not parse or its names do not resolve
      */
     public static function find(string $shadowSource, array $tokens): array
     {
@@ -37,15 +40,14 @@ final class TemplateClassDeclarations
 
         try {
             $statements = (new ParserFactory())->createForNewestSupportedVersion()->parse($shadowSource);
+
+            // A clashing `use` alias parses and only fails here: that template declares nothing,
+            // it must never take the run down.
+            $statements = $statements === null ? [] : (new NodeTraverser(new NameResolver()))->traverse($statements);
         } catch (\Throwable) {
             return [];
         }
 
-        if ($statements === null) {
-            return [];
-        }
-
-        $statements = (new NodeTraverser(new NameResolver()))->traverse($statements);
         $declarations = [];
 
         foreach ((new NodeFinder())->findInstanceOf($statements, ClassLike::class) as $node) {
@@ -56,8 +58,9 @@ final class TemplateClassDeclarations
             $declarations[] = [
                 'name' => $node->namespacedName->toString(),
                 'line' => $node->name->getStartLine(),
-                'start' => $node->getStartFilePos(),
+                'start' => \min([$node->getStartFilePos(), ...\array_map(static fn(\PhpParser\Comment $comment): int => $comment->getStartFilePos(), $node->getComments())]),
                 'end' => $node->getEndFilePos(),
+                'suppressed' => EnclosingSuppressions::at($statements, $node->name->getStartFilePos(), $node->name->getEndFilePos()),
             ];
         }
 

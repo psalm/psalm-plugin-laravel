@@ -1016,4 +1016,55 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertCount(1, $second->overriddenShadows);
         $this->assertCount(1, $second->classCollisions);
     }
+
+    /** A Composer classmap can map a class to the very template that declares it: that is no other owner. */
+    #[Test]
+    public function a_class_the_answer_maps_to_the_declaring_template_itself_is_not_a_collision(): void
+    {
+        $template = $this->writeTemplate('own.blade.php', "<?php\nclass Own {}\n?>\n");
+        $registrar = new RecordingShadowRegistrar(existingClassFiles: ['Own' => $this->viewDir . '/../views/own.blade.php']);
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertFileExists($template);
+        $this->assertSame([], $registrar->overriddenShadows);
+        $this->assertSame([], $registrar->classCollisions);
+    }
+
+    #[Test]
+    public function a_blade_comment_above_the_php_block_suppresses_the_collision_report(): void
+    {
+        $this->writeTemplate('doc.blade.php', "{{-- @psalm-suppress DuplicateClass --}}\n<?php\nclass Foo {}\n?>\n");
+        $registrar = new RecordingShadowRegistrar(existingClassFiles: ['Foo' => '/project/Foo.php']);
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertCount(1, $registrar->classCollisions);
+        $this->assertContains('DuplicateClass', $registrar->classCollisions[0][4]);
+    }
+
+    #[Test]
+    public function the_declarations_own_docblock_suppresses_the_collision_report(): void
+    {
+        $this->writeTemplate('doc.blade.php', "<?php\n/** @psalm-suppress DuplicateClass */\nclass Foo {}\n?>\n");
+        $registrar = new RecordingShadowRegistrar(existingClassFiles: ['Foo' => '/project/Foo.php']);
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertContains('DuplicateClass', $registrar->classCollisions[0][4]);
+    }
+
+    /** One template whose names cannot be resolved costs only itself, never the run. */
+    #[Test]
+    public function a_template_whose_names_cannot_be_resolved_does_not_disable_blade(): void
+    {
+        $this->writeTemplate('a-bad.blade.php', "<?php\nuse A\\B as Same;\nuse C\\D as Same;\nclass X {}\n?>\n");
+        $this->writeTemplate('b-good.blade.php', "<p>{{ \$x }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+        $bootstrapper = $this->bootstrapper($this->app(), $registrar);
+
+        $this->assertTrue($bootstrapper->boot());
+        $this->assertNull($bootstrapper->disabled());
+        $this->assertCount(2, $registrar->analyzedShadows);
+    }
 }

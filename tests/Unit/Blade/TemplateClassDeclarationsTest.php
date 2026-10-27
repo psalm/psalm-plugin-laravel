@@ -69,4 +69,33 @@ final class TemplateClassDeclarationsTest extends TestCase
         $this->assertStringEndsWith("\$kept = 1;\n", $blanked);
         $this->assertSame([], $this->find($blanked));
     }
+
+    /** Parsing succeeds but name resolution throws on the duplicate alias: that template declares nothing, and nothing escapes. */
+    #[Test]
+    public function a_shadow_whose_names_cannot_be_resolved_declares_nothing(): void
+    {
+        $this->assertSame([], $this->find("<?php\nuse A\\B as Same;\nuse C\\D as Same;\nclass X {}\nstrlen();\n"));
+    }
+
+    /** A docblock left behind would attach to the next statement and carry its `@psalm-suppress` onto it. */
+    #[Test]
+    public function blanking_takes_the_attached_comments_with_the_declaration(): void
+    {
+        $source = "<?php\n/** @psalm-suppress TooFewArguments */\nclass X {}\nstrlen();\n";
+        [$class] = $this->find($source);
+
+        $blanked = TemplateClassDeclarations::blank($source, [[$class['start'], $class['end']]]);
+
+        $this->assertStringNotContainsString('psalm-suppress', $blanked);
+        $this->assertStringContainsString('strlen();', $blanked);
+        $this->assertSame(\strlen($source), \strlen($blanked));
+    }
+
+    #[Test]
+    public function the_suppressions_that_cover_a_declaration_are_returned_with_it(): void
+    {
+        $found = $this->find("<?php\n/** @psalm-suppress DuplicateClass */\nclass A {}\nclass B {}\n");
+
+        $this->assertSame([['DuplicateClass'], []], \array_column($found, 'suppressed'));
+    }
 }

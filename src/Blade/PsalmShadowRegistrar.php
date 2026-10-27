@@ -110,24 +110,13 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     #[\Override]
     public function existingClassFile(string $className): ?string
     {
-        $composerFile = $this->projectAnalyzer->getCodebase()->config->getComposerFilePathForClassLike($className);
+        $config = $this->projectAnalyzer->getCodebase()->config;
 
-        if ($composerFile !== false) {
-            // Composer's loaders hand back `vendor/composer/../../app/Foo.php`, which would reach a message verbatim.
-            $resolved = \realpath($composerFile);
+        return ExistingClassFile::find($className, static function (string $name) use ($config): string|false {
+            $file = $config->getComposerFilePathForClassLike($name);
 
-            return $resolved === false ? $composerFile : $resolved;
-        }
-
-        if (!$this->isDeclaredInProcess($className)) {
-            return null;
-        }
-
-        /** @var class-string $declared proven by the check above */
-        $declared = $className;
-        $file = (new \ReflectionClass($declared))->getFileName();
-
-        return $file === false ? null : $file;
+            return \is_string($file) ? $file : false;
+        });
     }
 
     /** @inheritDoc */
@@ -171,14 +160,6 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
      */
     private function isIndependentlyResolvable(Config $config, string $candidate): bool
     {
-        return $config->getComposerFilePathForClassLike($candidate) !== false || $this->isDeclaredInProcess($candidate);
-    }
-
-    private function isDeclaredInProcess(string $className): bool
-    {
-        return \class_exists($className, false)
-            || \interface_exists($className, false)
-            || \trait_exists($className, false)
-            || \enum_exists($className, false);
+        return $config->getComposerFilePathForClassLike($candidate) !== false || ExistingClassFile::isDeclared($candidate);
     }
 }

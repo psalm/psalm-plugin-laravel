@@ -79,7 +79,7 @@ final class BladeBootstrapper
     /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
     private array $compileFailures = [];
 
-    /** @var list<array{0: string, 1: string, 2: int, 3: string, 4: string}> template path, shadow path, shadow line, class, first file */
+    /** @var list<array{0: string, 1: string, 2: int, 3: string, 4: string, 5: list<string>}> template path, shadow path, shadow line, class, first file, rules the declaration's own docblocks suppress */
     private array $classCollisions = [];
 
     private ?BladeDisabledException $disabled = null;
@@ -300,7 +300,7 @@ final class BladeBootstrapper
 
         foreach (TemplateClassDeclarations::find($shadowSource, $tokens) as $declaration) {
             $key = \strtolower($declaration['name']);
-            $firstFile = $claimedClasses[$key] ?? $this->registrar->existingClassFile($declaration['name']);
+            $firstFile = $claimedClasses[$key] ?? $this->externalClassFile($declaration['name'], $templatePath, $shadowPath);
 
             if ($firstFile === null) {
                 $claimedClasses[$key] = $templatePath;
@@ -309,7 +309,7 @@ final class BladeBootstrapper
             }
 
             $ranges[] = [$declaration['start'], $declaration['end']];
-            $this->classCollisions[] = [$templatePath, $shadowPath, $declaration['line'], $declaration['name'], $firstFile];
+            $this->classCollisions[] = [$templatePath, $shadowPath, $declaration['line'], $declaration['name'], $firstFile, $declaration['suppressed']];
         }
 
         if ($ranges !== []) {
@@ -317,10 +317,24 @@ final class BladeBootstrapper
         }
     }
 
+    /** A Composer or reflection answer that is this template or its shadow is the declaration itself, not another owner. */
+    private function externalClassFile(string $className, string $templatePath, string $shadowPath): ?string
+    {
+        $file = $this->registrar->existingClassFile($className);
+
+        if ($file === null) {
+            return null;
+        }
+
+        $real = static fn(string $path): string => \realpath($path) === false ? $path : (string) \realpath($path);
+
+        return \in_array($real($file), [$real($templatePath), $real($shadowPath)], true) ? null : $file;
+    }
+
     /** Needs the templates reportable and the shadow entries (line map, suppressions) published. */
     private function reportClassCollisions(ShadowManifest $manifest): void
     {
-        foreach ($this->classCollisions as [$templatePath, $shadowPath, $shadowLine, $className, $firstFile]) {
+        foreach ($this->classCollisions as [$templatePath, $shadowPath, $shadowLine, $className, $firstFile, $declared]) {
             $entry = $manifest->shadowEntry($shadowPath);
             $line = \max(1, $entry?->lineMap[$shadowLine] ?? 0);
 
@@ -330,7 +344,7 @@ final class BladeBootstrapper
                 $line,
                 $className,
                 $firstFile,
-                $entry?->suppressions[$line] ?? [],
+                [...$declared, ...($entry?->suppressions[$line] ?? [])],
             );
         }
     }
