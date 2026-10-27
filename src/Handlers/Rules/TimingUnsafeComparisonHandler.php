@@ -77,7 +77,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
 
         // Cheap property read: runs per expression, so the suppression-aware
         // tracksTaintFlow() check waits until a comparison actually matches.
-        if ($codebase->taint_flow_graph === null) {
+        if (!$codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
             return null;
         }
 
@@ -283,7 +283,7 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
         $sinkId = $sinkLabel . '-' . $locationId;
 
         $sink = $codebase->addTaintSink($sinkId, $codeLocation, self::SECRET_TAINTS);
-        if ($sink === null) {
+        if (!$sink instanceof \Psalm\Internal\DataFlow\DataFlowNode) {
             return;
         }
 
