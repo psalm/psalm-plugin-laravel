@@ -38,6 +38,7 @@ final class ResolveColumnTypeTest extends TestCase
 
         $codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $codebase->classlike_storage_provider = $this->classLikeStorageProvider;
+
         $this->codebase = $codebase;
     }
 
