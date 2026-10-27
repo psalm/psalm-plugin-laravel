@@ -195,8 +195,6 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
     /**
      * The `$default` arg's callback return: null for an absent or literal-null arg, false when it
      * cannot be determined (an unpack, a non-callable or a callable without a known return).
-     *
-     * @psalm-capabilities read-props
      */
     private static function defaultReturn(StatementsAnalyzer $source, ?Arg $arg): Union|false|null
     {
@@ -221,8 +219,6 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
      *
      * Returns null when any atomic is a callable without a known return type (or the arg
      * is not callable at all) — the caller then defers to the stub rather than guess.
-     *
-     * @psalm-pure
      */
     private static function callableReturn(StatementsAnalyzer $source, \PhpParser\Node\Expr $expr): ?Union
     {

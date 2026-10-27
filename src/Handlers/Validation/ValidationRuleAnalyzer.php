@@ -1212,10 +1212,6 @@ final class ValidationRuleAnalyzer
         $rules = [];
 
         foreach ($array->items as $item) {
-            if ($item === null) {
-                continue;
-            }
-
             // Key must be a string literal (field name)
             if (!$item->key instanceof Node\Scalar\String_) {
                 continue;
@@ -1235,10 +1231,6 @@ final class ValidationRuleAnalyzer
                 $segments = [];
 
                 foreach ($item->value->items as $ruleItem) {
-                    if ($ruleItem === null) {
-                        continue;
-                    }
-
                     if ($ruleItem->value instanceof Node\Scalar\String_) {
                         $segments[] = $ruleItem->value->value;
 
@@ -1621,8 +1613,7 @@ final class ValidationRuleAnalyzer
 
         foreach ($array->items as $item) {
             if (
-                $item === null
-                || $item->unpack
+                $item->unpack
                 || $item->key !== null
                 || !$item->value instanceof Node\Scalar\String_
                 || !self::isLosslessInValue($item->value->value)

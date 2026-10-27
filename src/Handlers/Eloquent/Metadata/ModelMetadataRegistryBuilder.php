@@ -1159,9 +1159,6 @@ final class ModelMetadataRegistryBuilder
                 continue;
             }
 
-            // strtolower() yields a lowercase string at runtime; the non-empty guard above makes it
-            // non-empty. Psalm 7 does not refine strtolower's output — assert what it cannot infer.
-            /** @psalm-var non-empty-lowercase-string $key */
             $relations[$key] = new RelationInfo(
                 name: $key,
                 relationClass: $parsed['relationClass'],

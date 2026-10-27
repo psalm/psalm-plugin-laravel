@@ -604,10 +604,6 @@ final class ContractParser
         $props = [];
 
         foreach ($expression->expr->items as $item) {
-            if ($item === null) {
-                return null;
-            }
-
             // `ComponentAttributeBag::extractPropNames()` names an entry with an `is_numeric()` key by
             // its value, with no default, exactly like a bare entry.
             $numericKey = $item->key instanceof Node\Scalar\Int_
