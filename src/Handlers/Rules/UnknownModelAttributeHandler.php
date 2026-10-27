@@ -256,7 +256,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
 
         if ($isListMethod) {
             foreach ($array->items as $item) {
-                if ($item === null || $item->unpack || $item->key !== null) {
+                if ($item->unpack || $item->key !== null) {
                     return null;
                 }
 
@@ -270,10 +270,9 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
 
         foreach ($maps as $map) {
             foreach ($map->items as $item) {
-                // $item is null only for skipped destructuring slots (`[, $x]`), never in a value array.
                 // Positional (list-style) and dynamic keys carry no property name and are dropped. A
                 // duplicated unknown key is reported at each of its occurrences, at the key node.
-                $key = $item?->key;
+                $key = $item->key;
 
                 if (!$key instanceof String_ || self::unknownKeys($allowedKeys, [$key->value]) === []) {
                     continue;

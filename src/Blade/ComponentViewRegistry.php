@@ -438,7 +438,7 @@ final class ComponentViewRegistry
             }
 
             foreach ($arg->value->items as $item) {
-                if ($item === null || $item->unpack || !$item->key instanceof String_) {
+                if ($item->unpack || !$item->key instanceof String_) {
                     $keys = null;
 
                     continue 2;

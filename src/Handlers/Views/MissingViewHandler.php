@@ -551,7 +551,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         $nextIndex = 0;
 
         foreach ($array->items as $item) {
-            if ($item === null || $item->unpack) {
+            if ($item->unpack) {
                 return;
             }
 
@@ -745,7 +745,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         $viewNames = [];
 
         foreach ($arg->value->items as $item) {
-            if ($item === null || $item->unpack || $item->key !== null || !$item->value instanceof String_) {
+            if ($item->unpack || $item->key !== null || !$item->value instanceof String_) {
                 return null;
             }
 

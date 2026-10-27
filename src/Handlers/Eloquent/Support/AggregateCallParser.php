@@ -108,7 +108,7 @@ final class AggregateCallParser
 
         if ($first instanceof Array_) {
             foreach ($first->items as $item) {
-                if ($item === null || $item->unpack) {
+                if ($item->unpack) {
                     continue;
                 }
 

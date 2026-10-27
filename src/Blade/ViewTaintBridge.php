@@ -235,7 +235,7 @@ final class ViewTaintBridge implements AfterExpressionAnalysisInterface, AfterSt
         $keys = [];
 
         foreach ($excluded->value->items as $item) {
-            if ($item === null || $item->unpack || !$item->key instanceof String_) {
+            if ($item->unpack || !$item->key instanceof String_) {
                 return false;
             }
 
