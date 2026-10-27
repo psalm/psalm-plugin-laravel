@@ -12,11 +12,16 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  * Keeps `Alias::Case` from crashing Psalm for an enum registered with AliasLoader (#2128).
  *
  * {@see AliasStubProvider} writes such an alias as `class_alias()`, which makes Psalm resolve `Alias::Case`
- * to the enum. Psalm's constant-fetch analyzer then reads the storage by the alias name, and that read throws
- * `InvalidArgumentException` (an uncaught crash of the whole run) when the enum was never scanned as a class:
- * the enum is declared outside `<projectFiles>` and no Composer autoloader maps it, so Psalm only knows it
- * from the stub. Registering the enum's storage under the alias name closes that gap. Upstream: Psalm's
- * `ClassConstAnalyzer` unaliases the name only for targets `classExists()` accepts, which excludes enums.
+ * to the enum. Psalm's constant-fetch analyzer then reads the storage by the ALIAS name
+ * (`ClassConstAnalyzer.php:244`), and that read throws `InvalidArgumentException`, an uncaught crash of the
+ * whole run. The enum's own storage is present; the entry under the alias key is what is missing. The
+ * analyzer unaliases the name first (`:145-146`) only when `classExists()` is true, and `ClassLikes`
+ * records an enum as `existing_classes_lc = false` (`addFullyQualifiedEnumName`, `:265`) when Psalm found
+ * it through its reflection route instead of a project file: an enum outside `<projectFiles>` that no
+ * Composer autoloader maps (`packages/`, `Modules/`). Registering the enum's storage under the alias name
+ * closes that gap. Upstream: `ClassConstAnalyzer` should unalias enum targets too.
+ *
+ * The `has($enum)` guard is defensive: with no storage for the target there is nothing to register.
  */
 final class EnumAliasStorageHandler implements AfterCodebasePopulatedInterface
 {

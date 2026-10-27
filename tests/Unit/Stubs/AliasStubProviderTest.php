@@ -125,6 +125,20 @@ final class AliasStubProviderTest extends TestCase
     }
 
     #[Test]
+    public function it_quotes_the_alias_of_an_enum_as_a_php_string(): void
+    {
+        AliasLoader::getInstance(["It's" => AliasedSuit::class]);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        $stub = (string) \file_get_contents($location);
+        $this->assertStringContainsString("'It\\'s');", $stub);
+        // Throws a ParseError when the line is not valid PHP.
+        $this->assertNotEmpty(\token_get_all($stub, \TOKEN_PARSE));
+    }
+
+    #[Test]
     public function it_keeps_the_extends_line_when_loading_the_target_throws(): void
     {
         $autoloader = static function (string $class): void {

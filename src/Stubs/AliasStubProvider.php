@@ -57,7 +57,7 @@ final class AliasStubProvider
 
             if (self::isEnum($fqcn)) {
                 self::$enumAliases[$alias] = $fqcn;
-                $stub .= "class_alias(\\{$fqcn}::class, '{$alias}');\n";
+                $stub .= "class_alias(\\{$fqcn}::class, " . \var_export($alias, true) . ");\n";
 
                 continue;
             }
@@ -86,9 +86,9 @@ final class AliasStubProvider
      * An enum cannot be a parent class, so `class Alias extends \Enum {}` leaves `Alias::Case` undefined.
      * Psalm models a literal `class_alias()` call (the call AliasLoader makes at runtime) instead.
      *
-     * The target is loaded to tell the two apart. AliasLoader targets are loadable by contract and
-     * FacadeMapProvider loads most of them anyway; a target whose autoload throws keeps the `extends`
-     * line rather than breaking the boot.
+     * `enum_exists()` autoloads the target, which adds no new load: FacadeMapProvider::init() already runs
+     * `is_subclass_of()` over every alias target, inside `catch (\Throwable)`, before this provider runs.
+     * A target whose autoload throws keeps the `extends` line rather than breaking the boot.
      */
     private static function isEnum(string $fqcn): bool
     {
