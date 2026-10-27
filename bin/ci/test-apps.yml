@@ -259,3 +259,22 @@ apps:
     # Filament 5 ERP: app/ holds 7 files, the ~2.9k-file code base is 28
     # modules under plugins/webkul/*/src.
     project_dir: plugins/webkul/*/src
+
+  - name: kanka
+    repo: https://github.com/owlchester/kanka.git
+    ref: 355c577
+    php: "8.4"
+    groups: [blade, pest, laravel-13, livewire, large]
+    # RPG worldbuilding app with 1,248 Blade templates, the largest classic
+    # (controller view) template set in the registry. Psalm 7.0.0-rc10 runs out
+    # of memory analysing AttributeMentionService (Collection put() in a loop,
+    # reproduces without the plugin), so the file is removed before analysis.
+    # config/backup.php needs a mail address from .env during package:discover.
+    before_install: rm -f app/Services/AttributeMentionService.php && cp .env.example .env
+
+  - name: skuul
+    repo: https://github.com/yungifez/skuul.git
+    ref: 795aabe
+    php: "8.4"
+    groups: [blade, pest, laravel-13, sanctum, livewire]
+    # School management app: 434 Blade templates, mostly Livewire views.
