@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793102737929,
+  "lastUpdate": 1793130333650,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16935,6 +16935,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1308,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "05fdc8813fd199f926cfad98e4d855e8f75772d4",
+          "message": "Require Psalm 7.0.0-rc12 (#2140)\n\n* chore(deps): require Psalm 7.0.0-rc12\n\nrc12 ships vimeo/psalm#12501 (classes a stub extends keep sealAllMethods),\nvimeo/psalm#12503 and vimeo/psalm#11966 (template placeholder memory blowup).\n\n* ci(delta): analyse kanka's AttributeMentionService again\n\nPsalm 7.0.0-rc12 includes vimeo/psalm#11966: the file analyses in ~12 s\nwhere rc10 ran out of 3 GiB.\n\n* refactor: fix self-analysis findings new in Psalm 7.0.0-rc12\n\n- Drop null checks on Array_ items: PHP-Parser 5 types them as ArrayItem\n  (an empty slot is an ArrayItem with an Expr\\Error value, destructuring\n  is List_), and rc12 now applies that type here.\n- Drop purity annotations from methods calling NodeTypeProvider::getType(),\n  which is unannotated and therefore impure; rc12 now checks the call.\n- Drop a @psalm-var that rc12 infers (vimeo/psalm#12528).\n\n* style: apply rector",
+          "timestamp": "2026-10-27T20:42:24+01:00",
+          "tree_id": "6e7df05a9499802af7649f38cd2d8acde095fee4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/05fdc8813fd199f926cfad98e4d855e8f75772d4"
+        },
+        "date": 1793130330986,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.56,
+            "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1306,
             "unit": "MB"
           }
         ]
