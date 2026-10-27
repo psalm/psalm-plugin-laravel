@@ -98,7 +98,7 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
         $codebase = $event->getCodebase();
 
         // Performance gate: skip the per-expression type lookup unless --taint-analysis is on.
-        if ($codebase->taint_flow_graph === null) {
+        if (!$codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
             return null;
         }
 
