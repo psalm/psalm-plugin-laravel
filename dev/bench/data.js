@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793005763766,
+  "lastUpdate": 1793102737929,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16900,6 +16900,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1314,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7c7a65fdba35bb144f39068d7f4055e1e12388be",
+          "message": "AliasLoader aliases with `class_alias()` (#2133)\n\n* fix(stubs): resolve enum cases through AliasLoader aliases\n\nAn enum cannot be a parent class, so the generated `class Alias extends \\Enum {}`\nstub left `Alias::Case` as UndefinedConstant, in PHP files and in Blade templates.\n\n- AliasStubProvider writes `class_alias(\\Enum::class, 'Alias');` for an alias whose\n  target is an enum; every other target keeps the byte-identical extends line, and a\n  target whose autoload throws keeps it too.\n- EnumAliasStorageHandler registers the enum's storage under the alias name, because\n  Psalm's ClassConstAnalyzer reads storage by alias name and crashes the run for an\n  enum it never scanned as a class.\n\nRefs #2128\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* fix(stubs): quote enum alias literal, correct crash trigger and residuals #2128\n\nWrite the alias in the class_alias line with var_export so a quote cannot break the stub. Correct the documented crash trigger (the enum storage exists; the alias-keyed entry is missing, for enums Psalm found only through reflection), drop the unreproduced dead-code claim, fix the autoload note, and record the Alias::class residual.\n\n* refactor(stubs): model every AliasLoader alias with class_alias()\n\nEvery alias, namespaced included, is a class_alias() stub line; self-aliases\nand alias cycles are skipped and targets are never autoloaded.\nClassAliasStorageHandler (replacing EnumAliasStorageHandler) registers the\ntarget storage under each alias name, because Psalm reads storage by the raw\nalias in ClassConstAnalyzer, AttributesAnalyzer, getClassConstantType and\nMethods::getStorage. Interface and attribute aliases no longer crash the run,\n\\Eloquent accepts a Model, and root facade aliases resolve to the facade.\n\nRefs #2128\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-10-27T13:02:51+01:00",
+          "tree_id": "beaefbc819a47500e3413333abff63bb6f2fdc07",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7c7a65fdba35bb144f39068d7f4055e1e12388be"
+        },
+        "date": 1793102735529,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.62,
+            "range": "± 0.52",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1308,
             "unit": "MB"
           }
         ]
