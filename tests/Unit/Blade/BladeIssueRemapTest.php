@@ -621,10 +621,11 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #2130 negative: the drop is keyed on the compiled save, not on the variable name. The author's
-     * own `$component` read before the tag in the same closure, and their own `$attributes` read in
-     * a closure of their own, report even though a name-only gate would swallow both. The tag in the
-     * first closure still draws no row for its save.
+     * #2130 negative: the drop is keyed on the compiled save and on the template never naming the
+     * variable. The author's own `$component` read before the tag in the same closure, and their own
+     * `$attributes` read in a closure of their own, report. The template names `$attributes`, so the
+     * tag's `$attributes` save (line 3) keeps its row too; `$component`'s save, reached after the
+     * author's read, draws none.
      */
     #[Test]
     public function an_authors_own_read_of_a_bookkeeping_name_in_a_closure_keeps_reporting(): void
@@ -633,12 +634,40 @@ final class BladeIssueRemapTest extends TestCase
         $template = 'resources/views/closure-directive-author-reads.blade.php';
 
         $this->assertSame(
-            ['Cannot find referenced variable $component' => [2], 'Cannot find referenced variable $attributes' => [5]],
+            ['Cannot find referenced variable $component' => [2], 'Cannot find referenced variable $attributes' => [3, 5]],
             $this->undefinedVariableLines($issues, $template),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
 
         $this->assertStringContainsString('if (isset($component)) { $__componentOriginal', $this->shadowSourceFor($template));
+    }
+
+    /**
+     * #2130 review: Psalm reports an undeclared name once per closure scope, at the first read. When
+     * the author binds the same name on the tag (`:foo="$attributes"`) the compiled save is that first
+     * read, so dropping it would remove the only signal for a read that throws at runtime. A template
+     * that names the variable keeps the finding on the tag line.
+     */
+    #[Test]
+    #[DataProvider('boundBookkeepingReads')]
+    public function an_authors_bound_read_of_a_bookkeeping_name_on_a_tag_in_a_closure_keeps_reporting(string $template, string $name): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            ["Cannot find referenced variable \${$name}" => [2]],
+            $this->undefinedVariableLines($issues, 'resources/views/' . $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $this->assertStringContainsString("if (isset(\${$name})) { \$__{$name}Original", $this->shadowSourceFor($template));
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function boundBookkeepingReads(): iterable
+    {
+        yield '$attributes' => ['closure-directive-bound-attributes.blade.php', 'attributes'];
+        yield '$component' => ['closure-directive-bound-component.blade.php', 'component'];
     }
 
     /**
