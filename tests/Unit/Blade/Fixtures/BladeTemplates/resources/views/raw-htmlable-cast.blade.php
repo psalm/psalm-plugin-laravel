@@ -1,0 +1,1 @@
+{!! (string) \Fx\Source::htmlable() !!}

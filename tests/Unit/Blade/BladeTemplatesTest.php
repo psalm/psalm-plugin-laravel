@@ -213,6 +213,53 @@ final class BladeTemplatesTest extends TestCase
         $this->assertSame(['ImplicitToStringCast'], $this->typesIn('php-strlen.blade.php'));
     }
 
+    // Issue #1196: `Htmlable` and the `View` contract declare no `__toString()`, so a bare `echo $x`
+    // reports `InvalidCast`, while the framework's own implementations are all Stringable.
+
+    /** `{!! !!}` compiles to a bare `echo`; `{{ }}` goes through `e()`, which accepts both contracts. */
+    #[Test]
+    #[DataProvider('contractEchos')]
+    public function a_raw_echo_of_an_htmlable_contract_is_silent(string $template): void
+    {
+        $this->assertSilent($template);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function contractEchos(): iterable
+    {
+        yield 'Htmlable' => ['raw-htmlable.blade.php'];
+        yield 'View contract' => ['raw-view.blade.php'];
+        yield 'Htmlable|string (PossiblyInvalidCast)' => ['raw-htmlable-union.blade.php'];
+        yield 'escaped echo of both contracts' => ['esc-htmlable.blade.php'];
+    }
+
+    /**
+     * Each template differs from a silent one in exactly one thing: the cast operand is a concrete
+     * class with no `__toString()` (a runtime fatal), the echo is the author's own (`@php echo`,
+     * `<?php echo ?>`, or an `echo` of the same expression elsewhere in the template), or the author
+     * wrote the `(string)` cast.
+     *
+     * @param list<string> $expected issue types, in report order, that the template must report
+     */
+    #[Test]
+    #[DataProvider('keptContractCasts')]
+    public function a_cast_the_author_owns_or_a_concrete_class_without_to_string_still_reports(string $template, array $expected): void
+    {
+        $this->assertCompiled($template);
+        $this->assertSame($expected, $this->typesIn($template), \var_export($this->in($template), true));
+    }
+
+    /** @return iterable<string, array{string, list<string>}> */
+    public static function keptContractCasts(): iterable
+    {
+        yield 'concrete Htmlable without __toString' => ['raw-no-tostring.blade.php', ['InvalidCast']];
+        yield 'concrete class | string' => ['raw-no-tostring-union.blade.php', ['PossiblyInvalidCast']];
+        yield '@php echo of the interface' => ['php-htmlable.blade.php', ['InvalidCast']];
+        yield 'raw <?php echo ?> of the interface' => ['phptag-htmlable.blade.php', ['InvalidCast']];
+        yield 'author (string) cast in a raw echo' => ['raw-htmlable-cast.blade.php', ['InvalidCast']];
+        yield 'raw echo beside an author echo of the same expression' => ['raw-htmlable-beside-php-echo.blade.php', ['InvalidCast', 'InvalidCast']];
+    }
+
     // Nullable echo: `e()`'s `@param` allows null, while a nullable receiver further along a chain reports.
 
     #[Test]

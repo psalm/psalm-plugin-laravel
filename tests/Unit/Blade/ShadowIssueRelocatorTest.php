@@ -29,6 +29,7 @@ use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\NullArgument;
 use Psalm\Issue\ParseError;
+use Psalm\Issue\PossiblyInvalidCast;
 use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
 use Psalm\Issue\RedundantCondition;
@@ -67,6 +68,11 @@ final class ShadowIssueRelocatorTest extends TestCase
     private const AWARE_CALLEE = 'Illuminate\View\Factory::getConsumableComponentData';
 
     private const AWARE_NULL_ARGUMENT = 'Argument 1 of Illuminate\View\Factory::getConsumableComponentData cannot be null, null value provided to parameter with type string';
+
+    /** The one line `{!! $links !!}` compiles to, as far as the cast gate reads it. */
+    private const RAW_ECHO_LINE = '<?php echo $links; ?>';
+
+    private const HTMLABLE_CAST = 'Illuminate\Contracts\Support\Htmlable cannot be cast to string';
 
     private const AWARE_NO_VALUE = 'All possible types for this argument were invalidated - This may be dead code';
 
@@ -571,6 +577,89 @@ final class ShadowIssueRelocatorTest extends TestCase
             new NullArgument(self::AWARE_NULL_ARGUMENT, $list, self::AWARE_CALLEE),
             "<div>\n@php \$__value = null; \$__env->getConsumableComponentData(\$__value); @endphp\n</div>\n",
         ];
+    }
+
+    /**
+     * #1196: a raw echo (`{!! !!}`, a bare `<?php echo $expr; ?>`) of `Htmlable` or the `View` contract
+     * reports `InvalidCast`, because neither interface declares `__toString()`; the framework's own
+     * implementations all have one. {@see BladeTemplatesTest} pins the same gate on real compiled output.
+     */
+    #[Test]
+    #[DataProvider('rawEchoOfAContract')]
+    public function a_raw_echo_of_an_htmlable_contract_is_dropped(CodeIssue $issue, string $templateSource): void
+    {
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource));
+    }
+
+    /** @return iterable<string, array{CodeIssue, string}> */
+    public static function rawEchoOfAContract(): iterable
+    {
+        $location = self::selectionLocation('$links', 6, self::RAW_ECHO_LINE);
+        $template = self::onLineThree('{!! $links !!}');
+
+        yield 'Htmlable' => [new InvalidCast(self::HTMLABLE_CAST, $location), $template];
+        yield 'View contract' => [new InvalidCast('Illuminate\Contracts\View\View cannot be cast to string', $location), $template];
+        yield 'Htmlable in a union with a castable member' => [new PossiblyInvalidCast(self::HTMLABLE_CAST, $location), $template];
+        yield 'class name in another case' => [new InvalidCast('illuminate\contracts\support\htmlable cannot be cast to string', $location), $template];
+        yield 'a whole expression as the operand' => [
+            new PossiblyInvalidCast(self::HTMLABLE_CAST, self::selectionLocation("\$a ? \$links : 'x'", 17, "<?php echo \$a ? \$links : 'x'; ?>")),
+            self::onLineThree("{!! \$a ? \$links : 'x' !!}"),
+        ];
+    }
+
+    /**
+     * Negatives: each case differs from the `Htmlable` row above in exactly ONE gate condition (the
+     * cast type, the issue class, the echo's provenance, the operand's shape), so it goes red if
+     * that condition is removed.
+     */
+    #[Test]
+    #[DataProvider('castsOnTheAuthorsOrAConcreteClass')]
+    public function a_cast_the_author_owns_or_a_concrete_class_keeps_reporting(CodeIssue $issue, string $templateSource): void
+    {
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource);
+
+        $this->assertInstanceOf($issue::class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** @return iterable<string, array{CodeIssue, string}> */
+    public static function castsOnTheAuthorsOrAConcreteClass(): iterable
+    {
+        $location = self::selectionLocation('$links', 6, self::RAW_ECHO_LINE);
+        $template = self::onLineThree('{!! $links !!}');
+
+        // The cast type.
+        yield 'concrete class without __toString' => [new InvalidCast('App\NoToStringHtmlable cannot be cast to string', $location), $template];
+        yield 'userland interface extending Htmlable' => [new InvalidCast('App\Contracts\Html cannot be cast to string', $location), $template];
+        yield 'intersection with the interface' => [new InvalidCast('Illuminate\Contracts\Support\Htmlable&App\Marker cannot be cast to string', $location), $template];
+        yield 'intersection led by another type' => [new InvalidCast('App\Marker&Illuminate\Contracts\Support\Htmlable cannot be cast to string', $location), $template];
+        yield 'text after the message' => [new InvalidCast(self::HTMLABLE_CAST . ' (and more)', $location), $template];
+        yield 'a cast type that merely starts with the interface name' => [new InvalidCast('Illuminate\Contracts\Support\HtmlableX cannot be cast to string', $location), $template];
+        // The issue class.
+        yield 'another issue class with the same message' => [new ImplicitToStringCast(self::HTMLABLE_CAST, $location), $template];
+        // The echo's provenance: the author wrote an `echo` of the same expression.
+        yield 'echo inside @php' => [new InvalidCast(self::HTMLABLE_CAST, $location), self::onLineThree('@php echo $links; @endphp')];
+        yield 'raw php tag' => [new InvalidCast(self::HTMLABLE_CAST, $location), self::onLineThree('<?php echo $links; ?>')];
+        yield 'raw echo beside an echo of the same expression' => [new InvalidCast(self::HTMLABLE_CAST, $location), self::onLineThree("{!! \$links !!}\n@php echo \$links; @endphp")];
+        // The operand did not survive compilation, so the template says nothing about the echo.
+        yield 'operand absent from the template' => [new InvalidCast(self::HTMLABLE_CAST, $location), self::onLineThree('{!! $other !!}')];
+        // The operand's shape.
+        yield 'the author wrote the (string) cast' => [
+            new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('(string) $links', 15, '<?php echo (string) $links; ?>')),
+            self::onLineThree('{!! (string) $links !!}'),
+        ];
+        yield 'not an echo operand' => [new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('$links', 6, '<?php print $links; ?>')), $template];
+        yield 'operand of an e() call' => [new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('$links', 6, '<?php echo e($links); ?>')), $template];
+        yield 'only the left side of a larger echo expression' => [
+            new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('$links', 6, "<?php echo \$links . 'x'; ?>")),
+            self::onLineThree("{!! \$links . 'x' !!}"),
+        ];
+    }
+
+    /** A template whose `$line` sits on line 3, where the `[9 => 3]` line map sends the shadow line. */
+    private static function onLineThree(string $line): string
+    {
+        return "<div>\n<p>x</p>\n{$line}\n</div>\n";
     }
 
     /**

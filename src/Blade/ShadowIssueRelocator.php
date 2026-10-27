@@ -23,6 +23,7 @@ use Psalm\Issue\NoValue;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyFalseArgument;
 use Psalm\Issue\PossiblyInvalidArgument;
+use Psalm\Issue\PossiblyInvalidCast;
 use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyNullPropertyFetch;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
@@ -75,6 +76,13 @@ final class ShadowIssueRelocator
         // php-parser's `Error::updateMessage()` appends ' on line N' to the raw message
         ParseError::class => '/( on line )(\d++)\z/',
     ];
+
+    /**
+     * `CastAnalyzer::castStringAttempt()`'s message when the type it names is exactly `Htmlable` or
+     * the `View` contract. It names ONE member of the echoed type (`$invalid_casts[0]`), so this
+     * matches that member, never proof about the rest of a union.
+     */
+    private const HTMLABLE_CONTRACT_CAST = '/^Illuminate\\\\Contracts\\\\(?:Support\\\\Htmlable|View\\\\View) cannot be cast to string\z/i';
 
     /**
      * @param ShadowTarget                    $target  the shadow the issue was found in
@@ -416,6 +424,19 @@ final class ShadowIssueRelocator
             return false;
         }
 
+        // `{!! $x !!}` compiles to a bare `echo $x`, and Psalm casts an object operand to string with
+        // `InvalidCast` (or `PossiblyInvalidCast` beside a castable member) when its type declares
+        // no `__toString()`. `Htmlable` and the `View` contract declare none, although every
+        // implementation the framework ships is Stringable, so a value typed as the bare interface
+        // (`$paginator->links()`, `Breadcrumbs::render()`, a documented `@return Htmlable`) always
+        // reports there (#1196). `{{ }}` is not affected: `e()` accepts both contracts.
+        if (
+            ($issue instanceof InvalidCast || $issue instanceof PossiblyInvalidCast)
+            && self::isGeneratedRawEchoOfHtmlableContract($issue, $target)
+        ) {
+            return false;
+        }
+
         // `@aware` compiles to a `foreach` over its literal array whose body picks
         // `getConsumableComponentData($__key, $__value)` or the list-form
         // `getConsumableComponentData($__value)` by `is_string($__key)` (CompilesComponents::
@@ -678,7 +699,57 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        $slice = self::echoArgumentSlice($issue->code_location, $callee);
+        return self::isGeneratedEchoOperand($issue->code_location, $callee, $target);
+    }
+
+    /**
+     * Whether the issue sits on the single operand of a bare `echo` the compiler wrote, as a
+     * `{!! $x !!}` becomes `<?php echo $x; ?>`, for an issue whose message says nothing about the
+     * call it sits in (`InvalidCast`; an argument issue has `function_id` for that).
+     *
+     * Beyond the provenance proof of {@see self::isGeneratedEchoOperand()}, the operand must be what
+     * Psalm's own echo-time cast reports, not an expression the author wrote that also fails to cast:
+     * it must end at the echo terminator, so the left side of `$x . 'y'` (reported as the operand of
+     * a concatenation, not of the echo) is out, and it must not itself be a `(string)` cast, which
+     * carries the same message on an argument that survives compilation verbatim.
+     *
+     * Residuals, accepted: the message names one member of the echoed type, so a union whose other
+     * member is an array or another class with no `__toString()` drops with it; a parenthesized
+     * operand, `Blade::setEchoFormat()` giving `{{ }}` the same bare shape, and a `{!! !!}` wrapped
+     * by a `Blade::stringable()` handler are not told apart or not matched.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedRawEchoOfHtmlableContract(CodeIssue $issue, ShadowTarget $target): bool
+    {
+        if (\preg_match(self::HTMLABLE_CONTRACT_CAST, $issue->message) !== 1) {
+            return false;
+        }
+
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if (
+            !$selection instanceof ShadowSelection
+            || \preg_match('/\G\s*+;/', $selection->snippet, offset: $selection->end) !== 1
+            || \preg_match('/\G\(\s*+(?:string|binary)\s*+\)/i', $selection->snippet, offset: $selection->start) === 1
+        ) {
+            return false;
+        }
+
+        return self::isGeneratedEchoOperand($issue->code_location, 'echo', $target);
+    }
+
+    /**
+     * The provenance proof shared by every echo gate: the enclosing `$callee` call cut out of the
+     * shadow is absent from the raw template while its operand is present, so the author never wrote
+     * the call and Blade did not rewrite the operand. See {@see self::isGeneratedEchoArgument()} for
+     * why each half is needed.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedEchoOperand(CodeLocation $location, string $callee, ShadowTarget $target): bool
+    {
+        $slice = self::echoArgumentSlice($location, $callee);
 
         if ($slice === null) {
             return false;
