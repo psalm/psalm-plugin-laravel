@@ -597,6 +597,69 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * #2130: a vendor directive that wraps its body in a closure (`@interact` stands in for
+     * TallStackUI's table slots) puts the tag's save/restore inside that closure, where the prelude's
+     * top-level `$component`/`$attributes` declarations do not reach. Psalm reports the first read of
+     * each name in a closure scope, which for a tag is the `isset()` of the compiled save.
+     */
+    #[Test]
+    public function a_tag_inside_a_directive_closure_reports_no_undefined_bookkeeping_variable(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/closure-directive-tag.blade.php';
+
+        $this->assertSame(
+            [],
+            $this->linesFor($issues, 'UndefinedVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        // Guard against a vacuous pass: the tag compiled inside the closure.
+        $shadow = $this->shadowSourceFor($template);
+        $this->assertStringContainsString("function(\$row) use (\$__env) { ?>\n", $shadow);
+        $this->assertStringContainsString('if (isset($component)) { $__componentOriginal', $shadow);
+    }
+
+    /**
+     * #2130 negative: the drop is keyed on the compiled save, not on the variable name. The author's
+     * own `$component` read before the tag in the same closure, and their own `$attributes` read in
+     * a closure of their own, report even though a name-only gate would swallow both. The tag in the
+     * first closure still draws no row for its save.
+     */
+    #[Test]
+    public function an_authors_own_read_of_a_bookkeeping_name_in_a_closure_keeps_reporting(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/closure-directive-author-reads.blade.php';
+
+        $this->assertSame(
+            ['Cannot find referenced variable $component' => [2], 'Cannot find referenced variable $attributes' => [5]],
+            $this->undefinedVariableLines($issues, $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+
+        $this->assertStringContainsString('if (isset($component)) { $__componentOriginal', $this->shadowSourceFor($template));
+    }
+
+    /**
+     * @param list<array{type: string, file_path: string, line_from: int, message: string}> $issues
+     *
+     * @return array<string, list<int>> message => template lines, for the template's UndefinedVariable rows
+     */
+    private function undefinedVariableLines(array $issues, string $template): array
+    {
+        $rows = [];
+
+        foreach ($issues as $issue) {
+            if ($issue['type'] === 'UndefinedVariable' && \str_ends_with($issue['file_path'], $template)) {
+                $rows[$issue['message']][] = $issue['line_from'];
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
      * #1873: a plain caller's `<x-...>` save/restore reads only names the prelude types from that
      * bookkeeping (`$component`, `$attributes`, each saved original), so the tag's own line reports
      * no ambient guard, single and nested.

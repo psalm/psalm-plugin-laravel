@@ -35,6 +35,7 @@ use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
 use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
+use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedVariable;
 
@@ -113,6 +114,14 @@ final class ShadowIssueRelocator
 
         // `@entangle('tab')` compiles to `'tab'->value()` (#1908), call text the template never holds.
         if ($issue instanceof InvalidMethodCall && self::isGeneratedLiteralReceiverCall($issue, $target)) {
+            return false;
+        }
+
+        // A vendor directive that wraps its body in a closure (TallStackUI's `@interact`) puts a
+        // `<x-...>` tag's compiled save inside a scope the prelude's top-level `$component`/
+        // `$attributes` declarations do not reach, and Psalm reports the save's `isset()` operand
+        // as undefined (#2130). The `isset()` guard makes the read safe at runtime.
+        if ($issue instanceof UndefinedVariable && self::isGeneratedTagSave($issue, $target)) {
             return false;
         }
 
@@ -800,6 +809,41 @@ final class ShadowIssueRelocator
     {
         return \preg_match('/^Docblock-defined type .+ for \$(?:' . $names . ') is (?:never|always) /', $message) === 1
             || \preg_match('/^Cannot resolve types for \$(?:' . $names . ') - docblock-defined type/', $message) === 1;
+    }
+
+    /**
+     * Whether an issue sits on the `isset()` operand of the save a `<x-...>` tag compiles for
+     * `$component`/`$attributes` (`if (isset($component)) { $__componentOriginal<hash> = $component; }`,
+     * `CompilesComponents::compileClassComponentOpening()`), the first read of the name in a closure
+     * scope the prelude's declaration does not reach (#2130). The whole statement must be absent from
+     * the template, so an author's own read of either name inside a closure keeps the finding.
+     * Residual: a template that writes the save statement itself keeps the finding on every compiled
+     * save in that file.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedTagSave(UndefinedVariable $issue, ShadowTarget $target): bool
+    {
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        $name = \substr($selection->snippet, $selection->start, $selection->end - $selection->start);
+        $open = 'if (isset(';
+
+        // `$name` is one of two literals by the time it reaches the pattern.
+        if (
+            ($name !== '$component' && $name !== '$attributes')
+            || $selection->start < \strlen($open)
+            || \substr($selection->snippet, $selection->start - \strlen($open), \strlen($open)) !== $open
+            || \preg_match('/\G\)\) \{ \$__' . \substr($name, 1) . 'Original[0-9a-f]++ = \\' . $name . '; \}/', $selection->snippet, $rest, 0, $selection->end) !== 1
+        ) {
+            return false;
+        }
+
+        return !TemplateSnippetMatcher::occursIn($open . $name . $rest[0], $target->templateSource, $target->markerPrefix());
     }
 
     /**
