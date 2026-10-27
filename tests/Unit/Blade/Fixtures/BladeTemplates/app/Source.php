@@ -69,6 +69,12 @@ final class Source
         throw new \RuntimeException('never called, type-only fixture');
     }
 
+    /** @return array<string, Htmlable> */
+    public static function htmlables(): array
+    {
+        throw new \RuntimeException('never called, type-only fixture');
+    }
+
     public static function htmlableOrString(): Htmlable|string
     {
         throw new \RuntimeException('never called, type-only fixture');

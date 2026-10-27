@@ -29,6 +29,7 @@ use Psalm\Issue\NonStaticSelfCall;
 use Psalm\Issue\NoValue;
 use Psalm\Issue\NullArgument;
 use Psalm\Issue\ParseError;
+use Psalm\Issue\PossiblyInvalidArgument;
 use Psalm\Issue\PossiblyInvalidCast;
 use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
@@ -601,6 +602,15 @@ final class ShadowIssueRelocatorTest extends TestCase
         yield 'View contract' => [new InvalidCast('Illuminate\Contracts\View\View cannot be cast to string', $location), $template];
         yield 'Htmlable in a union with a castable member' => [new PossiblyInvalidCast(self::HTMLABLE_CAST, $location), $template];
         yield 'class name in another case' => [new InvalidCast('illuminate\contracts\support\htmlable cannot be cast to string', $location), $template];
+        yield 'an operand with a subscript' => [new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation("\$links['']", 10, "<?php echo \$links['']; ?>")), self::onLineThree("{!! \$links[''] !!}")];
+        yield 'a comment after the operand' => [
+            new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('$links', 6, '<?php echo $links /* why */; ?>')),
+            self::onLineThree('{!! $links /* why */ !!}'),
+        ];
+        yield 'a comment before the operand' => [
+            new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('$links', 6, '<?php echo /* why */ $links; ?>')),
+            self::onLineThree('{!! /* why */ $links !!}'),
+        ];
         yield 'a whole expression as the operand' => [
             new PossiblyInvalidCast(self::HTMLABLE_CAST, self::selectionLocation("\$a ? \$links : 'x'", 17, "<?php echo \$a ? \$links : 'x'; ?>")),
             self::onLineThree("{!! \$a ? \$links : 'x' !!}"),
@@ -641,6 +651,19 @@ final class ShadowIssueRelocatorTest extends TestCase
         yield 'echo inside @php' => [new InvalidCast(self::HTMLABLE_CAST, $location), self::onLineThree('@php echo $links; @endphp')];
         yield 'raw php tag' => [new InvalidCast(self::HTMLABLE_CAST, $location), self::onLineThree('<?php echo $links; ?>')];
         yield 'raw echo beside an echo of the same expression' => [new InvalidCast(self::HTMLABLE_CAST, $location), self::onLineThree("{!! \$links !!}\n@php echo \$links; @endphp")];
+        // Blade strips the marker, so the author's echo and the generated one compile to the same text.
+        yield 'author echo Blade rewrote' => [
+            new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation("\$links['']", 10, "<?php echo \$links['']; ?>")),
+            self::onLineThree("@php echo \$links['##BEGIN-COMPONENT-CLASS##']; @endphp\n{!! \$links[''] !!}"),
+        ];
+        yield 'echo with a comment before the operand inside @php' => [
+            new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('$links', 6, '<?php echo /* why */ $links; ?>')),
+            self::onLineThree('@php echo /* why */ $links; @endphp'),
+        ];
+        yield 'echo with a comment after the operand inside @php' => [
+            new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('$links', 6, '<?php echo $links /* why */; ?>')),
+            self::onLineThree('@php echo $links /* why */; @endphp'),
+        ];
         // The operand did not survive compilation, so the template says nothing about the echo.
         yield 'operand absent from the template' => [new InvalidCast(self::HTMLABLE_CAST, $location), self::onLineThree('{!! $other !!}')];
         // The operand's shape.
@@ -654,6 +677,104 @@ final class ShadowIssueRelocatorTest extends TestCase
             new InvalidCast(self::HTMLABLE_CAST, self::selectionLocation('$links', 6, "<?php echo \$links . 'x'; ?>")),
             self::onLineThree("{!! \$links . 'x' !!}"),
         ];
+    }
+
+    /**
+     * The last line of a file with no final newline: Psalm cuts the snippet at the selection's end,
+     * so the `;` is only in the file. Same operand, same template; only the file's bytes differ.
+     */
+    #[Test]
+    public function an_echo_on_the_last_line_of_a_shadow_is_judged_by_the_file_not_the_snippet(): void
+    {
+        $template = self::onLineThree('{!! $links !!}');
+
+        $this->assertFalse($this->relocate(new InvalidCast(self::HTMLABLE_CAST, self::fileLocation('<?php echo $links; ?>', '$links')), $this->entry([9 => 3]), templateSource: $template));
+        $this->assertFalse($this->relocate(new InvalidCast(self::HTMLABLE_CAST, self::fileLocation('<?php echo $links ; ?>', '$links')), $this->entry([9 => 3]), templateSource: $template));
+
+        $kept = new InvalidCast(self::HTMLABLE_CAST, self::fileLocation("<?php echo \$links . 'x'; ?>", '$links'));
+        $this->assertInstanceOf(InvalidCast::class, $this->relocate($kept, $this->entry([9 => 3]), templateSource: self::onLineThree("{!! \$links . 'x' !!}")));
+    }
+
+    #[Test]
+    public function an_echo_whose_terminator_cannot_be_read_keeps_reporting(): void
+    {
+        $issue = new InvalidCast(self::HTMLABLE_CAST, self::fileLocation('<?php echo $links; ?>', '$links', writeFile: false));
+
+        $this->assertInstanceOf(InvalidCast::class, $this->relocate($issue, $this->entry([9 => 3]), templateSource: self::onLineThree('{!! $links !!}')));
+    }
+
+    /**
+     * The same provenance proof backs the #1535 argument gate, so an author echo Blade rewrote keeps
+     * its finding there too; the control differs only in the template.
+     */
+    #[Test]
+    #[DataProvider('echoArgumentTemplates')]
+    public function an_echo_argument_issue_is_dropped_only_when_no_author_echo_compiles_to_the_same_text(string $templateSource, bool $dropped): void
+    {
+        $issue = new PossiblyInvalidArgument(
+            'Argument 1 of echo expects string, but array<array-key, mixed>|string provided',
+            self::selectionLocation("\$links['']", 10, "<?php echo \$links['']; ?>"),
+            'echo',
+        );
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource);
+
+        $dropped ? $this->assertFalse($relocated) : $this->assertInstanceOf(PossiblyInvalidArgument::class, $relocated);
+    }
+
+    /** @return iterable<string, array{string, bool}> */
+    public static function echoArgumentTemplates(): iterable
+    {
+        yield 'generated echo only' => [self::onLineThree("{!! \$links[''] !!}"), true];
+        yield 'author echo Blade rewrote' => [self::onLineThree("@php echo \$links['##BEGIN-COMPONENT-CLASS##']; @endphp\n{!! \$links[''] !!}"), false];
+    }
+
+    /**
+     * A location on a real one-line file whose snippet stops at the selection's end, as Psalm's does
+     * for a last line without a newline.
+     */
+    private static function fileLocation(string $shadow, string $anchor, bool $writeFile = true): CodeLocation
+    {
+        $path = \sys_get_temp_dir() . '/shadow-last-line-' . \hash('xxh128', $shadow) . '.php';
+
+        if ($writeFile) {
+            \file_put_contents($path, $shadow);
+        } elseif (\is_file($path)) {
+            \unlink($path);
+        }
+
+        $end = (int) \strpos($shadow, $anchor) + \strlen($anchor);
+
+        return new class (\substr($shadow, 0, $end), $path, [$end - \strlen($anchor), $end]) extends CodeLocation {
+            /** @param array{int, int} $selection */
+            public function __construct(
+                private readonly string $snippetText,
+                string $path,
+                private readonly array $selection,
+            ) {
+                $this->file_path = $path;
+                $this->file_name = 'shadow.php';
+                $this->raw_line_number = 9;
+            }
+
+            #[\Override]
+            public function getSnippet(): string
+            {
+                return $this->snippetText;
+            }
+
+            #[\Override]
+            public function getSelectionBounds(): array
+            {
+                return $this->selection;
+            }
+
+            #[\Override]
+            public function getSnippetBounds(): array
+            {
+                return [0, \strlen($this->snippetText)];
+            }
+        };
     }
 
     /** A template whose `$line` sits on line 3, where the `[9 => 3]` line map sends the shadow line. */

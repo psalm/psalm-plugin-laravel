@@ -82,6 +82,9 @@ final class ShadowIssueRelocator
      * the `View` contract. It names ONE member of the echoed type (`$invalid_casts[0]`), so this
      * matches that member, never proof about the rest of a union.
      */
+    /** What may sit between a raw echo's operand and its `;`: whitespace and block comments. */
+    private const ECHO_TERMINATOR = '/\A(?:\s++|\/\*(?:(?!\*\/).)*+\*\/)*+;/s';
+
     private const HTMLABLE_CONTRACT_CAST = '/^Illuminate\\\\Contracts\\\\(?:Support\\\\Htmlable|View\\\\View) cannot be cast to string\z/i';
 
     /**
@@ -427,9 +430,9 @@ final class ShadowIssueRelocator
         // `{!! $x !!}` compiles to a bare `echo $x`, and Psalm casts an object operand to string with
         // `InvalidCast` (or `PossiblyInvalidCast` beside a castable member) when its type declares
         // no `__toString()`. `Htmlable` and the `View` contract declare none, although every
-        // implementation the framework ships is Stringable, so a value typed as the bare interface
-        // (`$paginator->links()`, `Breadcrumbs::render()`, a documented `@return Htmlable`) always
-        // reports there (#1196). `{{ }}` is not affected: `e()` accepts both contracts.
+        // framework implementation but `Illuminate\Foundation\Vite` is Stringable, so a value typed as
+        // the bare interface (`$paginator->links()`, `Breadcrumbs::render()`, a documented
+        // `@return Htmlable`) always reports there (#1196). `{{ }}` is not affected: `e()` accepts both contracts.
         if (
             ($issue instanceof InvalidCast || $issue instanceof PossiblyInvalidCast)
             && self::isGeneratedRawEchoOfHtmlableContract($issue, $target)
@@ -709,16 +712,19 @@ final class ShadowIssueRelocator
      *
      * Beyond the provenance proof of {@see self::isGeneratedEchoOperand()}, the operand must be what
      * Psalm's own echo-time cast reports, not an expression the author wrote that also fails to cast:
-     * it must end at the echo terminator, so the left side of `$x . 'y'` (reported as the operand of
-     * a concatenation, not of the echo) is out, and it must not itself be a `(string)` cast, which
-     * carries the same message on an argument that survives compilation verbatim.
+     * it must end at the echo terminator ({@see self::endsAtEchoTerminator()}), so the left side of
+     * `$x . 'y'` (reported as the operand of a concatenation, not of the echo) is out, and it must
+     * not itself be a `(string)` cast, which carries the same message on an argument that survives
+     * compilation verbatim.
      *
      * Residuals, accepted: the message names one member of the echoed type, so a union whose other
-     * member is an array or another class with no `__toString()` drops with it; a parenthesized
-     * operand, `Blade::setEchoFormat()` giving `{{ }}` the same bare shape, and a `{!! !!}` wrapped
-     * by a `Blade::stringable()` handler are not told apart or not matched.
+     * member is an array or another class with no `__toString()` drops with it, and so does a value
+     * typed as the contract that really is a non-Stringable implementation (`Illuminate\Foundation\Vite`
+     * has no `__toString()`); a parenthesized operand, a `//` comment inside the operand,
+     * `Blade::setEchoFormat()` giving `{{ }}` the same bare shape, and a `{!! !!}` wrapped by a
+     * `Blade::stringable()` handler are not told apart or not matched.
      *
-     * @psalm-mutation-free
+     * @psalm-capabilities read-props|write-this-props|write-refs|io
      */
     private static function isGeneratedRawEchoOfHtmlableContract(CodeIssue $issue, ShadowTarget $target): bool
     {
@@ -730,7 +736,7 @@ final class ShadowIssueRelocator
 
         if (
             !$selection instanceof ShadowSelection
-            || \preg_match('/\G\s*+;/', $selection->snippet, offset: $selection->end) !== 1
+            || !self::endsAtEchoTerminator($issue->code_location, $selection)
             || \preg_match('/\G\(\s*+(?:string|binary)\s*+\)/i', $selection->snippet, offset: $selection->start) === 1
         ) {
             return false;
@@ -740,10 +746,37 @@ final class ShadowIssueRelocator
     }
 
     /**
+     * Whether the shadow text after the selection is only whitespace and block comments up to a `;`.
+     * Psalm cuts the snippet at the selection's end when no newline follows it, which is the last
+     * line of a template with no final newline, so the terminator is then read from the file itself.
+     * Unreadable text is no terminator: the issue stays.
+     *
+     * @psalm-capabilities read-props|write-this-props|write-refs|io
+     */
+    private static function endsAtEchoTerminator(CodeLocation $location, ShadowSelection $selection): bool
+    {
+        $after = \substr($selection->snippet, $selection->end);
+
+        if ($after === '') {
+            $path = $location->file_path;
+            $bytes = \is_file($path) ? \file_get_contents($path, false, null, $location->getSelectionBounds()[1], 256) : false;
+            $after = $bytes === false ? '' : $bytes;
+        }
+
+        return \preg_match(self::ECHO_TERMINATOR, $after) === 1;
+    }
+
+    /**
      * The provenance proof shared by every echo gate: the enclosing `$callee` call cut out of the
      * shadow is absent from the raw template while its operand is present, so the author never wrote
      * the call and Blade did not rewrite the operand. See {@see self::isGeneratedEchoArgument()} for
      * why each half is needed.
+     *
+     * The call is searched with {@see TemplateSnippetMatcher::occursInWithRawTextRewrites()}: Blade
+     * strips component markers (and unescapes `@@`) inside an author's own `@php echo`, so that echo
+     * and a generated one can compile to identical text, and only the rewrite-aware search finds the
+     * author's. It can only keep more issues. The operand search stays exact: mirroring there would
+     * match more and drop more.
      *
      * @psalm-mutation-free
      */
@@ -761,7 +794,7 @@ final class ShadowIssueRelocator
             return false;
         }
 
-        return !TemplateSnippetMatcher::occursIn($call, $target->templateSource, $target->markerPrefix());
+        return !TemplateSnippetMatcher::occursInWithRawTextRewrites($call, $target->templateSource, $target->markerPrefix());
     }
 
     /**
