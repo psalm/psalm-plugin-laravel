@@ -90,7 +90,7 @@ final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterfa
         }
 
         // A plain type-check run has no taint graph to poison, so skip the work entirely.
-        if ($event->getCodebase()->taint_flow_graph === null) {
+        if (!$event->getCodebase()->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
             return null;
         }
 
