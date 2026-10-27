@@ -374,9 +374,9 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             return $resolved === \Illuminate\Support\Facades\App::class;
         }
 
-        // Fallback for root-namespace alias. The generated
-        // `class App extends \Illuminate\Support\Facades\App {}` alias stub means
-        // unqualified `App::make(...)` in application code resolves to the facade.
+        // Fallback for the root-namespace alias: the generated alias stub is
+        // `class_alias(\Illuminate\Support\Facades\App::class, 'App')`, so
+        // unqualified `App::make(...)` in application code is the facade.
         return $class->toString() === 'App';
     }
 

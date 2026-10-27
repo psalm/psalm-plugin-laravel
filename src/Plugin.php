@@ -283,8 +283,8 @@ final class Plugin implements PluginEntryPointInterface
 
         $carbonStubs = CarbonStubProvider::register($registration, $output);
 
-        // The alias stub stays out: its classes exist only as runtime class_alias() targets, and
-        // queueing them would let Psalm's reflection fallback autoload the alias.
+        // The alias stub stays out: it declares no classes, only class_alias() lines, and queueing
+        // its alias names would let Psalm's reflection fallback autoload the alias.
         $this->queueStubbedClassesForScanning($registration, [...$stubs, ...$carbonStubs]);
     }
 
@@ -637,9 +637,6 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/FacadeStubPrecedenceHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
         $registration->registerHooksFromClass(Handlers\Facades\FacadeStubPrecedenceHandler::class);
-        // Reads the enum aliases AliasStubProvider writes while stubs are registered, at AfterCodebasePopulated.
-        require_once __DIR__ . '/Handlers/Facades/EnumAliasStorageHandler.php';
-        $registration->registerHooksFromClass(Handlers\Facades\EnumAliasStorageHandler::class);
 
         // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
         // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.
@@ -877,6 +874,10 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\Annotate\AnnotationCollector::class);
             $registration->registerHooksFromClass(Blade\Annotate\AnnotationWriter::class);
         }
+
+        // Registered last, so earlier hooks that iterate classlike storages never see the duplicate alias keys.
+        require_once __DIR__ . '/Handlers/Facades/ClassAliasStorageHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\ClassAliasStorageHandler::class);
     }
 
     /**

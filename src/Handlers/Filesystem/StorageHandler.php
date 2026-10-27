@@ -191,8 +191,9 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
      * - the `Storage` facade (calls go through `__callStatic` → forwarded by Laravel's `@method`),
      * - the concrete `FilesystemManager` (common DI target),
      * - the `Factory` contract (DI by interface — `disk()` is its only method),
-     * - the app's root aliases of the facade (`\Storage`): Psalm dispatches by exact FQCN and the
-     *   alias is a separate stub class, so it needs its own registration. FacadeMapProvider only
+     * - the app's root aliases of the facade (`\Storage`): Psalm dispatches by exact FQCN, and
+     *   a scanned laravel-ide-helper `class Storage extends ...Storage {}` keeps the alias name
+     *   as a real class, so it needs its own registration. FacadeMapProvider only
      *   lists aliases the booted app's AliasLoader actually registers.
      *
      * @return list<string>

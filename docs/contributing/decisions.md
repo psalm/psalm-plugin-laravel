@@ -424,17 +424,22 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
-### AliasLoader aliases of an enum are `class_alias()` stub lines plus a storage registration (#2128)
+### AliasLoader aliases are `class_alias()` stub lines plus a storage bridge (#2128)
 
-**Decision:** `AliasStubProvider` writes `class_alias(\Target::class, 'Alias');` instead of `class Alias extends \Target {}` for an alias whose target `enum_exists()`. Every other target keeps the byte-identical `extends` line, because `AppFacadeRegistrationHandler` and `MacroHandler` depend on that shape. `EnumAliasStorageHandler` then registers the enum's `ClassLikeStorage` under the alias name at `AfterCodebasePopulated`.
+**Decision:** `AliasStubProvider` writes `class_alias(\Target\Fqcn::class, 'Alias');` for every AliasLoader alias, namespaced aliases included. A self-alias (`Introspect => Introspect`) and any alias that is part of a cycle in the AliasLoader map are skipped, because Psalm's `getUnAliasedName()` recurses without a cycle guard. The target is never autoloaded or reflected; its kind (class, interface, trait, enum) is Psalm's business. `ClassAliasStorageHandler` then registers the target's `ClassLikeStorage` under each alias name at `AfterCodebasePopulated`. It is registered last, so earlier hooks that iterate all storages never see the duplicate alias keys.
 
-**Why:** An enum cannot be a parent class, so the `extends` stub left `Alias::Case` as `UndefinedConstant`. Psalm's own `class_alias()` support resolves the case (`enum(App\Enums\Suit::Hearts)`), but `ClassConstAnalyzer` reads the storage by the ALIAS name (`:244`), and a missing entry throws and crashes the whole run. The enum's own storage is present; the alias-keyed entry is what is missing. The analyzer unaliases the name first (`:145-146`) only when `classExists()` is true, and `ClassLikes` records an enum as `existing_classes_lc = false` (`addFullyQualifiedEnumName`, `:265`) when Psalm found it through its reflection route: an enum outside `<projectFiles>` that no Composer autoloader maps (`packages/`, `Modules/`). Enums in project files or Composer-mapped vendor packages do not crash. The storage registration closes that gap; the `!has($enum)` guard in the handler is defensive, because it cannot help when the target storage is absent. The proper fix is upstream in vimeo/psalm.
+**Why:**
+- The old `class Alias extends \Target {}` subclass was not the runtime class. An enum cannot be a parent, so `Alias::Case` stayed `UndefinedConstant` (#2128). A parameter typed `\Eloquent` rejected a plain `Model`. A `#[\ShortAttr]` alias reported `InvalidAttribute`. The root `\Response` alias missed the attachment exemption of the `Response::make()` taint handling. As `class_alias()`, Psalm canonicalizes the alias name in calls and types, so all four resolve to the target.
+- Psalm still reads storage by the raw alias name in a few places: `ClassConstAnalyzer:244`, `AttributesAnalyzer:76`, `ClassLikes::getClassConstantType()` (docblock `@param \Alias::CONST`) and `Methods::getStorage()` (callable `['Alias', 'method']`). A missing alias-keyed entry throws an uncaught `InvalidArgumentException` (the whole run dies) or loses the type. The bridge shares the target's storage object under the alias key, so `name` stays the target and types print the target.
+- The proper fix belongs in vimeo/psalm, where those analyzers should unalias first. Larastan and PHPStan ship no alias stubs and rely on the runtime `class_alias()` (larastan/larastan#2435).
 
-**Autoload cost:** none new. `FacadeMapProvider::init()` runs `is_subclass_of()` over every alias target inside `catch (\Throwable)` before `AliasStubProvider` runs (`Plugin.php`), so `enum_exists()` finds the target already loaded. A target whose autoload throws keeps the `extends` line, so a bad alias never breaks the boot.
+**Kept on purpose:** alias names in `FacadeMapProvider` and `AppFacadeRegistrationHandler::isIlluminateAliasStub()`. laravel-ide-helper declares `class Date extends \Illuminate\Support\Facades\Date {}` and similar; once such a declaration is scanned, Psalm keeps the alias as a real class and providers keyed by the alias name are live again. For the same reason `ModelRegistrationHandler`'s `get_parent_class() === false` guard stays (ide-helper declares `class Eloquent extends Model`).
 
-**Probed, not needed:** an interface or trait target through the `extends` stub resolves its constants and static methods, so only enums take the `class_alias()` path.
-
-**Known limits:** `Alias::Case` inside a docblock type (`@param Alias::Case`) still reports `UndefinedConstant`; a type test cannot cover this because the type-test app registers no aliases, so the end-to-end proof is `BladeTemplatesTest`. `Alias::class` is typed as the enum's FQCN because Psalm canonicalizes `class_alias()` names, while PHP evaluates it to the alias name; only a literal-name comparison or an `Alias::class` docblock type notices.
+**Known limits:**
+- `Alias::class` is typed as the target FQCN for class targets because Psalm canonicalizes; PHP evaluates it to the alias name.
+- A class used only through its alias still reports `UnusedClass` (unchanged from the `extends` stub).
+- The bridge is rebuilt per run. Psalm's language-server incremental rescans of a target file are not tracked beyond the handler re-running.
+- Psalm records the alias spelling, so a different-case spelling may report `InvalidClass` like any class.
 
 ### `Schema` facade: `@mixin Schema\Builder` types the introspection methods, with no handler whitelist (#1680)
 

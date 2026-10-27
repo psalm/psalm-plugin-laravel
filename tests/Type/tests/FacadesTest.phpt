@@ -40,5 +40,18 @@ function test_str_alias(): bool {
 function test_arr_alias(): array {
     return \Arr::wrap('value');
 }
+
+/**
+ * The `Eloquent` root alias IS `Illuminate\Database\Eloquent\Model` (a `class_alias()`), so a
+ * `Model` is accepted where `\Eloquent` is declared. An `extends` stub would reject it with
+ * ArgumentTypeCoercion.
+ */
+function takes_eloquent_alias(\Eloquent $model): void {
+    unset($model);
+}
+
+function test_eloquent_alias_accepts_model(\Illuminate\Database\Eloquent\Model $model): void {
+    takes_eloquent_alias($model);
+}
 ?>
 --EXPECTF--
