@@ -815,10 +815,17 @@ final class ShadowIssueRelocator
      * Whether an issue sits on the `isset()` operand of the save a `<x-...>` tag compiles for
      * `$component`/`$attributes` (`if (isset($component)) { $__componentOriginal<hash> = $component; }`,
      * `CompilesComponents::compileClassComponentOpening()`), the first read of the name in a closure
-     * scope the prelude's declaration does not reach (#2130). The whole statement must be absent from
-     * the template, so an author's own read of either name inside a closure keeps the finding.
-     * Residual: a template that writes the save statement itself keeps the finding on every compiled
-     * save in that file.
+     * scope the prelude's declaration does not reach (#2130).
+     *
+     * Psalm reports an undeclared name once per scope, at its first read, so the save can be the only
+     * row for an author's own read of the same name (`:foo="$attributes"` on the tag). The drop is
+     * therefore limited to templates that never name the variable: with no author read of it, every
+     * read in the shadow is `isset()`-guarded bookkeeping. "Names" is a union of two readings of the
+     * source, so neither Blade rewrite can hide a mention: component-class markers removed (an
+     * `@php` block is stored before `{{-- --}}` comments are stripped, so PHP inside such a comment
+     * is live), and comments then markers removed (a `$compo{{-- --}}nent` joins into the name).
+     * Residual: a template naming the variable anywhere, even in a comment or as a component view's
+     * own `$attributes` read, keeps the finding on every compiled save inside a directive closure.
      *
      * @psalm-mutation-free
      */
@@ -838,12 +845,27 @@ final class ShadowIssueRelocator
             ($name !== '$component' && $name !== '$attributes')
             || $selection->start < \strlen($open)
             || \substr($selection->snippet, $selection->start - \strlen($open), \strlen($open)) !== $open
-            || \preg_match('/\G\)\) \{ \$__' . \substr($name, 1) . 'Original[0-9a-f]++ = \\' . $name . '; \}/', $selection->snippet, $rest, 0, $selection->end) !== 1
+            || \preg_match('/\G\)\) \{ \$__' . \substr($name, 1) . 'Original[0-9a-f]++ = \\' . $name . '; \}/', $selection->snippet, offset: $selection->end) !== 1
         ) {
             return false;
         }
 
-        return !TemplateSnippetMatcher::occursIn($open . $name . $rest[0], $target->templateSource, $target->markerPrefix());
+        return !self::sourceNames($name, $target->templateSource);
+    }
+
+    /**
+     * Whether the template source mentions `$name` (with its `$`) as a whole variable, read both ways
+     * described on {@see self::isGeneratedTagSave()}. Over-matching only keeps a finding.
+     *
+     * @psalm-pure
+     */
+    private static function sourceNames(string $name, string $source): bool
+    {
+        $markers = ['##BEGIN-COMPONENT-CLASS##', '##END-COMPONENT-CLASS##'];
+        $pattern = '/' . \preg_quote($name, '/') . '(?![A-Za-z0-9_\x80-\xff])/';
+
+        return \preg_match($pattern, \str_replace($markers, '', $source)) === 1
+            || \preg_match($pattern, \str_replace($markers, '', (string) \preg_replace('/\{\{--.*?--\}\}/s', '', $source))) === 1;
     }
 
     /**
