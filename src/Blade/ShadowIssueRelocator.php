@@ -82,10 +82,10 @@ final class ShadowIssueRelocator
      * the `View` contract. It names ONE member of the echoed type (`$invalid_casts[0]`), so this
      * matches that member, never proof about the rest of a union.
      */
+    private const HTMLABLE_CONTRACT_CAST = '/^Illuminate\\\\Contracts\\\\(?:Support\\\\Htmlable|View\\\\View) cannot be cast to string\z/i';
+
     /** What may sit between a raw echo's operand and its `;`: whitespace and block comments. */
     private const ECHO_TERMINATOR = '/\A(?:\s++|\/\*(?:(?!\*\/).)*+\*\/)*+;/s';
-
-    private const HTMLABLE_CONTRACT_CAST = '/^Illuminate\\\\Contracts\\\\(?:Support\\\\Htmlable|View\\\\View) cannot be cast to string\z/i';
 
     /**
      * @param ShadowTarget                    $target  the shadow the issue was found in
