@@ -15,6 +15,7 @@ use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Progress\Progress;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type\Union;
 
 /**
@@ -42,6 +43,8 @@ use Psalm\Type\Union;
 final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface, AfterCodebasePopulatedInterface
 {
     private const FACADE_FQCN = 'Illuminate\\Support\\Facades\\Facade';
+
+    private const MACROABLE_FQCN = 'Illuminate\\Support\\Traits\\Macroable';
 
     private const FACADE_FQCN_LOWER = 'illuminate\\support\\facades\\facade';
 
@@ -181,6 +184,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             }
 
             self::registerHandlersForFacade($codebase, $storage->name, $rootClass);
+            self::unsealIfRootForwardsUnknownCalls($codebase, $storage, $rootClass);
         }
     }
 
@@ -280,6 +284,50 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             $event,
             $rootClass,
         ));
+    }
+
+    /**
+     * Psalm seals every user-defined class's methods when `sealAllMethods` is on, so an unknown
+     * static call on a facade reports UndefinedMagicMethod even when the resolved root forwards it
+     * through its own `__call` (#2138). Lift the seal for such facades only.
+     *
+     * Only a facade with no seal of its own (`sealed_methods === null`) is touched: a class-level
+     * `@method` tag on the facade is an explicit catalogue and keeps Psalm's sealing. Unsealed means
+     * any call is accepted, with the unknown result typed `mixed`; methods the root really declares
+     * still resolve exactly through {@see FacadeMethodHandler}.
+     *
+     * Forwarding means a `__call` from anywhere but `Macroable`, whose `__call` throws
+     * `BadMethodCallException` for anything but a registered macro. A root without Psalm class
+     * storage or without a declared `__call` is never proven to forward, and a root that never
+     * resolved does not reach here, so their facades stay sealed.
+     *
+     * Runs after population, so facade subclasses that already inherited the seal keep it.
+     * Class aliases share this storage object, so they are covered by the same mutation.
+     *
+     * @param class-string $rootClass
+     */
+    private static function unsealIfRootForwardsUnknownCalls(
+        Codebase $codebase,
+        ClassLikeStorage $facadeStorage,
+        string $rootClass,
+    ): void {
+        if ($facadeStorage->sealed_methods !== null) {
+            return;
+        }
+
+        $provider = $codebase->classlike_storage_provider;
+
+        if (!$provider->has($rootClass)) {
+            return;
+        }
+
+        $callMethodId = $provider->get($rootClass)->declaring_method_ids['__call'] ?? null;
+
+        if ($callMethodId === null || \strcasecmp($callMethodId->fq_class_name, self::MACROABLE_FQCN) === 0) {
+            return;
+        }
+
+        $facadeStorage->sealed_methods = false;
     }
 
     /**

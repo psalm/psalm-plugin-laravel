@@ -424,6 +424,18 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
+### App facades whose root forwards through `__call` are unsealed, not given a catch-all `@method` (#2138)
+
+**Decision:** After registering providers, `AppFacadeRegistrationHandler` sets `sealed_methods = false` on an app facade when (a) the facade has no seal of its own (`sealed_methods === null`) and (b) its resolved root declares `__call` from anything other than `Illuminate\Support\Traits\Macroable`. A root that never resolved (unbound accessor, or a constructor or provider that throws) is left sealed. A facade with class-level `@method` tags (an explicit catalogue), a root without `__call`, a Macroable-only root, and a root without Psalm class storage keep `UndefinedMagicMethod`.
+
+**Why:** With `sealAllMethods` on, Psalm seals every user-defined class, vendor packages included, so `Facade::anything()` reports `UndefinedMagicMethod` even when the root forwards it at runtime. Unsealing makes Psalm accept the call and type the unknown result `mixed`, while real root methods keep their exact type through `FacadeMethodHandler`. The Macroable exclusion is because its `__call` throws for anything but a registered macro, so reporting is correct. Macroable provenance is read from `declaring_method_ids['__call']`, which names the trait for trait-provided methods.
+
+**Rejected:**
+- Unsealing a bound-but-throwing root (a string alias like `tymon.jwt.auth`, or an autowirable class whose constructor throws). It would stop the noise for facades Testbench cannot build, but nothing proves the root forwards, so it hides real typos. Kept reported on purpose.
+- Restoring the old `extends` alias stubs or adding a generated catch-all `@method` pseudo-method. Both change types and params of real methods.
+
+**Known limits:** A facade subclass that populated before this hook already inherited the parent's seal and keeps it. Skipped facades (`Illuminate\`, `Laravel\`, `Mockery\`, `PHPUnit\`) are untouched.
+
 ### AliasLoader aliases are `class_alias()` stub lines plus a storage bridge (#2128)
 
 **Decision:** `AliasStubProvider` writes `class_alias(\Target\Fqcn::class, 'Alias');` for every AliasLoader alias, namespaced aliases included. A self-alias (`Introspect => Introspect`) and any alias that is part of a cycle in the AliasLoader map are skipped, because Psalm's `getUnAliasedName()` recurses without a cycle guard. The target is never autoloaded or reflected; its kind (class, interface, trait, enum) is Psalm's business. `ClassAliasStorageHandler` then registers the target's `ClassLikeStorage` under each alias name at `AfterCodebasePopulated`. It is registered last, so earlier hooks that iterate all storages never see the duplicate alias keys.
