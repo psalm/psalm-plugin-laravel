@@ -267,8 +267,9 @@ apps:
     groups: [blade, pest, laravel-13, livewire, large]
     # RPG worldbuilding app with 1,248 Blade templates, the largest classic
     # (controller view) template set in the registry. Psalm 7.0.0-rc10 runs out
-    # of memory analysing AttributeMentionService (Collection put() in a loop,
-    # reproduces without the plugin), so the file is removed before analysis.
+    # of memory analysing AttributeMentionService (template placeholder blowup on
+    # Collection put() in a foreach, fixed on master by vimeo/psalm#11966), so the
+    # file is removed before analysis. Drop the rm once a Psalm release has the fix.
     # config/backup.php needs a mail address from .env during package:discover.
     before_install: rm -f app/Services/AttributeMentionService.php && cp .env.example .env
 
