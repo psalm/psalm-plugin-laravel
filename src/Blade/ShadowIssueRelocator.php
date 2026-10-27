@@ -6,6 +6,8 @@ namespace Psalm\LaravelPlugin\Blade;
 
 use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
+use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
@@ -444,18 +446,6 @@ final class ShadowIssueRelocator
             // receiver, none of which suppressed it — and maps normally once #1544 gives
             // `@php`/raw-PHP body lines their own markers, so an unmapped instance of this class is
             // always the synthesized duplicate, never a genuine `$this` fetch (#1545).
-            //
-            // `UndefinedThisPropertyAssignment` (the `__set` sibling) is DELIBERATELY not included
-            // here, despite coming from the identical kind of positionless synthesized node
-            // (`InstancePropertyAssignmentAnalyzer::analyzeSetCall()`): its twin,
-            // `UndefinedMagicPropertyAssignment`, requires a resolved `$var_id` and
-            // `InstancePropertyAssignmentAnalyzer` returns BEFORE emitting it when the receiver has
-            // none (a function/static-call result, an array offset — `Magic::make()->missing = 1`,
-            // `$objects[0]->missing = 1`). For those receivers the synthesized issue is the ONLY
-            // diagnostic, and this relocator sees one issue at a time with no way to know whether a
-            // twin fired for the same access, so the only sound choice is to never drop it: the
-            // pre-#1545 duplicate on line 1 with the `(unmapped)` suffix is the accepted trade-off
-            // (#1545 review; the corpus this issue was filed against was 100% the fetch shape).
             if ($issue instanceof UndefinedThisPropertyFetch) {
                 return false;
             }
@@ -463,10 +453,22 @@ final class ShadowIssueRelocator
             // Line -1 is Psalm's positionless sentinel (a location built from a synthesized,
             // attribute-less node, e.g. the `UnhandledMatchError` branch of a desugared `match`).
             // IssueBuffer::isSuppressed() drops such an issue on plain PHP, so decline and let Psalm
-            // do the same instead of parking it on line 1 (#1801). The assignment shape above keeps
-            // the #1545 trade-off.
-            if ($issue->code_location->getLineNumber() === -1 && !$issue instanceof UndefinedThisPropertyAssignment) {
-                return null;
+            // do the same instead of parking it on line 1 (#1801).
+            if ($issue->code_location->getLineNumber() === -1) {
+                if (!$issue instanceof UndefinedThisPropertyAssignment) {
+                    return null;
+                }
+
+                // The `__set` sibling comes from the same kind of positionless node
+                // (`InstancePropertyAssignmentAnalyzer::analyzeSetCall()`), but its twin,
+                // `UndefinedMagicPropertyAssignment`, is NOT unconditional: it needs a var id on the
+                // fetch AND an undeclared property, and for `Magic::make()->x = 1`, `$objects[0]->x = 1`
+                // or a declared protected property this unmapped issue is the only diagnostic. The
+                // relocator sees one issue at a time, so it drops only when it can prove the twin fired
+                // for every access of that name (#2129); otherwise it keeps the line-1 duplicate (#1545).
+                if (self::isDuplicateOfMappedAssignmentIssue($issue)) {
+                    return false;
+                }
             }
 
             $templateLine = 1;
@@ -881,6 +883,42 @@ final class ShadowIssueRelocator
         }
 
         return !TemplateSnippetMatcher::occursInWithRawTextRewrites($receiver[0] . $call, $target->templateSource, $target->markerPrefix());
+    }
+
+    /**
+     * Whether the `UndefinedMagicPropertyAssignment` twin of a synthesized `__set` issue certainly
+     * fired: the shadow only touches the property through receivers Psalm resolves a var id for, and
+     * the property is not declared (a declared one makes `propertyExists()` true, which silences the
+     * twin). Every failure to prove either half answers false, which keeps the issue.
+     */
+    private static function isDuplicateOfMappedAssignmentIssue(UndefinedThisPropertyAssignment $issue): bool
+    {
+        $separator = \strpos($issue->property_id, '::$');
+
+        if ($separator === false) {
+            return false;
+        }
+
+        $class = \substr($issue->property_id, 0, $separator);
+        $property = \substr($issue->property_id, $separator + 3);
+
+        // Rare path (a sealed class's magic assignment), so the shadow is read and parsed here rather
+        // than cached. Read from disk, not `Codebase::getStatementsForFile()`: its cache-hit branch
+        // mutates the file's diff map, which this event handler must not do mid-analysis.
+        $shadow = @\file_get_contents($issue->getFilePath());
+
+        if ($shadow === false || !ShadowPropertyAccesses::allHaveVarId($shadow, $property)) {
+            return false;
+        }
+
+        try {
+            $storage = ProjectAnalyzer::getInstance()->getCodebase()->classlike_storage_provider->get($class);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException|\Error) {
+            // Unknown or unpopulated class, or no booted analyzer (pure unit context): not proven.
+            return false;
+        }
+
+        return !isset($storage->declaring_property_ids[$property]);
     }
 
     /**

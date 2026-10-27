@@ -302,12 +302,11 @@ final class ShadowIssueRelocatorTest extends TestCase
     /**
      * #1545 review: `UndefinedThisPropertyAssignment` LOOKS like the identical `__set` sibling
      * (same kind of synthesized, positionless `VirtualMethodCall` node via
-     * `InstancePropertyAssignmentAnalyzer::analyzeSetCall()`), but is deliberately NOT dropped.
-     * Its twin, `UndefinedMagicPropertyAssignment`, requires a resolved `$var_id` and is never
-     * emitted for a non-variable receiver (`Magic::make()->missing = 1`); for that receiver shape
-     * this unmapped issue is the ONLY diagnostic, and the relocator sees one issue at a time with
-     * no way to know whether a twin fired for the same access — so it stays reported on line 1,
-     * same as any other unmapped non-`MixedIssue`.
+     * `InstancePropertyAssignmentAnalyzer::analyzeSetCall()`), but is not dropped on sight: its twin,
+     * `UndefinedMagicPropertyAssignment`, needs a resolved `$var_id` and an undeclared property, so
+     * for `Magic::make()->missing = 1` this unmapped issue is the ONLY diagnostic. A located
+     * (non-`-1`) instance is never the synthesized one at all, and stays reported on line 1 like any
+     * other unmapped non-`MixedIssue`.
      */
     #[Test]
     public function an_unmapped_undefined_this_property_assignment_is_still_reported_on_line_one(): void
@@ -322,12 +321,59 @@ final class ShadowIssueRelocatorTest extends TestCase
     }
 
     /**
+     * #2129: the synthesized (`-1`) issue is dropped only when the shadow AND the class storage prove its
+     * mapped twin fired. The drop itself needs a booted analyzer for the storage half, so the positive
+     * case lives in `BladeTemplatesTest`; here every failure to prove keeps the line-1 issue. Even a
+     * shadow whose only receiver is a plain variable keeps it with no analyzer to ask whether the
+     * property is declared, and so does an unreadable shadow or a property id that names no property.
+     */
+    #[Test]
+    #[DataProvider('unprovenSynthesizedAssignments')]
+    public function a_synthesized_assignment_issue_is_kept_when_its_twin_is_not_proven(?string $shadowSource, string $propertyId): void
+    {
+        $path = \sys_get_temp_dir() . '/relocator-2129-' . \getmypid() . '.php';
+
+        if ($shadowSource === null) {
+            if (\is_file($path)) {
+                \unlink($path);
+            }
+        } else {
+            \file_put_contents($path, $shadowSource);
+        }
+
+        try {
+            $issue = new UndefinedThisPropertyAssignment('Instance property ' . $propertyId . ' is not defined', $this->positionlessLocation($path), $propertyId);
+
+            $relocated = $this->relocate($issue, $this->entry([]));
+        } finally {
+            if (\is_file($path)) {
+                \unlink($path);
+            }
+        }
+
+        $this->assertInstanceOf(UndefinedThisPropertyAssignment::class, $relocated);
+        $this->assertSame(1, $relocated->code_location->getLineNumber());
+        $this->assertSame('Instance property ' . $propertyId . ' is not defined (unmapped)', $relocated->message);
+    }
+
+    /** @return iterable<string, array{?string, string}> */
+    public static function unprovenSynthesizedAssignments(): iterable
+    {
+        yield 'variable receiver but no analyzer to check the declaration' => ["<?php\n\$m->bar = 1;\n", 'Foo::$bar'];
+        yield 'call receiver' => ["<?php\nFoo::make()->bar = 1;\n", 'Foo::$bar'];
+        yield 'unreadable shadow' => [null, 'Foo::$bar'];
+        yield 'property id without a property' => ["<?php\n\$m->bar = 1;\n", 'Foo'];
+    }
+
+    /**
      * A location built from a node Psalm synthesized (a desugared `match` arm's `VirtualThrow`)
      * carries no attributes, so its line is Psalm's positionless `-1`.
      */
-    private function positionlessLocation(): CodeLocation
+    private function positionlessLocation(string $path = self::SHADOW): CodeLocation
     {
-        $source = new class implements FileSource {
+        $source = new class ($path) implements FileSource {
+            public function __construct(private readonly string $path) {}
+
             public function getFileName(): string
             {
                 return 'shadow.php';
@@ -335,7 +381,7 @@ final class ShadowIssueRelocatorTest extends TestCase
 
             public function getFilePath(): string
             {
-                return '/tmp/shadow.php';
+                return $this->path;
             }
 
             public function getRootFileName(): string
@@ -345,7 +391,7 @@ final class ShadowIssueRelocatorTest extends TestCase
 
             public function getRootFilePath(): string
             {
-                return '/tmp/shadow.php';
+                return $this->path;
             }
 
             public function getAliases(): Aliases
