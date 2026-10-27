@@ -359,6 +359,8 @@ final class BladeTemplatesTest extends TestCase
         yield 'array offset receiver' => ['set-offset-only.blade.php'];
         yield 'literal property name alongside a variable receiver' => ['set-literal-name.blade.php'];
         yield 'declared but inaccessible property' => ['set-declared-protected.blade.php'];
+        yield 'property a provider asserts exists' => ['set-provider-declared.blade.php'];
+        yield 'sealed interface in an intersection with an unsealed class' => ['set-intersection-interface.blade.php'];
     }
 
     #[Test]

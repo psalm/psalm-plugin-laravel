@@ -6,7 +6,6 @@ namespace Psalm\LaravelPlugin\Blade;
 
 use Psalm\CodeLocation;
 use Psalm\CodeLocation\Raw;
-use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\Issue\ArgumentIssue;
 use Psalm\Issue\CodeIssue;
@@ -888,8 +887,8 @@ final class ShadowIssueRelocator
     /**
      * Whether the `UndefinedMagicPropertyAssignment` twin of a synthesized `__set` issue certainly
      * fired: the shadow only touches the property through receivers Psalm resolves a var id for, and
-     * the property is not declared (a declared one makes `propertyExists()` true, which silences the
-     * twin). Every failure to prove either half answers false, which keeps the issue.
+     * the property is not declared (a declared one, or one a plugin asserts, makes `propertyExists()`
+     * true, which silences the twin). Every failure to prove either half answers false, which keeps the issue.
      */
     private static function isDuplicateOfMappedAssignmentIssue(UndefinedThisPropertyAssignment $issue): bool
     {
@@ -912,9 +911,25 @@ final class ShadowIssueRelocator
         }
 
         try {
-            $storage = ProjectAnalyzer::getInstance()->getCodebase()->classlike_storage_provider->get($class);
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException|\Error) {
-            // Unknown or unpopulated class, or no booted analyzer (pure unit context): not proven.
+            $codebase = ProjectAnalyzer::getInstance()->getCodebase();
+            $storage = $codebase->classlike_storage_provider->get($class);
+
+            // The sealed `__set` call is analyzed once per member of an intersection, so an interface
+            // or trait named here may be the sealed member while the twin ran on an unsealed one.
+            if ($storage->is_interface || $storage->is_trait) {
+                return false;
+            }
+
+            // `Codebase::propertyExists()` consults this provider first, so `true` here means the twin
+            // stayed silent for a property the class never declares. Asked directly, without source or
+            // context, because `propertyExists()` records property references as a side effect. The
+            // plugin's own Eloquent providers answer null in write mode, so a model still drops.
+            if ($codebase->properties->property_existence_provider->doesPropertyExist($class, $property, false) === true) {
+                return false;
+            }
+        } catch (\Throwable) {
+            // Unknown or unpopulated class, no booted analyzer (pure unit context), or a third-party
+            // provider that needs the source this call cannot supply: not proven.
             return false;
         }
 
