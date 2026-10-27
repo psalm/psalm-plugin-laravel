@@ -17,6 +17,11 @@ return RectorConfig::configure()
         'tests/Type/macro-fixtures-vendor-style.php', // The vendor-style macro fixture (PR #991 + PR #994) deliberately exercises closures without native return types or docblock `@return` so the AST-scan + body-inference paths are the only sources of narrowing.
         \Rector\PHPUnit\CodeQuality\Rector\FuncCall\AssertFuncCallToPHPUnitAssertRector::class => ['tests/*'], //  Rewrites `assert($x instanceof Foo)` inside test classes to `Assert::assertInstanceOf(...)`,  the two are not equivalent
         \Rector\PHPUnit\CodeQuality\Rector\MethodCall\AssertEmptyNullableObjectToAssertInstanceofRector::class => ['tests/*'],
+        // The `insteadof` / alias fixtures need one `use A, B { ... }` block. Splitting it into separate `use` statements makes the trait methods collide (fatal) and drops the precedence under test.
+        \Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector::class => [
+            'tests/Application/app/Services/PrecedenceMacroableService.php',
+            'tests/Application/app/Services/AliasedMacroableService.php',
+        ],
         \Rector\DeadCode\Rector\ClassMethod\RemoveParentDelegatingClassMethodRector::class => ['tests/*'], // GetKeyOverrideModel
         // Rewrites `=== null` on a Psalm-typed nullable into `instanceof` a Psalm\Internal class, which silently
         // evaluates false (disabling the handler) once Psalm renames that class.

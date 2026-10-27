@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Facades;
 
 use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Traits\Macroable;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
@@ -296,10 +297,20 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      * any call is accepted, with the unknown result typed `mixed`; methods the root really declares
      * still resolve exactly through {@see FacadeMethodHandler}.
      *
-     * Forwarding means a `__call` from anywhere but `Macroable`, whose `__call` throws
-     * `BadMethodCallException` for anything but a registered macro. A root without Psalm class
-     * storage or without a declared `__call` is never proven to forward, and a root that never
-     * resolved does not reach here, so their facades stay sealed.
+     * Forwarding needs two runtime facts, both checked against what PHP dispatches rather than
+     * Psalm's storage where the two can disagree:
+     * - The root's effective `__call` is not Macroable's, which throws `BadMethodCallException`
+     *   for anything but a registered macro. Psalm's `ClassLikeNodeScanner` ignores `insteadof`
+     *   precedence (vimeo/psalm#12113), so `use Forwarder, Macroable { Macroable::__call insteadof
+     *   Forwarder; }` is stored as `Forwarder::__call` while PHP runs Macroable's. A root whose
+     *   `__call` is not its own is therefore compared by reflected file and start line, because
+     *   `ReflectionMethod::getDeclaringClass()` names the using class for trait methods.
+     * - The facade's effective `__callStatic` is Laravel's `Facade::__callStatic`, the only
+     *   dispatcher that reaches the root's `__call`. `use Macroable` on the facade or an own
+     *   `__callStatic` replaces it and throws first, even if it would forward.
+     * A root without Psalm class storage or without a declared `__call` is never proven to
+     * forward, and a root that never resolved does not reach here, so their facades stay sealed.
+     * This is a plugin-side guard, not a fix of the Psalm provenance defect.
      *
      * Runs after population, so facade subclasses that already inherited the seal keep it.
      * Class aliases share this storage object, so they are covered by the same mutation.
@@ -323,11 +334,59 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
 
         $callMethodId = $provider->get($rootClass)->declaring_method_ids['__call'] ?? null;
 
-        if ($callMethodId === null || \strcasecmp($callMethodId->fq_class_name, self::MACROABLE_FQCN) === 0) {
+        if (
+            $callMethodId === null
+            || \strcasecmp($callMethodId->fq_class_name, self::MACROABLE_FQCN) === 0
+            || !self::facadeUsesLaravelDispatcher($facadeStorage->name)
+            // A `__call` the root declares itself always wins over trait methods; only a
+            // trait-provided one can be Macroable's under a stale storage entry.
+            || (\strcasecmp($callMethodId->fq_class_name, $rootClass) !== 0 && self::rootCallIsMacroable($rootClass))
+        ) {
             return;
         }
 
         $facadeStorage->sealed_methods = false;
+    }
+
+    /**
+     * Whether PHP runs `Facade::__callStatic` for calls on this facade, which is the only dispatcher
+     * that forwards to the root. A trait or an own override reports the facade (or an intermediate
+     * class) as declaring class, so only the plain inherited method matches. An unreflectable
+     * method counts as not matching: forwarding is then unproven and the facade stays sealed.
+     *
+     */
+    private static function facadeUsesLaravelDispatcher(string $facadeClass): bool
+    {
+        if (!\class_exists($facadeClass)) {
+            return false;
+        }
+
+        try {
+            return \strcasecmp((new \ReflectionMethod($facadeClass, '__callStatic'))->getDeclaringClass()->name, self::FACADE_FQCN) === 0;
+        } catch (\ReflectionException) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether PHP runs `Macroable::__call` for calls on this root. For trait methods
+     * `getDeclaringClass()` names the using class, so identity is the reflected file and start line.
+     * An unreflectable method counts as Macroable's: forwarding is then unproven and the facade
+     * stays sealed.
+     *
+     * @param class-string $rootClass
+     */
+    private static function rootCallIsMacroable(string $rootClass): bool
+    {
+        try {
+            $call = new \ReflectionMethod($rootClass, '__call');
+            $macroableCall = new \ReflectionMethod(Macroable::class, '__call');
+        } catch (\ReflectionException) {
+            return true;
+        }
+
+        return $call->getFileName() === $macroableCall->getFileName()
+            && $call->getStartLine() === $macroableCall->getStartLine();
     }
 
     /**
