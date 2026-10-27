@@ -10,6 +10,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\Plugin\RegistrationInterface;
+use Tests\Psalm\LaravelPlugin\Unit\Stubs\Fixtures\AliasedFacade;
+use Tests\Psalm\LaravelPlugin\Unit\Stubs\Fixtures\AliasedSuit;
 
 #[CoversClass(AliasStubProvider::class)]
 final class AliasStubProviderTest extends TestCase
@@ -41,6 +43,7 @@ final class AliasStubProviderTest extends TestCase
     protected function tearDown(): void
     {
         AliasLoader::setInstance($this->originalLoader);
+        AliasStubProvider::reset();
 
         foreach (\array_diff(\scandir($this->dir) ?: [], ['.', '..']) as $entry) {
             $path = $this->dir . '/' . $entry;
@@ -97,6 +100,54 @@ final class AliasStubProviderTest extends TestCase
         }
 
         $this->assertSame(['aliases.phpstub'], \array_values(\array_diff(\scandir($this->dir) ?: [], ['.', '..'])));
+    }
+
+    #[Test]
+    public function it_writes_an_enum_target_as_class_alias_and_keeps_extends_for_every_other_target(): void
+    {
+        AliasLoader::getInstance([
+            'Suit' => AliasedSuit::class,
+            'Loadable' => AliasedFacade::class,
+        ]);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        // An enum cannot be a parent class, so `extends` would leave `Suit::Hearts` undefined (#2128).
+        $this->assertSame(
+            "<?php\n\n"
+            . "class Foo extends \\Acme\\FooFacade {}\n"
+            . "class_alias(\\Tests\\Psalm\\LaravelPlugin\\Unit\\Stubs\\Fixtures\\AliasedSuit::class, 'Suit');\n"
+            . "class Loadable extends \\Tests\\Psalm\\LaravelPlugin\\Unit\\Stubs\\Fixtures\\AliasedFacade {}\n",
+            \file_get_contents($location),
+        );
+        $this->assertSame(['Suit' => AliasedSuit::class], AliasStubProvider::enumAliases());
+    }
+
+    #[Test]
+    public function it_keeps_the_extends_line_when_loading_the_target_throws(): void
+    {
+        $autoloader = static function (string $class): void {
+            if ($class === 'Acme\\ThrowsOnLoad') {
+                throw new \RuntimeException('target cannot be loaded');
+            }
+        };
+        \spl_autoload_register($autoloader);
+
+        try {
+            AliasLoader::getInstance(['Broken' => 'Acme\\ThrowsOnLoad']);
+            $location = $this->dir . '/aliases.phpstub';
+
+            AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+        } finally {
+            \spl_autoload_unregister($autoloader);
+        }
+
+        $this->assertSame(
+            "<?php\n\nclass Foo extends \\Acme\\FooFacade {}\nclass Broken extends \\Acme\\ThrowsOnLoad {}\n",
+            \file_get_contents($location),
+        );
+        $this->assertSame([], AliasStubProvider::enumAliases());
     }
 
     private function registrationExpectingStub(string $location): RegistrationInterface

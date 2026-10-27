@@ -234,6 +234,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\Support\RelationResolver::reset();
         SchemaStateProvider::reset();
         Handlers\Facades\AppFacadeRegistrationHandler::reset();
+        AliasStubProvider::reset();
         Handlers\Facades\DateFacadeHandler::reset();
         Handlers\Facades\FacadeMethodHandler::reset();
         Handlers\Helpers\NowTodayHandler::reset();
@@ -636,6 +637,9 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/FacadeStubPrecedenceHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\AppFacadeRegistrationHandler::class);
         $registration->registerHooksFromClass(Handlers\Facades\FacadeStubPrecedenceHandler::class);
+        // Reads the enum aliases AliasStubProvider writes while stubs are registered, at AfterCodebasePopulated.
+        require_once __DIR__ . '/Handlers/Facades/EnumAliasStorageHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\EnumAliasStorageHandler::class);
 
         // `App::make()`/`makeWith()`/`get()` class-string narrowing. Its getClassLikeNames() reads
         // FacadeMapProvider (for the `\App` alias), so it relies on init() having run above.

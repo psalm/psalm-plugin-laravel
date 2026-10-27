@@ -406,6 +406,18 @@ final class BladeTemplatesTest extends TestCase
         $this->assertContains('UndefinedFunction', $this->typesIn('PlainCaller.php'));
     }
 
+    // Issue #2128: an AliasLoader alias that points at an enum cannot be modelled as `class Alias extends \Enum {}`.
+
+    /** The template and the PHP file reach `Fx\Suit` only through the global `Suit` alias; the PHP file also pins the case type. */
+    #[Test]
+    public function an_enum_case_resolves_through_an_alias_in_a_template_and_a_php_file(): void
+    {
+        $this->assertSilent('enum-alias.blade.php');
+        $this->assertSilent('enum-alias-unscanned.blade.php');
+        // Like every fixture class nothing calls it, so UnusedClass is expected; anything else is the alias failing.
+        $this->assertSame(['UnusedClass'], $this->typesIn('EnumAliasConsumer.php'), \var_export($this->in('EnumAliasConsumer.php'), true));
+    }
+
     /** Psalm silently clamps `--threads` to 1 on Windows or without pcntl, so the proof would fail there instead of proving anything. */
     #[Test]
     public function the_run_forked_so_the_injection_reached_workers(): void

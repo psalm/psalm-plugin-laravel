@@ -10,7 +10,9 @@ use Psalm\Plugin\RegistrationInterface;
 
 /**
  * Generates and registers a `class <Alias> extends <FQCN> {}` stub file for each alias
- * declared by the booted Laravel app's {@see AliasLoader}.
+ * declared by the booted Laravel app's {@see AliasLoader}. An alias of an enum, which cannot be
+ * extended, is written as a `class_alias()` call instead and its storage is completed by
+ * {@see \Psalm\LaravelPlugin\Handlers\Facades\EnumAliasStorageHandler}.
  *
  * Reflects the actual aliases for the project (`config/app.php` aliases plus package
  * discovery), not just Laravel's hardcoded defaults, so plugin support follows whatever
@@ -23,16 +25,40 @@ use Psalm\Plugin\RegistrationInterface;
  */
 final class AliasStubProvider
 {
+    /** @var array<string, class-string> alias => enum, the aliases written as `class_alias()` this invocation */
+    private static array $enumAliases = [];
+
+    /**
+     * @return array<string, class-string>
+     */
+    public static function enumAliases(): array
+    {
+        return self::$enumAliases;
+    }
+
+    public static function reset(): void
+    {
+        self::$enumAliases = [];
+    }
+
     public static function register(RegistrationInterface $registration, string $location): void
     {
         /** @var array<string, class-string> $aliases */
         $aliases = AliasLoader::getInstance()->getAliases();
         $stub = "<?php\n\n";
+        self::reset();
 
         foreach ($aliases as $alias => $fqcn) {
             // Skip namespaced aliases — `class Some\Name extends ...` is invalid PHP
             // without a namespace block
             if (\str_contains($alias, '\\')) {
+                continue;
+            }
+
+            if (self::isEnum($fqcn)) {
+                self::$enumAliases[$alias] = $fqcn;
+                $stub .= "class_alias(\\{$fqcn}::class, '{$alias}');\n";
+
                 continue;
             }
 
@@ -54,5 +80,22 @@ final class AliasStubProvider
         }
 
         $registration->addStubFile($location);
+    }
+
+    /**
+     * An enum cannot be a parent class, so `class Alias extends \Enum {}` leaves `Alias::Case` undefined.
+     * Psalm models a literal `class_alias()` call (the call AliasLoader makes at runtime) instead.
+     *
+     * The target is loaded to tell the two apart. AliasLoader targets are loadable by contract and
+     * FacadeMapProvider loads most of them anyway; a target whose autoload throws keeps the `extends`
+     * line rather than breaking the boot.
+     */
+    private static function isEnum(string $fqcn): bool
+    {
+        try {
+            return \enum_exists($fqcn);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

@@ -424,6 +424,18 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
+### AliasLoader aliases of an enum are `class_alias()` stub lines plus a storage registration (#2128)
+
+**Decision:** `AliasStubProvider` writes `class_alias(\Target::class, 'Alias');` instead of `class Alias extends \Target {}` for an alias whose target `enum_exists()`. Every other target keeps the byte-identical `extends` line, because `AppFacadeRegistrationHandler` and `MacroHandler` depend on that shape. `EnumAliasStorageHandler` then registers the enum's `ClassLikeStorage` under the alias name at `AfterCodebasePopulated`.
+
+**Why:** An enum cannot be a parent class, so the `extends` stub left `Alias::Case` as `UndefinedConstant`. Psalm's own `class_alias()` support resolves the case (`enum(App\Enums\Suit::Hearts)`), but `ClassConstAnalyzer` reads the storage by the ALIAS name, and unaliases only for targets `classExists()` accepts, which excludes enums. When the enum was not scanned as a class (outside `<projectFiles>`, not Composer-mapped) that read throws and crashes the whole run. The storage registration closes that; the proper fix is upstream in vimeo/psalm.
+
+**Autoload cost:** `enum_exists()` autoloads each alias target once per run. AliasLoader targets are loadable by contract and `FacadeMapProvider::init()` loads the facade targets anyway. A target whose autoload throws keeps the `extends` line, so a bad alias never breaks the boot.
+
+**Probed, not needed:** an interface or trait target through the `extends` stub resolves its constants and static methods, so only enums take the `class_alias()` path.
+
+**Known limits:** `Alias::Case` inside a docblock type (`@param Alias::Case`) still reports `UndefinedConstant`; a type test cannot cover this because the type-test app registers no aliases, so the end-to-end proof is `BladeTemplatesTest`. A dead-code run can report the enum as unused when only an alias references it.
+
 ### `Schema` facade: `@mixin Schema\Builder` types the introspection methods, with no handler whitelist (#1680)
 
 **Decision:** `stubs/common/Support/Facades/Schema.phpstub` carries `@mixin \Illuminate\Database\Schema\Builder`. `Schema::getTables()`, `getViews()`, `getColumns()`, `getIndexes()`, `getForeignKeys()`, `getTableListing()`, `getColumnListing()` (and `getSchemas()`, `getIndexListing()`) resolve to Builder's types (the installed Laravel's docblock, or the Builder stub's correction described below) instead of the facade tag's bare `array`: `list<array{...}>` rows for `getTables()`, `getViews()`, `getColumns()`, `getForeignKeys()`, `getSchemas()`; `array<int, array{...}>` for `getIndexes()`; `list<string>` for `getTableListing()`, `getColumnListing()`, `getIndexListing()`. No `FacadeStubPrecedenceHandler` change.
