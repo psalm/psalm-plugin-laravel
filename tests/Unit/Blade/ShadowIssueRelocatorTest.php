@@ -16,6 +16,7 @@ use Psalm\CodeLocation\Raw;
 use Psalm\FileSource;
 use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
+use Psalm\Issue\DuplicateClass;
 use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
 use Psalm\Issue\InvalidCast;
@@ -1118,5 +1119,37 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(NonStaticSelfCall::class, $relocated);
         $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    // Issue #2126: no message may name a shadow cache file.
+
+    #[Test]
+    public function a_message_naming_another_registered_shadow_names_its_template_instead(): void
+    {
+        $otherShadow = '/tmp/other-shadow.php';
+        $otherTarget = new ShadowTarget(new ShadowEntry('/app/resources/views/first.blade.php', [], []), '', 'resources/views/first.blade.php', false, '', false);
+        $issue = new DuplicateClass('Class Foo has already been defined in ' . $otherShadow, $this->shadowLocation(9));
+        $target = new ShadowTarget($this->entry([9 => 3]), self::TEMPLATE_SOURCE, 'resources/views/profile.blade.php', false, '', false);
+
+        $relocated = ShadowIssueRelocator::relocate(
+            $issue,
+            $target,
+            static fn(string $path): ?ShadowTarget => $path === $otherShadow ? $otherTarget : null,
+        );
+
+        $this->assertInstanceOf(DuplicateClass::class, $relocated);
+        $this->assertSame('Class Foo has already been defined in resources/views/first.blade.php', $relocated->message);
+    }
+
+    /** Only a path some template owns is rewritten: Psalm's own wording for anything else is kept. */
+    #[Test]
+    public function a_message_path_no_template_owns_is_left_alone(): void
+    {
+        $issue = new DuplicateClass('Class Foo has already been defined in /tmp/unowned.php and /app/Foo.php', $this->shadowLocation(9));
+
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]));
+
+        $this->assertInstanceOf(DuplicateClass::class, $relocated);
+        $this->assertSame('Class Foo has already been defined in /tmp/unowned.php and /app/Foo.php', $relocated->message);
     }
 }

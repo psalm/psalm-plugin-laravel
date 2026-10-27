@@ -419,6 +419,76 @@ final class BladeTemplatesTest extends TestCase
         $this->assertStringContainsString('Forking analysis', self::$output, 'The run never forked, so it proves nothing about workers.');
     }
 
+    // Issue #2126: a class a template declares is scanned like a project class, so a duplicate name made
+    // Psalm drop the project class's own findings and name a shadow cache path in its message.
+
+    /** The collision must never change what a non-template file reports, in either scan order. */
+    #[Test]
+    public function a_template_class_redeclaring_a_project_class_leaves_the_project_files_findings_alone(): void
+    {
+        $this->assertCompiled('class-collision-project.blade.php');
+        $types = $this->typesIn('CollidedReport.php');
+
+        $this->assertContains('InvalidReturnStatement', $types);
+        $this->assertNotContains('DuplicateClass', $types);
+    }
+
+    #[Test]
+    public function the_collision_is_reported_on_the_template_declaration_line_naming_the_project_file(): void
+    {
+        $this->assertCompiled('class-collision-project.blade.php');
+        $reported = \array_values(\array_filter(
+            $this->in('class-collision-project.blade.php'),
+            static fn(array $issue): bool => $issue['type'] === 'DuplicateClass',
+        ));
+
+        $this->assertCount(1, $reported);
+        $this->assertSame(5, $reported[0]['line']);
+        $this->assertStringContainsString('Fx\CollidedReport', $reported[0]['message']);
+        $this->assertStringContainsString('app/CollidedReport.php', $reported[0]['message']);
+    }
+
+    #[Test]
+    public function two_templates_declaring_one_class_report_it_once_on_the_later_template_without_naming_a_shadow(): void
+    {
+        $this->assertCompiled('class-collision-first.blade.php');
+        $this->assertCompiled('class-collision-second.blade.php');
+
+        $this->assertSame([], $this->in('class-collision-first.blade.php'));
+
+        $reported = \array_values(\array_filter(
+            $this->in('class-collision-second.blade.php'),
+            static fn(array $issue): bool => $issue['type'] === 'DuplicateClass',
+        ));
+
+        $this->assertCount(1, $reported);
+        $this->assertSame(5, $reported[0]['line']);
+        $this->assertStringContainsString('resources/views/class-collision-first.blade.php', $reported[0]['message']);
+
+        foreach ($this->issues() as $issue) {
+            $this->assertStringNotContainsString('blade-shadows', $issue['message'], $issue['type'] . ' in ' . $issue['file']);
+        }
+    }
+
+    /** Only the duplicate declaration is withheld from analysis: the rest of the template keeps reporting. */
+    #[Test]
+    public function a_template_with_a_colliding_class_keeps_its_other_findings(): void
+    {
+        $this->assertCompiled('class-collision-second.blade.php');
+
+        $this->assertContains('TooFewArguments', $this->typesIn('class-collision-second.blade.php'));
+    }
+
+    #[Test]
+    public function a_template_class_nothing_else_declares_is_still_analyzed(): void
+    {
+        $this->assertCompiled('class-unique.blade.php');
+        $reported = $this->in('class-unique.blade.php');
+
+        $this->assertSame(['InvalidReturnStatement'], \array_column($reported, 'type'));
+        $this->assertSame(9, $reported[0]['line']);
+    }
+
     /** Static state carrying per-run facts must not survive into the next plugin invocation. */
     #[Test]
     public function the_captured_helper_files_are_cleared_on_reset(): void
