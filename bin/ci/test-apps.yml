@@ -249,7 +249,12 @@ apps:
     # the app/ skeleton auto-detection would miss entirely.
     project_dir: packages/*/src
     # Same asset-publishing hook as agent-fleet; dropped for the same reason.
-    before_install: composer config --no-interaction --unset scripts.post-update-cmd
+    # spatie/laravel-sluggable 4.0.5 adds HasSlug::resolveRouteBindingQuery(),
+    # which collides with HasUlids on App\Models\Workspace and fatals the
+    # artisan scripts. Pin the locked 4.0.3.
+    before_install: >-
+      composer config --no-interaction --unset scripts.post-update-cmd
+      && composer require --no-update --no-interaction spatie/laravel-sluggable:4.0.3
 
   - name: aureuserp
     repo: https://github.com/aureuserp/aureuserp.git
