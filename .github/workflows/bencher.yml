@@ -1,0 +1,51 @@
+name: Bencher
+
+# Continuous benchmarking on Bencher Bare Metal: https://bencher.dev/perf/psalm-plugin-laravel
+# This half builds the self-contained Monica image (tests/Benchmark/Dockerfile) without secrets,
+# so fork PRs are safe to build. bencher-track.yml (workflow_run) pushes it to Bencher, runs it
+# on bare metal, and reports to the PR; it never executes the PR's code on a GitHub runner.
+
+on:
+  push:
+    branches: [4.x, 3.x]
+    paths: &paths
+      - 'src/**'
+      - 'stubs/**'
+      - 'composer.json'
+      - 'tests/Benchmark/**'
+      - '.github/workflows/bencher*.yml'
+  pull_request:
+    paths: *paths
+
+concurrency:
+  group: bencher-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build benchmark image
+        run: |
+          docker build --file tests/Benchmark/Dockerfile --tag bench .
+          mkdir /tmp/bench
+          docker save bench | gzip > /tmp/bench/image.tar.gz
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: bench-image
+          path: /tmp/bench/image.tar.gz
+          retention-days: 1
