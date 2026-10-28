@@ -234,6 +234,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\Support\RelationResolver::reset();
         SchemaStateProvider::reset();
         Handlers\Facades\AppFacadeRegistrationHandler::reset();
+        AliasStubProvider::reset();
         Handlers\Facades\DateFacadeHandler::reset();
         Handlers\Facades\FacadeMethodHandler::reset();
         Handlers\Helpers\NowTodayHandler::reset();
@@ -282,8 +283,8 @@ final class Plugin implements PluginEntryPointInterface
 
         $carbonStubs = CarbonStubProvider::register($registration, $output);
 
-        // The alias stub stays out: its classes exist only as runtime class_alias() targets, and
-        // queueing them would let Psalm's reflection fallback autoload the alias.
+        // The alias stub stays out: it declares no classes, only class_alias() lines, and queueing
+        // its alias names would let Psalm's reflection fallback autoload the alias.
         $this->queueStubbedClassesForScanning($registration, [...$stubs, ...$carbonStubs]);
     }
 
@@ -873,6 +874,10 @@ final class Plugin implements PluginEntryPointInterface
             $registration->registerHooksFromClass(Blade\Annotate\AnnotationCollector::class);
             $registration->registerHooksFromClass(Blade\Annotate\AnnotationWriter::class);
         }
+
+        // Registered last, so earlier hooks that iterate classlike storages never see the duplicate alias keys.
+        require_once __DIR__ . '/Handlers/Facades/ClassAliasStorageHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\ClassAliasStorageHandler::class);
     }
 
     /**
@@ -960,7 +965,6 @@ final class Plugin implements PluginEntryPointInterface
             $finder = $factory->getFinder();
         } elseif ($app->bound('view.finder')) {
             try {
-                /** @var \Illuminate\View\FileViewFinder $finder */
                 $finder = $app->make('view.finder');
             } catch (\Throwable $throwable) {
                 // Degrades this one lookup, not the whole plugin (same policy as resolveViewFactory()).

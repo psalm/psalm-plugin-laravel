@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Facades;
 
 use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Traits\Macroable;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
@@ -15,6 +16,7 @@ use Psalm\Plugin\EventHandler\Event\MethodExistenceProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Progress\Progress;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type\Union;
 
 /**
@@ -122,12 +124,15 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                 continue;
             }
 
-            // Global-namespace alias stubs (e.g. `class Redis extends \Illuminate\Support\Facades\Redis {}`
-            // emitted by AliasStubProvider for every entry in AliasLoader::getAliases()) duplicate
-            // facades that FacadeMapProvider::init() already discovered through the alias loader
-            // and registered providers for. Re-probing them here is wasted work AND produces
-            // user-visible warnings for environment collisions FacadeMapProvider silently
-            // tolerates (only debug-level there):
+            // AliasStubProvider writes `class_alias()` lines, so Psalm resolves a root alias such as
+            // `Redis` to the facade itself and the alias never appears as its own storage entry.
+            // A global-namespace class that extends a first-party Illuminate facade
+            // (e.g. `class Redis extends \Illuminate\Support\Facades\Redis {}`) still shows up when
+            // the project scans a laravel-ide-helper declaration, which keeps the alias name as a
+            // real class. Such a class duplicates a facade that FacadeMapProvider::init() already
+            // discovered through the alias loader and registered providers for. Re-probing it here
+            // is wasted work AND produces user-visible warnings for environment collisions
+            // FacadeMapProvider silently tolerates (only debug-level there):
             //   - `Redis` collides with the global \Redis class shipped by ext-redis, so
             //     is_subclass_of() resolves to the extension class and returns false.
             //   - `Concurrency` (and other manager-backed facades) need a service-provider
@@ -178,6 +183,7 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             }
 
             self::registerHandlersForFacade($codebase, $storage->name, $rootClass);
+            self::unsealIfRootForwardsUnknownCalls($codebase, $storage, $rootClass);
         }
     }
 
@@ -280,6 +286,105 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     }
 
     /**
+     * Psalm seals every user-defined class's methods when `sealAllMethods` is on, so an unknown
+     * static call on a facade reports UndefinedMagicMethod even when the resolved root forwards it
+     * through its own `__call` (#2138). Lift the seal for such facades only.
+     *
+     * Only a facade with no seal of its own (`sealed_methods === null`) is touched: a class-level
+     * `@method` tag on the facade is an explicit catalogue and keeps Psalm's sealing. Unsealed means
+     * any call is accepted, with the unknown result typed `mixed`; methods the root really declares
+     * still resolve exactly through {@see FacadeMethodHandler}.
+     *
+     * Forwarding needs two runtime facts, both read from what PHP dispatches because Psalm's storage
+     * can disagree with it:
+     * - The root's effective `__call` is not Macroable's, which throws `BadMethodCallException`
+     *   for anything but a registered macro. Storage cannot say which: `ClassLikeNodeScanner` ignores
+     *   `insteadof` precedence (vimeo/psalm#12113) and keeps the first-listed trait, and a class-level
+     *   stub can redeclare `__call` on a root that uses Macroable at runtime. The reflected file and
+     *   start line decide, because `ReflectionMethod::getDeclaringClass()` names the using class
+     *   for trait methods.
+     * - The facade's effective `__callStatic` is Laravel's `Facade::__callStatic`, the only
+     *   dispatcher that reaches the root's `__call`. `use Macroable` on the facade or an own
+     *   `__callStatic` replaces it and throws first, even if it would forward.
+     * A root without Psalm class storage or without a declared `__call` is never proven to
+     * forward, and a root that never resolved does not reach here, so their facades stay sealed.
+     * This is a plugin-side guard, not a fix of the Psalm provenance defect.
+     *
+     * Runs after population, so facade subclasses that already inherited the seal keep it.
+     * Class aliases share this storage object, so they are covered by the same mutation.
+     *
+     * @param class-string $rootClass
+     */
+    private static function unsealIfRootForwardsUnknownCalls(
+        Codebase $codebase,
+        ClassLikeStorage $facadeStorage,
+        string $rootClass,
+    ): void {
+        if ($facadeStorage->sealed_methods !== null) {
+            return;
+        }
+
+        $provider = $codebase->classlike_storage_provider;
+
+        if (!$provider->has($rootClass)) {
+            return;
+        }
+
+        $callMethodId = $provider->get($rootClass)->declaring_method_ids['__call'] ?? null;
+
+        if (
+            $callMethodId === null
+            || !self::facadeUsesLaravelDispatcher($facadeStorage->name)
+            || self::rootCallIsMacroable($rootClass)
+        ) {
+            return;
+        }
+
+        $facadeStorage->sealed_methods = false;
+    }
+
+    /**
+     * Whether PHP runs `Facade::__callStatic` for calls on this facade, which is the only dispatcher
+     * that forwards to the root. A trait or an own override reports the facade (or an intermediate
+     * class) as declaring class, so only the plain inherited method matches. An unreflectable
+     * method counts as not matching: forwarding is then unproven and the facade stays sealed.
+     *
+     */
+    private static function facadeUsesLaravelDispatcher(string $facadeClass): bool
+    {
+        if (!\class_exists($facadeClass)) {
+            return false;
+        }
+
+        try {
+            return \strcasecmp((new \ReflectionMethod($facadeClass, '__callStatic'))->getDeclaringClass()->name, self::FACADE_FQCN) === 0;
+        } catch (\ReflectionException) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether PHP runs `Macroable::__call` for calls on this root. For trait methods
+     * `getDeclaringClass()` names the using class, so identity is the reflected file and start line.
+     * An unreflectable method counts as Macroable's: forwarding is then unproven and the facade
+     * stays sealed.
+     *
+     * @param class-string $rootClass
+     */
+    private static function rootCallIsMacroable(string $rootClass): bool
+    {
+        try {
+            $call = new \ReflectionMethod($rootClass, '__call');
+            $macroableCall = new \ReflectionMethod(Macroable::class, '__call');
+        } catch (\ReflectionException) {
+            return true;
+        }
+
+        return $call->getFileName() === $macroableCall->getFileName()
+            && $call->getStartLine() === $macroableCall->getStartLine();
+    }
+
+    /**
      * Facades we never register against. First-party `Illuminate\` facades already ship with
      * `@method` catalogues (and are covered by {@see \Psalm\LaravelPlugin\Stubs\FacadeMapProvider::init()}
      * for the alias path). `Laravel\` sub-packages (Cashier, Horizon, Telescope, Pulse,
@@ -301,13 +406,15 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
     }
 
     /**
-     * Detect a global-namespace alias stub generated by {@see \Psalm\LaravelPlugin\Stubs\AliasStubProvider}.
+     * Detect a global-namespace class that extends a first-party Illuminate facade, i.e. the
+     * `class Foo extends \Illuminate\Support\Facades\Foo {}` shape.
      *
-     * Such stubs take the form `class Foo extends \Illuminate\Support\Facades\Foo {}` — one per
-     * entry in `AliasLoader::getAliases()` whose alias name contains no backslash. They appear
-     * in Psalm's storage as Facade subclasses but are duplicates of facades already mapped by
+     * {@see \Psalm\LaravelPlugin\Stubs\AliasStubProvider} writes `class_alias()` lines, which
+     * never produce this shape. It does occur when the project scans a laravel-ide-helper
+     * declaration (`_ide_helper.php`): Psalm then keeps the alias name as a real class. Such a
+     * class is a duplicate of a facade already mapped by
      * {@see \Psalm\LaravelPlugin\Stubs\FacadeMapProvider::init()} through the same alias loader.
-     * Re-probing them in {@see self::afterCodebasePopulated()} adds no coverage and surfaces
+     * Re-probing it in {@see self::afterCodebasePopulated()} adds no coverage and surfaces
      * environment-dependent failures (extension class collision, missing service-provider
      * bindings) that FacadeMapProvider tolerates silently.
      *

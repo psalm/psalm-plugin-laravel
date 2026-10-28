@@ -424,6 +424,35 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
+### App facades whose root forwards through `__call` are unsealed (#2138)
+
+**Decision:** `AppFacadeRegistrationHandler` sets `sealed_methods = false` on an app facade with no seal of its own when PHP would forward an unknown static call to the root's `__call`: the root has a `__call` that is not `Illuminate\Support\Traits\Macroable`'s (which throws), and the facade still uses `Facade::__callStatic`. Real root methods keep their types through `FacadeMethodHandler`; unknown calls are `mixed`.
+
+**Why reflection, not storage:** Psalm's `declaring_method_ids['__call']` can name the wrong method. It ignores `insteadof` and keeps the first-listed trait ([vimeo/psalm#12113](https://github.com/vimeo/psalm/issues/12113)), and a class stub can declare `__call` on a root that uses Macroable at runtime. So the root's `__call` is compared to `Macroable::__call` by reflected file and start line (`getDeclaringClass()` names the using class for trait methods). Reflection failure keeps the seal.
+
+**Stays reported:** facades with `@method` tags, roots that do not resolve (unbound accessor, or a root that throws while being built, such as `JWTAuth` without a secret), roots without Psalm storage, and facades that override `__callStatic` (including `use Macroable`). Only Laravel's `Macroable` is recognised.
+
+**Rejected:** restoring the `extends` alias stubs (#2128) or a catch-all `@method`, since both change real method types and params.
+
+**Known limit:** a facade subclass inherits its parent's seal during population, before this hook runs, and keeps it.
+
+### AliasLoader aliases are `class_alias()` stub lines plus a storage bridge (#2128)
+
+**Decision:** `AliasStubProvider` writes `class_alias(\Target\Fqcn::class, 'Alias');` for every AliasLoader alias, namespaced aliases included. A self-alias (`Introspect => Introspect`) and any alias that is part of a cycle in the AliasLoader map are skipped, because Psalm's `getUnAliasedName()` recurses without a cycle guard. The target is never autoloaded or reflected; its kind (class, interface, trait, enum) is Psalm's business. `ClassAliasStorageHandler` then registers the target's `ClassLikeStorage` under each alias name at `AfterCodebasePopulated`. It is registered last, so earlier hooks that iterate all storages never see the duplicate alias keys.
+
+**Why:**
+- The old `class Alias extends \Target {}` subclass was not the runtime class. An enum cannot be a parent, so `Alias::Case` stayed `UndefinedConstant` (#2128). A parameter typed `\Eloquent` rejected a plain `Model`. A `#[\ShortAttr]` alias reported `InvalidAttribute`. The root `\Response` alias missed the attachment exemption of the `Response::make()` taint handling. As `class_alias()`, Psalm canonicalizes the alias name in calls and types, so all four resolve to the target.
+- Psalm still reads storage by the raw alias name in a few places: `ClassConstAnalyzer:244`, `AttributesAnalyzer:76`, `ClassLikes::getClassConstantType()` (docblock `@param \Alias::CONST`) and `Methods::getStorage()` (callable `['Alias', 'method']`). A missing alias-keyed entry throws an uncaught `InvalidArgumentException` (the whole run dies) or loses the type. The bridge shares the target's storage object under the alias key, so `name` stays the target and types print the target.
+- The proper fix belongs in vimeo/psalm, where those analyzers should unalias first. Larastan and PHPStan ship no alias stubs and rely on the runtime `class_alias()` (larastan/larastan#2435).
+
+**Kept on purpose:** alias names in `FacadeMapProvider` and `AppFacadeRegistrationHandler::isIlluminateAliasStub()`. laravel-ide-helper declares `class Date extends \Illuminate\Support\Facades\Date {}` and similar; once such a declaration is scanned, Psalm keeps the alias as a real class and providers keyed by the alias name are live again. For the same reason `ModelRegistrationHandler`'s `get_parent_class() === false` guard stays (ide-helper declares `class Eloquent extends Model`).
+
+**Known limits:**
+- `Alias::class` is typed as the target FQCN for class targets because Psalm canonicalizes; PHP evaluates it to the alias name.
+- A class used only through its alias still reports `UnusedClass` (unchanged from the `extends` stub).
+- The bridge is rebuilt per run. Psalm's language-server incremental rescans of a target file are not tracked beyond the handler re-running.
+- Psalm records the alias spelling, so a different-case spelling may report `InvalidClass` like any class.
+
 ### `Schema` facade: `@mixin Schema\Builder` types the introspection methods, with no handler whitelist (#1680)
 
 **Decision:** `stubs/common/Support/Facades/Schema.phpstub` carries `@mixin \Illuminate\Database\Schema\Builder`. `Schema::getTables()`, `getViews()`, `getColumns()`, `getIndexes()`, `getForeignKeys()`, `getTableListing()`, `getColumnListing()` (and `getSchemas()`, `getIndexListing()`) resolve to Builder's types (the installed Laravel's docblock, or the Builder stub's correction described below) instead of the facade tag's bare `array`: `list<array{...}>` rows for `getTables()`, `getViews()`, `getColumns()`, `getForeignKeys()`, `getSchemas()`; `array<int, array{...}>` for `getIndexes()`; `list<string>` for `getTableListing()`, `getColumnListing()`, `getIndexListing()`. No `FacadeStubPrecedenceHandler` change.

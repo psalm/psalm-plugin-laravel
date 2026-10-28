@@ -19,7 +19,7 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.0.0-rc10` or later. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 is currently a release candidate: the root `vimeo/psalm:^7.0@RC` requirement allows that one package to be pre-release without lowering your project's `minimum-stability`.
+v4 requires `vimeo/psalm ^7.0.0-rc12` or later. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 is currently a release candidate: the root `vimeo/psalm:^7.0@RC` requirement allows that one package to be pre-release without lowering your project's `minimum-stability`.
 
 Psalm 7 introduces new issue types that may surface in your codebase:
 

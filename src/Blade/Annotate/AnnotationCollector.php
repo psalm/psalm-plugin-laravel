@@ -595,7 +595,7 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             }
 
             foreach ($expr->items as $item) {
-                $flat[] = $item?->value;
+                $flat[] = $item->value;
             }
         }
 
@@ -625,9 +625,9 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
         }
 
         foreach ($data->items as $item) {
-            $key = $item?->key;
+            $key = $item->key;
 
-            if ($item !== null && $key instanceof String_ && $key->value === 'view') {
+            if ($key instanceof String_ && $key->value === 'view') {
                 return $item->value;
             }
         }

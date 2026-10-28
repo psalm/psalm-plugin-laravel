@@ -69,10 +69,10 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
 
 /**
  * The exempt journey labels name the concrete factory, its contract, and the fully qualified
- * facade. The root `\Response` alias reaches the same sink under the unqualified label
- * `Response::make`, which is left out of that list, so it keeps the sink. Accepted imprecision: a
- * project that trims the alias registry is unaffected either way, and the miss is a retained
- * finding rather than a dropped one.
+ * facade. The root `\Response` alias is a `class_alias()` of that facade, so the call resolves to
+ * `Illuminate\Support\Facades\Response::make` and reaches the exempt facade label. Kept as a
+ * regression guard: it reported TaintedHtml while the alias was an `extends` stub whose own
+ * unqualified `Response::make` label was outside the exempt list.
  */
 function makeThroughRootAliasFacade(Request $request): void
 {
@@ -82,7 +82,6 @@ function makeThroughRootAliasFacade(Request $request): void
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML

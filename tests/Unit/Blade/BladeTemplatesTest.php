@@ -406,6 +406,43 @@ final class BladeTemplatesTest extends TestCase
         $this->assertContains('UndefinedFunction', $this->typesIn('PlainCaller.php'));
     }
 
+    // Issue #2128: every AliasLoader alias is modelled with `class_alias()`, and the plugin registers the target's
+    // storage under the alias name, because Psalm reads storage by the raw alias in several analyzers and crashes
+    // (`Could not get class storage`) or loses types when it is missing. `extends` only worked for plain classes.
+
+    /** The template and the PHP file reach `Fx\Suit` only through the global `Suit` alias; the PHP file also pins the case type. */
+    #[Test]
+    public function an_enum_case_resolves_through_an_alias_in_a_template_and_a_php_file(): void
+    {
+        $this->assertSilent('enum-alias.blade.php');
+        $this->assertSilent('enum-alias-unscanned.blade.php');
+        // Like every fixture class nothing calls it, so UnusedClass is expected; the one InvalidArgument is the
+        // deliberate call in the next test. Anything else is an alias failing.
+        $types = $this->typesIn('AliasConsumer.php');
+        \sort($types);
+        $this->assertSame(['InvalidArgument', 'UnusedClass'], $types, \var_export($this->in('AliasConsumer.php'), true));
+    }
+
+    /**
+     * `\ClsAlias::A|\ClsAlias::B` in a docblock only becomes the literal union 'a'|'b' when Psalm finds the target's
+     * storage under the alias name, so reporting 'c' proves the constants resolved. The interface constant and the
+     * attribute alias in the same file crashed the run before, so reaching this assertion proves they no longer do.
+     */
+    #[Test]
+    public function a_docblock_constant_union_through_an_alias_rejects_a_literal_outside_it(): void
+    {
+        $invalid = \array_values(\array_filter(
+            $this->in('AliasConsumer.php'),
+            static fn(array $issue): bool => $issue['type'] === 'InvalidArgument',
+        ));
+
+        $this->assertCount(1, $invalid, \var_export($this->in('AliasConsumer.php'), true));
+
+        foreach (["'a'", "'b'", "'c'"] as $literal) {
+            $this->assertStringContainsString($literal, $invalid[0]['message']);
+        }
+    }
+
     /** Psalm silently clamps `--threads` to 1 on Windows or without pcntl, so the proof would fail there instead of proving anything. */
     #[Test]
     public function the_run_forked_so_the_injection_reached_workers(): void

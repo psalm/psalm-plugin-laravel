@@ -256,4 +256,15 @@ abstract class Factory
      * @return static
      */
     public function for($factory, ?string $relationship = null) {}
+
+    /**
+     * Restates Laravel's `Factory<TClass>` with the defaulted TCount spelled out:
+     * MissingTemplateParam ignores `@template` defaults and rejects the 1-arg form.
+     *
+     * @template TClass of Model
+     *
+     * @param  class-string<TClass>  $modelName
+     * @return class-string<Factory<TClass, null>>
+     */
+    public static function resolveFactoryName(string $modelName) {}
 }

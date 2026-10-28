@@ -9,12 +9,19 @@ use Psalm\LaravelPlugin\Internal\AtomicFileWriter;
 use Psalm\Plugin\RegistrationInterface;
 
 /**
- * Generates and registers a `class <Alias> extends <FQCN> {}` stub file for each alias
- * declared by the booted Laravel app's {@see AliasLoader}.
+ * Generates and registers a stub file with one `class_alias(\<FQCN>::class, '<Alias>');` call for each alias
+ * declared by the booted Laravel app's {@see AliasLoader}, the same call AliasLoader makes at runtime.
+ *
+ * `class_alias()` models every target kind (class, interface, enum) and namespaced aliases alike, where
+ * `class <Alias> extends <FQCN> {}` could not (an enum or interface cannot be a parent class). Psalm
+ * records the alias, not a class, so the alias storage is completed by
+ * {@see \Psalm\LaravelPlugin\Handlers\Facades\ClassAliasStorageHandler}.
  *
  * Reflects the actual aliases for the project (`config/app.php` aliases plus package
  * discovery), not just Laravel's hardcoded defaults, so plugin support follows whatever
  * the application has registered at runtime.
+ *
+ * Targets are never autoloaded or reflected here: the stub only names them.
  *
  * Mirrors the {@see CarbonStubProvider} shape: one `register()` call writes any
  * derived files and adds them to the Psalm registration in a single step.
@@ -23,20 +30,49 @@ use Psalm\Plugin\RegistrationInterface;
  */
 final class AliasStubProvider
 {
+    /** @var array<string, string> alias => target, exactly the aliases written to the stub this invocation */
+    private static array $aliases = [];
+
+    /**
+     * @return array<string, string>
+     */
+    public static function aliases(): array
+    {
+        return self::$aliases;
+    }
+
+    public static function reset(): void
+    {
+        self::$aliases = [];
+    }
+
     public static function register(RegistrationInterface $registration, string $location): void
     {
-        /** @var array<string, class-string> $aliases */
-        $aliases = AliasLoader::getInstance()->getAliases();
+        /** @var array<string, string> $loaderAliases */
+        $loaderAliases = AliasLoader::getInstance()->getAliases();
         $stub = "<?php\n\n";
+        self::reset();
 
-        foreach ($aliases as $alias => $fqcn) {
-            // Skip namespaced aliases — `class Some\Name extends ...` is invalid PHP
-            // without a namespace block
-            if (\str_contains($alias, '\\')) {
+        // Psalm's scanner strips leading backslashes from class names too.
+        $normalized = [];
+        foreach ($loaderAliases as $alias => $target) {
+            $normalized[\ltrim($alias, '\\')] = \ltrim($target, '\\');
+        }
+
+        $lowercased = [];
+        foreach ($normalized as $alias => $target) {
+            $lowercased[\strtolower($alias)] = \strtolower($target);
+        }
+
+        foreach ($normalized as $alias => $target) {
+            // Self-aliases (`Introspect => Introspect`) are no-ops; cycle members would send Psalm's
+            // recursive getUnAliasedName(), which has no cycle guard, into infinite recursion.
+            if (\strtolower($alias) === \strtolower($target) || self::isInCycle(\strtolower($alias), $lowercased)) {
                 continue;
             }
 
-            $stub .= "class {$alias} extends \\{$fqcn} {}\n";
+            self::$aliases[$alias] = $target;
+            $stub .= "class_alias(\\{$target}::class, " . \var_export($alias, true) . ");\n";
         }
 
         // Unchanged aliases skip the write; the atomic write keeps this read from seeing a partial file.
@@ -54,5 +90,29 @@ final class AliasStubProvider
         }
 
         $registration->addStubFile($location);
+    }
+
+    /**
+     * Whether following alias => target through the map leads back to $start.
+     *
+     * @param array<string, string> $lowercased lowercased alias => lowercased target
+     *
+     * @psalm-pure
+     */
+    private static function isInCycle(string $start, array $lowercased): bool
+    {
+        $seen = [];
+        $current = $lowercased[$start];
+
+        while (isset($lowercased[$current]) && !isset($seen[$current])) {
+            if ($current === $start) {
+                return true;
+            }
+
+            $seen[$current] = true;
+            $current = $lowercased[$current];
+        }
+
+        return false;
     }
 }

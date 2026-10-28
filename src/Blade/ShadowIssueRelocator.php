@@ -934,7 +934,7 @@ final class ShadowIssueRelocator
             $reflection = new \ReflectionClass($issue);
             $constructor = $reflection->getConstructor();
 
-            if ($constructor === null) {
+            if (!$constructor instanceof \ReflectionMethod) {
                 return null;
             }
 
@@ -977,7 +977,7 @@ final class ShadowIssueRelocator
 
         $property = $reflection->hasProperty($name) ? $reflection->getProperty($name) : null;
 
-        if ($property !== null && !$property->isStatic() && $property->isInitialized($issue)) {
+        if ($property instanceof \ReflectionProperty && !$property->isStatic() && $property->isInitialized($issue)) {
             return $property->getValue($issue);
         }
 

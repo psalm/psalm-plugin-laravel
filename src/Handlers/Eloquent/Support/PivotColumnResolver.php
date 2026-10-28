@@ -157,7 +157,7 @@ final class PivotColumnResolver
         if ($first->value instanceof Expr\Array_) {
             foreach ($first->value->items as $item) {
                 // An unpacked item or an explicit key may overwrite a column, in the literal or in array_merge().
-                if (!$item instanceof Expr\ArrayItem || $item->unpack || $item->key instanceof Expr) {
+                if ($item->unpack || $item->key instanceof Expr) {
                     return [];
                 }
 

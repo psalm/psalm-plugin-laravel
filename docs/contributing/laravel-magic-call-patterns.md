@@ -256,7 +256,7 @@ DB::table('users')
        Result: Query\Builder
 ```
 
-**Psalm challenge:** `__callStatic` loses taint context. The generated alias stubs (`class DB extends DatabaseManager`) help with type resolution but don't carry taint annotations. Calling the underlying class directly (`DB::connection()->...`) works correctly for taint analysis.
+**Psalm challenge:** `__callStatic` loses taint context. The generated alias stubs (`class_alias(\Illuminate\Support\Facades\DB::class, 'DB')`) make the root alias resolve to the facade itself, which helps with type resolution, but they don't carry taint annotations. Calling the underlying class directly (`DB::connection()->...`) works correctly for taint analysis.
 
 
 ### 4. Model Attribute Access (`__get` / `__set`)
@@ -810,7 +810,7 @@ but the handler ensures template params propagate correctly.
 |----------------------------|--------------------------------------------------------------|----------------------------------------------------------------------|
 | Relation → Builder fluent  | Relation stubs + `MethodForwardingHandler` + related custom-builder storage resolution | Instance-local builder macros that have no static metadata remain unresolved |
 | Builder → Query\Builder    | `@mixin Query\Builder` on Eloquent\Builder                   | `$passthru` re-declared on Eloquent\Builder for relations (#1734)    |
-| Facade → Service           | Generated alias stubs                                        | Taint annotations lost through `__callStatic`                        |
+| Facade → Service           | Generated `class_alias()` alias stubs                        | Taint annotations lost through `__callStatic`                        |
 | Model → Builder static     | `ModelMethodHandler`                                         | Scopes need `@mixin` or scope handler                                |
 | Model scopes               | `BuilderScopeHandler`                                        | Resolves scope calls on Builder to model scope methods               |
 | Custom collections         | `CustomCollectionHandler`                                    | Narrows `Builder::get()`, `findMany()`, `Model::all()` return types  |

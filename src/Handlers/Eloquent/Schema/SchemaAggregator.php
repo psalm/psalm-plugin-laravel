@@ -367,7 +367,7 @@ final class SchemaAggregator
 
         if ($columns_arg instanceof PhpParser\Node\Expr\Array_) {
             foreach ($columns_arg->items as $item) {
-                $item_name = $item !== null ? $this->resolveStringArgument($item->value) : null;
+                $item_name = $this->resolveStringArgument($item->value);
                 if ($item_name !== null) {
                     $table->dropColumn($item_name);
                 }
@@ -568,7 +568,7 @@ final class SchemaAggregator
                 // Handle dropColumn/removeColumn with array argument: $table->dropColumn(['col1', 'col2'])
                 if (\in_array($first_method_name_lc, ['dropcolumn', 'removecolumn'], true)) {
                     foreach ($first_arg->items as $item) {
-                        $item_name = $item !== null ? $this->resolveStringArgument($item->value) : null;
+                        $item_name = $this->resolveStringArgument($item->value);
 
                         if ($item_name !== null) {
                             $table->dropColumn($item_name);
@@ -595,7 +595,7 @@ final class SchemaAggregator
                 $second_arg_array = [];
 
                 foreach ($second_arg->items as $array_item) {
-                    if ($array_item && $array_item->value instanceof PhpParser\Node\Scalar\String_) {
+                    if ($array_item->value instanceof PhpParser\Node\Scalar\String_) {
                         $second_arg_array[] = $array_item->value->value;
                     }
                 }

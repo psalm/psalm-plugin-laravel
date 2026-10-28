@@ -96,6 +96,10 @@ fast_copy() {
     cp -a "$src" "$dst"
 }
 
+# Psalm every app installs, on both sides. Fixed rather than read from the
+# plugin composer.json so base and head analyze with the same Psalm.
+PSALM_PIN="^7.0.0-rc14@rc"
+
 # md5 of the plugin's dependency-affecting composer.json sections. Only `require`
 # and `autoload` change what gets installed into the app's vendor; if they match
 # between base and head, the head side can reuse the base install and re-point a
@@ -162,17 +166,14 @@ configure_plugin_repo() {
             $d["require-dev"]["psalm/plugin-laravel"] = "*";
             // minimum-stability=dev above is only needed for the dev-branch
             // path repo install above; it also makes vimeo/psalm eligible to
-            // resolve to its dev-master branch instead of a tagged beta, which
+            // resolve to its dev-master branch instead of a tagged release, which
             // is a problem because dev-master is a rolling branch that can be
             // transiently broken (e.g. a bad merge dropping a typed property,
             // producing a dynamic-property deprecation that the Psalm error
-            // handler escalates into an uncaught crash). Pin vimeo/psalm to at
-            // least beta stability, reusing the floor constraint declared in
-            // the plugin composer.json, so this one package still resolves to
-            // a tagged release regardless of the relaxed root stability.
-            $plugin_composer = json_decode(file_get_contents($argv[2] . "/composer.json"), true, 512, JSON_THROW_ON_ERROR);
-            $psalm_constraint = trim(explode("||", $plugin_composer["require"]["vimeo/psalm"] ?? "^7.0.0-beta19")[0]);
-            $d["require-dev"]["vimeo/psalm"] = $psalm_constraint . "@beta";
+            // handler escalates into an uncaught crash). Pin vimeo/psalm to
+            // a tagged RC, so this one package still resolves to a tagged
+            // release regardless of the relaxed root stability.
+            $d["require-dev"]["vimeo/psalm"] = $argv[4];
             // Relax a pinned PHP constraint (e.g. "8.3.*" -> "^8.3") so install
             // does not fail on the runner PHP; analysis runs under the real binary.
             $php = $d["require"]["php"] ?? "";
@@ -182,7 +183,7 @@ configure_plugin_repo() {
             }
         }
         file_put_contents($file, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    ' "$dir" "$plugin_dir" "$full"
+    ' "$dir" "$plugin_dir" "$full" "$PSALM_PIN"
 }
 
 write_psalm_xml() {
@@ -252,7 +253,9 @@ PLUGIN_SIG_FILE="$APP_SRC/.plugin-dep-sig"
 # signature means we cannot prove compatibility, so we also reinstall — a
 # self-healing guard must never reuse an unverifiable vendor. The reinstall is a
 # clean `composer update` that honours the plugin's constraints.
+# PSALM_PIN joins the signature so bumping it invalidates cached vendors too.
 want_sig="$(plugin_dep_sig "$PLUGIN_BASE")"
+[[ -n "$want_sig" ]] && want_sig="$want_sig:$PSALM_PIN"
 need_install=0
 if [[ ! -f "$APP_SRC/vendor/bin/psalm" ]]; then
     need_install=1
