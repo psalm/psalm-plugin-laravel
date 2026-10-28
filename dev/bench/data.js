@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793130333650,
+  "lastUpdate": 1793189375622,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -16970,6 +16970,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1306,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniil@daniil.it",
+            "name": "Daniil Gentili",
+            "username": "danog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "46b0984ddf4816dff7ce6bd1c66095ae7c5aed6b",
+          "message": "test: expect Psalm 7.0.0-rc16 to take a stubbed Dispatcher's properties as initialized (#2142)\n\nvimeo/psalm#12543 takes the properties of a stubbed class as initialized by its constructor, whose body the stub hides; require that release.",
+          "timestamp": "2026-10-28T13:07:19+01:00",
+          "tree_id": "86aa48411c194a2db4fe25a155cfcc3e308e103e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/46b0984ddf4816dff7ce6bd1c66095ae7c5aed6b"
+        },
+        "date": 1793189373923,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.7,
+            "range": "± 0.04",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1296,
             "unit": "MB"
           }
         ]
