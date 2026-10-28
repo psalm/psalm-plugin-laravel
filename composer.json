@@ -25,15 +25,6 @@
     "require": {
         "php": "^8.2",
         "ext-simplexml": "*",
-        "illuminate/config": "^12.27 || ^13.20",
-        "illuminate/container": "^12.27 || ^13.20",
-        "illuminate/contracts": "^12.27 || ^13.20",
-        "illuminate/database": "^12.27 || ^13.20",
-        "illuminate/events": "^12.27 || ^13.20",
-        "illuminate/http": "^12.27 || ^13.20",
-        "illuminate/routing": "^12.27 || ^13.20",
-        "illuminate/support": "^12.27 || ^13.20",
-        "illuminate/view": "^12.27 || ^13.20",
         "nikic/php-parser": "^5.0",
         "orchestra/testbench-core": "^10.0 || ^11.0",
         "psalm/psalm-plugin-api": "^0.4.1",
@@ -54,6 +45,17 @@
         "rector/rector": "^2.5.8",
         "symfony/http-foundation": "^7.1 || ^8.0",
         "symfony/process": "^7.1 || ^8.0"
+    },
+    "conflict": {
+        "illuminate/config": "<12.27",
+        "illuminate/container": "<12.27",
+        "illuminate/contracts": "<12.27",
+        "illuminate/database": "<12.27",
+        "illuminate/events": "<12.27",
+        "illuminate/http": "<12.27",
+        "illuminate/routing": "<12.27",
+        "illuminate/support": "<12.27",
+        "illuminate/view": "<12.27"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
