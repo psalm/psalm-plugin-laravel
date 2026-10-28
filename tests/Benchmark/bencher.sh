@@ -4,7 +4,8 @@
 set -euo pipefail
 
 : > /tmp/mem.txt
-hyperfine --warmup 1 --runs 3 --ignore-failure --style basic --export-json /tmp/hyperfine.json \
+# ~47 s per run on intel-v1 against a 5 min free-tier job limit; bare metal noise is ~0.1%, so 2 runs suffice.
+hyperfine --warmup 1 --runs 2 --ignore-failure --style basic --export-json /tmp/hyperfine.json \
     'bash /plugin/tests/Benchmark/run-psalm.sh /monica psalm-benchmark.xml /tmp/mem.txt'
 
 # shellcheck disable=SC2016
