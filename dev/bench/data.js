@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793225305659,
+  "lastUpdate": 1793226135921,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17140,6 +17140,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 43.11,
             "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1289,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "33ecdc2661bc5d397b51fab3ecf30d5f0c07ee0b",
+          "message": "Fix: allow forwarded package facade calls (#2139)\n\n* fix(facades): unseal app facades whose root forwards via __call #2138\n\n* fix(facades): gate app facade unsealing on effective runtime dispatchers #2138\n\nPsalm records the forwarding trait for `use Forwarder, Macroable { Macroable::__call insteadof Forwarder; }`\n(upstream ClassLikeNodeScanner ignores insteadof precedence, vimeo/psalm#12113) while PHP runs Macroable's\nthrowing __call. A facade with `use Macroable` or its own __callStatic also replaces Facade::__callStatic\nand throws before reaching the root. Require the root's effective __call to not be Macroable's (reflected\nfile and start line) and the facade's effective __callStatic to be Laravel's Facade::__callStatic.\n\n* fix(facades): unseal roots whose insteadof picks a forwarding __call over a first-listed Macroable #2138\n\n* fix(facades): run the Macroable runtime check for roots whose __call a class-level stub declares #2138\n\n* style: auto-fix (rector + php-cs-fixer)\n\n* test(facades): trim forwarding-root fixtures to the cases with unique teeth #2138\n\n- Merge three phpts into one; drop cases that funnel into gates other tests already pin\n- Condense the decisions.md entry\n\n---------\n\nCo-authored-by: GitHub Actions <actions@github.com>",
+          "timestamp": "2026-10-28T23:19:48+01:00",
+          "tree_id": "2e7df796acd5956b68efd58806dd2d429659521f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/33ecdc2661bc5d397b51fab3ecf30d5f0c07ee0b"
+        },
+        "date": 1793226134296,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 25.07,
+            "range": "± 0.72",
             "unit": "s"
           },
           {
