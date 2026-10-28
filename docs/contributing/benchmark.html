@@ -28,7 +28,8 @@ nav_order: 11
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"
         integrity="sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws"
         crossorigin="anonymous"></script>
-<script type="module">
+<script>
+(async () => {
   const DATA_URL = 'https://raw.githubusercontent.com/psalm/psalm-plugin-laravel/gh-pages/dev/bench/data.js';
   const COLOR = '#7253ed';
 
@@ -124,4 +125,5 @@ nav_order: 11
       });
     }
   }
+})();
 </script>
