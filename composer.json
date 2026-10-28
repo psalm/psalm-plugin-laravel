@@ -25,20 +25,11 @@
     "require": {
         "php": "^8.2",
         "ext-simplexml": "*",
-        "illuminate/config": "^12.14 || ^13.3",
-        "illuminate/container": "^12.14 || ^13.3",
-        "illuminate/contracts": "^12.14 || ^13.3",
-        "illuminate/database": "^12.14 || ^13.3",
-        "illuminate/events": "^12.14 || ^13.3",
-        "illuminate/http": "^12.14 || ^13.3",
-        "illuminate/routing": "^12.14 || ^13.3",
-        "illuminate/support": "^12.14 || ^13.3",
-        "illuminate/view": "^12.14 || ^13.3",
         "nikic/php-parser": "^5.0",
         "orchestra/testbench-core": "^10.0 || ^11.0",
         "psalm/psalm-plugin-api": "^0.4.1",
         "symfony/console": "^7.2 || ^8.0",
-        "vimeo/psalm": "^7.0.0-rc10 || dev-master"
+        "vimeo/psalm": "^7.0.0-rc16 || dev-master"
     },
     "bin": [
         "bin/psalm-laravel"
@@ -53,6 +44,17 @@
         "rector/rector": "^2.5.8",
         "symfony/http-foundation": "^7.1 || ^8.0",
         "symfony/process": "^7.1 || ^8.0"
+    },
+    "conflict": {
+        "illuminate/config": "<12.14",
+        "illuminate/container": "<12.14",
+        "illuminate/contracts": "<12.14",
+        "illuminate/database": "<12.14",
+        "illuminate/events": "<12.14",
+        "illuminate/http": "<12.14",
+        "illuminate/routing": "<12.14",
+        "illuminate/support": "<12.14",
+        "illuminate/view": "<12.14"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
