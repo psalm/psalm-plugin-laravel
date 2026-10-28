@@ -424,6 +424,18 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Known limitation:** A userland subclass of such a facade that declares its own same-name static method inherits the stub's signature checks.
 
+### App facades whose root forwards through `__call` are unsealed (#2138)
+
+**Decision:** `AppFacadeRegistrationHandler` sets `sealed_methods = false` on an app facade with no seal of its own when PHP would forward an unknown static call to the root's `__call`: the root has a `__call` that is not `Illuminate\Support\Traits\Macroable`'s (which throws), and the facade still uses `Facade::__callStatic`. Real root methods keep their types through `FacadeMethodHandler`; unknown calls are `mixed`.
+
+**Why reflection, not storage:** Psalm's `declaring_method_ids['__call']` can name the wrong method. It ignores `insteadof` and keeps the first-listed trait ([vimeo/psalm#12113](https://github.com/vimeo/psalm/issues/12113)), and a class stub can declare `__call` on a root that uses Macroable at runtime. So the root's `__call` is compared to `Macroable::__call` by reflected file and start line (`getDeclaringClass()` names the using class for trait methods). Reflection failure keeps the seal.
+
+**Stays reported:** facades with `@method` tags, roots that do not resolve (unbound accessor, or a root that throws while being built, such as `JWTAuth` without a secret), roots without Psalm storage, and facades that override `__callStatic` (including `use Macroable`). Only Laravel's `Macroable` is recognised.
+
+**Rejected:** restoring the `extends` alias stubs (#2128) or a catch-all `@method`, since both change real method types and params.
+
+**Known limit:** a facade subclass inherits its parent's seal during population, before this hook runs, and keeps it.
+
 ### AliasLoader aliases are `class_alias()` stub lines plus a storage bridge (#2128)
 
 **Decision:** `AliasStubProvider` writes `class_alias(\Target\Fqcn::class, 'Alias');` for every AliasLoader alias, namespaced aliases included. A self-alias (`Introspect => Introspect`) and any alias that is part of a cycle in the AliasLoader map are skipped, because Psalm's `getUnAliasedName()` recurses without a cycle guard. The target is never autoloaded or reflected; its kind (class, interface, trait, enum) is Psalm's business. `ClassAliasStorageHandler` then registers the target's `ClassLikeStorage` under each alias name at `AfterCodebasePopulated`. It is registered last, so earlier hooks that iterate all storages never see the duplicate alias keys.

@@ -1,0 +1,24 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Psalm-only view of `App\Services\StubbedMacroableService` for `AppFacadeForwardingRootTest.phpt`:
+ * Psalm records the root as the declaring class of `__call`, although PHP runs Macroable's.
+ */
+
+namespace App\Services;
+
+class StubbedMacroableService
+{
+    public function real(): int
+    {
+        return 1;
+    }
+
+    /** @param list<mixed> $parameters */
+    public function __call(string $method, array $parameters): mixed
+    {
+        return null;
+    }
+}
