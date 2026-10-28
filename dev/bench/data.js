@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793195130481,
+  "lastUpdate": 1793196207108,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17040,6 +17040,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1277,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "819d32cda4eacb39abe5a9de923a17c772b5d42d",
+          "message": "Add a benchmark trend chart to the docs and pin the benchmark to the Psalm floor (#2148)\n\n* docs: add a benchmark trend chart page fed from the gh-pages history\n\n* ci(benchmark): pin Psalm to the plugin's floor version\n\nThe trend now moves only on commits in this repository, not on every new Psalm tag.\n\n* docs: run the benchmark chart script as a classic script",
+          "timestamp": "2026-10-28T15:00:59+01:00",
+          "tree_id": "f222c448b01e9a95160c70f634de3ab3d58a8265",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/819d32cda4eacb39abe5a9de923a17c772b5d42d"
+        },
+        "date": 1793196205019,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.83,
+            "range": "± 0.34",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1300,
             "unit": "MB"
           }
         ]
