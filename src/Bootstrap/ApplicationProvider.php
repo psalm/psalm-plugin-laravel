@@ -18,8 +18,6 @@ use Psalm\LaravelPlugin\Internal\VendorDirectory;
 
 final class ApplicationProvider
 {
-    use CreatesApplication;
-
     private static ?\Illuminate\Foundation\Application $app = null;
 
     /**
@@ -239,7 +237,7 @@ final class ApplicationProvider
             // so handlers reading config still see whatever loaded prior to the throw.
             try {
                 $consoleApp->bootstrap();
-                $this->ensureAppKey($app);
+                self::ensureAppKey($app);
             } catch (\Throwable $bootstrapError) {
                 self::$bootstrapError = $bootstrapError;
             }
@@ -352,7 +350,7 @@ final class ApplicationProvider
      * that some provider may have already branched on (e.g. conditional registration
      * based on `config('app.key')` presence).
      */
-    private function ensureAppKey(LaravelApplication $app): void
+    public static function ensureAppKey(LaravelApplication $app): void
     {
         if (!$app->bound('config')) {
             return;
@@ -369,7 +367,7 @@ final class ApplicationProvider
             return;
         }
 
-        // 32-byte ASCII key — valid for AES-256-CBC, matches getEnvironmentSetUp() above.
+        // 32-byte ASCII key — valid for AES-256-CBC.
         $config->set('app.key', 'AckfSECXIvnK5r28GVIWUAxmbBSjTsmF');
     }
 
@@ -403,8 +401,17 @@ final class ApplicationProvider
      */
     private function bootFromTestbench(): LaravelApplication
     {
-        /** @psalm-suppress InternalMethod */
-        $app = (new self())->createApplication();
+        // checked before loading TestbenchApplicationFactory, whose trait would otherwise be a fatal error
+        if (!\trait_exists(CreatesApplication::class)) {
+            require_once __DIR__ . '/TestbenchMissingException.php';
+            throw new TestbenchMissingException(
+                'Found no bootstrap/app.php to boot Laravel from: to analyze a Laravel package, require'
+                . ' orchestra/testbench, which the plugin then boots instead',
+            );
+        }
+
+        require_once __DIR__ . '/TestbenchApplicationFactory.php';
+        $app = (new TestbenchApplicationFactory())->create();
 
         $this->retargetConfigPathAtProjectRoot($app);
 
@@ -664,64 +671,5 @@ final class ApplicationProvider
     public static function getAppFullyQualifiedClassName(): string
     {
         return self::getApp()::class;
-    }
-
-    /**
-     * Overrides {@see \Orchestra\Testbench\Concerns\CreatesApplication::resolveApplicationBootstrappers}
-     * Resolve application bootstrapper.
-     */
-    protected function resolveApplicationBootstrappers(LaravelApplication $app): void
-    {
-        // we want to keep the default psalm exception handler, otherwise the Laravel one will always return exit codes
-        // of 0
-        //$app->make('Illuminate\Foundation\Bootstrap\HandleExceptions')->bootstrap($app);
-        $app->make(\Illuminate\Foundation\Bootstrap\RegisterFacades::class)->bootstrap($app);
-        $app->make(\Illuminate\Foundation\Bootstrap\SetRequestForConsole::class)->bootstrap($app);
-        $app->make(\Illuminate\Foundation\Bootstrap\RegisterProviders::class)->bootstrap($app);
-
-        $this->getEnvironmentSetUp($app);
-
-        $app->make(\Illuminate\Foundation\Bootstrap\BootProviders::class)->bootstrap($app);
-
-        foreach ($this->getPackageBootstrappers($app) as $bootstrap) {
-            /** @var \Illuminate\Foundation\Bootstrap\BootProviders $bootstrapper */
-            $bootstrapper = $app->make($bootstrap);
-            $bootstrapper->bootstrap($app);
-        }
-
-        $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-
-        /** @var \Illuminate\Routing\Router $router */
-        $router = $app['router'];
-        $router->getRoutes()->refreshNameLookups();
-
-        /**
-         * @psalm-suppress MissingClosureParamType
-         * @psalm-suppress UnusedClosureParam
-         */
-        $app->resolving('url', static function ($url, $app) use ($router): void {
-            $router->getRoutes()->refreshNameLookups();
-        });
-    }
-
-    protected function getEnvironmentSetUp(LaravelApplication $app): void
-    {
-        // Backfill app.key BEFORE testbench's BootProviders runs (called next in
-        // resolveApplicationBootstrappers) so any provider that reads config('app.key')
-        // during boot sees the dummy. doGetApp() also calls ensureAppKey() after the
-        // console bootstrap completes — that covers the bootstrap-file branch, which
-        // never enters this method. Single constant lives in ensureAppKey().
-        $this->ensureAppKey($app);
-
-        /** @var \Illuminate\Config\Repository $config */
-        $config = $app['config'];
-
-        // Register a token-driver guard so Auth::guard('api') narrows to TokenGuard in type tests.
-        // The testbench default auth.php only ships a 'web' (session) guard; without this the
-        // AuthConfigAnalyzer cannot resolve the driver and falls back to the stub's Guard interface.
-        $config->set('auth.guards.api', [
-            'driver' => 'token',
-            'provider' => 'users',
-        ]);
     }
 }
