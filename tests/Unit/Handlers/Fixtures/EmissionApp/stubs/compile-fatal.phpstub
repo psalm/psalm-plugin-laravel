@@ -1,0 +1,8 @@
+<?php
+
+namespace CompileFatalFixture;
+
+use Illuminate\Database\Eloquent\Model as StubbedModel;
+
+// The stub's import map replaces the real class's aliases in Psalm's storage. PHP never sees it.
+class StubbedModel extends StubbedModel {}

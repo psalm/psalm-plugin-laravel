@@ -314,6 +314,48 @@ final class EmissionAppTest extends TestCase
         );
     }
 
+    #[Test]
+    public function classes_whose_declaration_is_a_compile_fatal_are_skipped_and_psalm_reports_the_files(): void
+    {
+        // `class Cache extends Cache` under `use ...\Facades\Cache;` is a compile-time fatal that no
+        // `catch` stops: before #2136 the plugin's class_exists()/is_subclass_of() probe killed the run, so
+        // psalmRun() itself (and every other test here) failed. Psalm's own ParseError for each file
+        // proves the run completed and still reports the cause. ChildOfBrokenModel compiles by itself but
+        // loads the broken Model parent first. Facade extends the Facade base directly, so it also reaches
+        // the scan-time guard (Cache only reaches the populate-time one).
+        // StubbedModel loads fine: the clash exists only in an analysis stub's import map, which Psalm
+        // copies onto the class's storage, so neither it nor its child may be skipped.
+        $parseErrors = $this->scenarioFindings('CompileFatalClasses', 'ParseError');
+
+        $this->assertEqualsCanonicalizing(
+            ['app/CompileFatalClasses/Cache.php', 'app/CompileFatalClasses/Facade.php', 'app/CompileFatalClasses/Model.php'],
+            \array_column($parseErrors, 'file_name'),
+        );
+
+        // The warnings only exist under a real progress sink: --no-progress turns warning() into a no-op.
+        // A second run restricted to the scenario keeps it cheap.
+        $process = $this->runPsalm(['--long-progress', 'app/CompileFatalClasses']);
+        $stderr = $process->getErrorOutput();
+
+        $this->assertIsArray(\json_decode($process->getOutput(), true), "Psalm did not complete.\nstderr:\n{$stderr}");
+
+        foreach ([['facade', 'Cache'], ['facade', 'Facade'], ['model', 'Model'], ['model', 'ChildOfBrokenModel']] as [$kind, $class]) {
+            $this->assertMatchesRegularExpression(
+                "/^Warning: Laravel plugin: skipping {$kind} 'CompileFatalFixture\\\\{$class}': .*PHP cannot load the class/m",
+                $stderr,
+                "Missing skip warning for {$class}.\nstderr:\n{$stderr}",
+            );
+        }
+
+        foreach (['Cache', 'Facade'] as $facade) {
+            $this->assertSame(1, \substr_count($stderr, "skipping facade 'CompileFatalFixture\\{$facade}'"), "{$facade} must be warned about once.");
+        }
+
+        foreach (['StubbedModel', 'ChildOfStubbedModel'] as $loadable) {
+            $this->assertStringNotContainsString("'CompileFatalFixture\\{$loadable}'", $stderr, "{$loadable} is loadable and must not be skipped.");
+        }
+    }
+
     /**
      * @param string ...$types issue types to keep
      * @return list<array{type: string, message: string, severity: string, file_name: string}>
@@ -336,15 +378,9 @@ final class EmissionAppTest extends TestCase
         return \array_column($findings, 'message');
     }
 
-    /**
-     * @return array{findings: list<array{type: string, message: string, severity: string, file_name: string}>, stdout: string, stderr: string}
-     */
-    private function psalmRun(): array
+    /** @param list<string> $arguments */
+    private function runPsalm(array $arguments): Process
     {
-        if (self::$run !== null) {
-            return self::$run;
-        }
-
         $projectRoot = \dirname(__DIR__, 3);
         $psalmBinary = $projectRoot . '/vendor/bin/psalm';
 
@@ -352,7 +388,7 @@ final class EmissionAppTest extends TestCase
 
         $cacheDir = \sys_get_temp_dir() . '/psalm-laravel-emission-app-' . \bin2hex(\random_bytes(6));
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--scan-threads=1', '--no-progress', '--show-info=true', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--scan-threads=1', '--show-info=true', '--output-format=json', ...$arguments],
             __DIR__ . '/Fixtures/EmissionApp',
             ['XDG_CACHE_HOME' => $cacheDir, 'TMPDIR' => $cacheDir . '/'],
         );
@@ -364,6 +400,20 @@ final class EmissionAppTest extends TestCase
         } finally {
             (new Filesystem())->deleteDirectory($cacheDir);
         }
+
+        return $process;
+    }
+
+    /**
+     * @return array{findings: list<array{type: string, message: string, severity: string, file_name: string}>, stdout: string, stderr: string}
+     */
+    private function psalmRun(): array
+    {
+        if (self::$run !== null) {
+            return self::$run;
+        }
+
+        $process = $this->runPsalm(['--no-progress']);
 
         $stdout = $process->getOutput();
         $stderr = $process->getErrorOutput();
