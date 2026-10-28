@@ -3,10 +3,8 @@
 declare(strict_types=1);
 
 /**
- * Class-level stub for `App\Services\StubbedMacroableService`, consumed by
- * `tests/Type/tests/Facades/AppFacadeStubbedRootTest.phpt`. It shadows the real class, which uses
- * `Macroable` at runtime, with a class that declares its own `__call`. Psalm then records the
- * root as the declaring class of `__call` although PHP runs Macroable's throwing one.
+ * Psalm-only view of `App\Services\StubbedMacroableService` for `AppFacadeForwardingRootTest.phpt`:
+ * Psalm records the root as the declaring class of `__call`, although PHP runs Macroable's.
  */
 
 namespace App\Services;
