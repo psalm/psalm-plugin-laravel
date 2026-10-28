@@ -1,8 +1,8 @@
 name: Benchmark
 
 # Push to 4.x (or manual dispatch): benchmarks Monica with the plugin
-# installed, stores the result for historical trend tracking (GH Pages chart,
-# regression alert at 150%).
+# installed, stores the result for historical trend tracking (chart:
+# docs/contributing/benchmark.html on the docs site, regression alert at 150%).
 #
 # There used to be a second, PR-comment-triggered ("/benchmark") path here that
 # compared PR vs base on Monica alone. It was dropped as redundant:
@@ -109,9 +109,15 @@ jobs:
           # laravel/framework is named explicitly: the plugin only conflicts with old
           # Laravel versions (no illuminate/* requires), so --with-all-dependencies alone
           # leaves Monica's locked framework below the conflict floor and the solve fails.
+          # Psalm is pinned to the plugin's floor (first alternative of the vimeo/psalm
+          # constraint) rather than the newest tag, so the trend moves only on commits here.
+          PSALM_FLOOR=$(jq -er '.require["vimeo/psalm"] | split("||")[0] | gsub("^[\\s^~>=]+|\\s+$"; "")' \
+            "$GITHUB_WORKSPACE/composer.json")
           COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel laravel/framework \
+            --with="vimeo/psalm:$PSALM_FLOOR" \
             --no-interaction --no-progress --with-all-dependencies
           composer show psalm/plugin-laravel
+          composer show vimeo/psalm
           cp "$GITHUB_WORKSPACE/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
 
       - name: Benchmark with hyperfine
