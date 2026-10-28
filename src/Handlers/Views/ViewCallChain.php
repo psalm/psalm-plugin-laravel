@@ -298,10 +298,6 @@ final class ViewCallChain
     private static function collectLiteralKeys(Expr\Array_ $array, array $latest): array
     {
         foreach ($array->items as $item) {
-            if ($item === null) {
-                continue;
-            }
-
             if ($item->unpack) {
                 if ($item->value instanceof Expr\Array_) {
                     $latest = self::collectLiteralKeys($item->value, $latest);
@@ -778,8 +774,7 @@ final class ViewCallChain
         $candidates = [];
 
         foreach ($views->value->items as $item) {
-            if ($item === null
-                || $item->key instanceof Expr
+            if ($item->key instanceof Expr
                 || !$item->value instanceof String_
                 || $item->value->value !== \trim($item->value->value)
             ) {

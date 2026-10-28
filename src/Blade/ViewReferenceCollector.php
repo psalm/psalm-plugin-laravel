@@ -167,7 +167,7 @@ final class ViewReferenceCollector
         }
 
         foreach ($arg->value->items as $item) {
-            if ($item === null || !$item->value instanceof String_) {
+            if (!$item->value instanceof String_) {
                 $dynamic = true;
 
                 continue;

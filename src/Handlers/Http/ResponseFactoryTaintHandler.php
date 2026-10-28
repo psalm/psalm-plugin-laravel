@@ -421,8 +421,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         $contentTypeProven = false;
 
         foreach ($headers->items as $item) {
-            if ($item === null
-                || $item->unpack
+            if ($item->unpack
                 || !$item->key instanceof String_
             ) {
                 return false;
