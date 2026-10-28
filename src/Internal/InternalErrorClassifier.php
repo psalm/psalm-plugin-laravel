@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Internal;
 
+use Psalm\LaravelPlugin\Bootstrap\TestbenchMissingException;
+
 /**
  * Classifies a {@see \Throwable} raised during plugin initialisation by walking
  * its stack trace and emitting a hint that points at the most likely fix site:
@@ -27,6 +29,11 @@ final class InternalErrorClassifier
      */
     public static function hint(\Throwable $throwable): ?string
     {
+        if ($throwable instanceof TestbenchMissingException) {
+            return 'The project has neither a bootstrap/app.php nor Orchestra Testbench installed, so there is no '
+                . 'Laravel application to boot. This is a project setup issue, not a plugin bug.';
+        }
+
         foreach (self::frameFiles($throwable) as $file) {
             $hint = self::hintForFile($file);
             if ($hint !== null) {

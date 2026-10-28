@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Bootstrap\TestbenchMissingException;
 use Psalm\LaravelPlugin\Internal\InternalErrorClassifier;
 
 #[CoversClass(InternalErrorClassifier::class)]
@@ -101,5 +102,15 @@ final class InternalErrorClassifierTest extends TestCase
         $hint = InternalErrorClassifier::hint(new \RuntimeException('boom'));
 
         $this->assertNotNull($hint);
+    }
+
+    #[Test]
+    public function a_missing_testbench_points_at_project_setup(): void
+    {
+        $hint = InternalErrorClassifier::hint(new TestbenchMissingException('Found no bootstrap/app.php'));
+
+        $this->assertNotNull($hint);
+        $this->assertStringContainsString('project setup', $hint);
+        $this->assertStringNotContainsString('likely a plugin bug', $hint);
     }
 }
