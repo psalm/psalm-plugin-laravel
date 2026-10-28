@@ -54,7 +54,11 @@ jobs:
           docker load < image.tar.gz
           docker tag bench "$IMAGE"
           echo "$BENCHER_API_KEY" | docker login registry.bencher.dev --username psalm-plugin-laravel --password-stdin
-          docker push --quiet "$IMAGE"
+          # registry.bencher.dev can time out finalizing a large layer; a retry resumes the pushed layers.
+          for attempt in 1 2 3; do
+            docker push --quiet "$IMAGE" && break
+            [[ $attempt == 3 ]] && exit 1
+          done
 
       - name: Benchmark on bare metal
         env:
