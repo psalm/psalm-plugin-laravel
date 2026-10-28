@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793204183058,
+  "lastUpdate": 1793225305659,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17110,6 +17110,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1287,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d723a10a3e2c98ef529f206b2c16734c331c197",
+          "message": "fix: clear self-analysis issues surfaced by Psalm 7.0.0-rc21 loading the plugin (#2155)\n\nPsalm 7.0.0-rc21 enables library plugins by default (loadLibraryPlugins), so\nself-analysis now runs with this plugin and its stubs. Register the plugin in\npsalm.xml so earlier rc builds analyse the same way, drop the @var annotations\nthe stubs make redundant, widen the class_basename() stub param to Laravel's\nstring|object, and restate Factory::resolveFactoryName() with both template\nargs so MissingTemplateParam does not reject the 1-arg form.",
+          "timestamp": "2026-10-28T23:04:31+01:00",
+          "tree_id": "efa0d1f274db96eff2c3472561acbfbe66d28f4a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6d723a10a3e2c98ef529f206b2c16734c331c197"
+        },
+        "date": 1793225303984,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 43.11,
+            "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1289,
             "unit": "MB"
           }
         ]
