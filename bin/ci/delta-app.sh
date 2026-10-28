@@ -98,7 +98,7 @@ fast_copy() {
 
 # Psalm every app installs, on both sides. Fixed rather than read from the
 # plugin composer.json so base and head analyze with the same Psalm.
-PSALM_PIN="^7.0.0-rc14@rc"
+PSALM_PIN="^7.0.0-rc21@rc"
 
 # md5 of the plugin's dependency-affecting composer.json sections. Only `require`
 # and `autoload` change what gets installed into the app's vendor; if they match
