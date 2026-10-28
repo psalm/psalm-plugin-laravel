@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793189375622,
+  "lastUpdate": 1793195130481,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17005,6 +17005,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1296,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a93ee7a3d0c66058ac7b56ee0eaaf21d3a5765fc",
+          "message": "ci(benchmark): unlock laravel/framework when installing the plugin into Monica (#2147)\n\nThe plugin no longer requires illuminate/* and only conflicts with old laravel/framework versions (#2141, #2145), so `composer update psalm/plugin-laravel --with-all-dependencies` kept Monica's locked v12.9.2 and failed on the conflict.",
+          "timestamp": "2026-10-28T14:42:55+01:00",
+          "tree_id": "58f7e5ceb8e6f69bf404ee3ae4629f0c6ab88f57",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a93ee7a3d0c66058ac7b56ee0eaaf21d3a5765fc"
+        },
+        "date": 1793195128784,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.13,
+            "range": "± 0.67",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1277,
             "unit": "MB"
           }
         ]
