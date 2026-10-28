@@ -28,4 +28,5 @@ RUN composer update laravel-lang/http-statuses --no-progress \
     && composer update psalm/plugin-laravel laravel/framework --with="vimeo/psalm:$PSALM_FLOOR" \
         --no-progress --with-all-dependencies \
     && composer show | grep -E '^(psalm/plugin-laravel|vimeo/psalm|laravel/framework) ' \
-    && cp /plugin/tests/Benchmark/psalm-benchmark.xml psalm-benchmark.xml
+    && cp /plugin/tests/Benchmark/psalm-benchmark.xml psalm-benchmark.xml \
+    && composer clear-cache
