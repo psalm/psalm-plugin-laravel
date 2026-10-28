@@ -84,7 +84,6 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
             return;
         }
 
-        /** @var \Illuminate\Routing\Router $router */
         $router = $app->make('router');
 
         /** @var array<string, true> $names */

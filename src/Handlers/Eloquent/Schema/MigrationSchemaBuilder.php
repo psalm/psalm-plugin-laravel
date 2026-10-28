@@ -222,7 +222,6 @@ final class MigrationSchemaBuilder
             return [$defaultDirectory];
         }
 
-        /** @var \Illuminate\Database\Migrations\Migrator $migrator */
         $migrator = $this->app->make('migrator');
 
         return \array_values(\array_merge($migrator->paths(), [$defaultDirectory]));

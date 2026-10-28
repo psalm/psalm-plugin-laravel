@@ -359,8 +359,10 @@ final class ApplicationProvider
         /** @var \Illuminate\Contracts\Config\Repository $config */
         $config = $app['config'];
 
-        // Cast through string keeps Psalm out of MixedAssignment territory; the encrypter
-        // only treats non-empty strings as a real key anyway, so any non-string is "empty".
+        // The encrypter only treats non-empty strings as a real key, so any non-string is "empty".
+        // The plugin types config values from the booted app, whose app.key this method backfills,
+        // so it sees `string`; at this point the key can still be null.
+        /** @psalm-suppress RedundantCast */
         $current = (string) $config->get('app.key', '');
 
         if ($current !== '') {

@@ -48,7 +48,6 @@ final class TestbenchApplicationFactory
 
         $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
-        /** @var \Illuminate\Routing\Router $router */
         $router = $app['router'];
         $router->getRoutes()->refreshNameLookups();
 
@@ -70,7 +69,6 @@ final class TestbenchApplicationFactory
         // never enters this method. Single constant lives in ensureAppKey().
         ApplicationProvider::ensureAppKey($app);
 
-        /** @var \Illuminate\Config\Repository $config */
         $config = $app['config'];
 
         // Register a token-driver guard so Auth::guard('api') narrows to TokenGuard in type tests.

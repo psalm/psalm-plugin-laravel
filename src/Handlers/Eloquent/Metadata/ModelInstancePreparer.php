@@ -44,10 +44,8 @@ final class ModelInstancePreparer
      */
     public static function prepare(\ReflectionClass $reflection, Model $instance): void
     {
-        // filterStringList() also fixes the value type: self-analysis does not load the plugin's own stubs, so
-        // class_uses_recursive() is typed `array` and its values would be mixed.
         $conventional = [];
-        foreach (self::filterStringList(\class_uses_recursive($instance)) as $trait) {
+        foreach (\class_uses_recursive($instance) as $trait) {
             $conventional['initialize' . \class_basename($trait)] = true;
         }
 
@@ -177,22 +175,5 @@ final class ModelInstancePreparer
         }
 
         return null;
-    }
-
-    /**
-     * Deliberate copy of {@see ModelMetadataRegistryBuilder}'s: its other sections still need theirs, and
-     * calling across would point this class back at the one that depends on it.
-     *
-     * @param array<array-key, mixed> $values
-     * @return list<non-empty-string>
-     * @psalm-pure
-     */
-    private static function filterStringList(array $values): array
-    {
-        /** @var list<non-empty-string> */
-        return \array_values(\array_filter(
-            $values,
-            static fn(mixed $entry): bool => \is_string($entry) && $entry !== '',
-        ));
     }
 }
