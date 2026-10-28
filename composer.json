@@ -47,7 +47,7 @@
         "symfony/process": "^7.1 || ^8.0"
     },
     "conflict": {
-        "laravel/framework": "<12.27 || >=13.0 <13.3",
+        "laravel/framework": "<12.27 || 13.0.0 || >=13.1 <13.20",
         "orchestra/testbench-core": "<10.0"
     },
     "minimum-stability": "dev",
