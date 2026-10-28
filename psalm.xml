@@ -17,6 +17,10 @@
         </ignoreFiles>
     </projectFiles>
 
+    <plugins>
+        <!-- Psalm >=7.0.0-rc21 enables this on its own (loadLibraryPlugins); listed so earlier rc builds analyse with the same stubs. -->
+        <pluginClass class="Psalm\LaravelPlugin\Plugin" />
+    </plugins>
     <issueHandlers>
         <LessSpecificReturnType errorLevel="info" />
         <ClassMustBeFinal errorLevel="info" />

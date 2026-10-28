@@ -85,6 +85,20 @@ function class_basename_allows_passing_object(): string
     return class_basename(new \stdClass());
 }
 
+function class_basename_allows_passing_plain_string(string $class): string
+{
+    $result = class_basename($class);
+    /** @psalm-check-type-exact $result = string */;
+    return $result;
+}
+
+function class_basename_keeps_non_empty_for_class_string(): string
+{
+    $result = class_basename(\App\Models\Customer::class);
+    /** @psalm-check-type-exact $result = non-empty-string */;
+    return $result;
+}
+
 function class_uses_recursive_allows_passing_fqcn(): array
 {
     return class_uses_recursive(\App\Models\Customer::class);

@@ -965,7 +965,6 @@ final class Plugin implements PluginEntryPointInterface
             $finder = $factory->getFinder();
         } elseif ($app->bound('view.finder')) {
             try {
-                /** @var \Illuminate\View\FileViewFinder $finder */
                 $finder = $app->make('view.finder');
             } catch (\Throwable $throwable) {
                 // Degrades this one lookup, not the whole plugin (same policy as resolveViewFactory()).
