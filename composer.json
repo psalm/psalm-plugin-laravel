@@ -47,15 +47,7 @@
         "symfony/process": "^7.1 || ^8.0"
     },
     "conflict": {
-        "illuminate/config": "<12.27",
-        "illuminate/container": "<12.27",
-        "illuminate/contracts": "<12.27",
-        "illuminate/database": "<12.27",
-        "illuminate/events": "<12.27",
-        "illuminate/http": "<12.27",
-        "illuminate/routing": "<12.27",
-        "illuminate/support": "<12.27",
-        "illuminate/view": "<12.27"
+        "laravel/framework": "<12.27 || 13.0.0 || >=13.1 <13.20"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
