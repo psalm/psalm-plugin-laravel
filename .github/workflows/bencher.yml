@@ -8,24 +8,20 @@ name: Bencher
 on:
   push:
     branches: [4.x, 3.x]
-    paths: &paths
-      - 'src/**'
-      - 'stubs/**'
-      - 'composer.json'
-      - 'tests/Benchmark/**'
-      - '.github/workflows/bencher*.yml'
+    paths: [src/**, stubs/**, composer.json, tests/Benchmark/**, .github/workflows/bencher*.yml]
   pull_request:
-    paths: *paths
+    paths: [src/**, stubs/**, composer.json, tests/Benchmark/**, .github/workflows/bencher*.yml]
 
 concurrency:
   group: bencher-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build benchmark image
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -44,7 +40,7 @@ jobs:
           mkdir /tmp/bench
           docker save bench | gzip > /tmp/bench/image.tar.gz
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bench-image
           path: /tmp/bench/image.tar.gz

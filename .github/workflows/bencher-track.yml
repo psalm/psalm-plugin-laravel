@@ -5,21 +5,29 @@ name: Bencher track
 # cannot report into the 4.x/3.x history.
 
 on:
-  workflow_run:
+  # Secrets with a fork-triggered run are the point here: the job never checks out or runs PR code,
+  # it only forwards the built image to Bencher's sandboxed runners (see the header).
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [Bencher]
     types: [completed]
 
 permissions: {}
 
+# A PR cancels its superseded run; a base-branch run is never cancelled mid-benchmark.
+concurrency:
+  group: bencher-track-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: ${{ github.event.workflow_run.event == 'pull_request' }}
+
 jobs:
   track:
+    name: Benchmark on bare metal
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       actions: read # download the image artifact of the triggering run
-      checks: write
-      pull-requests: write
+      checks: write # bencher creates the "Bencher Report" check on the benchmarked commit
+      pull-requests: write # bencher posts the results comment on the PR
     env:
       BENCHER_API_KEY: ${{ secrets.BENCHER_API_KEY }}
       IMAGE: registry.bencher.dev/psalm-plugin-laravel:${{ github.event.workflow_run.head_sha }}
