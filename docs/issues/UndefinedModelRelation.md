@@ -40,7 +40,7 @@ Supported name syntaxes:
 * Dot-notation: `with('posts.comments.author')`, where each segment is resolved against the previous segment's related model.
 * Array (list): `with(['posts', 'comments'])`.
 * Array (keyed closure): `with(['posts' => fn ($query) => $query])`, where the key is the relation name.
-* Select columns: `with('posts:id,title')`, where the `:columns` part is stripped before checking.
+* Select columns: `with('posts:id,title')`, where the `:columns` part is stripped before checking. The exception is a relation paired with a constraint closure, see [`:columns` with a closure](#columns-with-a-closure). Relationship existence queries do not parse `:columns` at all, see [`:columns` in existence queries](#columns-in-existence-queries).
 
 ## Example
 
@@ -62,6 +62,28 @@ $user->load('comments');  // UndefinedModelRelation: Relation 'comments' is not 
 ## How to fix
 
 Correct the relation name, or define the missing relationship method on the model.
+
+### `:columns` with a closure
+
+Laravel parses the `:columns` select syntax for list entries (`with('posts:id')`, `with(['posts:id'])`) and for nested-array keys, but not for a relation name paired with a constraint closure. There the name is looked up verbatim and `RelationNotFoundException` is thrown. The rule reports this for `with()` / `load()` / `loadMissing()` array keys whose value is a closure, and for the two-argument `Builder::with($relation, $closure)` form:
+
+```php
+User::with(['posts:id,user_id,title' => fn ($query) => $query->latest()]);  // UndefinedModelRelation
+User::query()->with('posts:id,user_id,title', fn ($query) => $query->latest());  // UndefinedModelRelation
+
+// Eager loading matches the posts to their users by `user_id`, so the foreign key must be selected.
+User::with(['posts' => fn ($query) => $query->select('id', 'user_id', 'title')->latest()]);  // OK: select inside the closure
+User::with('posts:id,user_id,title');  // OK: no closure, columns are parsed
+```
+
+### `:columns` in existence queries
+
+Relationship existence queries look the relation name up verbatim, so a `:columns` suffix never resolves and Laravel throws `BadMethodCallException` (`Call to undefined method ...::posts:id()`). This covers `has()` / `whereHas()` / `doesntHave()` / `whereDoesntHave()` (and their `or*` forms) and the `where*Relation()` families. There are no related columns to select in an existence query, so `:columns` has no meaning there. `withWhereHas()` is the exception and is not reported: without a callback it strips `:columns` itself on every supported Laravel version. With a closure, Laravel parses the suffix only from 13.37.0; on older versions the eager load looks it up verbatim. The rule does not report that case yet ([#1982](https://github.com/psalm/psalm-plugin-laravel/issues/1982)).
+
+```php
+User::has('posts:id');  // UndefinedModelRelation
+User::has('posts');     // OK
+```
 
 ## Known limitations
 

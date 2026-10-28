@@ -1,0 +1,1 @@
+{{ \Fx\Source::opt('@@foo') }}

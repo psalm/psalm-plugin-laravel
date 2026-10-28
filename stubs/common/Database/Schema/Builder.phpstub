@@ -73,4 +73,54 @@ class Builder
      * @psalm-taint-sink sql $table
      */
     public function hasTable($table) {}
+
+    /*
+     * Introspection methods whose Laravel `@return` contradicts what the driver processors
+     * (Illuminate\Database\Query\Processors\*) emit. Shapes below are the union over every driver and
+     * are identical on Laravel 12.27 through 13.x. The facade reaches them through its `@mixin`.
+     */
+
+    /**
+     * SQL Server selects `sys.sql_modules.definition`, which is NULL for encrypted views.
+     *
+     * @param  string|string[]|null  $schema
+     * @return list<array{name: string, schema: string|null, schema_qualified_name: string, definition: string|null}>
+     */
+    public function getViews($schema = null) {}
+
+    /**
+     * Laravel < 13.7 repeats the `type` key (invalid docblock, call becomes `mixed`) and < 13.8 omits
+     * `schema_qualified_name`; `type`/`category` are null for unmapped Postgres codes on every line.
+     *
+     * @param  string|string[]|null  $schema
+     * @return list<array{name: string, schema: string, schema_qualified_name: string, type: string|null, category: string|null, implicit: bool}>
+     */
+    public function getTypes($schema = null) {}
+
+    /**
+     * Laravel < 13.8 omits `collation`; `generation.type` is null for codes the processors do not map
+     * (MySQL `extra`, Postgres `generated`) on every line.
+     *
+     * @param  string  $table
+     * @return list<array{name: string, type: string, type_name: string, collation: string|null, nullable: bool, default: mixed, auto_increment: bool, comment: string|null, generation: array{type: string|null, expression: string|null}|null}>
+     */
+    public function getColumns($table) {}
+
+    /**
+     * SQLite never emits `type` (always null), and SQLiteProcessor::processIndexes() array_filter()s the
+     * synthetic `primary` row on composite primary keys, leaving gaps in the keys: not a list.
+     *
+     * @param  string  $table
+     * @return array<int, array{name: string, columns: list<string>, type: string|null, unique: bool, primary: bool}>
+     */
+    public function getIndexes($table) {}
+
+    /**
+     * Laravel < 13.7 documents a bare `array`. `name` is null on SQLite; `on_update`/`on_delete` are null
+     * for unmapped Postgres codes.
+     *
+     * @param  string  $table
+     * @return list<array{name: string|null, columns: list<string>, foreign_schema: string|null, foreign_table: string, foreign_columns: list<string>, on_update: string|null, on_delete: string|null}>
+     */
+    public function getForeignKeys($table) {}
 }

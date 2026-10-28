@@ -9,7 +9,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Name;
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Type\TypeExpander;
@@ -36,7 +38,7 @@ use Psalm\Type\Union;
  * 2. Method visibility — confirms magic methods are public
  * 3. Method params — provides parameter definitions for argument checking
  * 4. Return types — proxies forwarded calls to Builder<TModel> for type inference, and
- *    substitutes custom builders for Model::query() plus the real instance methods that
+ *    substitutes custom builders for Model::query() and Model::with() plus the real instance methods that
  *    construct builders through newEloquentBuilder()
  *
  * Existence, visibility, params, and return type providers for concrete Model subclasses are
@@ -44,7 +46,7 @@ use Psalm\Type\Union;
  * provider lookup requires exact class name matching — a handler registered for Model::class
  * is not consulted for concrete subclasses like App\Models\User.
  *
- * The getClassLikeNames() registration for Model::class handles `Model::query()` and the
+ * The getClassLikeNames() registration for Model::class handles `Model::query()`, `Model::with()` and the
  * real instance builder-construction methods only when a custom Eloquent builder is registered
  * for the called model. For plain models (base `Builder`), these methods are intentionally
  * deferred to the stubs at
@@ -139,8 +141,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Get the builder class for a model — custom builder if registered, base Builder otherwise.
+     *
+     * @internal Used by {@see RelationCallbackParamsHandler} to find the builder a model's queries run on
      */
-    private static function getBuilderClassForModel(string $modelClass): string
+    public static function getBuilderClassForModel(string $modelClass): string
     {
         return self::$customBuilderMap[$modelClass] ?? Builder::class;
     }
@@ -417,17 +421,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         // Dynamic where{Column}: gated on resolveDynamicWhereClauses (issue #1000).
-        // Mirrors the relation-chain fallback: typed single param when the return-type
-        // provider resolved a scalar column (issue #928 hand-off), variadic mixed
-        // otherwise so Psalm doesn't raise TooManyArguments on multi-segment forms
+        // Variadic mixed, so Psalm doesn't raise TooManyArguments on multi-segment forms
         // like whereFirstNameAndLastName($a, $b).
         if (DynamicWhereResolver::isEnabled() && DynamicWhereResolver::isDynamicWhereMethod($methodName)) {
-            return (
-                DynamicWhereResolver::consumeTypedParams(
-                    $methodName,
-                    $event->getCallArgs(),
-                ) ?? DynamicWhereResolver::variadicMixedParams()
-            );
+            return DynamicWhereResolver::variadicMixedParams();
         }
 
         return null;
@@ -503,10 +500,9 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // directly, the fake-call path resolves it with the method's actual return type
         // instead of unconditionally substituting Builder<TModel>.
         //
-        // Strict camel-cased validation (`resolveColumnType`) decides whether to queue the
-        // typed-param hand-off for #928 and gates the final return: a `false` result means
-        // the lowercase backtracker over-accepted (e.g. `wherefoobar` with @property `foo`
-        // and `bar` only matches via lowercase, not the camel-cased And/Or split that
+        // Strict camel-cased validation (`acceptsDynamicWhere`) gates the final return: a `false`
+        // result means the lowercase backtracker over-accepted (e.g. `wherefoobar` with @property
+        // `foo` and `bar` only matches via lowercase, not the camel-cased And/Or split that
         // Laravel's runtime requires). Returning null in that case avoids claiming
         // Builder<TModel> for a call Laravel would parse differently — existence remains
         // confirmed so Psalm doesn't raise UndefinedMagicMethod, but the return type stays
@@ -517,23 +513,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             && !$codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))
             && !$codebase->methodExists(new MethodIdentifier($builderClass, $methodName))
         ) {
-            $stmt = $event->getStmt();
-            $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
-            $columnType = DynamicWhereResolver::resolveColumnType($codebase, $modelClass, $originalMethodName);
+            $originalMethodName = DynamicWhereResolver::originalMethodName($event->getStmt(), $methodName);
 
-            if ($columnType === false) {
+            if (!DynamicWhereResolver::acceptsDynamicWhere($codebase, $modelClass, $originalMethodName)) {
                 return null;
-            }
-
-            // Queue typed param hand-off (issue #928) only when the producer/consumer
-            // contract holds: single-segment scalar column + exactly one argument. Mirrors
-            // {@see \Psalm\LaravelPlugin\Handlers\Magic\MethodForwardingHandler::resolveDynamicWhereOnRelation}.
-            if ($columnType instanceof Union) {
-                $args = $stmt->getArgs();
-
-                if (\count($args) === 1) {
-                    DynamicWhereResolver::storePendingColumnType($methodName, $args[0], $columnType);
-                }
             }
 
             return new Union([self::builderType($builderClass, $calledClass, $codebase)]);
@@ -624,17 +607,45 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         // doesn't raise UndefinedMagicMethod (issue #1000).
         //
         // The match is lowercase-only because the existence hook receives no AST node
-        // (so we can't reconstruct the original camel-cased suffix here). The return-
-        // type and params providers still run the strict camel-cased validation via
-        // DynamicWhereResolver::resolveColumnType when they fire on the confirmed call.
+        // (so we can't reconstruct the original camel-cased suffix here). The return-type
+        // provider still runs the strict camel-cased validation via
+        // DynamicWhereResolver::acceptsDynamicWhere when it fires on the confirmed call.
+        //
+        // A PUBLIC real method declared on the concrete model (own, trait, or parent) is dispatched by
+        // PHP before __callStatic/__call, so it is never a dynamic where; an inaccessible one is not.
         if (
             DynamicWhereResolver::isEnabled()
+            && !self::hasPublicMethod($codebase, $modelClass, $methodName)
             && DynamicWhereResolver::methodMatchesColumns($codebase, $modelClass, $methodName)
         ) {
             return self::$unresolvedCache[$key] = true;
         }
 
         return self::$unresolvedCache[$key] = false;
+    }
+
+    /**
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodName
+     * @psalm-capabilities read-props
+     */
+    private static function hasPublicMethod(Codebase $codebase, string $modelClass, string $methodName): bool
+    {
+        $methodId = new MethodIdentifier($modelClass, $methodName);
+        $declaringId = $codebase->methods->getDeclaringMethodId($methodId);
+
+        if (!$declaringId instanceof MethodIdentifier) {
+            return false;
+        }
+
+        // `use T { f as private; }` leaves the trait method's own visibility untouched; Psalm keeps the
+        // adaptation on the class the method appears in, so that view wins over the declaration.
+        $appearingId = $codebase->methods->getAppearingMethodId($methodId);
+        $adapted = $appearingId instanceof MethodIdentifier
+            ? $codebase->classlike_storage_provider->get($appearingId->fq_class_name)->trait_visibility_map[$methodName] ?? null
+            : null;
+
+        return ($adapted ?? $codebase->methods->getStorage($declaringId)->visibility) === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
     }
 
     /**
@@ -703,8 +714,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return self::getKeyReturnType($called_fq_classlike_name);
         }
 
-        // Model::query()
-        if ($methodName === 'query') {
+        // Model::query(), and Model::with() which is `static::query()->with(...)` (issue #1678)
+        if ($methodName === 'query' || ($methodName === 'with' && self::hasConcreteModelReceiver($event))) {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
             // For models without a custom builder, defer to the stub's
@@ -744,6 +755,37 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         return null;
+    }
+
+    /**
+     * Whether the call's receiver is a literally named class (`Vehicle::with()`, `static::with()`)
+     * or an expression typed as plain object / literal class-string. Template-typed receivers
+     * (`T $model`, `class-string<T>`) and class-string<Model> values decline: rebuilding the
+     * builder from the bound class would replace the template (or a possible subclass) with the
+     * bound, so the stub's `Builder<static>` must keep resolving it.
+     */
+    private static function hasConcreteModelReceiver(MethodReturnTypeProviderEvent $event): bool
+    {
+        $stmt = $event->getStmt();
+        $receiver = $stmt instanceof MethodCall ? $stmt->var : $stmt->class;
+
+        if ($receiver instanceof Name) {
+            return true;
+        }
+
+        $receiverType = $event->getSource()->getNodeTypeProvider()->getType($receiver);
+
+        if (!$receiverType instanceof Union) {
+            return false;
+        }
+
+        foreach ($receiverType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof Type\Atomic\TNamedObject && !$atomic instanceof Type\Atomic\TLiteralClassString) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

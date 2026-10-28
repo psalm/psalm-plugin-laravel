@@ -11,7 +11,7 @@ Emitted when a view name passed to any of the following does not correspond to a
 - `view()` helper, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()`/`composer()`/`creator()`, and their `View` facade forms (concrete, contract-typed, and aliases)
 - `ResponseFactory::view()` (`response()->view()`, `Illuminate\Contracts\Routing\ResponseFactory`, and the `Response` facade)
 - `Router::view()` and the `Route` facade
-- `Illuminate\Notifications\Messages\MailMessage::view()`/`markdown()`
+- `Illuminate\Notifications\Messages\MailMessage::view()`/`markdown()`/`text()`, including the array form of `view()`
 - `Illuminate\Mail\Mailable::view()`/`markdown()`/`text()`
 - `Illuminate\Mail\Mailables\Content`'s `view`, `html`, `text`, and `markdown` constructor arguments
 - `Illuminate\Testing\TestResponse::assertViewIs()`
@@ -67,3 +67,4 @@ This check is disabled by default. Enable it in your `psalm.xml`:
 - `Factory::first()` and `ResponseFactory::view()`'s array form only flag the call when every candidate is a literal AND all of them are missing. A non-literal candidate anywhere in the list, or one that resolves, skips the check
 - `renderEach()`'s `$empty` argument is skipped when it starts with `raw|` (Laravel treats that as raw text, not a view name)
 - `Factory::composer()`/`creator()` wildcard patterns are skipped because they are event patterns, not concrete template names
+- `MailMessage::view()`'s array form is only checked for a literal array with literal keys, and follows `Mailer::parseView()`: when key `0` is set (non-null), keys `0` and `1` are checked; otherwise `html` and `text`. `raw` (raw text, not a view name) is skipped. The array is skipped if key `0` may be null, is an unbounded template or otherwise not proven non-null, or if any key is a negative integer (implicit indexes after it differ between PHP 8.2 and 8.3+)

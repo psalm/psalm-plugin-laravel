@@ -32,22 +32,84 @@ final class IndirectMethodReferencesTest extends TestCase
     private const FIXTURE = __DIR__ . '/Fixtures/IndirectMethodReferences';
 
     /** @var list<string> */
-    private const DEAD_CODE = ['PossiblyUnusedMethod', 'UnusedMethod', 'UnusedConstructor', 'UnusedClass'];
+    private const DEAD_CODE = ['PossiblyUnusedMethod', 'UnusedMethod', 'UnusedConstructor', 'UnusedClass', 'UnusedProperty', 'PossiblyUnusedProperty'];
 
     /** @var list<string> */
     private const DEAD_RETURNS = ['PossiblyUnusedReturnValue', 'UnusedReturnValue'];
 
+    /**
+     * One cold and one warm run over a private fixture copy cover everything: the cold run asserts the
+     * dead-code report, the warm run (after touching three files) asserts the references replay from cache.
+     *
+     * The config sets `findUnusedCode="false"` and the run passes `--find-dead-code`: the flag turns
+     * reference collection on after the config is parsed, so the plugin must gate handler registration on
+     * the codebase flag rather than on the config value.
+     */
     #[Test]
-    public function it_reports_dead_code_only_where_laravel_cannot_dispatch(): void
+    public function it_reports_dead_code_only_where_laravel_cannot_dispatch_and_replays_it_from_cache(): void
     {
-        $findings = $this->runPsalm(self::FIXTURE, false);
+        // Keep the copy under the repository so Psalm's GitInfoCollector does not emit its
+        // "not a git repository" warning, which would hide real subprocess failures on stderr.
+        $fixtureDir = self::FIXTURE . '/.incremental-' . (int) \getmypid();
+        $this->copyDirectory(self::FIXTURE, $fixtureDir);
+
+        try {
+            $this->assertColdReport($this->runPsalm($fixtureDir));
+
+            foreach (['/app/Dependencies/Dependencies.php', '/app/Models/User.php', '/app/Conventions/QueuedJob.php'] as $changed) {
+                $this->assertNotFalse(
+                    \file_put_contents($fixtureDir . $changed, "\n// incremental change\n", \FILE_APPEND),
+                );
+            }
+
+            $findings = $this->runPsalm($fixtureDir);
+            $deadCode = $this->report($findings, self::DEAD_CODE);
+
+            $this->assertStringContainsString(
+                'Models\User::privateTeam',
+                $deadCode,
+                'Expected the incremental run to still consolidate dead code.',
+            );
+            $this->assertStringNotContainsString(
+                'Dependencies\UpdateDriver',
+                $deadCode,
+                'Expected the queued constructor edge to be replayed after its file changed.',
+            );
+            $this->assertStringNotContainsString(
+                '::team',
+                $deadCode,
+                'Expected the queued relationship edge to be replayed after the model changed.',
+            );
+            $this->assertStringNotContainsString(
+                'Conventions\SendReportJob',
+                $deadCode,
+                'Expected the class-sourced job edges (method and hook property) to be replayed after the job file changed.',
+            );
+            // The relationship edge is anchored to the plugin file (recordFileReference()), which is
+            // never re-analyzed, so its "return value used" half must survive the model file's own
+            // invalidation too - not just the method-used half asserted above.
+            $this->assertStringNotContainsString(
+                'function team(',
+                $this->report($findings, self::DEAD_RETURNS),
+                'Expected the relationship return value to remain used after the model file changed.',
+            );
+        } finally {
+            $this->removeDirectory($fixtureDir);
+        }
+    }
+
+    /**
+     * @param list<array{type: string, message: string, snippet: string}> $findings
+     */
+    private function assertColdReport(array $findings): void
+    {
         $deadCode = $this->report($findings, self::DEAD_CODE);
 
         foreach ([
             '::update',                         // controller action
             '::inherited',                      // action inherited from an abstract base controller
             '::traitAction',                    // action pulled in from a trait
-            '::handle',                         // console command entrypoint
+            'ReferenceCommand::handle',         // console command entrypoint
             '::team',                           // relationship declared on the model itself
             '::baseTeam',                       // relationship inherited from a parent model
             '::traitTeam',                      // relationship pulled in from a trait
@@ -62,6 +124,16 @@ final class IndirectMethodReferencesTest extends TestCase
             'Dependencies\NestedDependency',    // resolved recursively out of OwnerDependency
             'Dependencies\InheritedActionDependency', // parameter of an inherited action
             'Dependencies\TraitActionDependency',     // parameter of a trait-provided action
+            // Convention entry points (#1779): Laravel calls these without a Psalm-visible call, so
+            // everything below is reachable only through the class-conditional edges.
+            'Conventions\PlainInvokable',             // invokable: promoted dep, __construct, __invoke
+            'Conventions\InvokableService',           // collaborator reached only through __invoke
+            'Conventions\InvokeParamDependency',      // __invoke parameter
+            'Conventions\AddHeaderMiddleware',        // Closure-typed pipe: handle + terminate
+            'Conventions\SendReportJob',              // queued bus job: handle, failed, hook members
+            'Conventions\JobHandleDependency',        // handle() parameter
+            'Conventions\PrivateConstructorJob',      // dispatch() runs `new static` in class scope: a private ctor is fine
+            'Conventions\QueuedListener::',           // ShouldQueue alone roots handle(), so the private property it reads is alive
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
         }
@@ -76,6 +148,10 @@ final class IndirectMethodReferencesTest extends TestCase
             'Commands\ReferenceCommand::helper',                 // public command method other than handle()
             'Models\User::privateTeam',                          // non-public relationship
             'Models\User::ordinaryUnused',                       // plain model method
+            'Conventions\NotAPipe::handle',                      // $next has no native Closure type: not a pipe
+            'NotAPipe::$tries',                                  // hook-named property, but the class is not queued
+            'NonUniqueQueuedJob::uniqueId',                      // uniqueness hooks are read only for ShouldBeUnique
+            'QueuedListenerEvent::__construct',                  // ShouldQueue-only handle() parameters are not injected
         ] as $marker) {
             $this->assertStringContainsString($marker, $deadCode, "Expected {$marker} to remain reportable.");
         }
@@ -97,81 +173,24 @@ final class IndirectMethodReferencesTest extends TestCase
             'Expected CommandHelperDependency to remain an unused class.',
         );
 
+        $unusedClasses = $this->report($findings, ['UnusedClass']);
+        foreach ([
+            'Conventions\DeadJob',                // an edge from a dead class never fires
+            'Conventions\DemotedPipeDependency',  // `handle as protected` on the parent demotes the inherited pipe handle()
+        ] as $marker) {
+            $this->assertStringContainsString($marker, $unusedClasses, "Expected {$marker} to remain an unused class.");
+        }
+
         // Laravel consumes what an entrypoint and a relationship return (the router, the console
         // kernel, eager loading), so those edges carry "return value used" - unlike a discarded
         // return of an ordinary public method.
         $deadReturns = $this->report($findings, self::DEAD_RETURNS);
         $this->assertStringNotContainsString('function team(', $deadReturns, 'Expected the relationship return value to read as used.');
         $this->assertStringNotContainsString('function show(', $deadReturns, 'Expected the controller action return value to read as used.');
+        $this->assertStringNotContainsString('function __invoke(InvokeParamDependency', $deadReturns, 'Expected the invokable return value to read as used.');
+        $this->assertStringNotContainsString('function handle(string $request, \Closure $next)', $deadReturns, 'Expected the middleware return value to read as used.');
+        $this->assertStringNotContainsString('function uniqueId(): string', $deadReturns, 'Expected a queue hook return value to read as used.');
         $this->assertStringContainsString('function discarded(', $deadReturns, 'Expected a discarded return value to remain reportable.');
-    }
-
-    /**
-     * `--find-dead-code` turns reference collection on after the config is parsed, so the plugin
-     * must gate handler registration on the codebase flag rather than on the config value.
-     */
-    #[Test]
-    public function it_honors_the_cli_dead_code_override_when_config_disables_it(): void
-    {
-        $deadCode = $this->report(
-            $this->runPsalm(self::FIXTURE, false, 'psalm-no-dead-code.xml', ['--find-dead-code']),
-            self::DEAD_CODE,
-        );
-
-        $this->assertStringNotContainsString('::update', $deadCode, 'Expected the CLI override to activate the handler.');
-        $this->assertStringContainsString(
-            'Dependencies\UnusedDependency::__construct',
-            $deadCode,
-            'Expected the CLI override to actually report dead code.',
-        );
-    }
-
-    #[Test]
-    public function cached_runs_replay_references_after_file_changes(): void
-    {
-        // Keep the copy under the repository so Psalm's GitInfoCollector does not emit its
-        // "not a git repository" warning, which would hide real subprocess failures on stderr.
-        $fixtureDir = self::FIXTURE . '/.incremental-' . (int) \getmypid();
-        $this->copyDirectory(self::FIXTURE, $fixtureDir);
-
-        try {
-            $this->runPsalm($fixtureDir, true);
-
-            foreach (['/app/Dependencies/Dependencies.php', '/app/Models/User.php'] as $changed) {
-                $this->assertNotFalse(
-                    \file_put_contents($fixtureDir . $changed, "\n// incremental change\n", \FILE_APPEND),
-                );
-            }
-
-            $findings = $this->runPsalm($fixtureDir, true);
-            $deadCode = $this->report($findings, self::DEAD_CODE);
-
-            $this->assertStringContainsString(
-                'Models\User::privateTeam',
-                $deadCode,
-                'Expected the incremental run to still consolidate dead code.',
-            );
-            $this->assertStringNotContainsString(
-                'Dependencies\UpdateDriver',
-                $deadCode,
-                'Expected the queued constructor edge to be replayed after its file changed.',
-            );
-            $this->assertStringNotContainsString(
-                '::team',
-                $deadCode,
-                'Expected the queued relationship edge to be replayed after the model changed.',
-            );
-            // The relationship edge is anchored to the plugin file (recordFileReference()), which is
-            // never re-analyzed, so its "return value used" half must survive the model file's own
-            // invalidation too - not just the method-used half asserted above.
-            $this->assertStringNotContainsString(
-                'function team(',
-                $this->report($findings, self::DEAD_RETURNS),
-                'Expected the relationship return value to remain used after the model file changed.',
-            );
-        } finally {
-            $this->removeDirectory($fixtureDir);
-        }
     }
 
     /**
@@ -194,30 +213,14 @@ final class IndirectMethodReferencesTest extends TestCase
     }
 
     /**
-     * @param list<string> $extraArguments
      * @return list<array{type: string, message: string, snippet: string}>
      */
-    private function runPsalm(
-        string $fixtureDir,
-        bool $useCache,
-        string $config = 'psalm.xml',
-        array $extraArguments = [],
-    ): array {
-        $arguments = [
-            \PHP_BINARY,
-            \dirname(__DIR__, 3) . '/vendor/bin/psalm',
-            '-c',
-            $config,
-            '--threads=1',
-            '--no-progress',
-            '--output-format=json',
-            ...$extraArguments,
-        ];
-        if (!$useCache) {
-            $arguments[] = '--no-cache';
-        }
-
-        $process = new Process($arguments, $fixtureDir);
+    private function runPsalm(string $fixtureDir): array
+    {
+        $process = new Process(
+            [\PHP_BINARY, \dirname(__DIR__, 3) . '/vendor/bin/psalm', '-c', 'psalm.xml', '--threads=1', '--no-progress', '--output-format=json', '--find-dead-code'],
+            $fixtureDir,
+        );
         $process->setTimeout(300);
         $process->run();
 

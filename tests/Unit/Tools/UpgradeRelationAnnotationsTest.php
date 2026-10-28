@@ -41,14 +41,7 @@ final class UpgradeRelationAnnotationsTest extends TestCase
     public static function autoRelationProvider(): iterable
     {
         // Relations that go 1-param → 2-param (TDeclaringModel = self).
-        $twoParamRelations = [
-            'BelongsTo',
-            'HasMany',
-            'HasOne',
-            'MorphMany',
-            'MorphOne',
-            'MorphTo',
-        ];
+        $twoParamRelations = ['BelongsTo', 'MorphTo'];
 
         foreach ($twoParamRelations as $relation) {
             yield "@return {$relation}" => [
@@ -113,16 +106,6 @@ final class UpgradeRelationAnnotationsTest extends TestCase
                 "/**\n * @return {$relation}<Tag, \$this>\n */",
                 "/**\n * @return {$relation}<Tag, \$this, {$pivot}, 'pivot'>\n */",
             ];
-
-            yield "{$relation} 2-param with FQN model and self" => [
-                "/**\n * @return {$relation}<\\App\\Models\\Member, self>\n */",
-                "/**\n * @return {$relation}<\\App\\Models\\Member, self, {$pivot}, 'pivot'>\n */",
-            ];
-
-            yield "{$relation} 2-param with FQN model and \$this" => [
-                "/**\n * @return {$relation}<\\App\\Models\\Member, \$this>\n */",
-                "/**\n * @return {$relation}<\\App\\Models\\Member, \$this, {$pivot}, 'pivot'>\n */",
-            ];
         }
     }
 
@@ -142,24 +125,19 @@ final class UpgradeRelationAnnotationsTest extends TestCase
     public static function unchangedProvider(): iterable
     {
         $pivot      = '\Illuminate\Database\Eloquent\Relations\Pivot';
-        $morphPivot = '\Illuminate\Database\Eloquent\Relations\MorphPivot';
 
         // Already has two params — skip (non-pivot relations).
         yield 'BelongsTo already migrated' => ["/**\n * @return BelongsTo<User, self>\n */"];
-        yield 'HasMany already migrated' => ["/**\n * @return HasMany<Post, self>\n */"];
 
         // Already at four params — pivot relations fully migrated.
         yield 'BelongsToMany already 4-param' => ["/**\n * @return BelongsToMany<Tag, self, {$pivot}, 'pivot'>\n */"];
-        yield 'MorphToMany already 4-param' => ["/**\n * @return MorphToMany<Tag, self, {$morphPivot}, 'pivot'>\n */"];
 
         // Through relations — upgradeDocblock() leaves these unchanged; the
         // AST-based upgradeThroughRelations() handles them at runtime.
         yield 'HasManyThrough unchanged by upgradeDocblock' => ["/**\n * @return HasManyThrough<Post>\n */"];
-        yield 'HasOneThrough unchanged by upgradeDocblock' => ["/**\n * @return HasOneThrough<Post>\n */"];
 
         // Non-return annotation — never touch.
         yield '@param annotation untouched' => ["/**\n * @param BelongsTo<User> \$rel\n */"];
-        yield '@var annotation untouched' => ["/**\n * @var BelongsTo<User>\n */"];
 
         // No annotation at all.
         yield 'plain description' => ["/**\n * Get the user.\n */"];

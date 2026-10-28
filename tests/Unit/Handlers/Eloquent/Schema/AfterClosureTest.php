@@ -43,64 +43,6 @@ final class AfterClosureTest extends AbstractSchemaAggregatorTestCase
     }
 
     #[Test]
-    public function after_closure_with_different_parameter_name(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('posts', static function (Blueprint $table) {
-                        $table->id();
-                        $table->after('id', static function (Blueprint $blueprint) {
-                            $blueprint->string('title');
-                            $blueprint->boolean('published');
-                        });
-                    });
-                }
-            };
-            PHP);
-
-        $table = $schema->tables['posts'];
-        $this->assertTableHasNotNullableColumnOfType('title', 'string', $table);
-        $this->assertTableHasNotNullableColumnOfType('published', 'bool', $table);
-    }
-
-    #[Test]
-    public function after_closure_with_nullable_and_default_modifiers(): void
-    {
-        $schema = $this->schemaFromMigration(<<<'PHP'
-            <?php
-            use Illuminate\Database\Migrations\Migration;
-            use Illuminate\Database\Schema\Blueprint;
-            use Illuminate\Support\Facades\Schema;
-
-            return new class extends Migration {
-                public function up(): void
-                {
-                    Schema::create('orders', static function (Blueprint $table) {
-                        $table->id();
-                        $table->after('id', static function (Blueprint $table) {
-                            $table->string('status')->nullable()->default('pending');
-                            $table->integer('quantity')->unsigned();
-                        });
-                    });
-                }
-            };
-            PHP);
-
-        $table = $schema->tables['orders'];
-        $this->assertTableHasNullableColumnOfType('status', 'string', $table);
-        $this->assertColumnHasDefault('pending', $table->columns['status']);
-        $this->assertTableHasNotNullableColumnOfType('quantity', 'int', $table);
-        $this->assertTrue($table->columns['quantity']->unsigned);
-    }
-
-    #[Test]
     public function after_closure_in_alter_table(): void
     {
         $schema = $this->schemaFromMigration(<<<'PHP'

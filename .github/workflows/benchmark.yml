@@ -1,8 +1,8 @@
 name: Benchmark
 
 # Push to 4.x (or manual dispatch): benchmarks Monica with the plugin
-# installed, stores the result for historical trend tracking (GH Pages chart,
-# regression alert at 150%).
+# installed, stores the result for historical trend tracking (chart:
+# docs/contributing/benchmark.html on the docs site, regression alert at 150%).
 #
 # There used to be a second, PR-comment-triggered ("/benchmark") path here that
 # compared PR vs base on Monica alone. It was dropped as redundant:
@@ -38,9 +38,9 @@ permissions:
 env:
   # Pinned Monica release for reproducible benchmarks.
   # Monica is a real-world Laravel app (~700 PHP files, Laravel 12) https://github.com/monicahq/monica.
-  # beta.5 is the lowest tag on Laravel 12 (the plugin requires illuminate ^12.14 || ^13.3;
-  # beta.4 and earlier ship Laravel 11). Requiring the plugin bumps Monica's Laravel
-  # to >=12.14 during `composer update`. Its lock pins the dev dependency
+  # beta.5 is the lowest tag on Laravel 12 (the plugin requires Laravel 12+;
+  # beta.4 and earlier ship Laravel 11). Setup bumps Monica's locked Laravel past the
+  # plugin's `conflict` floor during `composer update` (see there). Its lock pins the dev dependency
   # laravel-lang/http-statuses 3.10.3, which Packagist flags as malware, so a plain
   # `composer install` aborts. The Prime step below bumps that one package to a clean
   # release before installing (see there).
@@ -106,9 +106,18 @@ jobs:
             '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
           composer config minimum-stability dev
           composer require --dev "psalm/plugin-laravel:*" --no-interaction --no-update
-          COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel \
+          # laravel/framework is named explicitly: the plugin only conflicts with old
+          # Laravel versions (no illuminate/* requires), so --with-all-dependencies alone
+          # leaves Monica's locked framework below the conflict floor and the solve fails.
+          # Psalm is pinned to the plugin's floor (first alternative of the vimeo/psalm
+          # constraint) rather than the newest tag, so the trend moves only on commits here.
+          PSALM_FLOOR=$(jq -er '.require["vimeo/psalm"] | split("||")[0] | gsub("^[\\s^~>=]+|\\s+$"; "")' \
+            "$GITHUB_WORKSPACE/composer.json")
+          COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel laravel/framework \
+            --with="vimeo/psalm:$PSALM_FLOOR" \
             --no-interaction --no-progress --with-all-dependencies
           composer show psalm/plugin-laravel
+          composer show vimeo/psalm
           cp "$GITHUB_WORKSPACE/tests/Benchmark/psalm-benchmark.xml" psalm-benchmark.xml
 
       - name: Benchmark with hyperfine

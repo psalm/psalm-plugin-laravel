@@ -17,9 +17,8 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Concerns\ForcesIntKeyType;
  *  - phase HOISTED before the walk: the attribute applies to the pristine `int` default, then the initializer
  *    overwrites it, and `getKeyType()` is `int`.
  *
- * Chosen over the `$table` force-branch, which is the other way to catch the hoist but only from 13.6 (13.3
- * through 13.5 have none). The `keyType` guard has no force branch and no version split — byte-identical from
- * 13.3 to 13.20 — so this discriminates across the whole `^13.3` range.
+ * The `$table` force-branch is the other way to catch the hoist. The `keyType` guard has no force branch
+ * and is byte-identical across every supported 13.x, so this discriminates across the whole 13.x range.
  *
  * Laravel 13.0+ (`#[Table]`); the consuming test is gated on `class_exists()`.
  *

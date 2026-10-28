@@ -12,6 +12,7 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Identifier;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
@@ -23,6 +24,8 @@ use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -52,11 +55,19 @@ use Psalm\Type\Union;
  * - boolean (contains, every, some) → bool
  * - aggregation (avg, sum) → numeric types
  * - first/last → TValue|null
+ * - sole → TValue
  *
- * Template params (TKey, TValue) and the concrete collection class are extracted
+ * Collection template params (TKey, TValue) and the concrete collection class are extracted
  * from the COLLECTION expression (the receiver of the property fetch), not from the
  * proxy itself, because Psalm doesn't fully resolve trait `@property-read` template
- * params during substitution.
+ * params during substitution. The proxy's own params, `HigherOrderCollectionProxy<TMethod,
+ * TValue, TCollection>` (Laravel 13.31+ shape, which the stubs declare for every version), are
+ * read only by the `Enumerable<TKey, TValue>` fallback: TValue at index 1, the key from the
+ * TCollection at index 2 (`array-key` when that is not a generic Enumerable, or when the proxy
+ * comes from a Laravel 12.27-13.30 trait annotation that still declares only `<TKey, TValue>`).
+ *
+ * A receiver that is a union of several collection types ({@see resolveProxyReturnTypeForUnion()})
+ * is resolved per branch and the branch results are combined.
  *
  * Property access on the proxy ($collection->map->name) is NOT yet supported —
  * Psalm's PropertyTypeProviderEvent doesn't expose template type parameters.
@@ -128,6 +139,8 @@ final class HigherOrderCollectionProxyHandler implements
             return;
         }
 
+        $proxyExpr = $expr->var;
+
         foreach ($calleeType->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TGenericObject || \strtolower($atomic->value) !== self::PROXY_CLASS_LOWER) {
                 continue;
@@ -140,12 +153,30 @@ final class HigherOrderCollectionProxyHandler implements
 
             // Extract the proxy method name (e.g. "each" from $collection->each->delete())
             $proxyMethod = self::extractProxyMethodNameFromExpr($expr);
+
+            // A receiver union of several collections is resolved per branch. An unknown proxy
+            // shape or name declines, keeping Psalm's own result.
+            $receiverType = $proxyExpr instanceof PropertyFetch
+                ? $source->getNodeTypeProvider()->getType($proxyExpr->var)
+                : null;
+            if ($receiverType instanceof Union && \count(self::collectionAtomics($receiverType, $source->getCodebase())) > 1) {
+                $unionType = $proxyMethod === null ? null : self::resolveProxyReturnTypeForUnion(
+                    $receiverType,
+                    $proxyMethod,
+                    self::extractCalledMethodName($expr),
+                    $source->getCodebase(),
+                );
+                if ($unionType instanceof Union) {
+                    $event->setReturnTypeCandidate($unionType);
+                }
+
+                return;
+            }
+
             if ($proxyMethod === null) {
                 // Unknown proxy shape — fall back to Enumerable<TKey, TValue> to at least
                 // allow chaining of collection methods without InvalidMethodCall.
-                $event->setReturnTypeCandidate(new Union([
-                    new TGenericObject(Enumerable::class, [$typeParams[0], $typeParams[1]]),
-                ]));
+                $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null, $source->getCodebase()));
                 return;
             }
 
@@ -154,9 +185,7 @@ final class HigherOrderCollectionProxyHandler implements
             $collectionInfo = self::extractCollectionInfoFromExpr($expr, $source);
             if ($collectionInfo === null) {
                 // Couldn't find the collection — fall back to Enumerable.
-                $event->setReturnTypeCandidate(new Union([
-                    new TGenericObject(Enumerable::class, [$typeParams[0], $typeParams[1]]),
-                ]));
+                $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null, $source->getCodebase()));
                 return;
             }
 
@@ -216,17 +245,26 @@ final class HigherOrderCollectionProxyHandler implements
             return null;
         }
 
+        $proxyMethod = self::extractProxyMethodNameFromFetch($proxyExpr);
+        if ($proxyMethod === null) {
+            return null;
+        }
+
+        if (\count(self::collectionAtomics($collectionType, $source->getCodebase())) > 1) {
+            return self::resolveProxyReturnTypeForUnion(
+                $collectionType,
+                $proxyMethod,
+                $event->getMethodNameLowercase(),
+                $source->getCodebase(),
+            );
+        }
+
         $collectionInfo = self::extractCollectionInfoFromType($collectionType, $source->getCodebase());
         if ($collectionInfo === null) {
             return null;
         }
 
         [$tKey, $tValue, $collectionClass] = $collectionInfo;
-
-        $proxyMethod = self::extractProxyMethodNameFromFetch($proxyExpr);
-        if ($proxyMethod === null) {
-            return null;
-        }
 
         return self::resolveProxyReturnType(
             $proxyMethod,
@@ -305,6 +343,11 @@ final class HigherOrderCollectionProxyHandler implements
         // first/last — returns TValue|null
         if ($proxyMethod === 'first' || $proxyMethod === 'last') {
             return Type::combineUnionTypes($tValue, Type::getNull());
+        }
+
+        // sole — returns the single matching item (throws when none or several match), never null
+        if ($proxyMethod === 'sole') {
+            return $tValue;
         }
 
         // max/min — use reduce() with null as the initial value, so null is always a possible result
@@ -396,6 +439,107 @@ final class HigherOrderCollectionProxyHandler implements
     }
 
     /**
+     * Resolve the proxy return type for a receiver that is a union of several collections: each
+     * branch is typed with its own TKey/TValue/class and the results are combined, so the union
+     * keeps what the proxied method adds (first/last add null) instead of Psalm's raw `@mixin
+     * TValue` result.
+     *
+     * Declines (null) for an unknown proxy name, and for a union holding anything besides
+     * collections and null (a template or another class whose own `first` proxy would be overwritten).
+     * A branch whose TKey/TValue are not provably its first two type params (a non-generic
+     * subclass, reordered templates) makes the whole answer mixed rather than a guess.
+     *
+     * @param Union $receiverType a union with at least two Enumerable atomics
+     * @param lowercase-string $proxyMethod
+     * @param lowercase-string $calledMethod
+     */
+    private static function resolveProxyReturnTypeForUnion(
+        Union $receiverType,
+        string $proxyMethod,
+        string $calledMethod,
+        Codebase $codebase,
+    ): ?Union {
+        $branches = self::collectionAtomics($receiverType, $codebase);
+
+        foreach ($receiverType->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNull && !\in_array($atomic, $branches, true)) {
+                return null;
+            }
+        }
+
+        $combined = null;
+        $opaqueBranch = false;
+
+        foreach ($branches as $branch) {
+            $readable = $branch instanceof TGenericObject && self::bindsKeyAndValuePositionally($branch, $codebase);
+            $opaqueBranch = $opaqueBranch || !$readable;
+
+            // An unreadable branch still resolves, with placeholders, so an unknown proxy name declines.
+            $branchType = self::resolveProxyReturnType(
+                $proxyMethod,
+                $readable ? $branch->type_params[0] : Type::getMixed(),
+                $readable ? $branch->type_params[1] : Type::getMixed(),
+                $branch->value,
+                $codebase,
+                $calledMethod,
+            );
+
+            if (!$branchType instanceof Union) {
+                return null;
+            }
+
+            $combined = $combined instanceof Union ? Type::combineUnionTypes($combined, $branchType) : $branchType;
+        }
+
+        return $opaqueBranch ? Type::getMixed() : $combined;
+    }
+
+    /**
+     * Whether the atomic's class is a plain two-slot collection: it declares exactly two templates
+     * and `Enumerable::TKey` / `TValue` resolve to the first / second of them. The resolver rebuilds
+     * `Class<TKey, TValue>` positionally, which is wrong for a subclass that reorders or adds
+     * templates. Decided from the class declaration alone, since equal instantiated params
+     * (`Reversed<string, string>`) do not prove which slot feeds which template.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function bindsKeyAndValuePositionally(TGenericObject $atomic, Codebase $codebase): bool
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get($atomic->value);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return false;
+        }
+
+        $templates = $storage->template_types ?? [];
+        if (\count($atomic->type_params) !== 2 || \count($templates) !== 2) {
+            return false;
+        }
+
+        $own = [];
+        foreach ($templates as $name => $boundByClass) {
+            $own[] = new TTemplateParam($name, \reset($boundByClass), $storage->name);
+        }
+
+        $ownParams = [new Union([$own[0]]), new Union([$own[1]])];
+        $probe = new TGenericObject($storage->name, $ownParams);
+
+        foreach (['TKey' => $own[0], 'TValue' => $own[1]] as $template => $expected) {
+            $projected = ClassLineage::projectedTemplate($codebase, $probe, Enumerable::class, $template);
+            $actual = $projected?->isSingle() === true ? $projected->getSingleAtomic() : null;
+
+            if (!$actual instanceof TTemplateParam
+                || $actual->param_name !== $expected->param_name
+                || $actual->defining_class !== $expected->defining_class
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Extract TKey, TValue, and the collection class from a MethodCall expression.
      * Used in the AfterMethodCallAnalysis path where we have the full AST.
      *
@@ -423,22 +567,113 @@ final class HigherOrderCollectionProxyHandler implements
     /**
      * Extract TKey, TValue, and the collection class from a Union type.
      *
+     * Declines (null) when the union holds more than one collection atomic, generic or not:
+     * taking one would silently drop the other branches' item types. Such receivers go through
+     * {@see resolveProxyReturnTypeForUnion()} instead.
+     *
      * @return array{Union, Union, string}|null [TKey, TValue, collectionClassName]
      * @psalm-mutation-free
      */
     private static function extractCollectionInfoFromType(Union $collectionType, Codebase $codebase): ?array
     {
-        foreach ($collectionType->getAtomicTypes() as $atomic) {
-            if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
-                continue;
-            }
+        $atomics = self::collectionAtomics($collectionType, $codebase);
 
-            if (ClassLineage::isA($codebase, $atomic->value, Enumerable::class)) {
-                return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
+        if (\count($atomics) !== 1) {
+            return null;
+        }
+
+        $atomic = $atomics[0];
+        if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
+            return null;
+        }
+
+        return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
+    }
+
+    /**
+     * `Enumerable<TKey, TValue>` rebuilt from the proxy's own type params, for receivers that
+     * {@see extractCollectionInfoFromType()} cannot read (a non-generic subclass, whose proxy
+     * comes from the vendor trait annotation).
+     *
+     * @param Union|null $tCollection absent when the vendor annotation is the pre-13.31 `<TKey, TValue>`
+     * @psalm-mutation-free
+     */
+    private static function enumerableFallback(Union $tValue, ?Union $tCollection, Codebase $codebase): Union
+    {
+        return new Union([
+            new TGenericObject(Enumerable::class, [self::enumerableKey($tCollection, $codebase), $tValue]),
+        ]);
+    }
+
+    /**
+     * The key type the proxy's TCollection binds to `Enumerable::TKey`, resolved through the class ancestry
+     * ({@see ClassLineage::projectedTemplate()}) so a subclass that reorders its templates still yields its
+     * key. `array-key` when that is not provable (no TCollection, non-generic or unknown class, a union).
+     *
+     * Caveat: the projected key is kept only when it is a flat union of plain int/string key types. A compound
+     * `@extends` mapping that still names a template (`Collection<K|int, V>`) falls back to `array-key` rather
+     * than leak the unresolved template; see HigherOrderProxyCompoundKeyKnownLimitation.phpt.
+     *
+     * @psalm-mutation-free
+     */
+    private static function enumerableKey(?Union $tCollection, Codebase $codebase): Union
+    {
+        if ($tCollection?->isSingle() === true) {
+            $atomic = $tCollection->getSingleAtomic();
+
+            if ($atomic instanceof TNamedObject) {
+                $key = ClassLineage::projectedTemplate($codebase, $atomic, Enumerable::class, 'TKey');
+
+                if ($key instanceof Union && self::isPlainKey($key)) {
+                    return $key;
+                }
             }
         }
 
-        return null;
+        return Type::getArrayKey();
+    }
+
+    /**
+     * Whether every atomic of a key type is an exact int/string key class (no template, no nested type).
+     *
+     * @psalm-pure
+     */
+    private static function isPlainKey(Union $key): bool
+    {
+        foreach ($key->getAtomicTypes() as $atomic) {
+            if (!\in_array($atomic::class, [
+                Type\Atomic\TInt::class,
+                Type\Atomic\TLiteralInt::class,
+                Type\Atomic\TIntRange::class,
+                Type\Atomic\TString::class,
+                Type\Atomic\TLiteralString::class,
+                Type\Atomic\TNonEmptyString::class,
+                Type\Atomic\TNonFalsyString::class,
+                Type\Atomic\TNumericString::class,
+                Type\Atomic\TArrayKey::class,
+            ], true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return list<TNamedObject> every named-object atomic of the union that is an Enumerable
+     * @psalm-mutation-free
+     */
+    private static function collectionAtomics(Union $collectionType, Codebase $codebase): array
+    {
+        $atomics = [];
+
+        foreach ($collectionType->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Enumerable::class)) {
+                $atomics[] = $atomic;
+            }
+        }
+
+        return $atomics;
     }
 
     /**

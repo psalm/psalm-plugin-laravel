@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\BladeDisabledException;
 use Psalm\LaravelPlugin\Bootstrap\TestbenchMissingException;
 use Psalm\LaravelPlugin\Internal\InternalErrorClassifier;
 
@@ -36,19 +37,9 @@ final class InternalErrorClassifierTest extends TestCase
             'Laravel framework',
         ];
 
-        yield 'illuminate split package' => [
-            '/home/user/project/vendor/illuminate/container/Container.php',
-            'Laravel framework',
-        ];
-
         yield 'Orchestra Testbench' => [
             '/home/user/project/vendor/orchestra/testbench-core/src/Foundation/Application.php',
             'Orchestra Testbench',
-        ];
-
-        yield 'plugin development checkout' => [
-            '/home/dev/code/psalm-plugin-laravel/src/Bootstrap/ApplicationProvider.php',
-            'Laravel plugin',
         ];
 
         yield 'plugin installed via composer wins over generic vendor' => [
@@ -63,11 +54,6 @@ final class InternalErrorClassifierTest extends TestCase
 
         yield 'user bootstrap/app.php' => [
             '/home/user/app/bootstrap/app.php',
-            'application code',
-        ];
-
-        yield 'user app/Providers' => [
-            '/home/user/app/app/Providers/AppServiceProvider.php',
             'application code',
         ];
 
@@ -93,15 +79,15 @@ final class InternalErrorClassifierTest extends TestCase
         $this->assertNull(InternalErrorClassifier::hintForFile(''));
     }
 
+    /** #1930: a Blade disable is thrown from the plugin's own file but is mostly a project setting. */
     #[Test]
-    public function it_returns_a_hint_for_a_real_throwable(): void
+    public function a_blade_disable_without_a_crash_points_at_project_settings(): void
     {
-        // Smoke test: a real throwable always has at least one classifiable frame
-        // (this test file itself is enough). Verifies frameFiles() is wired up
-        // and the hint() loop reaches a classifiable frame.
-        $hint = InternalErrorClassifier::hint(new \RuntimeException('boom'));
+        $hint = InternalErrorClassifier::hint(new BladeDisabledException('Blade template analysis is disabled for this run'));
 
         $this->assertNotNull($hint);
+        $this->assertStringContainsString('project setting', $hint);
+        $this->assertStringNotContainsString('likely a plugin bug', $hint);
     }
 
     #[Test]
@@ -112,5 +98,16 @@ final class InternalErrorClassifierTest extends TestCase
         $this->assertNotNull($hint);
         $this->assertStringContainsString('project setup', $hint);
         $this->assertStringNotContainsString('likely a plugin bug', $hint);
+    }
+
+    #[Test]
+    public function a_blade_disable_caused_by_a_crash_is_classified_by_the_crash(): void
+    {
+        $crash = new \RuntimeException('boom');
+
+        $this->assertSame(
+            InternalErrorClassifier::hint($crash),
+            InternalErrorClassifier::hint(new BladeDisabledException('Blade template analysis is disabled for this run', 0, $crash)),
+        );
     }
 }

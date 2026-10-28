@@ -129,6 +129,9 @@ final class DiagnoseCommand extends Command
 
         $this->renderProviders($io, $report->loadedProviders, $listProviders);
 
+        $io->writeln('<info>Blade:</info> ' . $report->blade);
+        $io->newLine();
+
         if ($tips !== []) {
             $io->writeln('<info>Tips</info>');
             foreach ($tips as $tip) {

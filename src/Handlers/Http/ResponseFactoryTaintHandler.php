@@ -57,7 +57,7 @@ use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
  * such miss fails toward a retained finding, never a dropped one.
  *
  * Every `make()` call shares one sink node; Psalm reports each flow into it separately, so
- * exempting one never hides another (`TaintedHtmlResponseFactoryMakeSharedSinkLongerFlow.phpt`).
+ * exempting one never hides another.
  *
  * Every private helper below is free of side effects, but the purity annotations follow what Psalm
  * can verify rather than what is true: helpers that reach for a call's arguments or walk the AST
@@ -421,8 +421,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
         $contentTypeProven = false;
 
         foreach ($headers->items as $item) {
-            if ($item === null
-                || $item->unpack
+            if ($item->unpack
                 || !$item->key instanceof String_
             ) {
                 return false;

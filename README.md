@@ -30,19 +30,19 @@ Real output on a fresh Laravel app, tracing the two lines above from source to s
 ## Install
 
 ```bash
-composer config minimum-stability dev && composer config prefer-stable true
-composer require --dev psalm/plugin-laravel:^4.15
+composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0@RC"
 ./vendor/bin/psalm-laravel init
 ./vendor/bin/psalm-laravel analyze
 ```
 
-Requires PHP 8.2+ and Laravel 12 or 13.
+Requires PHP 8.2+ and Laravel 12.x or 13.x.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
-* [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently in beta, which is the only reason dev stability is needed. `prefer-stable true` keeps every other package in your project on stable releases, so Psalm itself is the single beta you pull in.
-* Want zero beta packages? The 3.x line runs on stable Psalm 6 and needs no stability flags at all: `composer require --dev psalm/plugin-laravel:^3`. It carries the same security checks, and additionally supports Laravel 11.
+* [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently a release candidate. The `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
+* For stable Psalm 6 or Laravel 11 support, use `composer require --dev psalm/plugin-laravel:^3`; the 3.x line provides the same security checks.
 * `init` writes a `psalm.xml` at the project root with the plugin enabled, `errorLevel="4"` by default (`--level 1` is strictest, `--level 8` the most lenient), Laravel-friendly issue handler defaults, and `runTaintAnalysis="true"`. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 * `analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can invoke `./vendor/bin/psalm` directly instead.
+* `analyze --plugin-option=KEY=VALUE` (repeatable) overrides a bool or enum plugin setting for one run. See [per-run overrides](docs/config.md#per-run-overrides).
 
 On the 3.x line (Psalm 6) security scanning is a separate mode rather than an extra check: enabling it makes Psalm report `Tainted...` issues and suppress every type issue. Keep `runTaintAnalysis` out of your `psalm.xml` there, which is why `init` on 3.x omits it, and pass the flag only for the security pass. Putting it in the config turns every run taint-only, including the `--set-baseline` run below.
 
@@ -58,20 +58,25 @@ Psalm 7, and therefore the 4.x plugin line, merged the two: one run reports both
 Plugin ships Laravel-specific taint stubs that track user input from source to sink across your entire codebase.
 Unlike pattern-matching tools, Psalm follows dataflow across function boundaries, so input that travels through helper functions, service classes, and any number of call layers is still caught.
 
-| Vulnerability           | OWASP    | Example sinks                                                                              |
-|-------------------------|----------|--------------------------------------------------------------------------------------------|
-| SQL injection           | A03:2021 | `orderBy()` column, `orderByRaw()`, `DB::select()`, `DB::statement()`, `DB::unprepared()`  |
-| XSS                     | A03:2021 | `response()`, `new HtmlString()`, mailable `html()`                                        |
-| Shell injection         | A03:2021 | `Process::path()->run()`, `app(Kernel::class)->call()`                                     |
-| File traversal          | A01:2021 | `Storage::disk()->get()`, `->put()`, `->delete()`                                          |
-| Open redirect           | A01:2021 | `redirect()`, `redirect()->to()`                                                           |
-| SSRF                    | A10:2021 | `Http::withOptions()->get()` and the rest of `PendingRequest`                              |
-| Crypto misuse           | A02:2021 | encryption and hashing taint escape or unescape                                            |
-| Timing attack (CWE-208) | A02:2021 | a secret compared with `===`, `<=>`, or `strcmp()`                                         |
+| Vulnerability                  | OWASP    | Example sinks                                                                             |
+|--------------------------------|----------|-------------------------------------------------------------------------------------------|
+| SQL injection                  | A03:2021 | `orderBy()` column, `orderByRaw()`, `DB::select()`, `DB::statement()`, `DB::unprepared()` |
+| XSS                            | A03:2021 | `response()`, `new HtmlString()`, mailable `html()`                                       |
+| Shell injection                | A03:2021 | `Process::path()->run()`, `app(Kernel::class)->call()`                                    |
+| File traversal                 | A01:2021 | `Storage::disk()->get()`, `->put()`, `->delete()`                                         |
+| Open redirect                  | A01:2021 | `redirect()`, `redirect()->to()`                                                          |
+| SSRF                           | A10:2021 | `Http::withOptions()->get()` and the rest of `PendingRequest`                             |
+| Crypto misuse                  | A02:2021 | encryption and hashing taint escape or unescape                                           |
+| Timing attack (CWE-208)        | A02:2021 | a secret compared with `===`, `<=>`, or `strcmp()`                                        |
+| XSS in Blade templates, opt-in | A03:2021 | `{!! $userInput !!}`                                                                      |
 
 You can read more about how the plugin's taint analysis works and what vulnerabilities it detects in [docs/security.md](docs/security.md).
 
 Writing `laravel/ai` prompt middleware that blocks injection? Annotate it so the plugin stops reporting a mitigation you already ship: [Marking prompt-guard middleware as trusted](docs/security.md#marking-prompt-guard-middleware-as-trusted).
+
+## Blade template analysis
+
+Opt-in static analysis of `.blade.php` templates: type issues and `TaintedHtml` findings on unescaped output, reported directly at the template's own file and line. Enable it with `<blade />`. See [docs/blade.md](docs/blade.md) for setup, suppression, and known limits.
 
 ## Custom checks
 
@@ -120,7 +125,7 @@ Maintained versions:
 
 | Laravel Psalm Plugin                 | PHP  |      Laravel |   Psalm | Plugin Status |
 |--------------------------------------|------|-------------:|--------:|---------------|
-| **4.x** (recommended)                | 8.2+ |       12, 13 |  7-beta | Stable        |
+| **4.x** (recommended)                | 8.2+ |       12, 13 |  7 (RC) | Stable        |
 | 3.x ([upgrade](UPGRADING.md#3x--4x)) | 8.2+ |   11, 12, 13 |       6 | Stable        |
 | 2.x ([upgrade](UPGRADING.md#2x--3x)) | 8.0+ | 8, 9, 10, 11 | 4, 5, 6 | Unmaintained  |
 | 1.x ([upgrade](UPGRADING.md#1x--2x)) | 7.1+ |   5, 6, 7, 8 |    3, 4 | Unmaintained  |

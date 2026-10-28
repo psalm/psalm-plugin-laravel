@@ -15,14 +15,13 @@
 #     --app monica --repo https://github.com/monicahq/monica.git --ref e08e917 \
 #     --plugin-base /path/plugin-base --plugin-head /path/plugin-head \
 #     --out /path/output-dir --base-label base-AAAA --head-label pr-BBBB \
-#     [--php 8.3] [--project-dir app] [--date-marker cache] \
-#     [--prime 'composer update foo --no-interaction'] \
-#     [--psalm-args '--php-version=8.0'] \
-#     [--app-src /cache/monica-src] [--mem 4G]
+#     [--project-dir app] [--before-install 'composer update foo --no-interaction'] \
+#     [--psalm-args '--php-version=8.0'] [--flags '--blade'] \
+#     [--app-src /cache/monica-src]
 #
 # Output (per side, <label> in {base-label, head-label}):
-#   <out>/<app>/<app>-<label>-<date-marker>--issues.json   (Psalm --report JSON)
-#   <out>/<app>/<app>-<label>-<date-marker>--perf.json      (wall, coverage, count)
+#   <out>/<app>/<app>-<label>--issues.json   (Psalm --report JSON)
+#   <out>/<app>/<app>-<label>--perf.json      (wall, coverage, count)
 #
 # Exit 0 even on a per-app Psalm failure: a crash log is written and the side's
 # JSON is omitted so delta-report.php renders the app as (missing) instead of
@@ -35,7 +34,7 @@ set -euo pipefail
 
 APP="" REPO="" REF="" PLUGIN_BASE="" PLUGIN_HEAD="" OUT=""
 BASE_LABEL="" HEAD_LABEL="" PROJECT_DIR=""
-DATE_MARKER="cache" PRIME="" APP_SRC="" MEM="4G" PSALM_ARGS=""
+BEFORE_INSTALL="" APP_SRC="" PSALM_ARGS="" FLAGS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -47,15 +46,11 @@ while [[ $# -gt 0 ]]; do
         --out) OUT="$2"; shift 2 ;;
         --base-label) BASE_LABEL="$2"; shift 2 ;;
         --head-label) HEAD_LABEL="$2"; shift 2 ;;
-        # --php is the caller's setup concern (setup-php on CI, system php
-        # locally); accepted for interface symmetry with the registry, ignored.
-        --php) shift 2 ;;
         --project-dir) PROJECT_DIR="$2"; shift 2 ;;
-        --date-marker) DATE_MARKER="$2"; shift 2 ;;
-        --prime) PRIME="$2"; shift 2 ;;
+        --before-install) BEFORE_INSTALL="$2"; shift 2 ;;
         --psalm-args) PSALM_ARGS="$2"; shift 2 ;;
+        --flags) FLAGS="$2"; shift 2 ;;
         --app-src) APP_SRC="$2"; shift 2 ;;
-        --mem) MEM="$2"; shift 2 ;;
         *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
     esac
 done
@@ -79,12 +74,14 @@ APP_SRC="${APP_SRC:-${OUT}/${APP}/src}"
 COMPOSER_FLAGS=(--no-interaction --no-progress --ignore-platform-reqs)
 export COMPOSER_MEMORY_LIMIT=-1
 
-# Optional extra Psalm CLI args (e.g. --php-version=8.0), split on whitespace
-# into an array so each token is passed as a separate argument. `=` is not in
-# IFS, so --php-version=8.0 stays one token. `read -ra` returns 0 even on empty
-# input (set -e safe); the array is expanded with the bash-3.2-safe
-# ${arr[@]+...} guard at the call site to avoid an unbound-variable error.
+# Optional extra CLI args, split on whitespace into arrays so each token is
+# passed as a separate argument: --psalm-args is the registry's per-app Psalm
+# args (e.g. --php-version=8.0), --flags the run-wide `/psalm-delta` flags (e.g.
+# --blade). `=` is not in IFS, so --php-version=8.0 stays one token. `read -ra`
+# returns 0 even on empty input (set -e safe); the arrays are expanded with the
+# bash-3.2-safe ${arr[@]+...} guard at the call site to avoid an unbound-variable error.
 read -ra PSALM_EXTRA <<< "$PSALM_ARGS"
+read -ra FLAGS_EXTRA <<< "$FLAGS"
 
 # Copy a tree using a copy-on-write clone where the filesystem supports it
 # (APFS clonefile on macOS, btrfs/xfs reflinks on Linux): instant and low-disk,
@@ -98,6 +95,10 @@ fast_copy() {
     cp --reflink=auto -a "$src" "$dst" 2>/dev/null && return 0 # GNU coreutils reflink
     cp -a "$src" "$dst"
 }
+
+# Psalm every app installs, on both sides. Fixed rather than read from the
+# plugin composer.json so base and head analyze with the same Psalm.
+PSALM_PIN="^7.0.0-rc14@rc"
 
 # md5 of the plugin's dependency-affecting composer.json sections. Only `require`
 # and `autoload` change what gets installed into the app's vendor; if they match
@@ -117,7 +118,7 @@ plugin_dep_sig() {
 #
 # The ref is an immutable commit, so a populated APP_SRC is reusable across runs
 # and is what CI caches. Clone the branch tip then reset to the exact commit,
-# with a fetch fallback when the commit is not the tip (mirrors setup.sh).
+# with a fetch fallback when the commit is not the tip.
 
 if [[ ! -d "$APP_SRC/.git" ]]; then
     echo "[$APP] cloning $REPO @ $REF" >&2
@@ -152,8 +153,11 @@ configure_plugin_repo() {
         $d = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
         $repos = $d["repositories"] ?? [];
         if (array_is_list($repos) === false && $repos !== []) { $repos = array_values($repos); }
-        // Drop any prior plugin path repo, prepend ours.
-        $repos = array_values(array_filter($repos, fn($r) => strpos(json_encode($r), "psalm-plugin-laravel") === false));
+        // Drop any prior plugin path repo, prepend ours. Match by name: local
+        // runs link temp-dir checkouts whose path lacks "psalm-plugin-laravel",
+        // and stale entries pointing at deleted temp dirs break `composer update`.
+        $repos = array_values(array_filter($repos, fn($r) => ($r["name"] ?? null) !== "psalm/plugin-laravel"
+            && !str_contains(json_encode($r, JSON_UNESCAPED_SLASHES), "psalm-plugin-laravel")));
         array_unshift($repos, ["name" => "psalm/plugin-laravel", "type" => "path", "url" => $argv[2], "options" => ["symlink" => true]]);
         $d["repositories"] = $repos;
         if ($argv[3] === "1") {
@@ -162,17 +166,14 @@ configure_plugin_repo() {
             $d["require-dev"]["psalm/plugin-laravel"] = "*";
             // minimum-stability=dev above is only needed for the dev-branch
             // path repo install above; it also makes vimeo/psalm eligible to
-            // resolve to its dev-master branch instead of a tagged beta, which
+            // resolve to its dev-master branch instead of a tagged release, which
             // is a problem because dev-master is a rolling branch that can be
             // transiently broken (e.g. a bad merge dropping a typed property,
             // producing a dynamic-property deprecation that the Psalm error
-            // handler escalates into an uncaught crash). Pin vimeo/psalm to at
-            // least beta stability, reusing the floor constraint declared in
-            // the plugin composer.json, so this one package still resolves to
-            // a tagged release regardless of the relaxed root stability.
-            $plugin_composer = json_decode(file_get_contents($argv[2] . "/composer.json"), true, 512, JSON_THROW_ON_ERROR);
-            $psalm_constraint = trim(explode("||", $plugin_composer["require"]["vimeo/psalm"] ?? "^7.0.0-beta19")[0]);
-            $d["require-dev"]["vimeo/psalm"] = $psalm_constraint . "@beta";
+            // handler escalates into an uncaught crash). Pin vimeo/psalm to
+            // a tagged RC, so this one package still resolves to a tagged
+            // release regardless of the relaxed root stability.
+            $d["require-dev"]["vimeo/psalm"] = $argv[4];
             // Relax a pinned PHP constraint (e.g. "8.3.*" -> "^8.3") so install
             // does not fail on the runner PHP; analysis runs under the real binary.
             $php = $d["require"]["php"] ?? "";
@@ -182,13 +183,12 @@ configure_plugin_repo() {
             }
         }
         file_put_contents($file, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    ' "$dir" "$plugin_dir" "$full"
+    ' "$dir" "$plugin_dir" "$full" "$PSALM_PIN"
 }
 
 write_psalm_xml() {
-    # Reuse the app project layout heuristic from setup.sh: app/ (Laravel app),
-    # packages/*/src (monorepo like filament), or src/ (library). An explicit
-    # --project-dir overrides detection.
+    # Project layout: app/ (Laravel app), packages/*/src (monorepo like
+    # filament), or src/ (library). An explicit --project-dir overrides detection.
     local target="$APP_SRC/psalm.xml"
     local dirs=""
     if [[ -n "$PROJECT_DIR" ]]; then
@@ -253,7 +253,9 @@ PLUGIN_SIG_FILE="$APP_SRC/.plugin-dep-sig"
 # signature means we cannot prove compatibility, so we also reinstall — a
 # self-healing guard must never reuse an unverifiable vendor. The reinstall is a
 # clean `composer update` that honours the plugin's constraints.
+# PSALM_PIN joins the signature so bumping it invalidates cached vendors too.
 want_sig="$(plugin_dep_sig "$PLUGIN_BASE")"
+[[ -n "$want_sig" ]] && want_sig="$want_sig:$PSALM_PIN"
 need_install=0
 if [[ ! -f "$APP_SRC/vendor/bin/psalm" ]]; then
     need_install=1
@@ -270,9 +272,13 @@ if [[ "$need_install" == 1 ]]; then
     echo "[$APP] installing dependencies" >&2
     (
         cd "$APP_SRC"
-        if [[ -n "$PRIME" ]]; then
-            echo "[$APP] prime: $PRIME" >&2
-            eval "$PRIME"
+        # A reused source still carries the previous install's composer edits,
+        # including a path repo pointing at a deleted temp dir that breaks any
+        # composer command in before_install. Start from the pinned files.
+        git checkout --quiet HEAD -- $(git ls-files composer.json composer.lock)
+        if [[ -n "$BEFORE_INSTALL" ]]; then
+            echo "[$APP] before_install: $BEFORE_INSTALL" >&2
+            eval "$BEFORE_INSTALL"
         fi
     )
     configure_plugin_repo "$APP_SRC" "$PLUGIN_BASE" 1
@@ -304,9 +310,9 @@ run_side() {
     # so only real changes differ. Safe because base and head run sequentially
     # for an app (one matrix job), each starting with rm -rf below.
     local app_dir="${OUT}/${APP}/work"
-    local issues_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--issues.json"
-    local perf_file="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--perf.json"
-    local crash_log="${OUT}/${APP}/${APP}-${label}-${DATE_MARKER}--crash.log"
+    local issues_file="${OUT}/${APP}/${APP}-${label}--issues.json"
+    local perf_file="${OUT}/${APP}/${APP}-${label}--perf.json"
+    local crash_log="${OUT}/${APP}/${APP}-${label}--crash.log"
 
     # Skip-if-cached: a complete side is reused verbatim on rerun.
     if [[ -f "$issues_file" && -f "$perf_file" ]]; then
@@ -318,10 +324,11 @@ run_side() {
     rm -rf "$app_dir"
     fast_copy "$APP_SRC" "$app_dir"
 
-    # Point this copy's plugin at $plugin_dir. The source install already linked
-    # vendor/psalm/plugin-laravel at PLUGIN_BASE (symlink path repo), and the
-    # PSR-4 map resolves through that symlink, so the cheapest relink is a symlink
-    # swap — no Composer solve. Only fall back to Composer when head changed the
+    # Point this copy's plugin at $plugin_dir. vendor/psalm/plugin-laravel is a
+    # symlink (path repo) and the PSR-4 map resolves through it, so the cheapest
+    # relink is a symlink swap: no Composer solve. Base swaps too, because a
+    # cached install may still link the checkout of an earlier run (local
+    # worktrees are temp dirs). Only fall back to Composer when head changed the
     # plugin's installed dependency shape (see plugin_dep_sig).
     #
     # Critical: `composer update psalm/plugin-laravel` does NOT re-point the path
@@ -332,9 +339,6 @@ run_side() {
     # new dependencies into vendor.
     local link="$app_dir/vendor/psalm/plugin-laravel"
     case "$relink" in
-        none)
-            : # base side: the copied vendor already symlinks to PLUGIN_BASE
-            ;;
         symlink)
             rm -rf "$link"
             ln -s "$plugin_dir" "$link"
@@ -358,11 +362,16 @@ run_side() {
     # Own TMPDIR per side: both sides share the work-dir cwd, so the plugin's
     # psalm-laravel-<md5(cwd)> temp cache would otherwise carry base's migration
     # schema into head.
+    #
+    # Through the side's own `psalm-laravel analyze`, not vendor/bin/psalm: it
+    # consumes --blade/--no-blade, --experimental and --plugin-option, which Psalm rejects, and forwards
+    # everything else to Psalm verbatim, with Psalm's exit code and streams.
     (
         cd "$app_dir"
-        TMPDIR="$side_tmp" php -d memory_limit="$MEM" \
-            vendor/bin/psalm -c psalm.xml \
+        TMPDIR="$side_tmp" php \
+            vendor/bin/psalm-laravel analyze -c psalm.xml \
             --no-cache --no-diff --no-progress --no-suggestions --monochrome \
+            ${FLAGS_EXTRA[@]+"${FLAGS_EXTRA[@]}"} \
             ${PSALM_EXTRA[@]+"${PSALM_EXTRA[@]}"} \
             --report="${issues_file}" >"$out_txt" 2>"$err_txt"
     ) || exit_code=$?
@@ -379,45 +388,25 @@ run_side() {
         return 0
     fi
 
-    # Make file_path relative to the (now side-independent) work dir, so stored
-    # identities are readable. Because both sides share the work-dir path, every
-    # other place Psalm embeds it (messages, anon-class names, literal types) is
-    # already byte-identical across sides and needs no normalisation.
-    # Use the canonical (symlink-resolved) dir — Psalm reports realpath'd paths,
-    # so on macOS the report says /private/tmp/... while $app_dir is /tmp/...
-    local app_dir_real
-    app_dir_real=$(cd "$app_dir" && pwd -P)
-    php -d memory_limit=-1 -r '
-        $file = $argv[1]; $prefix = rtrim($argv[2], "/") . "/";
-        $d = json_decode(file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
-        foreach ($d as &$i) {
-            if (isset($i["file_path"]) && str_starts_with($i["file_path"], $prefix)) {
-                $i["file_path"] = substr($i["file_path"], strlen($prefix));
-            }
-        }
-        file_put_contents($file, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    ' "$issues_file" "$app_dir_real"
-
     coverage=$(sed -n 's/.*infer types for \([0-9.]*\)%.*/\1/p' "$out_txt" | tail -1)
     count=$(php -d memory_limit=-1 -r '$d=json_decode(file_get_contents($argv[1]),true); echo is_array($d)?count($d):0;' "$issues_file")
 
     php -r '
-        $cov = $argv[6];
+        $cov = $argv[5];
         file_put_contents($argv[1], json_encode([
-            "app" => $argv[2], "version" => $argv[3], "date" => $argv[4],
-            "wall_seconds" => (float) $argv[5],
+            "app" => $argv[2], "version" => $argv[3],
+            "wall_seconds" => (float) $argv[4],
             "type_coverage_pct" => $cov === "" ? null : (float) $cov,
-            "total_issues" => (int) $argv[7], "exit_code" => (int) $argv[8],
+            "total_issues" => (int) $argv[6], "exit_code" => (int) $argv[7],
         ], JSON_PRETTY_PRINT));
-    ' "$perf_file" "$APP" "$label" "$DATE_MARKER" "$wall" "${coverage:-}" "${count:-0}" "$exit_code"
+    ' "$perf_file" "$APP" "$label" "$wall" "${coverage:-}" "${count:-0}" "$exit_code"
 
     rm -f "$crash_log"
     echo "[$APP/$label] $count issues, ${coverage:-?}% coverage, ${wall}s" >&2
     rm -rf "$app_dir" "$out_txt" "$err_txt"
 }
 
-# Base reuses the source install verbatim (its vendor already links PLUGIN_BASE).
-# Head re-points a symlink when the plugin's dependency shape is unchanged
+# Head re-points a symlink when the plugin's dependency shape matches base's
 # (the common case), and only re-solves with Composer when it differs.
 if [[ "$(plugin_dep_sig "$PLUGIN_BASE")" == "$(plugin_dep_sig "$PLUGIN_HEAD")" ]]; then
     HEAD_RELINK=symlink
@@ -425,7 +414,7 @@ else
     HEAD_RELINK=composer
 fi
 
-run_side "$BASE_LABEL" "$PLUGIN_BASE" none
+run_side "$BASE_LABEL" "$PLUGIN_BASE" symlink
 run_side "$HEAD_LABEL" "$PLUGIN_HEAD" "$HEAD_RELINK"
 
 echo "[$APP] done" >&2

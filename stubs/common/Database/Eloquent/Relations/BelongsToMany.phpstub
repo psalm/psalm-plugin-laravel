@@ -6,7 +6,8 @@ namespace Illuminate\Database\Eloquent\Relations;
  * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
  * Covariant TDeclaringModel — required by #913 (see Relation.phpstub for the rationale).
  * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
- * @template TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\Pivot
+ * Covariant TPivotModel: a `withPivot()`-refined `Pivot&object{...}` must satisfy plain `Pivot` declarations (#1944).
+ * @template-covariant TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\Pivot
  * @template TAccessor of string = 'pivot'
  * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>>
  * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
@@ -285,6 +286,49 @@ class BelongsToMany extends Relation
      * @return \Illuminate\Support\LazyCollection<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function lazyByIdDesc($chunkSize = 1000, $column = null, $alias = null) {}
+
+    /**
+     * Laravel hydrates the pivot relation on each chunk before invoking the callback.
+     *
+     * @param  int  $count
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>, int): mixed  $callback
+     * @return bool
+     */
+    public function chunk($count, callable $callback) {}
+
+    /**
+     * @param  int  $count
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>, int): mixed  $callback
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function chunkById($count, callable $callback, $column = null, $alias = null) {}
+
+    /**
+     * @param  int  $count
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>, int): mixed  $callback
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function chunkByIdDesc($count, callable $callback, $column = null, $alias = null) {}
+
+    /**
+     * @param  callable(TRelatedModel&object{pivot: TPivotModel}, int): mixed  $callback
+     * @param  int  $count
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function eachById(callable $callback, $count = 1000, $column = null, $alias = null) {}
+
+    /**
+     * @param  callable(TRelatedModel&object{pivot: TPivotModel}, int): mixed  $callback
+     * @param  int  $count
+     * @return bool
+     */
+    public function each(callable $callback, $count = 1000) {}
 
     /**
      * Save an array of new models and attach them to the parent model.

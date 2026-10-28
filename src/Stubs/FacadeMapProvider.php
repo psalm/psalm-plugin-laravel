@@ -66,11 +66,12 @@ final class FacadeMapProvider
      * Values are listed as `[canonical-FQCN, global-alias-name]` so seeding
      * matches the shape of the existing AliasLoader walk: a Macroable owner
      * gets its pseudo-methods injected on both forms. The alias is a plain
-     * string. Its `class <alias> extends <FQCN> {}` stub is only materialised
-     * by {@see AliasStubProvider} when the user app actually registers that
-     * alias (modern Laravel apps without an `aliases` array in
-     * `config/app.php` will have only the facade FQCN). The inner `init()`
-     * loop skips the alias silently when the user has not registered it.
+     * string. Its `class_alias()` line is only written by {@see AliasStubProvider}
+     * when the user app actually registers that alias (modern Laravel apps without
+     * an `aliases` array in `config/app.php` will have only the facade FQCN). The
+     * alias name stays listed because a scanned laravel-ide-helper declaration keeps
+     * it as a real class. The inner `init()` loop skips the alias silently when the
+     * user has not registered it.
      *
      * @var array<class-string, list<class-string|non-empty-string>>
      */

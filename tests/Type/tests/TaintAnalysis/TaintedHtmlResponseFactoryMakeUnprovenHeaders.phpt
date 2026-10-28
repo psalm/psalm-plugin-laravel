@@ -1,5 +1,7 @@
+--CONFLICTS--
+taint-TaintedHtmlResponseFactoryMakeUnprovenHeaders
 --ARGS--
---no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1 --no-file-cache
+--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
 <?php declare(strict_types=1);
 
@@ -21,8 +23,8 @@ final class CustomResponseFactory
  * mutated headers variable, a dynamic content type, named-argument calls, and custom receivers
  * retain the default HTML sink.
  *
- * The unique ARGS line runs this file in its own batch. So many flows converging on the shared
- * `make#1` node cross Psalm's visited-node pruning in a shared batch, which silently drops the
+ * The unique CONFLICTS key runs this file in its own Psalm run. So many flows converging on the shared
+ * `make#1` node cross Psalm's visited-node pruning in a shared run, which silently drops the
  * last findings; standalone, all of them report.
  *
  * The headers argument must be an array literal AT the call, or a variable proven to hold exactly
@@ -67,10 +69,10 @@ function makeResponsesWithUnprovenHeaders(Request $request, ResponseFactory $res
 
 /**
  * The exempt journey labels name the concrete factory, its contract, and the fully qualified
- * facade. The root `\Response` alias reaches the same sink under the unqualified label
- * `Response::make`, which is left out of that list, so it keeps the sink. Accepted imprecision: a
- * project that trims the alias registry is unaffected either way, and the miss is a retained
- * finding rather than a dropped one.
+ * facade. The root `\Response` alias is a `class_alias()` of that facade, so the call resolves to
+ * `Illuminate\Support\Facades\Response::make` and reaches the exempt facade label. Kept as a
+ * regression guard: it reported TaintedHtml while the alias was an `extends` stub whose own
+ * unqualified `Response::make` label was outside the exempt list.
  */
 function makeThroughRootAliasFacade(Request $request): void
 {
@@ -80,7 +82,6 @@ function makeThroughRootAliasFacade(Request $request): void
 --EXPECTF--
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
-TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML

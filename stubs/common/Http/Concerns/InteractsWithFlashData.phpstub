@@ -7,9 +7,19 @@ trait InteractsWithFlashData
     /**
      * Retrieve old input for the given key.
      *
+     * Laravel's own `@return string|array|null` is narrower than the runtime. The flashed input is
+     * whatever reached `Session::flashInput()`: `$request->input()` carries JSON scalars (`int`,
+     * `float`, `bool`, `null`), `withInput(array)` carries any value except an uploaded file, and the
+     * session serializer restores both unchanged. A `Model` default resolves to its attribute, so a
+     * keyed read is `mixed`.
+     *
+     * Without a key, a request with a session returns the whole input array (keys are `array-key`:
+     * PHP turns a numeric field name into an int key). A request without one (console, queue, a route
+     * outside the `web` group) returns `$default`, which is `null` unless passed.
+     *
      * @param  string|null  $key
      * @param  mixed  $default
-     * @return ($key is null ? array<string, mixed> : mixed)
+     * @return ($key is null ? array<array-key, mixed>|null : mixed)
      *
      * @psalm-taint-source input
      */

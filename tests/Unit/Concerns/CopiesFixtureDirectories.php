@@ -8,6 +8,9 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Concerns;
  * Private per-process fixture copies for subprocess tests. A copy gets its own working directory,
  * so Psalm's cache and the plugin's `sys_get_temp_dir()/psalm-laravel-<md5(cwd)>` stub cache never
  * collide with another test (or paratest worker) analysing the original fixture.
+ *
+ * The helpers are static so a class that shares one copy across its cases can remove it from
+ * `tearDownAfterClass()`; instance callers keep using `$this->` unchanged.
  */
 trait CopiesFixtureDirectories
 {
@@ -16,7 +19,7 @@ trait CopiesFixtureDirectories
      * tests/README.md), so the listing is snapshotted before it exists; iterating lazily would
      * copy the copy into itself until the path overflows.
      */
-    private function copyDirectory(string $source, string $destination): void
+    private static function copyDirectory(string $source, string $destination): void
     {
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveDirectoryIterator($source, \FilesystemIterator::SKIP_DOTS),
@@ -42,7 +45,7 @@ trait CopiesFixtureDirectories
         }
     }
 
-    private function removeDirectory(string $directory): void
+    private static function removeDirectory(string $directory): void
     {
         if (!\is_dir($directory)) {
             return;

@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Application\ContainerResolver;
 use Psalm\LaravelPlugin\Handlers\Auth\GuardTaintHandler;
 use Psalm\LaravelPlugin\Handlers\Encryption\EncrypterTaintHandler;
 use Psalm\LaravelPlugin\Stubs\StubFileFinder;
@@ -23,7 +24,7 @@ use Symfony\Component\Process\Process;
  * file argument, and in that single-file mode Psalm scans the narrowed-to vendor class anyway, so a
  * phpt resolves the methods with or without the fix and would guard nothing. Each case points Psalm
  * at a self-contained fixture project the way a real application runs it, where the regression
- * actually reproduces.
+ * actually reproduces. The cases share one run, memoized per process.
  *
  * The fix in both cases replaced a full-class stub (`SessionGuard.phpstub` / `TokenGuard.phpstub`,
  * `Encryption/Encrypter.phpstub`), which shadowed a whole class to host its taint methods, with a
@@ -31,12 +32,16 @@ use Symfony\Component\Process\Process;
  * stubs that stay: the plugin queues every stubbed class before Psalm's main scan so its vendor
  * file is scanned and the stub merges into it.
  */
+#[CoversClass(ContainerResolver::class)]
 #[CoversClass(EncrypterTaintHandler::class)]
 #[CoversClass(GuardTaintHandler::class)]
 #[CoversClass(StubFileFinder::class)]
 #[Group('subprocess')]
 final class ContainerNarrowedMethodResolutionTest extends TestCase
 {
+    /** @var list<array{type: string, message: string, file: string}>|null */
+    private static ?array $report = null;
+
     #[Test]
     public function it_resolves_encrypter_methods_reached_only_through_container_narrowing(): void
     {
@@ -98,6 +103,25 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
         );
     }
 
+    #[Test]
+    public function it_queues_a_bound_class_that_nothing_else_references(): void
+    {
+        // The plugin instantiates the container's bindings once at init and queues each resolved class.
+        // 'composer' resolves to a class no stub and no source names, so it narrows only if queued.
+        $findings = $this->findings('BoundClassResolution');
+        $problems = [
+            ...$this->messagesOfType($findings, 'CheckType'),
+            ...$this->messagesOfType($findings, 'MixedMethodCall'),
+            ...$this->messagesOfType($findings, 'UndefinedClass'),
+        ];
+
+        $this->assertSame(
+            [],
+            $problems,
+            "app('composer')->dumpAutoloads() must resolve against Illuminate\\Support\\Composer, got:\n" . \implode("\n", $problems),
+        );
+    }
+
     /**
      * Extract the messages of every finding of a given issue type, optionally restricted to those
      * mentioning $needle. Returns a re-indexed `list<string>` so it compares cleanly against `[]`.
@@ -121,19 +145,39 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
     }
 
     /**
-     * One Psalm run over a fixture project. The two fixtures are separate projects, so each case
-     * needs its own run; only the harness is shared.
+     * Findings reported in one entry file (`app/<entry>.php`) of the shared fixture project. Psalm runs
+     * once per process; filtering by file keeps a regression in one entry from failing the other cases.
      *
      * @return list<array{type: string, message: string}>
      */
-    private function findings(string $fixture): array
+    private function findings(string $entry): array
     {
+        $file = 'app/' . $entry . '.php';
+
+        return \array_values(\array_filter(
+            $this->report(),
+            static fn(array $finding): bool => $finding['file'] === $file,
+        ));
+    }
+
+    /**
+     * One Psalm run over a single fixture project shared by every case: the four entry files each
+     * name no concrete Laravel class, so they cannot mask one another's narrowing.
+     *
+     * @return list<array{type: string, message: string, file: string}>
+     */
+    private function report(): array
+    {
+        if (self::$report !== null) {
+            return self::$report;
+        }
+
         $psalmBinary = \dirname(__DIR__, 3) . '/vendor/bin/psalm';
         $this->assertFileExists($psalmBinary, 'Psalm binary not found — run composer install.');
 
         $process = new Process(
             [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'],
-            __DIR__ . '/Fixtures/' . $fixture,
+            __DIR__ . '/Fixtures/ContainerNarrowedMethodResolution',
         );
         $process->setTimeout(300);
         // Psalm exits non-zero when it reports issues; that is expected here, so do not mustRun().
@@ -151,10 +195,11 @@ final class ContainerNarrowedMethodResolutionTest extends TestCase
                 $findings[] = [
                     'type' => $finding['type'],
                     'message' => (string) ($finding['message'] ?? ''),
+                    'file' => (string) ($finding['file_name'] ?? ''),
                 ];
             }
         }
 
-        return $findings;
+        return self::$report = $findings;
     }
 }

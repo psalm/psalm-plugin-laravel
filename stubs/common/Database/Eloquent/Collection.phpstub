@@ -13,41 +13,44 @@ use Illuminate\Support\Collection as BaseCollection;
  * Psalm does not inherit @property-read from a parent class when template parameters
  * are remapped via @extends, so these annotations must be repeated here with TModel.
  *
- * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the lowest supported 12.x — do not edit without checking that array.
+ * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
+ * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
+ * `@property-read` keeps `static` unparameterized (`Collection&static`), losing TKey/TModel.
  *
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $average
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $avg
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $contains
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $doesntContain
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $each
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $every
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $filter
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $first
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $flatMap
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $groupBy
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $hasMany
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $hasSole
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $keyBy
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $last
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $map
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $max
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $min
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $partition
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $percentage
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $reject
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $skipUntil
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $skipWhile
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $some
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $sortBy
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $sortByDesc
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $sum
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $takeUntil
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $takeWhile
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $unique
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $unless
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $until
- * @property-read \Illuminate\Support\HigherOrderCollectionProxy<TKey, TModel> $when
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'average', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $average
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'avg', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $avg
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'contains', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $contains
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'doesntContain', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $doesntContain
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'each', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $each
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'every', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $every
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'filter', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $filter
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'first', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $first
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'flatMap', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $flatMap
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'groupBy', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $groupBy
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'hasMany', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $hasMany
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'hasSole', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $hasSole
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'keyBy', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $keyBy
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'last', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $last
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'map', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $map
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'max', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $max
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'min', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $min
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'partition', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $partition
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'percentage', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $percentage
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'reject', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $reject
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'skipUntil', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $skipUntil
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'skipWhile', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $skipWhile
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'some', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $some
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'sortBy', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $sortBy
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'sortByDesc', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $sortByDesc
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'sum', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $sum
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'takeUntil', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $takeUntil
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'takeWhile', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $takeWhile
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'unique', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $unique
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'unless', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $unless
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'until', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $until
+ * @property-read \Illuminate\Support\HigherOrderCollectionProxy<'when', TModel, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> $when
  */
 class Collection extends BaseCollection implements QueueableCollection
 {
@@ -122,4 +125,109 @@ class Collection extends BaseCollection implements QueueableCollection
      * @psalm-variadic
      */
     public function select($keys) {}
+
+    /**
+     * Find a model in the collection by key or throw an exception.
+     *
+     * An array or Arrayable key returns the static collection from find(); any other key returns one model.
+     *
+     * @template TFindKey
+     *
+     * @param  TFindKey  $key
+     * @psalm-return (TFindKey is \Illuminate\Database\Eloquent\Model ? TModel : (TFindKey is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? static<TKey, TModel> : TModel))
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
+     */
+    public function findOrFail($key) {}
+
+    /**
+     * Runs on toBase()->pad(), and array_pad() keeps string keys.
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return \Illuminate\Support\Collection<TKey|int, TModel|TPadValue>
+     */
+    public function pad($size, $value) {}
+
+    /**
+     * Runs on toBase()->zip(), and array_map() pads the shorter side with null.
+     *
+     * @template TZipValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Support\Collection<int, TModel|TZipValue|null>>
+     *
+     * @psalm-variadic
+     */
+    public function zip($items) {}
+
+    /**
+     * Runs on toBase()->flip(), and array_flip() skips object values, so the result is always empty.
+     *
+     * @return \Illuminate\Support\Collection<array-key, TKey>
+     */
+    public function flip() {}
+
+    /**
+     * array_map() preserves the keys.
+     *
+     * @return array<TKey, array-key>
+     */
+    public function modelKeys() {}
+
+    /**
+     * Re-declared here because a stub override on `Support\Collection` does not reach subclasses of
+     * it for trait methods (vimeo/psalm#12158); see `Illuminate\Support\Collection::tap()` in the
+     * Support Collection stub.
+     *
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): mixed  $callback
+     * @return $this
+     */
+    public function tap(callable $callback) {}
+
+    /**
+     * @template TPipeReturnType
+     *
+     * @param  callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): TPipeReturnType  $callback
+     * @return TPipeReturnType
+     */
+    public function pipe(callable $callback) {}
+
+    /**
+     * @template TWhenEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
+     */
+    public function whenEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TWhenNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
+     */
+    public function whenNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
+     */
+    public function unlessEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
+     */
+    public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
 }

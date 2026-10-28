@@ -8,6 +8,7 @@ use Illuminate\Foundation\Application;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Config\PluginConfig;
+use Psalm\LaravelPlugin\Config\PluginOverrides;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
@@ -32,11 +33,15 @@ final class Plugin implements PluginEntryPointInterface
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
     {
-        $pluginConfig = PluginConfig::fromXml($config);
+        $pluginConfig = PluginConfig::fromXml($config, PluginOverrides::parse((string) \getenv(PluginOverrides::ENV_VAR)));
         require_once __DIR__ . '/Internal/DefaultIssueLevels.php';
         require_once __DIR__ . '/Internal/ExperimentalIssuePolicy.php';
         require_once __DIR__ . '/Issues/UnknownModelAttribute.php';
         require_once __DIR__ . '/Issues/UndefinedModelRelation.php';
+        require_once __DIR__ . '/Issues/BladeCompileError.php';
+        require_once __DIR__ . '/Issues/MissingViewData.php';
+        require_once __DIR__ . '/Issues/InvalidViewData.php';
+        require_once __DIR__ . '/Issues/UnusedViewData.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
         // Third gated laravel/ai call site, alongside the stubs and the handler.
@@ -88,8 +93,8 @@ final class Plugin implements PluginEntryPointInterface
             // (finder fallback) and the always-on view() narrowing both need it.
             $viewFactory = $this->resolveViewFactory(ApplicationProvider::getApp(), $output);
 
-            if ($pluginConfig->findMissingViews) {
-                $this->initMissingViewHandler($output, $viewFactory);
+            if ($pluginConfig->findMissingViews || $pluginConfig->bladeEnabled) {
+                $this->initMissingViewHandler(ApplicationProvider::getApp(), $output, $viewFactory, $pluginConfig->findMissingViews);
             }
 
             if ($pluginConfig->findUnconfiguredFilesystemDisks) {
@@ -100,10 +105,39 @@ final class Plugin implements PluginEntryPointInterface
             // of whether findMissingViews is enabled (same split as translations above).
             $this->initViewFactoryHandler($viewFactory);
 
+            // The `psalm-laravel blade:annotate` codemod, and the only thing that lets this plugin
+            // write to the source tree. Absent for every ordinary psalm run (#1524).
+            $annotate = Blade\Annotate\AnnotateRequest::fromEnvironment();
+
+            if ($annotate instanceof Blade\Annotate\AnnotateRequest) {
+                // The codemod reads call-site types only. Psalm 7 builds the taint graph by default,
+                // and here nothing reports it, so dropping it saves analysis time and memory. The
+                // graph exists already (taint is set up before plugins load); taint handlers bail
+                // without it.
+                ProjectAnalyzer::getInstance()->getCodebase()->taint_flow_graph = null;
+            }
+
+            // A request force-enables Blade even for a project that has it off: the user ran the
+            // codemod, and refusing because of a config flag they never set for it would only be
+            // confusing. That is safe precisely because the request is gated on a marked control
+            // file this CLI wrote, not on the environment variable being set to something readable.
+
+            // Not `bladeEnabled` alone: a boot that degraded registered no shadows, so every Blade
+            // handler below would read an empty registry and, worse, report on templates whose
+            // facts were never collected (#1518).
+            $bladeActive = ($pluginConfig->bladeEnabled || $annotate instanceof Blade\Annotate\AnnotateRequest)
+                && $this->initBladeAnalysis($pluginConfig, $output, $annotate);
+
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
 
-            $this->registerHandlers($registration, $pluginConfig);
+            $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
+
+            // Last: make()ing every binding runs provider and binding closures, so it must follow every other
+            // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
+            if ($registration instanceof \Psalm\PluginRegistrationSocket) {
+                Handlers\Application\ContainerResolver::queueBoundClassesForScanning($registration->codebase);
+            }
         } catch (\Throwable $throwable) {
             InternalErrorReporter::report($throwable, $output, $pluginConfig);
         }
@@ -179,6 +213,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Application\ContainerResolver::reset();
         Handlers\Auth\AuthConfigAnalyzer::reset();
         Handlers\Auth\GuardClassResolver::reset();
+        Handlers\Auth\RequestHandler::reset();
         Handlers\Config\ConfigKeyResolver::reset();
         Handlers\Console\CommandDefinitionAnalyzer::reset();
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
@@ -192,12 +227,14 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelPropertyHandler::reset();
         Handlers\Eloquent\ModelRelationReturnTypeHandler::reset();
         Handlers\Eloquent\ModelRelationshipPropertyHandler::reset();
+        Handlers\Eloquent\RelationCallbackParamsHandler::reset();
         Handlers\Eloquent\ModelRegistrationHandler::reset();
         Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
         Handlers\Eloquent\Support\RelationResolver::reset();
         SchemaStateProvider::reset();
         Handlers\Facades\AppFacadeRegistrationHandler::reset();
+        AliasStubProvider::reset();
         Handlers\Facades\DateFacadeHandler::reset();
         Handlers\Facades\FacadeMethodHandler::reset();
         Handlers\Helpers\NowTodayHandler::reset();
@@ -212,7 +249,17 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Validation\FormRequestPropertyHandler::reset();
         Handlers\Validation\ValidationRuleAnalyzer::reset();
         Handlers\Views\MissingViewHandler::reset();
+        Handlers\Views\ViewContractHandler::reset();
+        Internal\PathCaseCanonicalizer::reset();
         Internal\ProxyMethodReturnTypeProvider::reset();
+        Blade\Annotate\AnnotationCollector::reset();
+        Blade\Annotate\AnnotationWriter::reset();
+        Blade\BladeIssueRemapHandler::reset();
+        Blade\ContractRegistry::reset();
+        Blade\ComponentViewRegistry::reset();
+        Blade\RuntimeHelperVisibility::reset();
+        Blade\ShadowRegistry::reset();
+        Blade\ViewReferenceRegistry::reset();
     }
 
     private function registerStubs(
@@ -236,8 +283,8 @@ final class Plugin implements PluginEntryPointInterface
 
         $carbonStubs = CarbonStubProvider::register($registration, $output);
 
-        // The alias stub stays out: its classes exist only as runtime class_alias() targets, and
-        // queueing them would let Psalm's reflection fallback autoload the alias.
+        // The alias stub stays out: it declares no classes, only class_alias() lines, and queueing
+        // its alias names would let Psalm's reflection fallback autoload the alias.
         $this->queueStubbedClassesForScanning($registration, [...$stubs, ...$carbonStubs]);
     }
 
@@ -272,9 +319,9 @@ final class Plugin implements PluginEntryPointInterface
      * Stubs for optional first/third-party AI packages. Each entry guards on
      * Composer's runtime metadata so absent packages contribute zero stubs and
      * we avoid triggering the project autoloader for a class lookup. The
-     * version constraint additionally protects against a future major bump
-     * (e.g. laravel/ai 1.0) silently loading stubs that reference removed or
-     * renamed classes.
+     * version constraint additionally keeps the stubs off a laravel/ai release
+     * whose declarations they no longer match (see
+     * LaravelAiIntegration::CONSTRAINT).
      *
      * @return list<string>
      */
@@ -293,8 +340,8 @@ final class Plugin implements PluginEntryPointInterface
      * Single gate for every laravel/ai call site (stubs, LlmOutputTaintHandler,
      * PromptInjectionIssuePolicy). They must move in lockstep: a stub loaded
      * without its handler, or an issue policy applied without the stubs that
-     * feed it, is a silent half-integration. The version range has no ceiling
-     * below 1.0 because disabling coverage on every minor is worse than the
+     * feed it, is a silent half-integration. The range has no ceiling below the
+     * next major, because disabling coverage on every minor is worse than the
      * rare drift FP that bin/ci/check-laravel-ai-stub-parity.php catches.
      */
     private function laravelAiIntegrationEnabled(): bool
@@ -302,13 +349,26 @@ final class Plugin implements PluginEntryPointInterface
         return LaravelAiIntegration::isEnabled();
     }
 
-    private function registerHandlers(RegistrationInterface $registration, PluginConfig $pluginConfig): void
-    {
+    /**
+     * @param bool $bladeActive whether {@see self::initBladeAnalysis()} actually put shadows into the analysis
+     * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod's control file, null for an ordinary run
+     */
+    private function registerHandlers(
+        RegistrationInterface $registration,
+        PluginConfig $pluginConfig,
+        bool $bladeActive,
+        ?Blade\Annotate\AnnotateRequest $annotate,
+    ): void {
         // Global stop-gap for vimeo/psalm#12251 and #12252 (named arguments bound to a variadic).
         // Not domain-specific like the other taint handlers below, so it is registered
         // first rather than filed under any one Laravel feature directory.
         require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Taint\NamedArgumentTaintHandler::class);
+
+        // Core removes only html from json_encode() with HEX flags and keeps has_quotes by design, so the Blade
+        // @json directive would still report it. Global like the handler above, hence registered next to it.
+        require_once __DIR__ . '/Handlers/Taint/JsonEncodeTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Taint\JsonEncodeTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
@@ -344,6 +404,7 @@ final class Plugin implements PluginEntryPointInterface
         // Model property handlers are registered dynamically by ModelRegistrationHandler
         // after Psalm populates its codebase (AfterCodebasePopulated event).
         require_once __DIR__ . '/Handlers/Eloquent/CastContractUserDefinedHandler.php';
+        require_once __DIR__ . '/Handlers/Magic/RedeclaredClassSealHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRegistrationHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/CustomCollectionHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelRelationshipPropertyHandler.php';
@@ -366,6 +427,7 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $registration->registerHooksFromClass(Handlers\Eloquent\CastContractUserDefinedHandler::class);
+        $registration->registerHooksFromClass(Handlers\Magic\RedeclaredClassSealHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\ModelRegistrationHandler::class);
         // Laravel's container and Eloquent relationship dispatch are invisible to Psalm's syntax
         // walker. Register this after ModelRegistrationHandler so relation metadata is complete
@@ -380,6 +442,13 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
+        // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
+        require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
+        // Adds `withPivot()` columns to the BelongsToMany / MorphToMany pivot slot (#1944).
+        require_once __DIR__ . '/Handlers/Eloquent/Support/PivotColumnResolver.php';
+        require_once __DIR__ . '/Handlers/Eloquent/BelongsToManyWithPivotHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\BelongsToManyWithPivotHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.
@@ -484,9 +553,6 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Support/ConditionableCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableCallbackParamsHandler::class);
 
-        require_once __DIR__ . '/Handlers/Support/TappableTapHandler.php';
-        $registration->registerHooksFromClass(Handlers\Support\TappableTapHandler::class);
-
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
         require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
@@ -494,8 +560,8 @@ final class Plugin implements PluginEntryPointInterface
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';
         $registration->registerHooksFromClass(Handlers\Console\CommandArgumentHandler::class);
-        require_once __DIR__ . '/Handlers/Console/ConsoleClosureScopeHandler.php';
-        $registration->registerHooksFromClass(Handlers\Console\ConsoleClosureScopeHandler::class);
+        require_once __DIR__ . '/Handlers/Console/CliOnlyConsoleCodeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Console\CliOnlyConsoleCodeHandler::class);
 
         require_once __DIR__ . '/Handlers/Validation/ValidatedTypeHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidatedTypeHandler::class);
@@ -621,9 +687,8 @@ final class Plugin implements PluginEntryPointInterface
 
             // Exempts prompt()/stream() call sites whose receiver declares a middleware
             // stack containing a guard that annotates `@psalm-taint-escape llm_prompt` on
-            // whichever method Illuminate's Pipeline dispatches to it (__invoke for an
-            // object entry that has one, handle otherwise). Emission-time only, never a
-            // graph write.
+            // its handle() method (the only one laravel/ai 1.x dispatches). Emission-time
+            // only, never a graph write.
             require_once __DIR__ . '/Handlers/Ai/PromptGuardTaintHandler.php';
             $registration->registerHooksFromClass(Handlers\Ai\PromptGuardTaintHandler::class);
         }
@@ -739,6 +804,80 @@ final class Plugin implements PluginEntryPointInterface
         // registration order. Enabled by default; silence via the issueHandlers config.
         require_once __DIR__ . '/Handlers/Rules/UnresolvableAppendedModelAttributeHandler.php';
         $registration->registerHooksFromClass(Handlers\Rules\UnresolvableAppendedModelAttributeHandler::class);
+
+        // Drops the `expects never` argument issues of read-only lookups on an empty collection (#1814).
+        // Registered BEFORE the Blade remap on purpose: Psalm's dispatcher stops at the first handler
+        // that returns a bool, so a drop here spares the remap the cost of rebuilding the issue.
+        require_once __DIR__ . '/Handlers/Collections/EmptyCollectionLookupIssueHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\EmptyCollectionLookupIssueHandler::class);
+
+        // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
+        // nothing the shadow analysis finds is visible without it. Registered LAST of the
+        // BeforeAddIssue handlers on purpose: Psalm's dispatcher stops at the first handler that
+        // returns a bool, so the taint exemptions above get to drop an issue before the remap pays
+        // to rebuild it. Only meaningful when templates were compiled, hence the same gate as
+        // initBladeAnalysis() — without an active boot the shadow registry is empty and every issue
+        // would take the (cheap, but pointless) miss path. RuntimeHelperVisibility shares the gate
+        // for the same reason — with no compiled templates there are no shadows to patch — and its
+        // init() already ran in initBladeAnalysis(), where the boot's own capture is in scope.
+        if ($bladeActive) {
+            require_once __DIR__ . '/Blade/BladeIssueRemapHandler.php';
+            $registration->registerHooksFromClass(Blade\BladeIssueRemapHandler::class);
+            require_once __DIR__ . '/Blade/RuntimeHelperVisibility.php';
+            $registration->registerHooksFromClass(Blade\RuntimeHelperVisibility::class);
+            // Types a class component's own view from its class (#1804). Needs the boot's shadow and
+            // tag facts, hence the same gate.
+            require_once __DIR__ . '/Blade/ComponentViewSeedHandler.php';
+            $registration->registerHooksFromClass(Blade\ComponentViewSeedHandler::class);
+            require_once __DIR__ . '/Blade/RawDeclarationHandler.php';
+            $registration->registerHooksFromClass(Blade\RawDeclarationHandler::class);
+            // Carries taint from the data `view()` calls pass into the template that receives it (#2031).
+            // Registered AFTER ComponentViewSeedHandler on purpose: both act on the prelude sentinel, and
+            // the seed replaces a variable's whole type, which would drop the taint nodes attached here.
+            // Not for an annotate-only run, which analyses nothing for findings.
+            if (!$annotate instanceof Blade\Annotate\AnnotateRequest) {
+                require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
+                require_once __DIR__ . '/Blade/ViewTaintBridge.php';
+                $registration->registerHooksFromClass(Blade\ViewTaintBridge::class);
+            }
+        }
+
+        // Checks view() call sites against the contracts the compiled templates declare, and reports
+        // data keys the template never reads (#1478); needs ContractRegistry populated. No flag of
+        // its own: ExperimentalIssuePolicy sets the severity of its issues (#1985). Not for a run
+        // where only the annotate codemod switched Blade on: that run skips initMissingViewHandler(),
+        // which `@includeFirst` candidates resolve through.
+        if ($bladeActive && $pluginConfig->bladeEnabled) {
+            require_once __DIR__ . '/Blade/ComposerKeyResolver.php';
+            require_once __DIR__ . '/Blade/ReadSetResolver.php';
+            require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
+            require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
+            $registration->registerHooksFromClass(Handlers\Views\ViewContractHandler::class);
+        }
+
+
+        // Writes `@var` docblock declarations into the analysed templates (#1524). Registered only
+        // when `psalm-laravel blade:annotate` put its control file in the environment — that gate,
+        // not a config flag, is what keeps an ordinary psalm run from touching the source tree.
+        // The two hooks are one pass in two halves: the collector fills a static that only survives
+        // to the writer's AfterAnalysis because annotate mode pins the analysis to this process.
+        if ($bladeActive && $annotate instanceof Blade\Annotate\AnnotateRequest) {
+            require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
+            require_once __DIR__ . '/Blade/Annotate/AnnotationCollector.php';
+            require_once __DIR__ . '/Blade/Annotate/AnnotationWriter.php';
+            Blade\Annotate\AnnotationCollector::init();
+            Blade\Annotate\AnnotationWriter::init($annotate);
+            // A forked analysis worker never hands the collector's statics back, so analysis must run
+            // in this process. Psalm reads `$threads` only when analysis starts, after this init,
+            // while the scan already took its count from `--threads`: the caller's value sizes the scan.
+            ProjectAnalyzer::getInstance()->threads = 1;
+            $registration->registerHooksFromClass(Blade\Annotate\AnnotationCollector::class);
+            $registration->registerHooksFromClass(Blade\Annotate\AnnotationWriter::class);
+        }
+
+        // Registered last, so earlier hooks that iterate classlike storages never see the duplicate alias keys.
+        require_once __DIR__ . '/Handlers/Facades/ClassAliasStorageHandler.php';
+        $registration->registerHooksFromClass(Handlers\Facades\ClassAliasStorageHandler::class);
     }
 
     /**
@@ -810,42 +949,46 @@ final class Plugin implements PluginEntryPointInterface
      *
      * Uses the app's FileViewFinder which reflects config('view.paths') plus
      * any paths added by service providers during bootstrap.
+     *
+     * Also runs without findMissingViews ($report false) for Blade's view-data checks, which need
+     * to know which `@includeFirst` candidate exists; a finder it cannot read then just leaves that
+     * unknown, so only the MissingView diagnostic warns.
      */
-    private function initMissingViewHandler(\Psalm\Progress\Progress $output, ?\Illuminate\View\Factory $factory): void
+    private function initMissingViewHandler(Application $app, \Psalm\Progress\Progress $output, ?\Illuminate\View\Factory $factory, bool $report): void
     {
-        $app = ApplicationProvider::getApp();
+        $finder = null;
+        $problem = null;
 
-        // Prefer the dedicated view.finder binding; fall back to the pre-resolved
-        // Factory's finder (ApplicationProvider may bind 'view' without 'view.finder').
-        if ($app->bound('view.finder')) {
-            /** @var \Illuminate\View\FileViewFinder $finder */
-            $finder = $app->make('view.finder');
-        } elseif ($factory instanceof \Illuminate\View\Factory) {
+        // Prefer the pre-resolved Factory's finder, the one views render through: 'view.finder' is
+        // bound transiently, so a fresh one lacks the locations and extensions added on the factory.
+        if ($factory instanceof \Illuminate\View\Factory) {
             $finder = $factory->getFinder();
+        } elseif ($app->bound('view.finder')) {
+            try {
+                /** @var \Illuminate\View\FileViewFinder $finder */
+                $finder = $app->make('view.finder');
+            } catch (\Throwable $throwable) {
+                // Degrades this one lookup, not the whole plugin (same policy as resolveViewFactory()).
+                $output->debug("Laravel plugin: resolving the 'view.finder' binding threw: {$throwable->getMessage()}\n");
+                $problem = 'the view finder could not be resolved (run with --debug for the underlying cause).';
+            }
         } elseif ($app->bound('view')) {
             // 'view' is bound but resolveViewFactory() returned null: the binding
             // threw (swallowed to a --debug line rather than disabling the plugin)
             // or resolved to a non-standard implementation.
-            $output->warning(
-                'Laravel plugin: findMissingViews is enabled but the view factory could not be resolved to a '
-                . 'standard instance (run with --debug for the underlying cause). The MissingView check will be skipped.',
-            );
-
-            return;
+            $problem = 'the view factory could not be resolved to a standard instance (run with --debug for the underlying cause).';
         } else {
-            $output->warning(
-                'Laravel plugin: findMissingViews is enabled but the view finder service is not bound. '
-                . 'The MissingView check will be skipped.',
-            );
-
-            return;
+            $problem = 'the view finder service is not bound.';
         }
 
         if (!$finder instanceof \Illuminate\View\FileViewFinder) {
-            $output->warning(
-                'Laravel plugin: findMissingViews is enabled but the view finder is not an instance of '
-                . 'Illuminate\View\FileViewFinder. The MissingView check will be skipped.',
-            );
+            if ($report) {
+                $output->warning(
+                    'Laravel plugin: findMissingViews is enabled but '
+                    . ($problem ?? 'the view finder is not an instance of Illuminate\View\FileViewFinder.')
+                    . ' The MissingView check will be skipped.',
+                );
+            }
 
             return;
         }
@@ -856,7 +999,7 @@ final class Plugin implements PluginEntryPointInterface
         /** @var list<string> $extensions */
         $extensions = $finder->getExtensions();
 
-        Handlers\Views\MissingViewHandler::init($paths, $extensions);
+        Handlers\Views\MissingViewHandler::init($paths, $extensions, $report);
     }
 
     /**
@@ -872,6 +1015,71 @@ final class Plugin implements PluginEntryPointInterface
     private function initViewFactoryHandler(?\Illuminate\View\Factory $factory): void
     {
         Handlers\Views\MissingViewHandler::initViewFactory($factory instanceof \Illuminate\View\Factory ? $factory::class : null);
+    }
+
+    /**
+     * Compile the analyzed application's Blade templates into shadow PHP files and add them to this
+     * run: the shadows for analysis, the templates for reporting.
+     *
+     * Runs synchronously inside `__invoke()` because that is the only window in which a file can
+     * still join the analysis — Psalm calls `Config::initializePlugins()` after it has queued the
+     * project files and before it starts scanning them.
+     *
+     * Holds no static state, so there is nothing to reset between invocations: every run recompiles
+     * from the manifest on disk, whose fingerprints carry the Laravel version, the plugin version,
+     * and the booted `BladeCompiler`'s own registration surface (see
+     * `Blade\CompilerEnvironment::describe()`).
+     *
+     * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod driving this run, told why
+     *                                                Blade disabled itself
+     *
+     * @return bool whether the boot actually activated: false means it degraded with a warning and
+     *              published nothing, so no Blade handler may register
+     *
+     * @throws Blade\BladeDisabledException when Blade disabled itself and `failOnInternalError` is on
+     */
+    private function initBladeAnalysis(PluginConfig $pluginConfig, \Psalm\Progress\Progress $output, ?Blade\Annotate\AnnotateRequest $annotate): bool
+    {
+        $registrar = new Blade\PsalmShadowRegistrar(ProjectAnalyzer::getInstance());
+
+        $bootstrapper = new Blade\BladeBootstrapper(
+            ApplicationProvider::getApp(),
+            $registrar,
+            $output,
+            $pluginConfig->bladeCacheDir,
+            collectDataIncludes: true,
+            failOnInternalError: $pluginConfig->failOnInternalError,
+        );
+
+        if (!$bootstrapper->boot()) {
+            $disabled = $bootstrapper->disabled();
+
+            if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException) {
+                $annotate?->publishError($disabled->getMessage());
+            }
+
+            // Blade is opt-in: a run that silently lost it would pass CI with zero template findings.
+            if ($disabled instanceof \Psalm\LaravelPlugin\Blade\BladeDisabledException && $pluginConfig->failOnInternalError) {
+                throw $disabled;
+            }
+
+            return false;
+        }
+
+        // #1551: the helper files the boot `include`d are reachable from no project file, so Psalm
+        // would never scan them and RuntimeHelperVisibility would have no storage to read. Queued
+        // here rather than inside BladeBootstrapper to keep the bootstrapper free of a Bootstrap\
+        // dependency; both halves are needed, the deep scan alone changes nothing.
+        $helperFiles = ApplicationProvider::runtimeDeclaredFunctionFiles();
+        $registrar->queueFilesForScanning($helperFiles);
+        Blade\RuntimeHelperVisibility::init(
+            $helperFiles,
+            ApplicationProvider::runtimeDeclaredFunctionIds(),
+            ApplicationProvider::runtimeDeclaredConstants(),
+        );
+
+
+        return true;
     }
 
     /**

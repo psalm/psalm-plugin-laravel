@@ -1,0 +1,371 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Psalm\LaravelPlugin\Unit\Cli;
+
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Cli\AnnotateCommand;
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\ArrayInput;
+use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Console\Tester\CommandTester;
+
+#[CoversClass(AnnotateCommand::class)]
+final class AnnotateCommandTest extends TestCase
+{
+    private string $tempDir;
+
+    protected function setUp(): void
+    {
+        $this->tempDir = \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-annotate-cmd-' . \uniqid('', true);
+
+        if (!\mkdir($this->tempDir) && !\is_dir($this->tempDir)) {
+            throw new \RuntimeException("Failed to create temp directory {$this->tempDir}");
+        }
+    }
+
+    protected function tearDown(): void
+    {
+        foreach (\glob($this->tempDir . \DIRECTORY_SEPARATOR . '*') ?: [] as $entry) {
+            @\unlink($entry);
+        }
+
+        @\rmdir($this->tempDir);
+    }
+
+    #[Test]
+    public function fails_cleanly_when_the_psalm_binary_is_missing(): void
+    {
+        $application = new Application();
+        $application->addCommand(new AnnotateCommand($this->tempDir, ['psalm-laravel', 'blade:annotate']));
+
+        $tester = new CommandTester($application->find('blade:annotate'));
+
+        $this->assertSame(Command::FAILURE, $tester->execute([]));
+        $this->assertStringContainsString('Could not find', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function forwards_the_callers_thread_count_so_the_scan_runs_in_parallel(): void
+    {
+        // The plugin pins the analysis to one process itself; forcing `--threads=1` here would
+        // serialise the scan for nothing.
+        $command = new AnnotateCommand();
+
+        $this->assertSame(
+            ['--threads=8', '-c', 'psalm.xml'],
+            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--threads=8', '-c', 'psalm.xml']),
+        );
+    }
+
+    #[Test]
+    public function refuses_a_run_limited_to_some_paths(): void
+    {
+        // Producer agreement is a whole-project claim: a competing call site in a file the run never
+        // analysed would leave a concrete type written for a variable two call sites disagree on.
+        $application = new Application();
+        $application->addCommand(new AnnotateCommand($this->tempDir, ['psalm-laravel', 'blade:annotate', 'app/Renderer.php']));
+
+        $tester = new CommandTester($application->find('blade:annotate'));
+
+        $this->assertSame(Command::FAILURE, $tester->execute(['psalm-args' => ['app/Renderer.php']]));
+        $this->assertStringContainsString('whole project', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function names_the_path_limiting_arguments_it_refuses(): void
+    {
+        $command = new AnnotateCommand();
+
+        $this->assertSame(
+            ['-f', 'app/A.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '-f', 'app/A.php']),
+        );
+        // The attached spelling Psalm accepts for a short option; the token itself names the path.
+        $this->assertSame(
+            ['-f=app/A.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '-f=app/A.php']),
+        );
+        $this->assertSame(
+            ['app/'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', 'app/']),
+        );
+        $this->assertSame(
+            [],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '-c', 'psalm.xml', '--dry-run']),
+        );
+    }
+
+    #[Test]
+    public function skips_only_the_separate_values_psalm_itself_skips(): void
+    {
+        // Psalm's getopt() accepts both `--config=psalm.xml` and `--config psalm.xml`, and its own
+        // path extraction skips the separate value of exactly these options.
+        $command = new AnnotateCommand();
+
+        $this->assertSame(
+            [],
+            $command->pathLimitingArguments([
+                'psalm-laravel',
+                'blade:annotate',
+                '--config',
+                'psalm.xml',
+                '--root',
+                '/srv/app',
+                '--printer',
+                'Some\\Printer',
+            ]),
+        );
+        // Any other separate value is a path to Psalm (or a "Cannot locate" error), never skipped.
+        $this->assertSame(
+            ['2G'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--memory-limit', '2G']),
+        );
+    }
+
+    #[Test]
+    public function still_refuses_a_path_that_follows_a_long_option(): void
+    {
+        $command = new AnnotateCommand();
+
+        $this->assertSame(
+            ['app/Renderer.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--no-progress', 'app/Renderer.php']),
+        );
+        // getopt binds an OPTIONAL value only when it is attached, so the next token is a path.
+        $this->assertSame(
+            ['app/Renderer.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--find-unused-code', 'app/Renderer.php']),
+        );
+        // Psalm's own path list skips a separate value only after -c/-f/-r/--config/--printer/--root,
+        // so a flag it does not know to be value-taking leaves its follower as a path to check.
+        $this->assertSame(
+            ['app/A.php'],
+            $command->pathLimitingArguments(['psalm-laravel', 'blade:annotate', '--report-show-info', 'app/A.php']),
+        );
+    }
+
+    #[Test]
+    public function a_dry_run_that_could_not_plan_every_template_fails(): void
+    {
+        // The diff is incomplete, so the caller must not read exit 0 as "this is what writing does".
+        $this->assertSame(Command::FAILURE, $this->reportExitCode([
+            'dryRun' => true,
+            'changed' => ['a.blade.php' => ['title']],
+            'failures' => ['b.blade.php' => 'unreadable'],
+            'diff' => "+ * @var string \$title\n",
+        ]));
+    }
+
+    #[Test]
+    public function a_write_that_could_not_annotate_every_template_fails(): void
+    {
+        $this->assertSame(Command::FAILURE, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => ['a.blade.php' => ['title']],
+            'failures' => ['b.blade.php' => 'unreadable'],
+        ]));
+    }
+
+    #[Test]
+    public function a_run_that_annotated_every_template_succeeds_in_either_mode(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => ['a.blade.php' => ['title']],
+                'failures' => [],
+                'diff' => "+ * @var string \$title\n",
+            ]));
+        }
+    }
+
+    #[Test]
+    public function prints_a_dry_run_diff_with_template_markup_intact(): void
+    {
+        // The diff is console-formatted for colour; unescaped, `<x-card>` would be read as a style
+        // tag and the printed patch would no longer apply.
+        $diff = "--- a/v.blade.php\n+++ b/v.blade.php\n@@ -1 +1,4 @@\n+<?php\n+/** @var string \$t */\n+?>\n <x-card>{{ \$t }}</x-card>\r\n";
+        $output = new BufferedOutput();
+
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => true,
+            'changed' => ['v.blade.php' => ['t']],
+            'failures' => [],
+            'diff' => $diff,
+        ], $output));
+
+        $this->assertStringContainsString($diff, $output->fetch());
+    }
+
+    #[Test]
+    public function prints_the_diff_after_a_write_too(): void
+    {
+        $diff = "--- a/v.blade.php\n+++ b/v.blade.php\n@@ -1 +1,4 @@\n+<?php\n+/** @var string \$t */\n+?>\n <x-card>{{ \$t }}</x-card>\r\n";
+        $output = new BufferedOutput();
+
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => ['v.blade.php' => ['t']],
+            'failures' => [],
+            'diff' => $diff,
+        ], $output));
+
+        $display = $output->fetch();
+        $this->assertStringContainsString($diff, $display);
+        $this->assertStringContainsString('1 template(s) annotated.', $display);
+    }
+
+    #[Test]
+    public function lists_the_changed_templates_instead_of_the_diff_under_no_diffs(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $output = new BufferedOutput();
+
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => ['v.blade.php' => ['t', 'rows']],
+                'failures' => [],
+                'diff' => "--- a/v.blade.php\n+++ b/v.blade.php\n@@ -1 +1,2 @@\n+<?php\n",
+            ], $output, null, false));
+
+            $display = $output->fetch();
+            $this->assertStringContainsString('v.blade.php (t, rows)', $display);
+            $this->assertStringNotContainsString('@@', $display);
+        }
+    }
+
+    #[Test]
+    public function keeps_its_own_flags_out_of_the_forwarded_tokens(): void
+    {
+        $command = new AnnotateCommand();
+
+        $this->assertSame(
+            ['-c', 'psalm.xml'],
+            $command->forwardedArguments(['psalm-laravel', 'blade:annotate', '--dry-run', '--no-diffs', '-c', 'psalm.xml']),
+        );
+    }
+
+    #[Test]
+    public function lists_the_names_no_call_site_types_instead_of_claiming_every_template_is_declared(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $output = new BufferedOutput();
+
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => [],
+                'failures' => [],
+                'diff' => '',
+                'unknown' => ['a.blade.php' => ['rows', 'title']],
+            ], $output));
+
+            $display = $output->fetch();
+            $this->assertStringContainsString('a.blade.php (rows, title)', $display);
+            $this->assertStringContainsString('type unknown', $display);
+            $this->assertStringNotContainsString('Every template already declares', $display);
+        }
+    }
+
+    #[Test]
+    public function lists_the_names_an_unreadable_call_site_hides_with_that_site(): void
+    {
+        $output = new BufferedOutput();
+
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => [],
+            'failures' => [],
+            'diff' => '',
+            'unknown' => [],
+            'unreadable' => [
+                'a.blade.php' => ['site' => 'app/Http/Home.php:12', 'names' => ['rows', 'title']],
+                'b.blade.php' => ['site' => '', 'names' => ['flag']],
+            ],
+        ], $output));
+
+        $display = $output->fetch();
+        $this->assertStringContainsString('a call site could not be read', $display);
+        $this->assertStringContainsString('a.blade.php (rows, title), at app/Http/Home.php:12', $display);
+        $this->assertMatchesRegularExpression('/b\.blade\.php \(flag\)$/m', $display);
+        $this->assertStringNotContainsString('type unknown', $display);
+        $this->assertStringNotContainsString('Every template already declares', $display);
+    }
+
+    #[Test]
+    public function lists_one_line_per_name_its_call_sites_disagree_on_in_either_mode(): void
+    {
+        foreach ([true, false] as $dryRun) {
+            $output = new BufferedOutput();
+
+            $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+                'dryRun' => $dryRun,
+                'changed' => [],
+                'failures' => [],
+                'diff' => '',
+                'unknown' => [],
+                'disagreed' => ['posts.index' => [
+                    'key' => ['int', 'string'],
+                    'rows' => ['Illuminate\Support\Collection<int, App\Post>', 'Illuminate\Support\Collection<int, App\Video>'],
+                ]],
+            ], $output));
+
+            $display = $output->fetch();
+            $this->assertStringContainsString('call sites disagree', $display);
+            $this->assertStringContainsString('posts.index $key: int vs string', $display);
+            $this->assertStringContainsString(
+                'posts.index $rows: Illuminate\Support\Collection<int, App\Post> vs Illuminate\Support\Collection<int, App\Video>',
+                $display,
+                'a generic type is printed as is, never read as a console style tag',
+            );
+            $this->assertStringNotContainsString('Every template already declares', $display);
+        }
+    }
+
+    #[Test]
+    public function shows_psalms_own_output_only_when_the_pass_never_ran(): void
+    {
+        // A whole-project run prints hundreds of findings that bury the summary, so a run that
+        // annotated (or found nothing to) hides them; one that never reached the pass shows them,
+        // since they are the only clue why.
+        $psalmOutput = $this->tempDir . \DIRECTORY_SEPARATOR . 'psalm-output.txt';
+        \file_put_contents($psalmOutput, "ERROR: ParseError - app/Broken.php:3:1\n");
+
+        $neverRan = new BufferedOutput();
+        $this->reportExitCode(['dryRun' => false], $neverRan, $psalmOutput);
+        $this->assertStringContainsString('ParseError - app/Broken.php', $neverRan->fetch());
+
+        $ran = new BufferedOutput();
+        $this->assertSame(Command::SUCCESS, $this->reportExitCode([
+            'dryRun' => false,
+            'changed' => [],
+            'failures' => [],
+            'diff' => '',
+        ], $ran, $psalmOutput));
+        $this->assertStringNotContainsString('ParseError', $ran->fetch());
+    }
+
+    /**
+     * Drives the reporting half of the command directly: the exit code depends on what the child
+     * published, and no CommandTester run can produce a child.
+     *
+     * @param array<string, mixed> $published
+     */
+    private function reportExitCode(array $published, ?BufferedOutput $output = null, ?string $psalmOutput = null, bool $showDiffs = true): int
+    {
+        $controlFile = $this->tempDir . \DIRECTORY_SEPARATOR . 'control.json';
+        \file_put_contents($controlFile, (string) \json_encode($published));
+
+        $command = new AnnotateCommand();
+        $report = new \ReflectionMethod($command, 'report');
+        $io = new SymfonyStyle(new ArrayInput([]), $output ?? new BufferedOutput());
+
+        /** @var int */
+        return $report->invoke($command, $io, $controlFile, 0, $psalmOutput, $showDiffs);
+    }
+}

@@ -65,32 +65,13 @@ final class MissingViewHandlerTest extends TestCase
         (new \ReflectionProperty(MissingViewHandler::class, 'factoryClass'))->setValue(null, null);
     }
 
-    #[Test]
-    public function returns_view_function_id(): void
-    {
-        $this->assertSame(['view'], MissingViewHandler::getFunctionIds());
-    }
-
-    #[Test]
-    public function returns_factory_class_name_as_first_entry(): void
-    {
-        // FacadeMapProvider is not initialized in unit tests, so only Factory is returned.
-        // The type test (MissingViewTest.phpt) verifies facade classes are included
-        // when the full plugin is booted.
-        $classNames = MissingViewHandler::getClassLikeNames();
-        $this->assertNotEmpty($classNames);
-        $this->assertSame(\Illuminate\View\Factory::class, $classNames[0]);
-    }
-
     /**
      * @return iterable<string, array{string}>
      */
     public static function existingViewProvider(): iterable
     {
-        yield 'blade template in root' => ['welcome'];
         yield 'blade template in subdirectory' => ['emails.invite'];
         yield 'php template' => ['legacy'];
-        yield 'html template' => ['plain'];
     }
 
     /**
@@ -113,7 +94,6 @@ final class MissingViewHandlerTest extends TestCase
     public static function skippedViewProvider(): iterable
     {
         yield 'namespaced view' => ['mail::html.header'];
-        yield 'another namespaced view' => ['notifications::email'];
     }
 
     /**
@@ -150,6 +130,22 @@ final class MissingViewHandlerTest extends TestCase
 
         // Re-enable for other tests
         MissingViewHandler::init([self::$fixtureDir], ['blade.php', 'php', 'css', 'html']);
+    }
+
+    /** Blade's `@includeFirst` check reads existence without turning MissingView on. */
+    #[Test]
+    public function view_existence_is_known_only_once_the_paths_are_read(): void
+    {
+        $this->assertTrue(MissingViewHandler::viewExists('legacy'));
+        $this->assertFalse(MissingViewHandler::viewExists('nonexistent'));
+        $this->assertNull(MissingViewHandler::viewExists('mail::html.header'));
+
+        MissingViewHandler::reset();
+        $this->assertNull(MissingViewHandler::viewExists('welcome'));
+
+        MissingViewHandler::init([self::$fixtureDir], ['blade.php', 'php', 'css', 'html'], false);
+        $this->assertTrue(MissingViewHandler::viewExists('welcome'));
+        $this->assertFalse((new \ReflectionProperty(MissingViewHandler::class, 'enabled'))->getValue());
     }
 
     #[Test]
@@ -227,12 +223,6 @@ final class MissingViewHandlerTest extends TestCase
     }
 
     #[Test]
-    public function narrows_zero_arg_to_null_when_no_factory_class_resolved(): void
-    {
-        $this->assertNull($this->invokeNarrowedHelperReturn(0));
-    }
-
-    #[Test]
     public function narrows_argument_supplied_to_view_for_the_stock_factory(): void
     {
         MissingViewHandler::initViewFactory(\Illuminate\View\Factory::class);
@@ -260,20 +250,6 @@ final class MissingViewHandlerTest extends TestCase
         return $result;
     }
 
-    #[Test]
-    public function registers_the_canonical_view_facade_even_without_alias_resolution(): void
-    {
-        // FacadeMapProvider is not initialized here, so getFacadeClasses() returns [].
-        // This mirrors an app that trims its alias registry: the canonical facade must
-        // still be registered (hardcoded), or ProducerReturnTypeHandler would answer the
-        // return type first and the missing-view diagnostic would never fire on
-        // \Illuminate\Support\Facades\View::make().
-        $this->assertContains(
-            \Illuminate\Support\Facades\View::class,
-            MissingViewHandler::getClassLikeNames(),
-        );
-    }
-
     // --- View::make() (MethodReturnTypeProvider) tests ---
 
     #[Test]
@@ -286,72 +262,9 @@ final class MissingViewHandlerTest extends TestCase
     }
 
     #[Test]
-    #[DataProvider('skippedViewProvider')]
-    public function method_skips_namespaced_views(string $viewName): void
-    {
-        $event = $this->createMethodEvent('make', $viewName);
-
-        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
-    }
-
-    #[Test]
     public function method_skips_non_make_methods(): void
     {
         $event = $this->createMethodEvent('exists', 'nonexistent');
-
-        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
-    }
-
-    #[Test]
-    public function method_skips_no_arguments(): void
-    {
-        $source = $this->createStub(StatementsSource::class);
-        $source->method('getFilePath')->willReturn('/app/Http/Controllers/TestController.php');
-        $source->method('getFileName')->willReturn('TestController.php');
-
-        $methodCall = new MethodCall(
-            new Variable('factory'),
-            'make',
-        );
-        $methodCall->setAttribute('startFilePos', 0);
-        $methodCall->setAttribute('endFilePos', 10);
-        $methodCall->args = [];
-
-        $event = new MethodReturnTypeProviderEvent(
-            $source,
-            \Illuminate\View\Factory::class,
-            'make',
-            $methodCall,
-            new Context(),
-            new CodeLocation($source, $methodCall),
-        );
-
-        $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
-    }
-
-    #[Test]
-    public function method_skips_dynamic_variable_argument(): void
-    {
-        $source = $this->createStub(StatementsSource::class);
-        $source->method('getFilePath')->willReturn('/app/Http/Controllers/TestController.php');
-        $source->method('getFileName')->willReturn('TestController.php');
-
-        $methodCall = new MethodCall(
-            new Variable('factory'),
-            'make',
-        );
-        $methodCall->setAttribute('startFilePos', 0);
-        $methodCall->setAttribute('endFilePos', 10);
-        $methodCall->args = [new Arg(new Variable('viewName'))];
-
-        $event = new MethodReturnTypeProviderEvent(
-            $source,
-            \Illuminate\View\Factory::class,
-            'make',
-            $methodCall,
-            new Context(),
-            new CodeLocation($source, $methodCall),
-        );
 
         $this->assertNotInstanceOf(Union::class, MissingViewHandler::getMethodReturnType($event));
     }

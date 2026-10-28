@@ -51,13 +51,13 @@ function collection_doesnt_contain_strict_variadic(Collection $c): void
 function collection_zip_variadic(Collection $c, Collection $other): void
 {
     $_one = $c->zip($other);
-    /** @psalm-check-type-exact $_one = Collection<int, Collection<int, string>&static>&static */
+    /** @psalm-check-type-exact $_one = Collection<int, Collection<int, null|string>&static>&static */
 
     $_two = $c->zip($other, ['x', 'y']);
-    /** @psalm-check-type-exact $_two = Collection<int, Collection<int, string>&static>&static */
+    /** @psalm-check-type-exact $_two = Collection<int, Collection<int, null|string>&static>&static */
 
     $_three = $c->zip($other, ['x', 'y'], ['a', 'b']);
-    /** @psalm-check-type-exact $_three = Collection<int, Collection<int, string>&static>&static */
+    /** @psalm-check-type-exact $_three = Collection<int, Collection<int, null|string>&static>&static */
 }
 ?>
 --EXPECTF--

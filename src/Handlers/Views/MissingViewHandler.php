@@ -14,13 +14,19 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Issues\MissingView;
+use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\StatementsSource;
+use Psalm\Type\Atomic\Scalar;
+use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -29,7 +35,7 @@ use Psalm\Type\Union;
  * across every Laravel API that accepts one — the view() helper, Factory
  * (make/first/renderWhen/renderUnless/renderEach/composer/creator) and its View facade,
  * ResponseFactory::view() (concrete, contract, and Response facade),
- * Router::view(), MailMessage::view()/markdown(), Mailable::view()/markdown()/text(),
+ * Router::view(), MailMessage::view()/markdown()/text(), Mailable::view()/markdown()/text(),
  * Mailables\Content's constructor, TestResponse::assertViewIs(), and
  * InteractsWithViews::view() (a test-case trait method) — and narrows the view()
  * helper's return type past the stub's contract fallback to a concrete class.
@@ -64,6 +70,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
 
     private static bool $enabled = false;
 
+    /** Whether init() read the finder, so a name {@see self::viewFileExists()} misses is provably absent. */
+    private static bool $pathsKnown = false;
+
     /** @var array<string, bool> Cached view existence results to avoid repeated filesystem checks */
     private static array $resolvedViews = [];
 
@@ -89,6 +98,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         self::$viewPaths = [];
         self::$extensions = ['blade.php', 'php'];
         self::$enabled = false;
+        self::$pathsKnown = false;
         self::$resolvedViews = [];
         self::$factoryClass = null;
     }
@@ -96,16 +106,32 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
     /**
      * @param list<string> $viewPaths Absolute paths to view directories (from config('view.paths'))
      * @param list<string> $extensions File extensions without leading dot (from FileViewFinder::getExtensions())
+     * @param bool $report false records the paths for {@see self::viewExists()} only, leaving MissingView off
      */
-    public static function init(array $viewPaths, array $extensions = ['blade.php', 'php']): void
+    public static function init(array $viewPaths, array $extensions = ['blade.php', 'php'], bool $report = true): void
     {
         self::$viewPaths = \array_map(static fn(string $path): string => \rtrim(
             $path,
             \DIRECTORY_SEPARATOR,
         ), $viewPaths);
         self::$extensions = $extensions;
-        self::$enabled = true;
+        self::$enabled = $report;
+        self::$pathsKnown = true;
         self::$resolvedViews = [];
+    }
+
+    /**
+     * Whether a view name resolves to a file in the finder's paths, or null when that cannot be
+     * told: the paths were never read, or the name is empty or namespaced (package hints are not
+     * tracked).
+     */
+    public static function viewExists(string $viewName): ?bool
+    {
+        if (!self::$pathsKnown || $viewName === '' || \str_contains($viewName, '::')) {
+            return null;
+        }
+
+        return self::viewFileExists($viewName);
     }
 
     /**
@@ -265,7 +291,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             ViewNameSignatures::ROLE_VIEW_FACTORY => self::checkViewFactoryCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_RESPONSE_FACTORY => self::checkResponseFactoryCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_ROUTER => self::checkRouterCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
-            ViewNameSignatures::ROLE_MAIL_MESSAGE => self::checkMailMessageCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
+            ViewNameSignatures::ROLE_MAIL_MESSAGE => self::checkMailMessageCall($methodNameLower, $callArgs, $event->getSource(), $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_MAILABLE => self::checkMailableCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_TEST_RESPONSE => self::checkTestResponseCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
             ViewNameSignatures::ROLE_INTERACTS_WITH_VIEWS => self::checkInteractsWithViewsCall($methodNameLower, $callArgs, $codeLocation, $suppressedIssues),
@@ -332,9 +358,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
                 break;
 
             case 'first':
-                $arg = self::argByNameOrPosition($callArgs, 0, 'views');
+                $arg = ArgUtil::byNameOrPosition($callArgs, 0, 'views');
 
-                if ($arg instanceof \PhpParser\Node\Arg) {
+                if ($arg instanceof Arg) {
                     $viewNames = self::extractLiteralStringArrayArg($arg);
 
                     if ($viewNames !== null) {
@@ -353,9 +379,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             case 'rendereach':
                 self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
 
-                $emptyArg = self::argByNameOrPosition($callArgs, 3, 'empty');
+                $emptyArg = ArgUtil::byNameOrPosition($callArgs, 3, 'empty');
 
-                if ($emptyArg instanceof \PhpParser\Node\Arg) {
+                if ($emptyArg instanceof Arg) {
                     $emptyName = self::extractLiteralStringArg($emptyArg);
 
                     if ($emptyName !== null && !\str_starts_with($emptyName, 'raw|')) {
@@ -384,7 +410,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      */
     private static function checkViewPatternArg(array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
     {
-        $arg = self::argByNameOrPosition($callArgs, 0, 'views');
+        $arg = ArgUtil::byNameOrPosition($callArgs, 0, 'views');
         if (!$arg instanceof Arg) {
             return;
         }
@@ -432,9 +458,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             return;
         }
 
-        $arg = self::argByNameOrPosition($callArgs, 0, 'view');
+        $arg = ArgUtil::byNameOrPosition($callArgs, 0, 'view');
 
-        if (!$arg instanceof \PhpParser\Node\Arg) {
+        if (!$arg instanceof Arg) {
             return;
         }
 
@@ -472,20 +498,132 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
     }
 
     /**
-     * MailMessage::view()/markdown() — both take a single view name at $view
-     * (position 0); markdown() renders through Illuminate\Mail\Markdown, which
-     * resolves non-namespaced names against the same registered view paths.
+     * MailMessage::view()/markdown() take a single view name at $view (position 0);
+     * view() also accepts an array. markdown() renders through Illuminate\Mail\Markdown,
+     * which resolves non-namespaced names against the same registered view paths.
+     * text() stores its $textView argument (position 0) as the 'text' entry of the
+     * view array, so it is rendered as a view name too.
      *
      * @param list<Arg> $callArgs
      * @param array<array-key, string> $suppressedIssues
      */
-    private static function checkMailMessageCall(string $methodNameLower, array $callArgs, CodeLocation $codeLocation, array $suppressedIssues): void
+    private static function checkMailMessageCall(string $methodNameLower, array $callArgs, StatementsSource $source, CodeLocation $codeLocation, array $suppressedIssues): void
     {
-        if ($methodNameLower !== 'view' && $methodNameLower !== 'markdown') {
+        if ($methodNameLower === 'text') {
+            self::checkArgViewName($callArgs, 0, 'textview', $codeLocation, $suppressedIssues);
+
+            return;
+        }
+
+        if ($methodNameLower === 'view') {
+            $arg = ArgUtil::byNameOrPosition($callArgs, 0, 'view');
+
+            if ($arg instanceof Arg && $arg->value instanceof Array_) {
+                self::checkMailViewArray($arg->value, $source->getNodeTypeProvider(), $codeLocation, $suppressedIssues);
+
+                return;
+            }
+        } elseif ($methodNameLower !== 'markdown') {
             return;
         }
 
         self::checkArgViewName($callArgs, 0, 'view', $codeLocation, $suppressedIssues);
+    }
+
+    /**
+     * Array form of MailMessage::view(), mirroring Illuminate\Mail\Mailer::parseView():
+     * when key 0 is set only keys 0 and 1 are views (a "pretty" and a plain one);
+     * otherwise only 'html' and 'text' are — 'raw' is raw text, not a view name, and
+     * any other key is ignored. Each present entry is rendered independently, so
+     * (unlike first()) every missing literal is reported.
+     *
+     * The whole array is skipped when its keys cannot be resolved statically
+     * (spread, a non-literal key, or a negative integer key whose implicit-index
+     * continuation differs across PHP versions), or when key 0 may be null
+     * (precedence unknown).
+     *
+     * @param array<array-key, string> $suppressedIssues
+     */
+    private static function checkMailViewArray(Array_ $array, NodeTypeProvider $nodeTypeProvider, CodeLocation $codeLocation, array $suppressedIssues): void
+    {
+        /** @var array<array-key, \PhpParser\Node\Expr> $entries */
+        $entries = [];
+        $nextIndex = 0;
+
+        foreach ($array->items as $item) {
+            if ($item->unpack) {
+                return;
+            }
+
+            if ($item->key === null) {
+                $key = $nextIndex;
+            } elseif ($item->key instanceof \PhpParser\Node\Scalar\Int_) {
+                $key = $item->key->value;
+            } elseif ($item->key instanceof String_) {
+                // PHP normalizes decimal-integer string keys ('0') to ints
+                $key = (string) (int) $item->key->value === $item->key->value ? (int) $item->key->value : $item->key->value;
+            } else {
+                return;
+            }
+
+            if (\is_int($key)) {
+                // PHP < 8.3 continues implicit indexes from 0 after a negative key, >= 8.3 from key + 1
+                if ($key < 0) {
+                    return;
+                }
+
+                if ($key >= $nextIndex) {
+                    $nextIndex = $key + 1;
+                }
+            }
+
+            $entries[$key] = $item->value;
+        }
+
+        // parseView() branches on isset($view[0]), i.e. key 0 present AND non-null.
+        // Decide the branch only when that is proven; a possibly-null or untyped key 0
+        // would make either branch a guess, so decline rather than risk a false positive.
+        if (!isset($entries[0])) {
+            $viewKeys = ['html', 'text'];
+        } elseif ($entries[0] instanceof String_) {
+            $viewKeys = [0, 1];
+        } elseif ($entries[0] instanceof \PhpParser\Node\Expr\ConstFetch && $entries[0]->name->toLowerString() === 'null') {
+            $viewKeys = ['html', 'text'];
+        } else {
+            $type = $nodeTypeProvider->getType($entries[0]);
+
+            if (!$type instanceof Union || $type->possibly_undefined || !self::isProvenNonNull($type)) {
+                return;
+            }
+
+            $viewKeys = [0, 1];
+        }
+
+        foreach ($viewKeys as $viewKey) {
+            $value = $entries[$viewKey] ?? null;
+
+            if ($value instanceof String_) {
+                self::checkViewExists($value->value, $codeLocation, $suppressedIssues);
+            }
+        }
+    }
+
+    /**
+     * Accept only concrete scalar/array atomics. Mixed, null and template params
+     * (whose bound may admit null, e.g. an unbounded `T`) fail the proof, as does
+     * anything else not understood here.
+     *
+     * @psalm-pure
+     */
+    private static function isProvenNonNull(Union $type): bool
+    {
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof Scalar && !$atomic instanceof TArray && !$atomic instanceof TKeyedArray) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -556,9 +694,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         CodeLocation $codeLocation,
         array $suppressedIssues,
     ): void {
-        $arg = self::argByNameOrPosition($callArgs, $position, $paramName);
+        $arg = ArgUtil::byNameOrPosition($callArgs, $position, $paramName);
 
-        if (!$arg instanceof \PhpParser\Node\Arg) {
+        if (!$arg instanceof Arg) {
             return;
         }
 
@@ -567,32 +705,6 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         if ($viewName !== null) {
             self::checkViewExists($viewName, $codeLocation, $suppressedIssues);
         }
-    }
-
-    /**
-     * Resolve one parameter's Arg node whether the call used positional or
-     * named arguments. PHP requires every positional argument to precede any
-     * named one, so a non-named node already at `$position` is authoritative;
-     * otherwise the parameter can only have been supplied by name, in whatever
-     * order — e.g. `Route::view(view: 'welcome', uri: '/x')` must not read
-     * '/x' (position 1) as the view name just because $paramName's usual slot
-     * is 1.
-     *
-     * @param list<Arg> $callArgs
-     */
-    private static function argByNameOrPosition(array $callArgs, int $position, string $paramName): ?Arg
-    {
-        if (isset($callArgs[$position]) && $callArgs[$position]->name === null) {
-            return $callArgs[$position];
-        }
-
-        foreach ($callArgs as $arg) {
-            if ($arg->name !== null && $arg->name->toLowerString() === $paramName) {
-                return $arg;
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -633,7 +745,7 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
         $viewNames = [];
 
         foreach ($arg->value->items as $item) {
-            if ($item === null || $item->unpack || $item->key !== null || !$item->value instanceof String_) {
+            if ($item->unpack || $item->key !== null || !$item->value instanceof String_) {
                 return null;
             }
 
@@ -689,17 +801,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             return;
         }
 
-        // Skip namespaced views (e.g., 'mail::html.header') — they resolve
-        // through package-registered paths we don't track yet
-        if (\str_contains($viewName, '::')) {
-            return;
-        }
-
-        if ($viewName === '') {
-            return;
-        }
-
-        if (self::viewFileExists($viewName)) {
+        // Namespaced views (e.g., 'mail::html.header') resolve through
+        // package-registered paths we don't track yet, so they are skipped.
+        if ($viewName === '' || \str_contains($viewName, '::') || self::viewFileExists($viewName)) {
             return;
         }
 

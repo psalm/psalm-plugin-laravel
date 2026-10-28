@@ -16,41 +16,44 @@ use Illuminate\Support\Traits\EnumeratesValues;
  * These annotations are declared directly here so that TKey/TValue resolve to the class-level
  * template parameters and higher-order proxy method calls are properly typed.
  *
- * The list mirrors EnumeratesValues::$proxies exactly — do not edit without checking that array.
+ * The list mirrors EnumeratesValues::$proxies at the lowest supported 12.x — do not edit without checking that array.
+ * `$sole` is left out on purpose: Laravel added it in 13.33.0 and declares it in its own docblock there.
  * Note: $hasMany here is a collection method (not an Eloquent relationship).
+ * The third proxy argument spells the receiver class out instead of Laravel's `static`: a stub
+ * `@property-read` keeps `static` unparameterized (`Collection&static`), losing TKey/TValue.
  *
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $average
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $avg
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $contains
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $doesntContain
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $each
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $every
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $filter
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $first
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $flatMap
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $groupBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasMany
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $hasSole
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $keyBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $last
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $map
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $max
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $min
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $partition
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $percentage
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $reject
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipUntil
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $skipWhile
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $some
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortBy
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sortByDesc
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $sum
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeUntil
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $takeWhile
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $unique
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $unless
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $until
- * @property-read HigherOrderCollectionProxy<TKey, TValue> $when
+ * @property-read HigherOrderCollectionProxy<'average', TValue, Collection<TKey, TValue>> $average
+ * @property-read HigherOrderCollectionProxy<'avg', TValue, Collection<TKey, TValue>> $avg
+ * @property-read HigherOrderCollectionProxy<'contains', TValue, Collection<TKey, TValue>> $contains
+ * @property-read HigherOrderCollectionProxy<'doesntContain', TValue, Collection<TKey, TValue>> $doesntContain
+ * @property-read HigherOrderCollectionProxy<'each', TValue, Collection<TKey, TValue>> $each
+ * @property-read HigherOrderCollectionProxy<'every', TValue, Collection<TKey, TValue>> $every
+ * @property-read HigherOrderCollectionProxy<'filter', TValue, Collection<TKey, TValue>> $filter
+ * @property-read HigherOrderCollectionProxy<'first', TValue, Collection<TKey, TValue>> $first
+ * @property-read HigherOrderCollectionProxy<'flatMap', TValue, Collection<TKey, TValue>> $flatMap
+ * @property-read HigherOrderCollectionProxy<'groupBy', TValue, Collection<TKey, TValue>> $groupBy
+ * @property-read HigherOrderCollectionProxy<'hasMany', TValue, Collection<TKey, TValue>> $hasMany
+ * @property-read HigherOrderCollectionProxy<'hasSole', TValue, Collection<TKey, TValue>> $hasSole
+ * @property-read HigherOrderCollectionProxy<'keyBy', TValue, Collection<TKey, TValue>> $keyBy
+ * @property-read HigherOrderCollectionProxy<'last', TValue, Collection<TKey, TValue>> $last
+ * @property-read HigherOrderCollectionProxy<'map', TValue, Collection<TKey, TValue>> $map
+ * @property-read HigherOrderCollectionProxy<'max', TValue, Collection<TKey, TValue>> $max
+ * @property-read HigherOrderCollectionProxy<'min', TValue, Collection<TKey, TValue>> $min
+ * @property-read HigherOrderCollectionProxy<'partition', TValue, Collection<TKey, TValue>> $partition
+ * @property-read HigherOrderCollectionProxy<'percentage', TValue, Collection<TKey, TValue>> $percentage
+ * @property-read HigherOrderCollectionProxy<'reject', TValue, Collection<TKey, TValue>> $reject
+ * @property-read HigherOrderCollectionProxy<'skipUntil', TValue, Collection<TKey, TValue>> $skipUntil
+ * @property-read HigherOrderCollectionProxy<'skipWhile', TValue, Collection<TKey, TValue>> $skipWhile
+ * @property-read HigherOrderCollectionProxy<'some', TValue, Collection<TKey, TValue>> $some
+ * @property-read HigherOrderCollectionProxy<'sortBy', TValue, Collection<TKey, TValue>> $sortBy
+ * @property-read HigherOrderCollectionProxy<'sortByDesc', TValue, Collection<TKey, TValue>> $sortByDesc
+ * @property-read HigherOrderCollectionProxy<'sum', TValue, Collection<TKey, TValue>> $sum
+ * @property-read HigherOrderCollectionProxy<'takeUntil', TValue, Collection<TKey, TValue>> $takeUntil
+ * @property-read HigherOrderCollectionProxy<'takeWhile', TValue, Collection<TKey, TValue>> $takeWhile
+ * @property-read HigherOrderCollectionProxy<'unique', TValue, Collection<TKey, TValue>> $unique
+ * @property-read HigherOrderCollectionProxy<'unless', TValue, Collection<TKey, TValue>> $unless
+ * @property-read HigherOrderCollectionProxy<'until', TValue, Collection<TKey, TValue>> $until
+ * @property-read HigherOrderCollectionProxy<'when', TValue, Collection<TKey, TValue>> $when
  */
 class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerable
 {
@@ -80,6 +83,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @return ($default is \Closure ? TFirstDefaultFromClosure : (TFirstDefault | TValue))
      *
      * @psalm-flow ($default) -> return
+     * @psalm-taint-specialize
      */
     public function first(callable $callback = null, $default = null) {}
 
@@ -89,13 +93,33 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TGetDefault
      * @template TGetClosureReturn
      *
-     * @param  TKey  $key
+     * @param  TKey|null  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
      * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
      *
      * @psalm-flow ($default) -> return
+     * @psalm-taint-specialize
      */
     public function get($key, $default = null) {}
+
+    /**
+     * Get the last item from the collection.
+     *
+     * A closure default only runs when no item matches, so its result joins `TValue`.
+     *
+     * @psalm-mutation-free
+     *
+     * @template TLastDefault
+     * @template TLastClosureReturn
+     *
+     * @param  (callable(TValue, TKey): bool)|null  $callback
+     * @param  TLastDefault|(\Closure(): TLastClosureReturn)  $default
+     * @return ($default is \Closure ? TLastClosureReturn|TValue : (TLastDefault | TValue))
+     *
+     * @psalm-flow ($default) -> return
+     * @psalm-taint-specialize
+     */
+    public function last(?callable $callback = null, $default = null) {}
 
     /**
      * @template TCount of int
@@ -103,7 +127,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @return (
      *     TCount is 1
      *     ? TValue|null
-     *     : static
+     *     : static<int, TValue>
      * )
      */
     public function pop($count = 1) {}
@@ -114,9 +138,10 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  TKey  $key
      * @param  TPullDefault|(\Closure(): TPullClosureReturn)  $default
-     * @return ($default is \Closure ? TPullClosureReturn : (TPullDefault | TValue))
+     * @return ($default is \Closure ? TPullClosureReturn|TValue : (TPullDefault | TValue))
      *
      * @psalm-flow ($default) -> return
+     * @psalm-taint-specialize
      */
     public function pull($key, $default = null) {}
 
@@ -125,22 +150,23 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @psalm-mutation-free
      *
-     * @template TValueDefault
-     *
      * @param  string|int  $key
-     * @param  TValueDefault|(\Closure(): TValueDefault)  $default
-     * @return mixed|TValueDefault
+     * @param  mixed  $default
+     * @return mixed
      *
      * @psalm-flow ($default) -> return
+     * @psalm-taint-specialize
      */
     public function value($key, $default = null) {}
 
     /**
      * @psalm-mutation-free
      *
+     * `$preserveKeys = true` keeps the source keys; any other number result is re-indexed.
+     *
      * @param  (callable(self<TKey, TValue>): int)|int|null  $number
      * @param  bool  $preserveKeys
-     * @return ($number is null ? TValue : static<int, TValue>)
+     * @return ($number is null ? TValue : ($preserveKeys is true ? static<TKey, TValue> : static<int, TValue>))
      *
      * @throws \InvalidArgumentException
      */
@@ -161,10 +187,28 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @return (
      *     TCount is 1
      *     ? TValue|null
-     *     : static
+     *     : static<int, TValue>
      * )
      */
     public function shift($count = 1) {}
+
+    /**
+     * Shuffled items are renumbered (the runtime shuffles into a list).
+     *
+     * @return static<int, TValue>
+     */
+    public function shuffle() {}
+
+    /**
+     * Appends each item with `push()`, so the source keys are discarded and appended items get
+     * int keys.
+     *
+     * @template TConcatValue
+     *
+     * @param  iterable<array-key, TConcatValue>  $source
+     * @return static<TKey|int, TValue|TConcatValue>
+     */
+    public function concat($source) {}
 
     /**
      * Merge the collection with the given items.
@@ -219,6 +263,86 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     public function put($key, $value) {}
 
     /**
+     * Push an item onto the beginning of the collection.
+     *
+     * Same model as push()/put(): independent templates plus `@psalm-this-out`, so a value (or key)
+     * outside the current types widens the collection instead of raising InvalidArgument.
+     *
+     * Laravel branches on the argument count, not on null: `prepend($v)` gets an integer key, while
+     * `prepend($v, null)` inserts the string key `''`.
+     *
+     * @template TPrependValue
+     * @template TPrependKey of array-key
+     *
+     * @param  TPrependValue  $value
+     * @param  TPrependKey|null  $key
+     * @psalm-this-out static<(func_num_args() is 1 ? TKey|int : ($key is null ? TKey|'' : TKey|TPrependKey)), TValue|TPrependValue>
+     * @return static<(func_num_args() is 1 ? TKey|int : ($key is null ? TKey|'' : TKey|TPrependKey)), TValue|TPrependValue>
+     */
+    public function prepend($value, $key = null) {}
+
+    /**
+     * Prepend one or more items to the beginning of the collection.
+     *
+     * @template TUnshiftValue
+     *
+     * @param  TUnshiftValue  ...$values
+     * @psalm-this-out static<TKey|int, TValue|TUnshiftValue>
+     * @return static<TKey|int, TValue|TUnshiftValue>
+     */
+    public function unshift(...$values) {}
+
+    /**
+     * Add an item to the collection.
+     *
+     * @template TAddValue
+     *
+     * @param  TAddValue  $item
+     * @psalm-this-out static<TKey|int, TValue|TAddValue>
+     * @return static<TKey|int, TValue|TAddValue>
+     */
+    public function add($item) {}
+
+    /**
+     * Splice a portion of the underlying collection array.
+     *
+     * Returns the removed slice (original items), while the receiver gains the replacement values.
+     * The receiver's key type stays `TKey` as in Laravel: array_splice() also renumbers integer keys
+     * and gives the replacement integer keys, which is not modelled here.
+     *
+     * @template TSpliceValue
+     *
+     * @param  int  $offset
+     * @param  int|null  $length
+     * @param  array<array-key, TSpliceValue>  $replacement
+     * @psalm-this-out static<TKey, TValue|TSpliceValue>
+     * @return static<TKey, TValue>
+     */
+    public function splice($offset, $length = null, $replacement = []) {}
+
+    /**
+     * Get an item from the collection by key or add it to the collection if it does not exist.
+     *
+     * The key is deliberately unbounded: Laravel declares `mixed`, and null, bool and float keys are
+     * accepted at runtime (coerced by PHP). A non-array-key argument widens the key type to `array-key`.
+     *
+     * Psalm cannot decide `\Closure` against interfaces, iterables or templates, so the guards first rule
+     * out non-callable values and only then split on `\Closure`. An unbounded template argument stays
+     * silent although it may hold a Closure, and an invokable-interface value gains `|mixed` (Psalm does not treat
+     * `Closure` as final in conditional types); see GetOrPutClosureDefaultKnownLimitation.phpt.
+     *
+     * @template TGetOrPutKey
+     * @template TGetOrPutValue
+     * @template TGetOrPutClosureReturn
+     *
+     * @param  TGetOrPutKey  $key
+     * @param  TGetOrPutValue|(\Closure(): TGetOrPutClosureReturn)  $value
+     * @psalm-this-out static<TKey|(TGetOrPutKey is array-key ? TGetOrPutKey : array-key), TValue|($value is scalar|array|null ? TGetOrPutValue : ($value is callable ? ($value is \Closure ? TGetOrPutClosureReturn : TGetOrPutValue) : TGetOrPutValue))>
+     * @return TValue|($value is scalar|array|null ? TGetOrPutValue : ($value is callable ? ($value is \Closure ? TGetOrPutClosureReturn : TGetOrPutValue) : TGetOrPutValue))
+     */
+    public function getOrPut($key, $value) {}
+
+    /**
      * Count the number of items in the collection.
      *
      * @psalm-mutation-free
@@ -241,7 +365,6 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Determine if the collection is not empty.
      *
      * @psalm-mutation-free
-     * @psalm-assert-if-false null $this->first()
      * @return bool
      */
     public function isNotEmpty() {}
@@ -252,7 +375,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @template TCombineValue
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TCombineValue>|iterable<array-key, TCombineValue>  $values
-     * @return static<TValue, TCombineValue>
+     * @return static<array-key, TCombineValue>
      */
     public function combine($values) {}
 
@@ -285,31 +408,115 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Chunk the collection into chunks with a callback.
      *
-     * @param  callable(TValue, TKey, static<TKey, TValue>): bool  $callback
+     * The chunk is a plain `Collection` (built by `LazyCollection::chunkWhile()`); it becomes `static`
+     * only after the callback ran. Laravel's `static<TKey, TValue>` leaves an untyped closure param
+     * as an unresolved `static`, which the check then rejects.
+     *
+     * @param  callable(TValue, TKey, \Illuminate\Support\Collection<TKey, TValue>): bool  $callback
      * @return static<int, static<TKey, TValue>>
      */
     public function chunkWhile(callable $callback) {}
 
     /**
+     * Laravel's `callable($this)` gives an untyped closure param the unresolved `static` (the
+     * enclosing class inside a class body), so every untyped closure was rejected. The callbacks
+     * below name the class with its templates instead. These stubs reach `Collection` itself only:
+     * a subclass keeps the `EnumeratesValues` declaration (vimeo/psalm#12158).
+     *
+     * @param  callable(\Illuminate\Support\Collection<TKey, TValue>): mixed  $callback
+     * @return $this
+     */
+    public function tap(callable $callback) {}
+
+    /**
+     * @template TPipeReturnType
+     *
+     * @param  callable(\Illuminate\Support\Collection<TKey, TValue>): TPipeReturnType  $callback
+     * @return TPipeReturnType
+     */
+    public function pipe(callable $callback) {}
+
+    /**
+     * The whenEmpty() family runs `when($condition, $callback, $default)`, which passes the condition
+     * as the second argument and returns `$callback(...) ?? $this`. The callable return is
+     * `T|null` so a null or void callback leaves only `$this`.
+     * Each callable is declared with and without the `bool` parameter because Psalm rejects a non-closure
+     * callable with fewer params than the declared one (UnionTypeComparator arity rule). Caveat: the
+     * single-param arm also accepts a callable with an optional non-bool 2nd param, which Laravel then
+     * calls with a bool. That arm is listed first on purpose: the order decides which issue type Psalm
+     * reports for a mismatched 2nd param (InvalidArgument, not InvalidScalarArgument).
+     *
+     * @template TWhenEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TWhenEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenEmptyReturnType|null))|null  $default
+     * @return (TWhenEmptyReturnType is void ? $this : (TWhenEmptyReturnType is null ? $this : $this|TWhenEmptyReturnType))
+     */
+    public function whenEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TWhenNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TWhenNotEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TWhenNotEmptyReturnType|null))|null  $default
+     * @return (TWhenNotEmptyReturnType is void ? $this : (TWhenNotEmptyReturnType is null ? $this : $this|TWhenNotEmptyReturnType))
+     */
+    public function whenNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TUnlessEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessEmptyReturnType|null))|null  $default
+     * @return (TUnlessEmptyReturnType is void ? $this : (TUnlessEmptyReturnType is null ? $this : $this|TUnlessEmptyReturnType))
+     */
+    public function unlessEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
+     * @template TUnlessNotEmptyReturnType
+     *
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))  $callback
+     * @param  (callable(\Illuminate\Support\Collection<TKey, TValue>): (TUnlessNotEmptyReturnType|null))|(callable(\Illuminate\Support\Collection<TKey, TValue>, bool): (TUnlessNotEmptyReturnType|null))|null  $default
+     * @return (TUnlessNotEmptyReturnType is void ? $this : (TUnlessNotEmptyReturnType is null ? $this : $this|TUnlessNotEmptyReturnType))
+     */
+    public function unlessNotEmpty(callable $callback, ?callable $default = null) {}
+
+    /**
      * Get the sum of the given values.
      *
-     * At runtime, the accumulator starts at 0 and uses the + operator,
-     * so the result is always int|float (non-numeric values throw TypeError).
-     *
-     * When called without arguments, the return type narrows based on TValue:
-     * - Collection<_, int>::sum() → int (matches array_sum behavior for int arrays)
-     * - Collection<_, float>::sum() → float
+     * At runtime, the accumulator starts at int 0 and adds with the + operator, so the result is
+     * always int|float (a non-numeric string throws TypeError, a numeric string is added as a number)
+     * and an empty collection yields int 0 whatever the item type. Only an int source narrows:
+     * - Collection<_, int>::sum() → int
+     * - Collection<_, float>::sum() → int|float (empty collection)
      * - Otherwise → int|float
      *
-     * @template TCallbackReturn of int|float
+     * The callback is called with the item only on every 12.x release; 13.x also passes the key
+     * (`stubs/13/`).
      *
-     * @param  (callable(TValue, TKey): TCallbackReturn)|string|null  $callback
+     * @template TCallbackReturn of int|float|numeric-string
+     *
+     * @param  (callable(TValue): TCallbackReturn)|string|null  $callback
      * @return ($callback is null
-     *  ? (TValue is int ? int : (TValue is float ? float : int|float))
-     *  : ($callback is string ? int|float : TCallbackReturn)
+     *  ? (TValue is int ? int : int|float)
+     *  : ($callback is string ? int|float : (TCallbackReturn is int ? int : int|float))
      * )
      */
     public function sum($callback = null) {}
+
+    /**
+     * Pad collection to the specified length with a value.
+     *
+     * array_pad() keeps string keys and renumbers int keys, so the key type is `TKey|int`
+     * (Laravel's docblock declares `int`).
+     *
+     * @template TPadValue
+     *
+     * @param  int  $size
+     * @param  TPadValue  $value
+     * @return static<TKey|int, TValue|TPadValue>
+     */
+    public function pad($size, $value) {}
 
     /**
      * Determine if an item exists in the collection by key.
@@ -322,6 +529,42 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * @psalm-variadic
      */
     public function has($key) {}
+
+    /**
+     * Determine if any of the keys exist in the collection.
+     *
+     * Accepts an array of keys or variadic key arguments via func_get_args().
+     *
+     * @param  TKey|array<array-key, TKey>  $key
+     * @return bool
+     *
+     * @psalm-variadic
+     */
+    public function hasAny($key) {}
+
+    /**
+     * Get all items except for those with the specified keys.
+     *
+     * Accepts an array/Enumerable of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \Illuminate\Support\Enumerable<array-key, TKey>|array<array-key, TKey>|string  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function except($keys) {}
+
+    /**
+     * Get the items with the specified keys.
+     *
+     * Accepts an array/Enumerable of keys or variadic key arguments via func_get_args().
+     *
+     * @param  \Illuminate\Support\Enumerable<array-key, TKey>|array<array-key, TKey>|string|null  $keys
+     * @return static
+     *
+     * @psalm-variadic
+     */
+    public function only($keys) {}
 
     /**
      * Determine if an item is not contained in the collection.
@@ -358,11 +601,12 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Zip the collection together with one or more arrays.
      *
      * Accepts variadic iterables via func_get_args().
+     * array_map() pads the shorter side with null.
      *
      * @template TZipValue
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, TZipValue>|iterable<array-key, TZipValue>  $items
-     * @return static<int, static<int, TValue|TZipValue>>
+     * @return static<int, static<int, TValue|TZipValue|null>>
      *
      * @psalm-variadic
      */

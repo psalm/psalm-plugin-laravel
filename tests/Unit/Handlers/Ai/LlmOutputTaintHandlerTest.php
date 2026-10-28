@@ -23,11 +23,9 @@ use Psalm\Type;
 use Psalm\Type\Union;
 
 /**
- * Unit-level coverage for the early-exit gates and class matching in
- * {@see LlmOutputTaintHandler}. End-to-end taint propagation is covered by
- * the PHPT suite under `tests/Type/tests/PromptInjection/`, which needs a
- * real Psalm analyzer; these tests intentionally exercise only the cheap
- * branches that decide whether to call `Codebase::addTaintSource()` at all.
+ * Early-exit gates of {@see LlmOutputTaintHandler}. Which classes resolve
+ * to a source, and the taint flow itself, need a real Psalm analyzer and are
+ * covered by the PHPT suite under `tests/Type/tests/PromptInjection/`.
  */
 #[CoversClass(LlmOutputTaintHandler::class)]
 final class LlmOutputTaintHandlerTest extends TestCase
@@ -46,20 +44,7 @@ final class LlmOutputTaintHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_returns_null_for_non_property_fetch_expression(): void
-    {
-        $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
-        $event = $this->createEvent(
-            expr: new Variable('response'),
-            codebase: $codebase,
-            varType: Type::getString(),
-        );
-
-        $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));
-    }
-
-    #[Test]
-    public function it_returns_null_when_property_name_is_not_text(): void
+    public function it_returns_null_for_properties_that_do_not_hold_model_output(): void
     {
         $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
         $event = $this->createEvent(
@@ -69,25 +54,6 @@ final class LlmOutputTaintHandlerTest extends TestCase
         );
 
         $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));
-    }
-
-    #[Test]
-    public function it_lists_all_known_response_classes(): void
-    {
-        $taintedClasses = $this->taintedProperties()['text'] ?? [];
-
-        $this->assertContains('Laravel\\Ai\\Responses\\TextResponse', $taintedClasses);
-        $this->assertContains('Laravel\\Ai\\Responses\\AgentResponse', $taintedClasses);
-        // StreamedAgentResponse extends AgentResponse but is named explicitly to
-        // short-circuit the `classExtendsOrImplements()` walk on a common type.
-        $this->assertContains('Laravel\\Ai\\Responses\\StreamedAgentResponse', $taintedClasses);
-        // StreamableAgentResponse is a separate hierarchy that exposes `$text`
-        // only after the stream completes — has to be listed explicitly because
-        // it does not extend TextResponse upstream.
-        $this->assertContains('Laravel\\Ai\\Responses\\StreamableAgentResponse', $taintedClasses);
-        // TranscriptionResponse is a third hierarchy: a transcript of user-supplied
-        // audio is attacker-authored text that a speech model re-typed.
-        $this->assertContains('Laravel\\Ai\\Responses\\TranscriptionResponse', $taintedClasses);
     }
 
     #[Test]
@@ -109,29 +75,19 @@ final class LlmOutputTaintHandlerTest extends TestCase
     }
 
     #[Test]
-    public function it_scopes_the_structured_payload_to_the_structured_responses(): void
+    public function it_returns_null_when_the_receiver_type_is_unknown_or_not_an_object(): void
     {
-        // Not a cross-product with the $text class list: only these two declare
-        // $structured, and tainting the property on a class that does not have it
-        // would source whatever a user subclass happens to name the same way.
-        $this->assertSame([
-            'Laravel\\Ai\\Responses\\StructuredAgentResponse',
-            'Laravel\\Ai\\Responses\\StructuredTextResponse',
-        ], $this->taintedProperties()['structured'] ?? []);
-    }
+        $codebase = $this->createCodebase(taintFlowGraph: new TaintFlowGraph());
 
-    #[Test]
-    public function it_only_taints_the_known_payload_properties(): void
-    {
-        $this->assertSame(['text', 'structured'], array_keys($this->taintedProperties()));
-    }
+        foreach ([null, Type::getString()] as $varType) {
+            $event = $this->createEvent(
+                expr: $this->propertyFetch('text'),
+                codebase: $codebase,
+                varType: $varType,
+            );
 
-    /** @return array<string, list<string>> */
-    private function taintedProperties(): array
-    {
-        $reflection = new \ReflectionClass(LlmOutputTaintHandler::class);
-
-        return $reflection->getReflectionConstant('TAINTED_PROPERTIES')?->getValue() ?? [];
+            $this->assertNull(LlmOutputTaintHandler::afterExpressionAnalysis($event));
+        }
     }
 
     private function propertyFetch(string $propertyName): PropertyFetch

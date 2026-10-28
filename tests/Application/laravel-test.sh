@@ -16,13 +16,6 @@ set -u
 # See https://github.com/laravel/laravel/tags for Laravel versions
 LARAVEL_INSTALLER_VERSION="${LARAVEL_INSTALLER_VERSION:-dev-master}"
 
-# Optional Composer constraint applied to laravel/framework after the project is scaffolded.
-# Empty means whatever laravel/laravel resolves. Set it to hold the framework back when a
-# release breaks the analysis itself rather than the plugin. Currently set by the workflow to
-# dodge the Psalm scan-phase crash on laravel/framework >= 13.32.
-# @see https://github.com/vimeo/psalm/issues/11958
-LARAVEL_FRAMEWORK_CONSTRAINT="${LARAVEL_FRAMEWORK_CONSTRAINT:-}"
-
 # Terminal colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -50,7 +43,6 @@ Options:
 
 Environment variables:
     LARAVEL_INSTALLER_VERSION    Laravel version to install (default: 12.12.2)
-    LARAVEL_FRAMEWORK_CONSTRAINT Composer constraint forced on laravel/framework (default: none)
     COMPOSER_MEMORY_LIMIT        Memory limit for Composer (default: -1)
 EOF
 }
@@ -184,14 +176,6 @@ quiet_run "composer create-project" \
         laravel/laravel "$APP_INSTALLATION_PATH" "$LARAVEL_INSTALLER_VERSION"
 cd "$APP_INSTALLATION_PATH"
 
-# @see https://github.com/vimeo/psalm/issues/11958
-if [ -n "$LARAVEL_FRAMEWORK_CONSTRAINT" ]; then
-    info "Forcing laravel/framework:${LARAVEL_FRAMEWORK_CONSTRAINT}"
-    quiet_run "composer require laravel/framework" \
-        composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n -W \
-            "laravel/framework:${LARAVEL_FRAMEWORK_CONSTRAINT}"
-fi
-
 info "Generating example Laravel classes for analysis"
 # Invoke every generator inside a single bootstrapped Laravel process — spawning
 # ~30 separate `./artisan` invocations is ~16× slower (~10s vs ~0.6s locally).
@@ -261,17 +245,18 @@ quiet_run "composer require psalm/plugin-laravel" \
         "psalm/plugin-laravel:*" --update-with-all-dependencies
 
 # Install laravel/ai so the integration stubs are loaded under real reflection.
-# The plugin gates its laravel-ai stubs on `InstalledVersions::satisfies('>=0.11.0 <1.0.0')`,
-# so without this install the application-level integration tests would silently
-# skip the entire laravel/ai surface — including the next-release drift detector
-# (a stub method signature that no longer matches the real source surfaces as a
-# real Psalm error here before it ships).
+# The plugin gates its laravel-ai stubs on `InstalledVersions::satisfies('>=1.0.0 <2.0.0')`:
+# 1.0.0 is the supported floor and the ceiling stays below 2.0, since that major
+# is unsupported and has no CI coverage. Without
+# this install, the application-level integration tests would silently skip the
+# entire laravel/ai surface; native-signature drift is checked separately by the
+# dedicated parity leg in tests.yml.
 # laravel/ai requires PHP ^8.3 on every released version; skip on the PHP 8.2 leg
 # rather than fail the whole app-test job over an optional integration.
 if php -r 'exit(version_compare(PHP_VERSION, "8.3.0", "<") ? 1 : 0);'; then
     quiet_run "composer require laravel/ai" \
         composer require ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} --no-ansi -n \
-            "laravel/ai:>=0.11.0 <1.0.0"
+            "laravel/ai:>=1.0.0 <2.0.0"
 else
     info "Skipping laravel/ai install: requires PHP >=8.3, running $(php -r 'echo PHP_VERSION;')"
 fi
@@ -289,6 +274,43 @@ else
     # below only runs on success.
     info "Running: ./vendor/bin/psalm --config=\"$PSALM_CONFIG\""
     ./vendor/bin/psalm --config="$PSALM_CONFIG" --use-baseline="$PSALM_BASELINE" --no-progress --no-suggestions --output-format=compact
+
+    # `psalm-laravel blade:annotate` (#1524), end to end from a real project root: it is the only
+    # caller of the control-file child process, and the only step that proves
+    # the shipped binary reaches it. Deliberately AFTER the baselined run and against its own
+    # Blade-enabled config, so neither the fixture below nor the compiled shadows touch the baseline.
+    info "Running: ./vendor/bin/psalm-laravel blade:annotate"
+    cat > resources/views/annotate-target.blade.php <<'BLADE'
+<h1>{{ $heading }}</h1>
+BLADE
+    mkdir -p app/Blade
+    cat > app/Blade/AnnotateTarget.php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App\Blade;
+
+use Illuminate\Contracts\View\View;
+
+final class AnnotateTarget
+{
+    public function render(): View
+    {
+        return view('annotate-target', ['heading' => 'Hello']);
+    }
+}
+PHP
+    # No --no-progress on purpose: that flag installs a progress implementation that discards the
+    # plugin's warnings, and a Blade boot that degraded is exactly what this step needs to see.
+    ./vendor/bin/psalm-laravel blade:annotate --config="../../tests/Application/laravel-test-psalm-blade.xml"
+
+    # The annotator writes a native docblock block (`<?php /** * @var T $x */ ?>`), one `@var` per line.
+    if ! grep -qxF ' * @var string $heading' resources/views/annotate-target.blade.php; then
+        cat resources/views/annotate-target.blade.php
+        error "blade:annotate did not declare \$heading in resources/views/annotate-target.blade.php"
+    fi
+    info "blade:annotate declared \$heading from its view() call site"
 fi
 
 info "Fresh Laravel app test is completed"

@@ -10,10 +10,20 @@ To go deeper with PHPT syntax, please check [PHPT](https://qa.php.net/phpt_detai
 
 - When asserting error output, use `--EXPECTF--` (not `--EXPECT--`) with `%d` for line numbers (e.g., `ErrorType on line %d: message`).
   This prevents tests from breaking when lines shift due to unrelated edits.
-- A test that needs taint analysis or a non-default config declares an `--ARGS--` section before `--FILE--`,
-  e.g. `--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis`, or one of the alternate
-  `tests/Type/psalm-*.xml` configs. Without it the test runs under plain defaults, where a negative
+- A test that needs taint analysis or a non-default config declares an `--ARGS--` section before `--FILE--`:
+  `--no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1` for taint, or
+  `--no-progress --no-diff --config=./tests/Type/psalm-with-optin-custom-issues.xml` for opt-in rules and the other
+  non-default plugin settings. Without it the test runs under plain defaults, where a negative
   (empty-`--EXPECTF--`) taint or opt-in-rule test passes vacuously.
+- Every distinct `--ARGS--` string (and every `--CONFLICTS--` fixture) is its own Psalm process, and each one pays a
+  full Laravel boot (about 8 seconds of CPU, which dominates a small CI runner). Copy one of the two strings above
+  verbatim instead of inventing a variant, and add a setting to `psalm-with-optin-custom-issues.xml` rather than
+  creating another `psalm-*.xml`. `--threads=1` is shared by every taint fixture because Psalm's parallel workers
+  can drop cross-method taint edges when they merge their graphs.
+- A phpt that needs `laravel/ai` runs only in the laravel/ai CI jobs, which select it with `LARAVEL_AI_PHPT_FILTER` in
+  `.github/workflows/tests.yml` (currently the `PromptInjection/` directory plus `Collection/TextResponseCollectionTypesTest`).
+  The main type cells skip it because `laravel/ai` is not installed there. Add a new laravel/ai phpt outside
+  `PromptInjection/` to that filter, otherwise it runs nowhere.
 
 ### `--EXPECTF--` format specifiers
 

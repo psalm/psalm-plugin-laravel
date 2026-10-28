@@ -1,0 +1,981 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Psalm\LaravelPlugin\Blade;
+
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Container\Container;
+use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\Factory;
+use Illuminate\View\FileViewFinder;
+use Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer;
+use Psalm\LaravelPlugin\Internal\VendorDirectory;
+use Psalm\Progress\Progress;
+use Psalm\Progress\VoidProgress;
+
+/**
+ * Compiles every Blade template of the analyzed application into a shadow PHP file and hands both
+ * sides to Psalm: the shadow for analysis, the template for reporting.
+ *
+ * Must run synchronously inside the plugin entry point. Shadows can only join the analysis while
+ * `Config::initializePlugins()` is on the stack, before Psalm starts scanning.
+ *
+ * Nothing here throws. Every failure disables Blade analysis for the run with one warning naming
+ * the cause, recorded in {@see disabled()} so the caller can escalate it under `failOnInternalError`.
+ *
+ * @internal
+ */
+final class BladeBootstrapper
+{
+    /** Templates named in the aggregated skip warning before it degrades to a count. */
+    private const FAILURES_TO_NAME = 3;
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function __construct(
+        private readonly Container $app,
+        private readonly ShadowRegistrar $registrar,
+        private readonly Progress $output,
+        private readonly string $shadowDir,
+        /** UnusedViewData's read sets: two extra AST walks per template. The plugin always collects them. */
+        private readonly bool $collectDataIncludes = false,
+        /** The caller escalates a disable, so the warning is left to that one report. */
+        private readonly bool $failOnInternalError = false,
+        /**
+         * Test seam: vendor dir for the hint-root filter and the project root of listed inputs. Null derives it from
+         * laravel/framework's install path (the plugin's own vendor, in a unit test).
+         */
+        private readonly ?string $vendorDirOverride = null,
+    ) {}
+
+    /** Kept for name-ownership checks against namespaces that lost a root to the vendor filter. */
+    private ?FileViewFinder $finder = null;
+
+    /**
+     * Buffered, not written to the registries directly: a degraded run must leave them empty
+     * (#1518). Registries keep their own lowest-root-index-wins precedence.
+     *
+     * @var list<array{0: string, 1: int, 2: string}> view name, view root index, template path
+     */
+    private array $pendingTemplates = [];
+
+    /** @var list<array{0: string, 1: int, 2: ViewDataContract, 3: array{0: list<string>, 1: bool}|null}> */
+    private array $pendingContracts = [];
+
+    /** @var array<string, array<string, array{0: int, 1: string}>> template path => variable name => [line, message] */
+    private array $pendingProblems = [];
+
+    /** @var array<string, true> lowercased classes a compiled `<x-…>` tag renders, see {@see ComponentTagCollector} */
+    private array $tagRenderedClasses = [];
+
+    /** @var array<string, true> literal named-slot names any compiled template passes */
+    private array $namedSlots = [];
+
+    /** @var array<array-key, true> view names a compiled template renders by name (`@include`, `@each`, …) */
+    private array $viewsRenderedByName = [];
+
+    /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error], reported once the run activates */
+    private array $compileFailures = [];
+
+    private ?BladeDisabledException $disabled = null;
+
+    /** Why boot() disabled Blade analysis, chaining the crash behind it; null when it activated or merely found nothing to analyze. */
+    public function disabled(): ?BladeDisabledException
+    {
+        return $this->disabled;
+    }
+
+    /** @return bool whether shadows joined the analysis; false means Blade analysis is off for the run */
+    public function boot(): bool
+    {
+        try {
+            return $this->run();
+        } catch (\Throwable $throwable) {
+            $this->degrade($throwable::class . ': ' . $throwable->getMessage(), $throwable);
+
+            return false;
+        }
+    }
+
+    private function run(): bool
+    {
+        $compiler = $this->resolveCompiler();
+
+        if (!$compiler instanceof BladeCompiler) {
+            return false;
+        }
+
+        $this->disableBlaze();
+
+        $viewPaths = $this->resolveViewPaths();
+
+        if ($viewPaths === null) {
+            return false;
+        }
+
+        // Shared with compileAll()'s findTemplates() call below: both must enumerate from the
+        // SAME case-collapsed roots that registerContract()/ViewName::resolve() match against.
+        $roots = $this->resolveRoots($viewPaths);
+
+        /** @var array<string, string> $failures template path => reason */
+        $failures = [];
+        $templates = $this->findTemplates($roots, $failures);
+
+        if ($templates === [] && $failures === []) {
+            // Not a failure (an API-only app is normal), but the shape of #1497, a real view tree
+            // that discovered nothing. Unlike a disable, VoidProgress (--no-progress) drops it.
+            $this->output->warning(
+                'Laravel plugin: Blade template analysis is enabled, but no Blade templates were discovered.',
+            );
+        }
+
+        // An incomplete scan can hide templates still on disk; pruning is only safe once
+        // discovery is known-complete, or a transient read failure deletes live shadows.
+        $templatesFullyDiscovered = $failures === [];
+
+        // A run with no templates still has to reach prune() below, or a template deleted since
+        // the last run leaves its shadow and manifest entry behind forever.
+        $shadowDir = $this->prepareShadowDir();
+
+        if ($shadowDir === null) {
+            $this->reportFailures($failures);
+
+            return false;
+        }
+
+        [$environmentHash, $trustedEnvironment, $untrustedInputs] = CompilerEnvironment::describe($compiler);
+
+        if (!$trustedEnvironment) {
+            $this->reportUntrustedEnvironment($untrustedInputs);
+        }
+
+        $manifest = new ShadowManifest($shadowDir, $environmentHash);
+        $manifest->load();
+
+        $shadows = $this->compileAll(new ShadowCompiler($compiler), $manifest, $templates, $roots, $failures, $trustedEnvironment);
+
+        if ($templatesFullyDiscovered) {
+            $manifest->prune($templates);
+        }
+
+        $manifest->flush();
+
+        if ($shadows === []) {
+            // Nothing joins the analysis and no template fact is published, but a compile failure
+            // still gets its issue: an app whose every template fails would otherwise go silent
+            // under --no-progress.
+            $reported = $this->compileFailures !== []
+                && $this->registrar->markTemplatesReportable(\array_keys($this->compileFailures));
+
+            if ($reported) {
+                $this->reportCompileFailures();
+            }
+
+            $this->reportFailures($failures, $reported ? $this->compileFailures : []);
+
+            // Unreadable view roots and nothing found elsewhere: the user asked for Blade and got none of it.
+            if ($templates === [] && $failures !== []) {
+                $this->degrade(
+                    'no Blade template was discovered and ' . \count($failures) . ' view director'
+                    . (\count($failures) === 1 ? 'y' : 'ies') . ' could not be read ('
+                    . \implode(', ', \array_slice(\array_keys($failures), 0, self::FAILURES_TO_NAME))
+                    . (\count($failures) > self::FAILURES_TO_NAME ? ', ...' : '') . ')',
+                );
+            }
+
+            return false;
+        }
+
+        // The run is about to activate and report each compile failure as an issue, so the warning
+        // keeps only the rest. If activation fails after all, the degradation warning covers every
+        // template.
+        $this->reportFailures($failures, $this->compileFailures);
+
+        // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry.
+        // Config::reportIssueInFile() consults only this project-file list.
+        if (!$this->registrar->markTemplatesReportable($templates)) {
+            $this->degrade(
+                "issues found in Blade templates could not be made reportable (Psalm's internal project-file "
+                . 'list is not writable on this Psalm version)',
+            );
+
+            return false;
+        }
+
+        // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
+        // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
+        // (which skips ShadowCompiler) still gets them. Composer classes ride along: nothing
+        // references one in code position, yet the key resolver needs their storage.
+        $composerSources = ComposerSourceReader::read($this->viewFactory(), \array_column($this->pendingContracts, 0));
+        $composerClasses = \array_column(\array_merge(...\array_values(\array_filter($composerSources))), 0);
+        $this->registrar->queueClassLikesForScanning([...PreludeBuilder::ambientClassNames(), ...$composerClasses]);
+
+        // #1505: a vendor directive can compile a class name into a string literal, invisible to
+        // Psalm's scanner and the ambient queue above. Read off DISK, not the fresh compile
+        // result, so a warm-manifest run (which skips ShadowCompiler) is covered too. The same
+        // tokens feed the class-component scan (#1804).
+        $collector = new ClassLiteralCollector();
+        $literalCandidates = [];
+
+        foreach ($shadows as $shadowPath) {
+            $shadowSource = @\file_get_contents($shadowPath);
+
+            if ($shadowSource === false) {
+                continue;
+            }
+
+            $tokens = \token_get_all($shadowSource);
+
+            foreach ($collector->collectFromTokens($tokens) as $candidate) {
+                $literalCandidates[$candidate] = true;
+            }
+
+            [$tagClasses, $slotNames, $viewNames] = ComponentTagCollector::collect($tokens);
+
+            foreach ($tagClasses as $tagClass) {
+                $this->tagRenderedClasses[$tagClass] = true;
+            }
+
+            foreach ($slotNames as $slotName) {
+                $this->namedSlots[$slotName] = true;
+            }
+
+            foreach ($viewNames as $viewName) {
+                $this->viewsRenderedByName[$viewName] = true;
+            }
+        }
+
+        $this->registrar->queueResolvableClassLikesForScanning(\array_keys($literalCandidates));
+
+        // Enqueue is the one irreversible step, done last. Remap entries publish in a `finally`:
+        // a partial enqueue that then throws must not leave shadow paths unmapped.
+        try {
+            $this->registrar->registerShadowsForAnalysis(\array_values($shadows));
+        } finally {
+            $this->publishShadowEntries($manifest, $shadows);
+        }
+
+        $this->publishTemplateFacts();
+        ContractRegistry::registerComposerSources($composerSources);
+        $this->reportCompileFailures();
+
+        return true;
+    }
+
+    private function reportCompileFailures(): void
+    {
+        foreach ($this->compileFailures as $templatePath => [$source, $message]) {
+            $this->registrar->reportCompileFailure($templatePath, $source, $message);
+        }
+    }
+
+    /**
+     * @param array<string, string> $shadows template path => shadow path
+     */
+    private function publishShadowEntries(ShadowManifest $manifest, array $shadows): void
+    {
+        foreach ($shadows as $shadowPath) {
+            $entry = $manifest->shadowEntry($shadowPath);
+
+            if ($entry instanceof ShadowEntry) {
+                ShadowRegistry::register($shadowPath, $entry);
+            }
+        }
+    }
+
+    /** @see self::$pendingTemplates for why this is deferred to the end of a successful run */
+    private function publishTemplateFacts(): void
+    {
+        foreach ($this->pendingTemplates as [$viewName, $rootIndex, $templatePath]) {
+            ViewReferenceRegistry::registerTemplate($viewName, $rootIndex, $templatePath);
+        }
+
+        $factory = $this->viewFactory();
+        $shared = ['app' => true] + \array_fill_keys(
+            \array_map(static fn(int|string $name): string => (string) $name, \array_keys($factory?->getShared() ?? [])),
+            true,
+        );
+
+        // A shared name is no contract, so a marker problem on its declaration is not one either.
+        foreach ($this->pendingProblems as $templatePath => $problems) {
+            ContractRegistry::registerProblems($templatePath, \array_diff_key($problems, $shared));
+        }
+
+        foreach ($this->pendingContracts as [$viewName, $rootIndex, $contract, $dataIncludes]) {
+            ContractRegistry::register($viewName, $rootIndex, $this->withoutSharedNames($contract, $shared), $dataIncludes);
+        }
+
+        ComponentViewRegistry::registerTagUsage($this->tagRenderedClasses, $this->namedSlots, $this->viewsRenderedByName);
+    }
+
+    /**
+     * @param list<string>                              $templates
+     * @param list<array{0: string, 1: string|null}>     $roots     resolved, deduped roots in finder
+     *                                                     order, which decides which template wins a
+     *                                                     view name two roots both define
+     * @param array<string, string>                      $failures  template path => reason, appended to
+     * @param bool                                        $trustedEnvironment when false,
+     *                                                     {@see CompilerEnvironment::describe()} could
+     *                                                     not resolve every compiler input, so the
+     *                                                     freshness check is skipped and every template
+     *                                                     recompiles this run regardless of the manifest
+     *
+     * @return array<string, string> template path => shadow path
+     */
+    private function compileAll(
+        ShadowCompiler $compiler,
+        ShadowManifest $manifest,
+        array $templates,
+        array $roots,
+        array &$failures,
+        bool $trustedEnvironment,
+    ): array {
+        $shadows = [];
+        $parser = new ContractParser();
+        $collector = $this->collectDataIncludes ? new ViewReferenceCollector() : null;
+        $requiredSlots = $this->collectDataIncludes ? ShadowManifest::SLOT_DATA_INCLUDES : 0;
+
+        foreach ($templates as $template) {
+            $source = @\file_get_contents($template);
+
+            if ($source === false) {
+                $failures[$template] = 'the template could not be read';
+                $this->claimNameOnly($template, $roots);
+
+                continue;
+            }
+
+            // The relocator re-reads the template later; a prefix derived from stale bytes
+            // silently disables the marker strip (ShadowTarget).
+            ShadowRegistry::registerMarkerPrefix($template, MarkerComment::prefixFor($source));
+
+            if ($trustedEnvironment && $manifest->isFresh($template, $source, $requiredSlots)) {
+                $shadowPath = $manifest->shadowPathFor($template, $source);
+                $shadows[$template] = $shadowPath;
+                $this->registerContract($template, $roots, $manifest->contractFor($shadowPath), $manifest->dataIncludesFor($shadowPath));
+
+                continue;
+            }
+
+            // A `@props` literal default types the body through the prelude: no docblock states it (#1828).
+            $propTypes = [];
+
+            // A contract parse that throws costs its own template, as a compile failure does, never
+            // the whole run (#1848).
+            try {
+                if (\stripos($source, '@props') !== false) {
+                    foreach ($parser->parseDeclarations($source)->vars as $name => $var) {
+                        if ($var->defaultType !== null) {
+                            $propTypes[$name] = $var->defaultType;
+                        }
+                    }
+                }
+            } catch (\Throwable $throwable) {
+                $this->skipUncompiled(CompileFailureReason::fromThrowable($template, $throwable), $source, $roots, $failures);
+
+                continue;
+            }
+
+            $shadow = $compiler->compile($template, $source, $propTypes);
+
+            if ($shadow instanceof CompileFailureReason) {
+                $this->skipUncompiled($shadow, $source, $roots, $failures);
+
+                continue;
+            }
+
+            try {
+                // Built AFTER compile so the read set comes off compiled output.
+                $contract = $this->collectDataIncludes
+                    ? $parser->parseDataContract($source, $shadow->contents)
+                    : $parser->parseDeclarations($source, $shadow->contents);
+
+                // Null (not empty) when the pass is off, so isFresh() can tell "never collected"
+                // from "collected nothing".
+                $dataIncludes = $this->collectDataIncludes ? $collector?->collectDataIncludes($shadow->contents) : null;
+            } catch (\Throwable $throwable) {
+                $this->skipUncompiled(CompileFailureReason::fromThrowable($template, $throwable), $source, $roots, $failures);
+
+                continue;
+            }
+
+            try {
+                $shadowPath = $manifest->store($template, $source, $shadow, $contract, $dataIncludes);
+                $shadows[$template] = $shadowPath;
+                $this->registerContract($template, $roots, $contract, $dataIncludes);
+
+            } catch (\RuntimeException $throwable) {
+                $failures[$template] = $throwable->getMessage();
+                $this->claimNameOnly($template, $roots);
+            }
+        }
+
+        return $shadows;
+    }
+
+    /**
+     * Skips a template this pass could not compile; it is reported as a `BladeCompileError`.
+     *
+     * @param list<array{0: string, 1: string|null}> $roots
+     * @param array<string, string>                  $failures
+     */
+    private function skipUncompiled(CompileFailureReason $error, string $source, array $roots, array &$failures): void
+    {
+        $failures[$error->templatePath] = $error->message;
+        $this->compileFailures[$error->templatePath] = [$source, $error->message];
+        $this->claimNameOnly($error->templatePath, $roots);
+    }
+
+    /**
+     * Realpaths, deduped by (path, namespace): a published override's directory is both the
+     * default root's last segment AND its own hint root, and both names must survive. Callers
+     * pre-canonicalize; this dedups by exact string only.
+     *
+     * @param list<array{0: string, 1: string|null}> $viewPaths
+     *
+     * @return list<array{0: string, 1: string|null}>
+     */
+    private function resolveRoots(array $viewPaths): array
+    {
+        $roots = [];
+        $seen = [];
+
+        foreach ($viewPaths as [$viewPath, $namespace]) {
+            $resolved = \realpath($viewPath);
+
+            if ($resolved === false) {
+                continue;
+            }
+
+            // realpath() preserves a symlink's STORED target casing, which can reintroduce a
+            // mis-cased spelling after canonicalization — canonicalize again.
+            $resolved = PathCaseCanonicalizer::canonicalize($resolved);
+            // Trimming the filesystem root would leave '', which no downstream check survives.
+            $trimmed = \rtrim($resolved, \DIRECTORY_SEPARATOR);
+            $resolved = $trimmed === '' ? $resolved : $trimmed;
+            // "\0" never occurs in a namespace, so a null (default-root) marker cannot collide.
+            $key = ($namespace ?? "\0") . "\0" . $resolved;
+
+            if (isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $roots[] = [$resolved, $namespace];
+        }
+
+        return $roots;
+    }
+
+    /**
+     * Claims a view name with no declarations for a template this pass couldn't process: Laravel
+     * still renders the first root's file, so an unclaimed name would let a same-named template
+     * in a later root wrongly own it.
+     *
+     * @param list<array{0: string, 1: string|null}> $roots
+     */
+    private function claimNameOnly(string $templatePath, array $roots): void
+    {
+        $this->registerContract($templatePath, $roots, new ViewDataContract([], false));
+
+    }
+
+    /**
+     * Registers an empty contract too: skipping it would leave the view name unclaimed for a
+     * same-named template in a LATER root to wrongly own. {@see claimNameOnly()} is the same
+     * idea for a template this pass couldn't process at all.
+     *
+     * @param list<array{0: string, 1: string|null}> $roots
+     * @param array{0: list<string>, 1: bool}|null   $dataIncludes null when the collection pass was off
+     */
+    private function registerContract(
+        string $templatePath,
+        array $roots,
+        ?ViewDataContract $contract,
+        ?array $dataIncludes = null,
+    ): void {
+        foreach ($contract?->vars ?? [] as $name => $var) {
+            // Psalm reads a raw docblock as written, so `string $x = null` types the body `string`
+            // while the call-site check treats the key as `string|null`: say so at the declaration.
+            if ($var->optional && !ContractParser::allowsNull($var->typeString)) {
+                $this->pendingProblems[$templatePath][$name] = [
+                    $var->declarationLine,
+                    "Optional view variable \${$name} is declared with `= null` but its type {$var->typeString} does not include null; write `"
+                    . ContractParser::withNull($var->typeString) . " \${$name} = null`",
+                ];
+            }
+        }
+
+        // A published override's file matches two roots (default-root name AND namespace name);
+        // both must register or one becomes unresolvable.
+        foreach (ViewName::resolve($templatePath, $roots) as [$rootIndex, $viewName]) {
+            if (!$this->templateOwnsName($viewName, $templatePath)) {
+                continue;
+            }
+
+            $this->pendingTemplates[] = [$viewName, $rootIndex, $templatePath];
+
+            if (!$contract instanceof ViewDataContract) {
+                continue;
+            }
+
+            $this->pendingContracts[] = [$viewName, $rootIndex, $contract, $dataIncludes];
+        }
+    }
+
+    /**
+     * Data the framework hands every view (`$app`, whatever a provider `share()`d) is never a
+     * contract: no call site passes it. It stays declared, so a call site that does pass the key is
+     * not reported as unused.
+     *
+     * @param array<string, true> $shared
+     *
+     * @psalm-pure
+     */
+    private function withoutSharedNames(ViewDataContract $contract, array $shared): ViewDataContract
+    {
+        $dropped = \array_intersect_key($contract->vars, $shared);
+
+        if ($dropped === []) {
+            return $contract;
+        }
+
+        return new ViewDataContract(
+            \array_diff_key($contract->vars, $dropped),
+            $contract->propsUnknown,
+            $contract->readVariables,
+            $contract->readsUnknown,
+            $contract->localVariables,
+            [...$contract->rawDeclaredVariables, ...\array_keys($dropped)],
+        );
+    }
+
+    private function viewFactory(): ?Factory
+    {
+        try {
+            return $this->asFactory($this->app->bound('view') ? $this->app->make('view') : null);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function resolveCompiler(): ?BladeCompiler
+    {
+        if (!$this->app->bound('blade.compiler')) {
+            // Normal for a package analyzed through the Testbench fallback without the view
+            // service provider, and for any bootstrap that trims it.
+            $this->degrade("the 'blade.compiler' service is not bound in the analyzed application");
+
+            return null;
+        }
+
+        try {
+            $compiler = $this->asCompiler($this->app->make('blade.compiler'));
+        } catch (\Throwable $throwable) {
+            $this->degrade("resolving the 'blade.compiler' service threw: " . $throwable->getMessage(), $throwable);
+
+            return null;
+        }
+
+        if (!$compiler instanceof BladeCompiler) {
+            $this->degrade("the 'blade.compiler' service is not an " . BladeCompiler::class);
+
+            return null;
+        }
+
+        return $compiler;
+    }
+
+    /**
+     * livewire/blaze's earliest string preparation callback rewrites every `<x-...>` tag into a
+     * `require` of its own compiled function and wraps a Blaze component view in an untyped
+     * function, code the author never wrote (UnresolvableInclude, MissingParamType, an unchecked
+     * `ltrim(ob_get_clean())` per tag). Disabled, the callback returns its input unchanged and Blade
+     * compiles the tags as it does without Blaze, Blaze's own `blaze.enabled = false` behavior.
+     * Runs before any shadow compiles. `BlazeManager` caches both flags on first read (Blaze reads
+     * `isDebugging()` at boot), so the config write alone is not enough: `disable()` and a reset of
+     * the cached debug flag override what the app already read or forced through `Blaze::debug()`.
+     * Fails open: a Blaze that cannot be disabled keeps compiling as the app would.
+     */
+    private function disableBlaze(): void
+    {
+        $manager = 'Livewire\\Blaze\\BlazeManager';
+
+        if (!$this->app->bound($manager)) {
+            return;
+        }
+
+        try {
+            $config = $this->app->bound('config') ? $this->app->make(Repository::class) : null;
+            $config?->set(['blaze.enabled' => false, 'blaze.debug' => false]);
+
+            /** @var object $instance */
+            $instance = $this->app->make($manager);
+
+            if (\method_exists($instance, 'disable')) {
+                \call_user_func([$instance, 'disable']);
+            }
+
+            // Blaze's own booted callback has already cached `isDebugging()` from `blaze.debug`, and a
+            // disabled-but-debugging Blaze still instruments every tag (`compileForDebug()`). No public
+            // setter clears it.
+            if (\property_exists($instance, 'debug')) {
+                (new \ReflectionProperty($instance, 'debug'))->setValue($instance, false);
+            }
+        } catch (\Throwable) {
+            // Blaze stays enabled: its generated code is reported, as before this gate.
+        }
+    }
+
+    /**
+     * View roots paired with namespace (null = default). `getPaths()` roots first — decides which
+     * template wins a shared name — then each namespace's `getHints()` roots in finder order.
+     *
+     * Vendor-directory hint roots are dropped so third-party template diagnostics and annotation
+     * writes stay outside the analyzed project; `getPaths()` roots are never filtered.
+     *
+     * @return list<array{0: string, 1: string|null}>|null
+     */
+    private function resolveViewPaths(): ?array
+    {
+        $finder = $this->resolveFinder();
+
+        if (!$finder instanceof FileViewFinder) {
+            $this->degrade('the view finder could not be resolved to an ' . FileViewFinder::class);
+
+            return null;
+        }
+
+        $roots = [];
+
+        foreach (\array_values($finder->getPaths()) as $path) {
+            $roots[] = [PathCaseCanonicalizer::canonicalize($path), null];
+        }
+
+        $vendorDir = $this->vendorDirectory();
+
+        // FileViewFinder's own docblock says only `array<string, array>`, but addNamespace()
+        // casts to a string list; narrowed here because Psalm cannot see through the cast.
+        /** @psalm-var array<string, list<string>> $hints */
+        $hints = $finder->getHints();
+
+        foreach ($hints as $namespace => $hintPaths) {
+            foreach ($hintPaths as $hint) {
+                // Canonicalized before the vendor check: the same physical root can reach here
+                // twice under different case (a published override's hint vs. its default-root
+                // path, #1552), and realpath() alone won't collapse that on a case-insensitive
+                // filesystem.
+                $hint = PathCaseCanonicalizer::canonicalize($hint);
+
+                if ($vendorDir !== null && $this->isUnderVendorDirectory($hint, $vendorDir)) {
+                    continue;
+                }
+
+                $roots[] = [$hint, $namespace];
+            }
+        }
+
+        $this->finder = $finder;
+
+        return $roots;
+    }
+
+    /**
+     * Whether Laravel would actually resolve the namespaced `$viewName` to `$templatePath`. Hint
+     * root order alone does not say: a vendor root dropped by the filter, or an earlier root's
+     * non-Blade file (`widget.php`), can win the name. A name the finder cannot resolve is not
+     * owned; any other finder failure keeps the claim (fail open).
+     *
+     * Default-root names are not asked: root order decides between Blade files there, and a
+     * non-Blade file shadowing a later root's template is a known residual.
+     */
+    private function templateOwnsName(string $viewName, string $templatePath): bool
+    {
+        if (!\str_contains($viewName, '::') || !$this->finder instanceof FileViewFinder) {
+            return true;
+        }
+
+        try {
+            $winner = \realpath($this->finder->find($viewName));
+        } catch (\InvalidArgumentException) {
+            return false;
+        } catch (\Throwable) {
+            return true;
+        }
+
+        // The finder resolves against its OWN uncanonicalized hints, so its winner needs
+        // canonicalizing too before comparing.
+        return $winner !== false && PathCaseCanonicalizer::canonicalize($winner) === $templatePath;
+    }
+
+    /**
+     * The analyzed project's Composer vendor directory, or the test override. Null when it
+     * cannot be determined — the vendor filter above is then skipped. {@see VendorDirectory} for
+     * why the boundary is the install root, not the substring `vendor`.
+     */
+    private function vendorDirectory(): ?string
+    {
+        $vendorDir = $this->vendorDirOverride ?? VendorDirectory::path();
+
+        if ($vendorDir === null) {
+            return null;
+        }
+
+        // Must match the hints' canonicalization (realpath-then-canonicalize) or a vendor path
+        // whose spelling differs from the on-disk casing fails the prefix test against every hint.
+        $resolved = \realpath($vendorDir);
+
+        return $resolved === false ? $vendorDir : PathCaseCanonicalizer::canonicalize($resolved);
+    }
+
+    private function isUnderVendorDirectory(string $path, string $vendorDir): bool
+    {
+        return VendorDirectory::contains($path, $vendorDir);
+    }
+
+    /**
+     * `ViewServiceProvider::registerViewFinder()` binds `'view.finder'` with `bind()`, not
+     * `singleton()`: a fresh `make('view.finder')` never carries the hints `loadViewsFrom()` added
+     * to the `'view'` Factory's own finder. `'view.finder'` is kept only as a fallback for a boot
+     * with no Factory at all.
+     */
+    private function resolveFinder(): ?FileViewFinder
+    {
+        // Each branch catches on its own: a 'view' closure that throws under the plugin's partial
+        // boot (documented boot shape) must fall through to 'view.finder', not disable the feature.
+        if ($this->app->bound('view')) {
+            try {
+                $finder = $this->asFactoryFinder($this->app->make('view'));
+
+                if ($finder instanceof FileViewFinder) {
+                    return $finder;
+                }
+            } catch (\Throwable $throwable) {
+                $this->output->debug('Laravel plugin: resolving the view factory threw: ' . $throwable->getMessage() . "\n");
+            }
+        }
+
+        if ($this->app->bound('view.finder')) {
+            try {
+                return $this->asFinder($this->app->make('view.finder'));
+            } catch (\Throwable $throwable) {
+                $this->output->debug('Laravel plugin: resolving the view finder threw: ' . $throwable->getMessage() . "\n");
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The container is documented as returning `mixed`, so each binding gets narrowed at exactly
+     * one place instead of assigning `mixed` into a variable first.
+     *
+     * @psalm-pure
+     */
+    private function asCompiler(mixed $resolved): ?BladeCompiler
+    {
+        return $resolved instanceof BladeCompiler ? $resolved : null;
+    }
+
+    /**
+     * @psalm-pure
+     */
+    private function asFinder(mixed $resolved): ?FileViewFinder
+    {
+        return $resolved instanceof FileViewFinder ? $resolved : null;
+    }
+
+    /**
+     * @psalm-pure
+     */
+    private function asFactory(mixed $resolved): ?Factory
+    {
+        return $resolved instanceof Factory ? $resolved : null;
+    }
+
+    /**
+     * @psalm-mutation-free
+     */
+    private function asFactoryFinder(mixed $resolved): ?FileViewFinder
+    {
+        return $resolved instanceof Factory ? $this->asFinder($resolved->getFinder()) : null;
+    }
+
+    /**
+     * Every `*.blade.php` file under the view roots, realpath'd and deduplicated: a path registered
+     * with Psalm has to be the same string Psalm itself would use, and view roots overlap in
+     * applications that add a package path twice.
+     *
+     * @param list<array{0: string, 1: string|null}> $roots    resolved, deduped view roots
+     * @param array<string, string>                  $failures appended to, keyed by the directory
+     *                                                that failed
+     *
+     * @return list<string>
+     */
+    private function findTemplates(array $roots, array &$failures): array
+    {
+        $templates = [];
+
+        foreach ($roots as [$viewPath]) {
+            if (!\is_dir($viewPath)) {
+                // A configured-but-absent view root (a package path, a not-yet-published vendor
+                // directory) is not an error for Laravel either.
+                continue;
+            }
+
+            try {
+                /** @var iterable<\SplFileInfo> $files */
+                $files = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($viewPath, \FilesystemIterator::SKIP_DOTS),
+                );
+
+                foreach ($files as $file) {
+                    if (!$file->isFile() || !\str_ends_with($file->getFilename(), '.blade.php')) {
+                        continue;
+                    }
+
+                    $real = $file->getRealPath();
+
+                    if ($real !== false) {
+                        // getRealPath() can expand a mis-cased symlink target, reintroducing a
+                        // spelling the roots already collapsed — same file, two shadows.
+                        $templates[PathCaseCanonicalizer::canonicalize($real)] = true;
+                    }
+                }
+            } catch (\Throwable $throwable) {
+                $failures[$viewPath] = 'the directory could not be read: ' . $throwable->getMessage();
+            }
+        }
+
+        $templates = \array_keys($templates);
+        \sort($templates);
+
+        return $templates;
+    }
+
+    /**
+     * The shadow directory, created if absent, as an absolute path: a relative `cacheDir` would
+     * otherwise reach Psalm as a relative file path, which nothing downstream of it expects.
+     */
+    private function prepareShadowDir(): ?string
+    {
+        if (!\is_dir($this->shadowDir) && !@\mkdir($this->shadowDir, 0o777, true) && !\is_dir($this->shadowDir)) {
+            $this->degrade("the shadow cache directory '{$this->shadowDir}' could not be created");
+
+            return null;
+        }
+
+        if (!\is_writable($this->shadowDir)) {
+            $this->degrade("the shadow cache directory '{$this->shadowDir}' is not writable");
+
+            return null;
+        }
+
+        $resolved = \realpath($this->shadowDir);
+
+        if ($resolved === false) {
+            $this->degrade("the shadow cache directory '{$this->shadowDir}' could not be resolved");
+
+            return null;
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * One warning for the whole run, however many templates failed: the individual causes go to
+     * `--debug`, because a broken template is a per-template fact and the run-level fact is that
+     * some templates are not covered.
+     *
+     * @param array<string, string> $failures
+     * @param array<string, array{0: string, 1: string}> $reportedAsIssues templates left out of the
+     *        warning, because each is reported as a `BladeCompileError` instead
+     */
+    private function reportFailures(array $failures, array $reportedAsIssues = []): void
+    {
+        foreach ($failures as $path => $reason) {
+            $this->output->debug("Laravel plugin: skipped Blade template '{$path}': {$reason}\n");
+        }
+
+        $failures = \array_diff_key($failures, $reportedAsIssues);
+
+        if ($failures === []) {
+            return;
+        }
+
+        $count = \count($failures);
+        $named = \array_slice(\array_keys($failures), 0, self::FAILURES_TO_NAME);
+        $suffix = $count > \count($named) ? ', ...' : '';
+
+        $this->output->warning(
+            "Laravel plugin: {$count} Blade template(s) were skipped and are not analyzed ("
+            . \implode(', ', $named) . $suffix . '). Run with --debug for the individual causes.',
+        );
+    }
+
+    /**
+     * Debug only: the cost is about a second of recompiling per run and results are unaffected, and on
+     * most apps every input is a vendor package's (Livewire) that the user cannot change anyway.
+     *
+     * @param list<array{input: string, file: ?string}> $inputs
+     */
+    private function reportUntrustedEnvironment(array $inputs): void
+    {
+        $vendorDir = $this->vendorDirectory();
+        $count = \count($inputs);
+        $message = 'Laravel plugin: Blade shadow cache skipped for this run ('
+            . ($count === 0
+                ? 'the compiler environment cannot be fingerprinted'
+                : ($count === 1 ? '1 compiler input cannot' : "{$count} compiler inputs cannot") . ' be fingerprinted')
+            . '): every template is recompiled. Slower only; analysis results are unaffected.';
+
+        foreach ($inputs as ['input' => $input, 'file' => $file]) {
+            $message .= "\n  - {$input}" . ($file === null ? '' : ' in ' . self::displayPath($file, $vendorDir === null ? null : \dirname($vendorDir)));
+        }
+
+        if ($count > 0) {
+            $message .= "\nA callback in your own code restores caching when declared `static fn` / `static function` capturing no objects, "
+                . "or registered as a static method (`[Foo::class, 'bar']`).";
+        }
+
+        $this->output->debug($message . "\n");
+    }
+
+    /**
+     * Relative to the project root, so a path reads `vendor/livewire/...` and `app/...` like Psalm's own
+     * issue paths. A file outside the project, or an unknown root, keeps the path it came with.
+     */
+    public static function displayPath(string $file, ?string $projectRoot): string
+    {
+        if ($projectRoot === null) {
+            return $file;
+        }
+
+        $resolved = \realpath($file);
+        $canonical = PathCaseCanonicalizer::canonicalize($resolved === false ? $file : $resolved);
+        $root = \rtrim($projectRoot, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR;
+
+        return \str_starts_with($canonical, $root) ? \substr($canonical, \strlen($root)) : $file;
+    }
+
+    private function degrade(string $cause, ?\Throwable $previous = null): void
+    {
+        $this->disabled = new BladeDisabledException('Blade template analysis is disabled for this run, because ' . $cause . '.', 0, $previous);
+
+        if ($this->failOnInternalError) {
+            return;
+        }
+
+        $message = 'Laravel plugin: ' . $this->disabled->getMessage();
+        $this->output->warning($message);
+
+        // Blade is opt-in, so a silent disable hides a feature the user asked for; VoidProgress
+        // (--no-progress, CI) drops warnings. Silenced: Psalm turns the notice of a write to a closed
+        // STDERR into an exception, which would skip registering the whole plugin.
+        if ($this->output instanceof VoidProgress && \defined('STDERR')) {
+            @\fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
+        }
+    }
+}

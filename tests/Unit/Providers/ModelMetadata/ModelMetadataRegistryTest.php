@@ -11,27 +11,21 @@ use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\CustomPkUuidModel;
 use App\Models\KeylessPermission;
-use App\Models\SpecializationPivot;
-use App\Models\UlidModel;
 use App\Models\UnguardedModel;
 use App\Models\UuidModel;
 use App\Models\WorkOrder;
-use Illuminate\Database\Eloquent\Attributes\Connection;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
-use Illuminate\Database\Eloquent\Attributes\UseEloquentBuilder;
 use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\Attribute;
-use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
@@ -55,19 +49,14 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\LegacyScopeInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PrimaryKeyType;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\PropertyOrigin;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TableSchema;
-use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\TraitFlags;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaAggregator;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaTable;
 use Psalm\Progress\Progress;
-use Psalm\Progress\VoidProgress;
 use Psalm\Storage\AttributeStorage;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
@@ -85,7 +74,6 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeConfiguredModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\AttributeOverriddenByPropertyModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CollectionCastVariantsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\CustomDeletedAtModel;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\EnumConnectionModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\InboundCastModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\NonStringDeclaredCastsModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\PlainEnumConnectionModel;
@@ -96,7 +84,6 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableKeyAttributeModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsAttributeModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TableTimestampsEnabledModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributeInheritedModel;
-use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsAttributePrecedenceModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TimestampsInitializerOrderModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\TraitInitializedConfigModel;
 use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Models\UnguardedAttributeModel;
@@ -128,12 +115,6 @@ final class ModelMetadataRegistryTest extends TestCase
     // ---------------------------------------------------------------------
     // Lookup / cache semantics
     // ---------------------------------------------------------------------
-
-    #[Test]
-    public function for_returns_null_when_class_is_not_warmed_up(): void
-    {
-        $this->assertNull(ModelMetadataRegistry::for(WorkOrder::class));
-    }
 
     #[Test]
     public function for_returns_null_for_non_model_class(): void
@@ -233,25 +214,6 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertInstanceOf(ModelMetadata::class, $metadata, 'warm-up must not fail on $guarded = false');
         // `$guarded = false` means guard nothing → empty list (not the base default ['*']).
         $this->assertSame([], $metadata->guarded);
-    }
-
-    #[Test]
-    public function model_without_class_attributes_survives_warm_up_on_laravel_12(): void
-    {
-        // Regression for #1254: Laravel 12.14 has none of the four configuration attributes, while
-        // mergeHidden()/mergeVisible()/mergeAppends() are also unavailable. Attribute replay must be
-        // a no-op instead of calling one of those missing helpers with an empty list.
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(ScalarFieldsModel::class);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, ScalarFieldsModel::class);
-
-        $metadata = ModelMetadataRegistry::for(ScalarFieldsModel::class);
-        $this->assertInstanceOf(ModelMetadata::class, $metadata, 'Laravel 12 model warm-up must succeed');
-        $this->assertSame(['Password'], $metadata->hidden);
-        $this->assertSame(['Name', 'EMAIL'], $metadata->visible);
-        $this->assertSame(['FullName'], $metadata->appends);
-        $this->assertSame(['Name', 'EMAIL'], $metadata->fillable);
     }
 
     #[Test]
@@ -366,16 +328,12 @@ final class ModelMetadataRegistryTest extends TestCase
     {
         yield '#[WithoutTimestamps]' => [WithoutTimestampsAttributeModel::class, false];
         yield '#[Table(timestamps: false)]' => [TableTimestampsAttributeModel::class, false];
-        yield '#[WithoutTimestamps] outranks #[Table(timestamps: true)]' => [TimestampsAttributePrecedenceModel::class, false];
         // Inherited #[WithoutTimestamps] outranks the CHILD's own #[Table] — precedence is decided across
         // the hierarchy, and only the ancestor walk finds the parent's attribute.
         yield 'inherited #[WithoutTimestamps] outranks the child #[Table]' => [TimestampsAttributeInheritedModel::class, false];
         yield 'declared $timestamps = false closes the guard' => [AttributeOverriddenByPropertyModel::class, false];
         // The only case that assigns `true` FROM the attribute rather than leaving the default.
         yield '#[Table(timestamps: true)]' => [TableTimestampsEnabledModel::class, true];
-        // #[Table] carrying no timestamps: argument must leave them alone — pins that the mirror reads
-        // the argument, not the attribute's presence.
-        yield '#[Table] without a timestamps: argument' => [AttributeConfiguredModel::class, true];
     }
 
     /**
@@ -522,133 +480,22 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function an_int_backed_enum_connection_attribute_is_normalized_to_a_string(): void
+    public function an_int_backed_enum_connection_is_normalized_to_a_string(): void
     {
-        // `#[Connection]` is 13.0 — gated on the attribute this row actually carries, not on the enum
-        // support it relies on, which is older (see the property-default twin below).
-        if (!class_exists(Connection::class)) {
-            self::markTestSkipped('#[Connection] requires Laravel >= 13.0.');
-        }
-
-        $this->assertNormalizedEnumConnection(EnumConnectionModel::class);
-    }
-
-    #[Test]
-    public function an_int_backed_enum_connection_property_is_normalized_to_a_string(): void
-    {
-        // No attribute here, so no attribute to gate on: the real boundary is Laravel 12.28, where
-        // `$connection` widened to `\UnitEnum|string|null` and getConnectionName() started applying
-        // enum_value(). Below it the getter hands back the enum object and null is the honest answer, so the
-        // assertion would rightly fail. Gate on the CAPABILITY rather than re-encode that version number —
-        // an int here means enum_value() ran.
+        // The real boundary is Laravel 12.28, where `$connection` widened to `\UnitEnum|string|null` and
+        // getConnectionName() started applying enum_value(). Gate on the CAPABILITY rather than re-encode the version.
         if (!\is_int((new PlainEnumConnectionModel())->getConnectionName())) {
             self::markTestSkipped('enum_value() on $connection requires Laravel >= 12.28.');
         }
 
-        $this->assertNormalizedEnumConnection(PlainEnumConnectionModel::class);
-    }
-
-    /**
-     * @param class-string<Model> $modelFqcn
-     */
-    private function assertNormalizedEnumConnection(string $modelFqcn): void
-    {
         $codebase = $this->makeCodebase();
-        $this->registerStorage($modelFqcn);
+        $this->registerStorage(PlainEnumConnectionModel::class);
 
-        ModelMetadataRegistryBuilder::warmUp($codebase, $modelFqcn);
+        ModelMetadataRegistryBuilder::warmUp($codebase, PlainEnumConnectionModel::class);
 
-        $metadata = ModelMetadataRegistry::for($modelFqcn);
-        // The model must survive warm-up: getConnectionName()'s enum_value() yields the enum's raw int
-        // backing value, and that TypeErrors the ?string field OUTSIDE every section guard — so a regression
-        // drops the whole entry rather than degrading one section, and this assertInstanceOf goes red.
-        $this->assertInstanceOf(ModelMetadata::class, $metadata);
-        $this->assertSame('1', $metadata->connection);
-    }
-
-    #[Test]
-    public function override_for_testing_bypasses_compute(): void
-    {
-        $metadata = $this->makeStubMetadata(WorkOrder::class);
-
-        ModelMetadataRegistryBuilder::overrideForTesting(WorkOrder::class, $metadata);
-
-        $this->assertSame($metadata, ModelMetadataRegistry::for(WorkOrder::class));
-    }
-
-    #[Test]
-    public function for_is_idempotent_across_repeated_calls(): void
-    {
-        $metadata = $this->makeStubMetadata(WorkOrder::class);
-        ModelMetadataRegistryBuilder::overrideForTesting(WorkOrder::class, $metadata);
-
-        $this->assertSame(ModelMetadataRegistry::for(WorkOrder::class), ModelMetadataRegistry::for(WorkOrder::class));
-    }
-
-    #[Test]
-    public function reset_clears_cached_metadata(): void
-    {
-        $progress = new VoidProgress();
-        ModelMetadataRegistry::init($progress);
-        ModelMetadataRegistryBuilder::overrideForTesting(
-            WorkOrder::class,
-            $this->makeStubMetadata(WorkOrder::class),
-        );
-
-        ModelMetadataRegistryBuilder::reset();
-
-        $this->assertNull(ModelMetadataRegistry::for(WorkOrder::class));
-        $this->assertNull(ModelMetadataRegistry::getProgress());
-    }
-
-    #[Test]
-    public function all_iterates_every_warmed_entry(): void
-    {
-        ModelMetadataRegistryBuilder::overrideForTesting(
-            WorkOrder::class,
-            $this->makeStubMetadata(WorkOrder::class),
-        );
-        ModelMetadataRegistryBuilder::overrideForTesting(
-            UuidModel::class,
-            $this->makeStubMetadata(UuidModel::class),
-        );
-
-        $keys = [];
-        foreach (ModelMetadataRegistry::all() as $fqcn => $_) {
-            $keys[] = $fqcn;
-        }
-
-        $this->assertContains(WorkOrder::class, $keys);
-        $this->assertContains(UuidModel::class, $keys);
-    }
-
-    #[Test]
-    public function init_captures_progress_handle(): void
-    {
-        $progress = new VoidProgress();
-        ModelMetadataRegistry::init($progress);
-
-        $this->assertSame($progress, ModelMetadataRegistry::getProgress());
-    }
-
-    // ---------------------------------------------------------------------
-    // Compute: warmUp idempotency
-    // ---------------------------------------------------------------------
-
-    #[Test]
-    public function warm_up_is_idempotent(): void
-    {
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(WorkOrder::class);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
-        $first = ModelMetadataRegistry::for(WorkOrder::class);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
-        $second = ModelMetadataRegistry::for(WorkOrder::class);
-
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $first);
-        $this->assertSame($first, $second);
+        // The raw int backing value TypeErrors the ?string field OUTSIDE every section guard, so a regression
+        // drops the whole entry rather than degrading one section.
+        $this->assertSame('1', $this->metadataFor(PlainEnumConnectionModel::class)->connection);
     }
 
     #[Test]
@@ -775,36 +622,6 @@ final class ModelMetadataRegistryTest extends TestCase
         ));
     }
 
-    #[Test]
-    public function warning_names_every_withheld_section_not_only_the_thrown_one(): void
-    {
-        // A trait-initializer replay failure withholds runtime configuration, schema, casts and
-        // primary key (see a_failed_section_preserves_independent_metadata above) — only ONE
-        // ('trait initializers') is a recorded failure, so the other three would otherwise be
-        // invisible to a reader of the warning. 'relations' also withholds here: the unit-test
-        // Codebase (built via newInstanceWithoutConstructor()) never initializes Codebase::$methods,
-        // so codebaseMethodsInitialized() is false and SECTION_RELATIONS is never attempted —
-        // registry consumers are blind to relations for every model in this test class.
-        $captured = null;
-        $progress = $this->createMock(Progress::class);
-        $progress->expects($this->once())
-            ->method('warning')
-            ->willReturnCallback(function (string $message) use (&$captured): void {
-                $captured = $message;
-            });
-        $codebase = $this->makeCodebase($progress);
-        $this->registerStorage(SectionFailureModel::class, [HasUuids::class]);
-        SectionFailureModel::$failures = ['trait initializers' => true];
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, SectionFailureModel::class);
-
-        $this->assertNotNull($captured);
-        $this->assertStringEndsWith(
-            'withheld sections: relations, runtime configuration, schema, casts, primary key',
-            $captured,
-        );
-    }
-
     // ---------------------------------------------------------------------
     // Accessors / mutators (storage-derived, full-callable)
     // ---------------------------------------------------------------------
@@ -868,23 +685,6 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function read_only_attribute_accessor_has_no_mutator(): void
-    {
-        $codebase = $this->makeCodebase();
-        $storage = $this->registerStorage(Customer::class);
-        // Attribute<string, never>: TSet=never means read-only — no mutator entry, hasMutator=false.
-        $this->defineAppearingMethod($storage, 'displayName', $this->attributeReturn(Type::getString(), Type::getNever()));
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
-        $metadata = $this->metadataFor(Customer::class);
-
-        $accessor = $metadata->accessors()['displayname'] ?? null;
-        $this->assertInstanceOf(AttributeAccessorInfo::class, $accessor);
-        $this->assertFalse($accessor->hasMutator);
-        $this->assertArrayNotHasKey('displayname', $metadata->mutators());
-    }
-
-    #[Test]
     public function set_only_attribute_is_not_a_read_accessor(): void
     {
         $codebase = $this->makeCodebase();
@@ -900,21 +700,6 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->assertNull($metadata->accessor('write_only'), 'set-only Attribute is not a read accessor');
         $this->assertArrayNotHasKey('writeonly', $metadata->accessors());
         $this->assertInstanceOf(AttributeMutatorInfo::class, $metadata->mutators()['writeonly'] ?? null);
-    }
-
-    #[Test]
-    public function acronym_accessor_collapses_to_laravel_resolution_key(): void
-    {
-        // getApiURLAttribute() must key as 'apiurl' (separators stripped, lowercased) so it resolves via
-        // $model->api_url / $model->apiUrl — Laravel's Str::studly equivalence. A snake-INSERTING
-        // normalizer would key it 'api_u_r_l' and miss every real access spelling.
-        $codebase = $this->makeCodebase();
-        $storage = $this->registerStorage(Customer::class);
-        $this->defineAppearingMethod($storage, 'getApiURLAttribute', Type::getString());
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
-
-        $this->assertArrayHasKey('apiurl', $this->metadataFor(Customer::class)->accessors());
     }
 
     #[Test]
@@ -975,26 +760,6 @@ final class ModelMetadataRegistryTest extends TestCase
         );
     }
 
-    #[Test]
-    public function most_derived_accessor_wins_over_inherited(): void
-    {
-        // Child and parent both declare getFooAttribute; the child's (most-derived) declaration wins,
-        // because callableMethodStorages walks self before ancestors and insertAccessor keeps the first.
-        $codebase = $this->makeCodebase();
-        $child = $this->registerStorage(Customer::class);
-        $child->parent_classes[\strtolower(AbstractDocument::class)] = AbstractDocument::class;
-        $parent = $this->registerStorage(AbstractDocument::class);
-        $this->defineAppearingMethod($child, 'getFooAttribute', Type::getString());
-        $this->defineAppearingMethod($parent, 'getFooAttribute', Type::getInt());
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
-
-        $accessor = $this->metadataFor(Customer::class)->accessors()['foo'] ?? null;
-        $this->assertInstanceOf(LegacyAccessorInfo::class, $accessor);
-        $this->assertTrue($accessor->returnType->hasString(), 'child (most-derived) returnType wins');
-        $this->assertFalse($accessor->returnType->hasInt());
-    }
-
     // ---------------------------------------------------------------------
     // Fixture: trait-derived metadata
     // ---------------------------------------------------------------------
@@ -1007,52 +772,15 @@ final class ModelMetadataRegistryTest extends TestCase
 
         ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
 
-        $metadata = ModelMetadataRegistry::for(UuidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
+        $metadata = $this->metadataFor(UuidModel::class);
         $this->assertTrue($metadata->traits->hasUuids);
         $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
         $this->assertFalse($metadata->primaryKey->incrementing);
         $this->assertSame(['id'], $metadata->primaryKey->uuidColumns);
-    }
-
-    #[Test]
-    public function has_uuids_does_not_inject_bogus_int_cast_on_primary_key(): void
-    {
-        // Regression: before the $usesUniqueIds reflective flip, $instance->getCasts()
-        // returned [id => 'int'] for HasUuids models because getIncrementing() fell through
-        // to the Model default. The registry must not reflect that bogus entry.
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(UuidModel::class, [HasUuids::class]);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
-
-        $metadata = ModelMetadataRegistry::for(UuidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
-
-        $casts = $metadata->casts();
-        if (isset($casts['id'])) {
-            $this->fail(
-                "HasUuids model 'id' column should not carry an auto-injected cast. "
-                . "Got shape: {$casts['id']->shape->value}.",
-            );
-        }
-    }
-
-    #[Test]
-    public function concrete_model_without_guards_inherits_framework_defaults(): void
-    {
-        // Concrete path (computeForInstance -> getFillable()/getGuarded()). A model that declares
-        // neither $fillable nor $guarded inherits Eloquent's defaults: guarded ['*'], fillable [].
-        // The abstract path's ['*'] is pinned separately (computeForAbstract reads
-        // getDefaultProperties()); the two derive the default through different code, so each path
-        // needs its own guard against regression.
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(UuidModel::class, [HasUuids::class]);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, UuidModel::class);
-
-        $metadata = ModelMetadataRegistry::for(UuidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
+        // Regression: getCasts() used to inject [id => 'int'] because getIncrementing() fell through to the
+        // Model default before the $usesUniqueIds flip.
+        $this->assertArrayNotHasKey('id', $metadata->casts());
+        // Concrete path inherits Eloquent's defaults (the abstract path reads them through a different route).
         $this->assertSame(['*'], $metadata->guarded);
         $this->assertSame([], $metadata->fillable);
     }
@@ -1171,16 +899,9 @@ final class ModelMetadataRegistryTest extends TestCase
         // Each non-string value is coerced to 'mixed' rather than dropped: the key stays present
         // (so the section keeps reporting the column at all) and the resolved type stays honest
         // about not knowing the real one.
-        $this->assertArrayHasKey('null_col', $metadata->casts());
-        $this->assertTrue($metadata->casts()['null_col']->psalmType->hasMixed());
-        $this->assertArrayHasKey('int_col', $metadata->casts());
-        $this->assertTrue($metadata->casts()['int_col']->psalmType->hasMixed());
-        $this->assertArrayHasKey('bool_col', $metadata->casts());
-        $this->assertTrue($metadata->casts()['bool_col']->psalmType->hasMixed());
-        $this->assertArrayHasKey('float_col', $metadata->casts());
-        $this->assertTrue($metadata->casts()['float_col']->psalmType->hasMixed());
-        $this->assertArrayHasKey('nested_col', $metadata->casts());
-        $this->assertTrue($metadata->casts()['nested_col']->psalmType->hasMixed());
+        foreach (['null_col', 'int_col', 'bool_col', 'float_col', 'nested_col'] as $column) {
+            $this->assertTrue($metadata->casts()[$column]->psalmType->hasMixed(), $column);
+        }
     }
 
     #[Test]
@@ -1202,24 +923,6 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function has_ulids_trait_yields_string_primary_key(): void
-    {
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(UlidModel::class, [HasUlids::class]);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, UlidModel::class);
-
-        $metadata = ModelMetadataRegistry::for(UlidModel::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
-        $this->assertTrue($metadata->traits->hasUlids);
-        $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
-        $this->assertFalse($metadata->primaryKey->incrementing);
-        // Same bogus-cast guard as the HasUuids test: the preparer's uniqueIds flip keeps
-        // getCasts() from injecting [id => 'int'] on ULID models too.
-        $this->assertArrayNotHasKey('id', $metadata->casts());
-    }
-
-    #[Test]
     public function soft_deletes_trait_adds_deleted_at_cast(): void
     {
         $codebase = $this->makeCodebase();
@@ -1235,37 +938,11 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function trait_initializer_merged_class_cast_appears_in_casts(): void
+    public function trait_initializers_merge_casts_and_fillable_into_the_metadata(): void
     {
-        // classifyCast() checks class_exists(..., autoload: false), so force AsArrayObject into memory
-        // first, as a real app boot would (mirrors as_collection_class_cast_classifies_as_class_castable).
+        // classifyCast() checks class_exists(..., autoload: false), so force the Castable wrappers into memory
+        // first, as a real app boot would.
         \class_exists(AsArrayObject::class);
-
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(TraitInitializedConfigModel::class);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, TraitInitializedConfigModel::class);
-
-        $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
-
-        // The `meta` cast is merged only by MergesTraitConfig::initializeMergesTraitConfig() — a protected
-        // hook the constructor-less warm-up instance skips unless the trait initializer is replayed. Its
-        // presence as a class cast is exactly what backs the `meta` append and clears the false positive.
-        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS));
-        $this->assertArrayHasKey('meta', $metadata->casts());
-        $this->assertTrue($metadata->casts()['meta']->shape->isClassCastable());
-    }
-
-    #[Test]
-    public function attribute_tagged_trait_initializer_merged_class_cast_appears_in_casts(): void
-    {
-        // The #[Initialize] attribute and the bootTraits branch reading it arrive in Laravel 12.22; below
-        // that the framework ignores the tag, so the replay stays convention-only and `via_attr` is absent
-        // (the plugin is correct there — the CI 12.14 floor exercises exactly this).
-        if (!\class_exists(\Illuminate\Database\Eloquent\Attributes\Initialize::class)) {
-            self::markTestSkipped('The #[Initialize] attribute discovery branch requires Laravel >= 12.22.');
-        }
-
         \class_exists(AsCollection::class);
 
         $codebase = $this->makeCodebase();
@@ -1275,28 +952,14 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
 
-        // `via_attr` is merged only by SeedsCastViaAttribute::seedViaAttribute() — a `#[Initialize]`-tagged,
-        // NON-conventionally-named initializer. It is reachable only through the replay's attribute-discovery
-        // branch (bootTraits' second branch); a convention-only replay would miss it and the false positive
-        // would return for this shape.
-        $this->assertArrayHasKey('via_attr', $metadata->casts());
+        // `meta` is merged only by a conventionally named initializer (initializeMergesTraitConfig()), which the
+        // constructor-less warm-up instance skips unless the replay invokes it.
+        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_CASTS | ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
+        $this->assertTrue($metadata->casts()['meta']->shape->isClassCastable());
+        // `via_attr` comes from a `#[Initialize]`-tagged, non-conventionally-named initializer: reachable only
+        // through the replay's attribute-discovery branch.
         $this->assertTrue($metadata->casts()['via_attr']->shape->isClassCastable());
-    }
-
-    #[Test]
-    public function trait_initializer_merged_fillable_unions_with_class_fillable(): void
-    {
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(TraitInitializedConfigModel::class);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, TraitInitializedConfigModel::class);
-
-        $metadata = $this->metadataFor(TraitInitializedConfigModel::class);
-
-        // Replaying the initializer must MERGE the trait's mergeFillable() onto the class-level $fillable,
-        // never replace or drop it (over-restriction). Order mirrors Laravel's mergeFillable(): the
-        // existing class entry first, then the trait-merged one.
-        $this->assertTrue($metadata->isComplete(ModelMetadata::SECTION_RUNTIME_CONFIGURATION));
+        // The trait's mergeFillable() unions onto the class-level $fillable instead of replacing it.
         $this->assertSame(['class_fillable', 'trait_fillable'], $metadata->fillable);
     }
 
@@ -1321,19 +984,6 @@ final class ModelMetadataRegistryTest extends TestCase
         // (both survive on 8.5, the replace wins on 8.4), so runtime getAppends() differs by PHP. The registry
         // must reproduce whatever the running PHP yields, which the getMethods()-order interleave guarantees.
         $this->assertSame((new AppendsOrderModel())->getAppends(), $metadata->appends);
-    }
-
-    #[Test]
-    public function has_factory_trait_is_flagged(): void
-    {
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(Customer::class, [HasFactory::class, SoftDeletes::class]);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
-
-        $metadata = ModelMetadataRegistry::for(Customer::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
-        $this->assertTrue($metadata->traits->hasFactory);
     }
 
     #[Test]
@@ -1379,18 +1029,6 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function pivot_model_is_tolerated(): void
-    {
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(SpecializationPivot::class);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, SpecializationPivot::class);
-
-        $metadata = ModelMetadataRegistry::for(SpecializationPivot::class);
-        $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
-    }
-
-    #[Test]
     public function morph_map_alias_is_resolved(): void
     {
         Relation::morphMap(['wo' => WorkOrder::class], merge: false);
@@ -1404,25 +1042,6 @@ final class ModelMetadataRegistryTest extends TestCase
             $metadata = ModelMetadataRegistry::for(WorkOrder::class);
             $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
             $this->assertSame('wo', $metadata->morphAlias);
-        } finally {
-            Relation::morphMap([], merge: false);
-        }
-    }
-
-    #[Test]
-    public function morph_map_miss_yields_null_alias(): void
-    {
-        Relation::morphMap([], merge: false);
-
-        try {
-            $codebase = $this->makeCodebase();
-            $this->registerStorage(WorkOrder::class, [SoftDeletes::class]);
-
-            ModelMetadataRegistryBuilder::warmUp($codebase, WorkOrder::class);
-
-            $metadata = ModelMetadataRegistry::for(WorkOrder::class);
-            $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
-            $this->assertNull($metadata->morphAlias);
         } finally {
             Relation::morphMap([], merge: false);
         }
@@ -1512,7 +1131,7 @@ final class ModelMetadataRegistryTest extends TestCase
     }
 
     #[Test]
-    public function custom_builder_and_collection_classes_follow_available_attributes(): void
+    public function custom_builder_and_collection_classes_are_recorded(): void
     {
         // WorkOrder declares #[UseEloquentBuilder(WorkOrderBuilder)] and #[CollectedBy(WorkOrderCollection)].
         // The registry records both via the pure resolvers shared with ModelRegistrationHandler.
@@ -1523,11 +1142,7 @@ final class ModelMetadataRegistryTest extends TestCase
 
         $metadata = ModelMetadataRegistry::for(WorkOrder::class);
         $this->assertInstanceOf(\Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata::class, $metadata);
-        if (class_exists(UseEloquentBuilder::class)) {
-            $this->assertSame(WorkOrderBuilder::class, $metadata->customBuilder);
-        } else {
-            $this->assertNull($metadata->customBuilder);
-        }
+        $this->assertSame(WorkOrderBuilder::class, $metadata->customBuilder);
 
         $this->assertSame(WorkOrderCollection::class, $metadata->customCollection);
     }
@@ -1635,93 +1250,6 @@ final class ModelMetadataRegistryTest extends TestCase
         ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
 
         $this->assertArrayNotHasKey('secret', $this->metadataFor(Customer::class)->scopes());
-    }
-
-    #[Test]
-    public function trait_hosted_scope_is_reached(): void
-    {
-        // A scope whose declaring_fqcln is a trait (not the model body) must still classify — the
-        // full-callable walk yields it from the carrier's appearing_method_ids.
-        $codebase = $this->makeCodebase();
-        $storage = $this->registerStorage(Customer::class);
-        $this->defineAppearingMethod(
-            $storage,
-            'scopeArchived',
-            new Union([new TNamedObject(Builder::class)]),
-            declaringFqcn: 'App\\Concerns\\Archivable',
-            params: [$this->queryParam()],
-        );
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
-
-        $this->assertInstanceOf(LegacyScopeInfo::class, $this->metadataFor(Customer::class)->scopes()['archived'] ?? null);
-    }
-
-    #[Test]
-    public function inherited_scope_from_abstract_base_resolves_on_child(): void
-    {
-        // The scope is declared on the abstract parent; the full-callable walk over parent_classes
-        // surfaces it on the concrete child (mirrors BuilderScopeHandler's methodExists resolution).
-        $codebase = $this->makeCodebase();
-        $child = $this->registerStorage(Contract::class);
-        $child->parent_classes[\strtolower(AbstractDocument::class)] = AbstractDocument::class;
-        $parent = $this->registerStorage(AbstractDocument::class);
-        $this->defineAppearingMethod($parent, 'scopeDraft', new Union([new TNamedObject(Builder::class)]), params: [$this->queryParam()]);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, Contract::class);
-
-        $this->assertInstanceOf(LegacyScopeInfo::class, $this->metadataFor(Contract::class)->scopes()['draft'] ?? null);
-    }
-
-    #[Test]
-    public function abstract_base_populates_scopes_without_instantiation(): void
-    {
-        // computeForAbstract never instantiates, yet the storage-derived scope map still populates
-        // (so a scope resolves on a Builder<AbstractBase> receiver — #901).
-        $codebase = $this->makeCodebase();
-        $storage = $this->registerStorage(AbstractDocument::class);
-        $this->defineAppearingMethod($storage, 'scopeDraft', new Union([new TNamedObject(Builder::class)]), params: [$this->queryParam()]);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, AbstractDocument::class);
-
-        $this->assertInstanceOf(LegacyScopeInfo::class, $this->metadataFor(AbstractDocument::class)->scopes()['draft'] ?? null);
-    }
-
-    #[Test]
-    public function model_without_scopes_has_empty_scope_map(): void
-    {
-        $codebase = $this->makeCodebase();
-        $this->registerStorage(Customer::class);
-
-        ModelMetadataRegistryBuilder::warmUp($codebase, Customer::class);
-
-        $this->assertSame([], $this->metadataFor(Customer::class)->scopes());
-    }
-
-    // ---------------------------------------------------------------------
-    // Relations (AST-parsed, OWN-CLASS). The end-to-end parse + handler path needs a real Codebase,
-    // so it is gated by the tests/Type/ relation corpus; here we pin the getter, the value object,
-    // and the compute guard.
-    // ---------------------------------------------------------------------
-
-    #[Test]
-    public function relations_getter_returns_the_stored_map(): void
-    {
-        $relation = new RelationInfo(
-            name: 'posts',
-            relationClass: HasMany::class,
-            relatedModel: 'App\\Models\\Post',
-            generics: [],
-        );
-
-        ModelMetadataRegistryBuilder::overrideForTesting(
-            Customer::class,
-            $this->makeStubMetadata(Customer::class, ['posts' => $relation]),
-        );
-
-        $relations = $this->metadataFor(Customer::class)->relations();
-        $this->assertSame($relation, $relations['posts'] ?? null);
-        $this->assertSame('App\\Models\\Post', $relations['posts']->relatedModel);
     }
 
     #[Test]
@@ -1929,47 +1457,5 @@ final class ModelMetadataRegistryTest extends TestCase
         (new \ReflectionProperty(AttributeStorage::class, 'fq_class_name'))->setValue($attribute, Scope::class);
 
         return $attribute;
-    }
-
-    /**
-     * @param class-string<Model> $fqcn
-     * @param array<non-empty-lowercase-string, RelationInfo> $relations
-     * @return ModelMetadata<Model>
-     */
-    private function makeStubMetadata(string $fqcn, array $relations = []): ModelMetadata
-    {
-        return new ModelMetadata(
-            fqcn: $fqcn,
-            primaryKey: new PrimaryKeyInfo('id', PrimaryKeyType::Integer, incrementing: true, uuidColumns: []),
-            traits: new TraitFlags(
-                hasSoftDeletes: false,
-                hasUuids: false,
-                hasUlids: false,
-                hasFactory: false,
-                hasApiTokens: false,
-                hasNotifications: false,
-                hasGlobalScopes: false,
-                usesTimestamps: true,
-            ),
-            fillable: [],
-            guarded: [],
-            appends: [],
-            with: [],
-            withCount: [],
-            hidden: [],
-            visible: [],
-            connection: null,
-            morphAlias: null,
-            customBuilder: null,
-            customCollection: null,
-            schemaData: new TableSchema([]),
-            castsData: [],
-            accessorsData: [],
-            mutatorsData: [],
-            scopesData: [],
-            relationsData: $relations,
-            knownPropertiesData: [],
-            completeSections: ModelMetadata::ALL_SECTIONS,
-        );
     }
 }

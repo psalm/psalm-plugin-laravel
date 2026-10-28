@@ -6,15 +6,15 @@ nav_order: 7
 
 # Keeping self-analysis at 100% type coverage
 
-Plugin self-analysis must report `Psalm was able to infer types for 100% of the codebase`. Verify with:
+Plugin self-analysis must report `Psalm was able to infer types for 100% of the codebase`. The Psalm workflow fails a pull request that drops below 100%. Verify locally with:
 
 ```bash
-composer psalm -- --no-progress --no-suggestions --stats 2>&1 | grep -E "mixed\)" | grep -vE '\b0 mixed'
+composer psalm, --no-progress --no-suggestions --stats 2>&1 | grep -E "mixed\)" | grep -vE '\b0 mixed'
 ```
 
 Empty output means 100%. Any printed line names a file with mixed expressions. An empty result also appears when psalm itself failed, so confirm the run succeeded before trusting it.
 
-Psalm's coverage counter fires on mixed expressions, mostly assignments to locals. Closure and function parameters do not count. The patterns below remove the counter honestly, without suppressing anything.
+Psalm's coverage counter fires on mixed expressions, mostly assignments to locals. Closure and function parameters do not count. The patterns below remove the counter without suppressing anything.
 
 ## 1. Inline mixed-returning calls
 
@@ -60,6 +60,75 @@ Use it only when restructuring is impossible, and take the coverage hit delibera
 ## 4. `@psalm-suppress MixedAssignment` is banned
 
 Restructure the code instead. Plugin self-analysis has no baseline file, and none may be introduced (the only baseline in the repo is the Application-fixture snapshot).
+
+## 5. String and array callables in `array_map` count one mixed
+
+On Psalm 7.0.0-rc2, `array_map('strval', $keys)` and `array_map([self::class, 'fmt'], $keys)` each count 1 mixed and report no issue. `ArrayMapReturnTypeProvider` analyzes a synthetic call on an array fetch whose offset is mixed, and suppresses `MixedArrayOffset` but not the counter. Use a typed closure (`array_map(static fn(int|string $key): string => (string) $key, $keys)`) or a first-class callable (`array_map(strval(...), $keys)`), which count nothing.
+
+Worked example: the shared view names in `src/Blade/BladeBootstrapper.php` (#1854).
+
+## 6. Narrow container lookups in a helper, not a local
+
+A mixed argument passed to a `mixed` parameter does not count, so a one-line narrowing helper replaces the local that would hold the mixed value:
+
+```php
+// BAD: counts as 1 mixed (assignment)
+$resolved = $container->make('view');
+
+return $resolved instanceof Factory ? $resolved : null;
+
+// GOOD: no local, no counter
+return $this->asFactory($container->make('view'));
+
+/** @psalm-pure */
+private function asFactory(mixed $resolved): ?Factory
+{
+    return $resolved instanceof Factory ? $resolved : null;
+}
+```
+
+Worked example: `asCompiler()`, `asFinder()` and `asFactory()` in `src/Blade/BladeBootstrapper.php`.
+
+## 7. Narrow a mixed local with `assert()` or an early exit
+
+When the local is needed, `assert()` or an early-exit guard on it removes both the count and the `MixedAssignment` issue. A ternary does not (the BAD example in section 6), and neither does a positive guard:
+
+```php
+// GOOD: no counter
+$x = $container->make('view');
+assert($x instanceof Factory);
+
+// GOOD: no counter
+$x = $container->make('view');
+if (!$x instanceof Factory) {
+    return null;
+}
+
+// BAD: counts as 1 mixed, plus MixedAssignment (the positive guard narrows only inside its branch)
+$x = $container->make('view');
+if ($x instanceof Factory) {
+    return $x;
+}
+
+return null;
+```
+
+## 8. Locate the expression Psalm counts
+
+`--stats` prints only per-file counts. To find the lines, back up `vendor/vimeo/psalm/src/Psalm/Internal/Codebase/Analyzer.php` and add this at the top of `incrementMixedCount()` (Psalm 7.0.0-rc2):
+
+```php
+foreach (debug_backtrace() as $frame) {
+    foreach ($frame['args'] ?? [] as $arg) {
+        if ($arg instanceof \PhpParser\Node) {
+            file_put_contents('/tmp/mixed.log', $file_path . ':' . $arg->getStartLine() . "\n", FILE_APPEND);
+            break 2;
+        }
+    }
+}
+```
+
+Run `vendor/bin/psalm --no-cache --threads=1 --no-progress --stats <file>` on a file `--stats` names, then read the log (a file, because forked workers swallow stdout). It lists every increment, so a line that `assert()` or a guard removes again (section 7) shows up too. Restore the backup afterwards.
 
 ## Trade-off: try/catch boundaries
 

@@ -21,18 +21,14 @@ use Illuminate\Support\LazyCollection;
  *  - `random(int, bool)` compiles without TooManyArguments — the `$preserveKeys`
  *    second parameter was missing from the stub.
  *
- * NOT covered here: the conditional return type `($number is null ? TValue :
- * static<int, TValue>)` does not currently narrow correctly when `$number` is
- * non-null. That is tracked separately in
- * https://github.com/psalm/psalm-plugin-laravel/issues/903 and is out of scope
- * for this stub-signature fix.
+ * Non-null `$number` (int or callable) returns `static<int, TValue>`, not the `TValue`
+ * branch (#903, vimeo/psalm#11837).
  *
- * Also covers (#1149): the same no-arg narrowing on the `Enumerable` interface
+ * Also covers (#1149): the same conditional on the `Enumerable` interface
  * and `LazyCollection` receivers, which previously fell back to Laravel's
  * reflected `static<int, TValue>|TValue` union. Receivers are bare `Enumerable`/
  * `LazyCollection` (via `@param`) so calls route to those stubs, not Collection.
- * Asserted only for the no-arg branch (the headline fix); the non-null branch is
- * the #903 limitation noted above. `LazyCollection::random` also carries the
+ * `LazyCollection::random` also carries the
  * `$preserveKeys` second parameter (Enumerable's does not) — guarded below.
  */
 final class CollectionRandomTest
@@ -110,6 +106,58 @@ final class CollectionRandomTest
     public function lazyCollectionRandomWithPreserveKeys(LazyCollection $items): void
     {
         $items->random(3, true);
+    }
+
+    /**
+     * Non-null `$number` returns a collection keyed by int, on every receiver.
+     *
+     * @param  BaseCollection<string, Customer>  $base
+     * @param  LazyCollection<string, Customer>  $lazy
+     * @param  Enumerable<string, Customer>  $enumerable
+     */
+    public function randomWithNumberReturnsCollection(BaseCollection $base, LazyCollection $lazy, Enumerable $enumerable): void
+    {
+        $_fromInt = $base->random(2);
+        /** @psalm-check-type-exact $_fromInt = BaseCollection<int, Customer>&static */
+
+        $_fromCallable = $base->random(static fn (BaseCollection $items): int => $items->count());
+        /** @psalm-check-type-exact $_fromCallable = BaseCollection<int, Customer>&static */
+
+        $_single = $base->random();
+        /** @psalm-check-type-exact $_single = Customer */
+
+        $_lazyMany = $lazy->random(2);
+        /** @psalm-check-type-exact $_lazyMany = LazyCollection<int, Customer>&static */
+
+        $_enumerableMany = $enumerable->random(2);
+        /** @psalm-check-type-exact $_enumerableMany = Enumerable<int, Customer>&static */
+
+        $_eloquentMany = $this->getCustomers()->random(2);
+        /** @psalm-check-type-exact $_eloquentMany = EloquentCollection<int, Customer>&static */
+    }
+
+    /**
+     * `$preserveKeys = true` keeps the source keys; a plain bool yields both shapes.
+     *
+     * @param  BaseCollection<string, Customer>  $base
+     * @param  LazyCollection<string, Customer>  $lazy
+     */
+    public function randomPreserveKeys(BaseCollection $base, LazyCollection $lazy, bool $flag): void
+    {
+        $_preserved = $base->random(2, true);
+        /** @psalm-check-type-exact $_preserved = BaseCollection<string, Customer>&static */
+
+        $_notPreserved = $base->random(2, false);
+        /** @psalm-check-type-exact $_notPreserved = BaseCollection<int, Customer>&static */
+
+        $_unknown = $base->random(2, $flag);
+        /** @psalm-check-type-exact $_unknown = BaseCollection<int, Customer>&static|BaseCollection<string, Customer>&static */
+
+        $_lazyPreserved = $lazy->random(2, true);
+        /** @psalm-check-type-exact $_lazyPreserved = LazyCollection<string, Customer>&static */
+
+        $_lazyUnknown = $lazy->random(2, $flag);
+        /** @psalm-check-type-exact $_lazyUnknown = LazyCollection<int, Customer>&static|LazyCollection<string, Customer>&static */
     }
 }
 ?>

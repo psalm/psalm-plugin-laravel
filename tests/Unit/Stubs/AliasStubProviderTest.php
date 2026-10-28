@@ -14,7 +14,9 @@ use Psalm\Plugin\RegistrationInterface;
 #[CoversClass(AliasStubProvider::class)]
 final class AliasStubProviderTest extends TestCase
 {
-    private const EXPECTED_STUB = "<?php\n\nclass Foo extends \\Acme\\FooFacade {}\n";
+    private const EXPECTED_FOO_STUB = "<?php\n\nclass_alias(\\Acme\\FooFacade::class, 'Foo');\n";
+
+    private const EXPECTED_STUB = self::EXPECTED_FOO_STUB . "class_alias(\\Acme\\Bar::class, 'Ns\\\\Bar');\n";
 
     private string $dir;
 
@@ -33,7 +35,6 @@ final class AliasStubProviderTest extends TestCase
         AliasLoader::setInstance(null);
         AliasLoader::getInstance([
             'Foo' => 'Acme\\FooFacade',
-            // Namespaced aliases are not valid in the global-namespace stub and must be skipped.
             'Ns\\Bar' => 'Acme\\Bar',
         ]);
     }
@@ -41,6 +42,7 @@ final class AliasStubProviderTest extends TestCase
     protected function tearDown(): void
     {
         AliasLoader::setInstance($this->originalLoader);
+        AliasStubProvider::reset();
 
         foreach (\array_diff(\scandir($this->dir) ?: [], ['.', '..']) as $entry) {
             $path = $this->dir . '/' . $entry;
@@ -97,6 +99,155 @@ final class AliasStubProviderTest extends TestCase
         }
 
         $this->assertSame(['aliases.phpstub'], \array_values(\array_diff(\scandir($this->dir) ?: [], ['.', '..'])));
+    }
+
+    #[Test]
+    public function it_writes_every_target_kind_as_class_alias_including_an_unloadable_one(): void
+    {
+        // The provider names a target without loading it, so a class, an enum, an interface and a
+        // class that does not exist all take the same line.
+        $this->useAliases([
+            'Klass' => \stdClass::class,
+            'Suit' => \DateTimeInterface::class,
+            'Gone' => 'Acme\\DoesNotExist',
+        ]);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        $this->assertSame(
+            "<?php\n\n"
+            . "class_alias(\\stdClass::class, 'Klass');\n"
+            . "class_alias(\\DateTimeInterface::class, 'Suit');\n"
+            . "class_alias(\\Acme\\DoesNotExist::class, 'Gone');\n",
+            \file_get_contents($location),
+        );
+    }
+
+    #[Test]
+    public function it_writes_a_namespaced_alias(): void
+    {
+        $this->useAliases(['Ns\\Bar' => 'Acme\\Bar']);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        $this->assertSame("<?php\n\nclass_alias(\\Acme\\Bar::class, 'Ns\\\\Bar');\n", \file_get_contents($location));
+    }
+
+    #[Test]
+    public function it_normalizes_leading_backslashes_on_alias_and_target(): void
+    {
+        $this->useAliases(['\\Foo' => '\\Acme\\FooFacade']);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        $this->assertSame(self::EXPECTED_FOO_STUB, \file_get_contents($location));
+        $this->assertSame(['Foo' => 'Acme\\FooFacade'], AliasStubProvider::aliases());
+    }
+
+    #[Test]
+    public function it_quotes_the_alias_as_a_php_string(): void
+    {
+        $this->useAliases(["It's" => \stdClass::class]);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        // TOKEN_PARSE throws a ParseError when the line is not valid PHP.
+        $strings = [];
+        foreach (\token_get_all((string) \file_get_contents($location), \TOKEN_PARSE) as $token) {
+            if (\is_array($token) && $token[0] === \T_CONSTANT_ENCAPSED_STRING) {
+                $strings[] = $token[1];
+            }
+        }
+
+        $this->assertSame(["'It\\'s'"], $strings);
+    }
+
+    #[Test]
+    public function it_skips_a_self_alias_case_insensitively(): void
+    {
+        $this->useAliases(['Introspect' => 'Introspect', 'Same' => '\\same', 'Foo' => 'Acme\\FooFacade']);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        $this->assertSame(self::EXPECTED_FOO_STUB, \file_get_contents($location));
+        $this->assertSame(['Foo' => 'Acme\\FooFacade'], AliasStubProvider::aliases());
+    }
+
+    #[Test]
+    public function it_skips_alias_cycles_and_keeps_unrelated_aliases(): void
+    {
+        // Psalm's getUnAliasedName() has no cycle guard: A => B, B => A would recurse forever.
+        $this->useAliases([
+            'CycleA' => 'cyclea',
+            'Ping' => 'Pong',
+            'Pong' => '\\Ping',
+            'Foo' => 'Acme\\FooFacade',
+        ]);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        $this->assertSame(self::EXPECTED_FOO_STUB, \file_get_contents($location));
+        $this->assertSame(['Foo' => 'Acme\\FooFacade'], AliasStubProvider::aliases());
+    }
+
+    #[Test]
+    public function it_keeps_an_alias_that_only_leads_into_a_cycle_it_is_not_part_of(): void
+    {
+        $this->useAliases(['Entry' => 'Ping', 'Ping' => 'Pong', 'Pong' => 'Ping']);
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        $this->assertSame(['Entry' => 'Ping'], AliasStubProvider::aliases());
+    }
+
+    #[Test]
+    public function it_never_autoloads_a_target(): void
+    {
+        $requested = [];
+        $autoloader = static function (string $class) use (&$requested): void {
+            $requested[] = $class;
+        };
+        \spl_autoload_register($autoloader);
+
+        try {
+            $this->useAliases(['Broken' => 'Acme\\ThrowsOnLoad', 'Foo' => 'Acme\\FooFacade']);
+            $location = $this->dir . '/aliases.phpstub';
+
+            AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+        } finally {
+            \spl_autoload_unregister($autoloader);
+        }
+
+        $this->assertSame([], $requested);
+    }
+
+    #[Test]
+    public function it_exposes_exactly_the_written_aliases_and_forgets_them_on_reset(): void
+    {
+        $location = $this->dir . '/aliases.phpstub';
+
+        AliasStubProvider::register($this->registrationExpectingStub($location), $location);
+
+        $this->assertSame(['Foo' => 'Acme\\FooFacade', 'Ns\\Bar' => 'Acme\\Bar'], AliasStubProvider::aliases());
+
+        AliasStubProvider::reset();
+
+        $this->assertSame([], AliasStubProvider::aliases());
+    }
+
+    /**
+     * @param array<string, string> $aliases replaces the whole AliasLoader map, unlike getInstance($aliases), which merges
+     */
+    private function useAliases(array $aliases): void
+    {
+        AliasLoader::getInstance()->setAliases($aliases);
     }
 
     private function registrationExpectingStub(string $location): RegistrationInterface

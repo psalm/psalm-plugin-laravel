@@ -18,25 +18,13 @@ use Psalm\Type;
  * (ModelRegistrationHandler's `class_exists(autoload: true)` gate), and a `.phpt` model is not on the
  * autoloader. So the detection logic is split into the pure, table-testable methods exercised here; the
  * end-to-end emission (warm-up through IssueBuffer) is guarded by
- * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\UnresolvableAppendedModelAttributeEmissionTest} (a real Psalm
+ * {@see \Tests\Psalm\LaravelPlugin\Unit\Handlers\EmissionAppTest} (a real Psalm
  * subprocess over an autoloadable fixture), and `composer test:app` guards against false positives on a
  * fresh Laravel app.
  */
 #[CoversClass(UnresolvableAppendedModelAttributeHandler::class)]
 final class UnresolvableAppendedModelAttributeHandlerTest extends TestCase
 {
-    #[Test]
-    public function flags_an_append_with_no_backing(): void
-    {
-        $this->assertSame(['avatar_url'], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(['avatar_url'], []));
-    }
-
-    #[Test]
-    public function clears_an_append_backed_by_an_accessor(): void
-    {
-        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(['full_name'], ['fullname' => true]));
-    }
-
     #[Test]
     public function matches_the_accessor_identity_separator_and_case_insensitively(): void
     {
@@ -66,12 +54,6 @@ final class UnresolvableAppendedModelAttributeHandlerTest extends TestCase
     }
 
     #[Test]
-    public function returns_empty_for_a_model_without_appends(): void
-    {
-        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends([], ['x' => true]));
-    }
-
-    #[Test]
     public function collects_every_cast_key_regardless_of_shape(): void
     {
         // Any declared cast counts as backing, regardless of shape — counting any cast keeps this
@@ -84,6 +66,7 @@ final class UnresolvableAppendedModelAttributeHandlerTest extends TestCase
             'age' => $this->cast(CastShape::Primitive, 'age'),
             'published_at' => $this->cast(CastShape::DateTime, 'published_at'),
             'status' => $this->cast(CastShape::BackedEnum, 'status'),
+            'full_name' => $this->cast(CastShape::Primitive, 'full_name'),
         ];
 
         $this->assertSame([
@@ -92,27 +75,8 @@ final class UnresolvableAppendedModelAttributeHandlerTest extends TestCase
             'age' => true,
             'publishedat' => true,
             'status' => true,
+            'fullname' => true,
         ], UnresolvableAppendedModelAttributeHandler::castKeys($casts));
-    }
-
-    #[Test]
-    public function normalizes_cast_column_keys_to_the_accessor_identity(): void
-    {
-        $this->assertSame(['fullname' => true], UnresolvableAppendedModelAttributeHandler::castKeys([
-            'full_name' => $this->cast(CastShape::Primitive, 'full_name'),
-        ]));
-    }
-
-    #[Test]
-    public function a_cast_backs_a_matching_append(): void
-    {
-        // The two pure steps composed: a cast on `address` (no column, no accessor) resolves the appended
-        // `address`, so it is not flagged.
-        $backed = UnresolvableAppendedModelAttributeHandler::castKeys([
-            'address' => $this->cast(CastShape::CustomCastsAttributes, 'address'),
-        ]);
-
-        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends(['address'], $backed));
     }
 
     #[Test]
@@ -134,37 +98,6 @@ final class UnresolvableAppendedModelAttributeHandlerTest extends TestCase
             ['full_name'],
             UnresolvableAppendedModelAttributeHandler::serializedAppends(['full_name', 'avatar_url'], [], ['full_name']),
         );
-    }
-
-    #[Test]
-    public function keeps_all_appends_when_no_hidden_or_visible_is_set(): void
-    {
-        $this->assertSame(
-            ['full_name', 'avatar_url'],
-            UnresolvableAppendedModelAttributeHandler::serializedAppends(['full_name', 'avatar_url'], [], []),
-        );
-    }
-
-    #[Test]
-    public function a_hidden_unbacked_append_is_not_reported(): void
-    {
-        // End-to-end of the two pure steps: an unbacked append that is also hidden is filtered out, so
-        // unresolvedAppends() never sees it.
-        $serialized = UnresolvableAppendedModelAttributeHandler::serializedAppends(['avatar_url'], ['avatar_url'], []);
-
-        $this->assertSame([], UnresolvableAppendedModelAttributeHandler::unresolvedAppends($serialized, []));
-    }
-
-    #[Test]
-    public function message_names_both_accessor_spellings_and_the_attribute(): void
-    {
-        $message = UnresolvableAppendedModelAttributeHandler::message('App\\Models\\User', 'avatar_url');
-
-        $this->assertStringContainsString("'avatar_url'", $message);
-        $this->assertStringContainsString('App\\Models\\User', $message);
-        $this->assertStringContainsString('getAvatarUrlAttribute()', $message);
-        $this->assertStringContainsString('avatarUrl(): Attribute', $message);
-        $this->assertStringContainsString('BadMethodCallException', $message);
     }
 
     private function cast(CastShape $shape, string $column = 'x'): CastInfo

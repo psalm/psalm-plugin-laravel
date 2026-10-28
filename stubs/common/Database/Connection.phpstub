@@ -173,4 +173,12 @@ class Connection implements ConnectionInterface
      * @psalm-flow ($value) -> return
      */
     public function escape($value, $binary = false) {}
+
+    /**
+     * Laravel documents a non-list shape and omits `readWriteType`, which the log writes from 12.45
+     * (after the 12.27 floor), hence optional. Matches the DB facade stub.
+     *
+     * @return list<array{query: string, bindings: array<array-key, mixed>, time: float|null, readWriteType?: string|null}>
+     */
+    public function getQueryLog() {}
 }

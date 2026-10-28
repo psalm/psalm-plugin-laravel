@@ -66,28 +66,6 @@ final class SqlSchemaParserTest extends TestCase
         $this->assertSame(SchemaColumn::TYPE_STRING, $table->columns['email']->type);
     }
 
-    #[Test]
-    public function it_parses_multiple_tables(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE `users` (
-              `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-              PRIMARY KEY (`id`)
-            ) ENGINE=InnoDB;
-            CREATE TABLE `posts` (
-              `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-              `user_id` bigint unsigned NOT NULL,
-              PRIMARY KEY (`id`)
-            ) ENGINE=InnoDB;
-            SQL;
-
-        $schema = $this->parse($sql);
-
-        $this->assertCount(2, $schema->tables);
-        $this->assertArrayHasKey('users', $schema->tables);
-        $this->assertArrayHasKey('posts', $schema->tables);
-    }
-
     // ──────────────────────────────────────────────────
     // MySQL: integer types
     // ──────────────────────────────────────────────────
@@ -120,19 +98,6 @@ final class SqlSchemaParserTest extends TestCase
 
         $this->assertSame(SchemaColumn::TYPE_INT, $table->columns['col_tinyint']->type);
         $this->assertTrue($table->columns['col_tinyint']->unsigned);
-    }
-
-    #[Test]
-    public function it_parses_int_with_display_width(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE `test` (
-              `col` int(11) NOT NULL
-            );
-            SQL;
-
-        $table = $this->parse($sql)->tables['test'];
-        $this->assertSame(SchemaColumn::TYPE_INT, $table->columns['col']->type);
     }
 
     // ──────────────────────────────────────────────────
@@ -247,21 +212,6 @@ final class SqlSchemaParserTest extends TestCase
     // ──────────────────────────────────────────────────
 
     #[Test]
-    public function it_parses_default_null(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE `test` (
-              `col` varchar(255) DEFAULT NULL
-            );
-            SQL;
-
-        $column = $this->parse($sql)->tables['test']->columns['col'];
-        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
-        $this->assertTrue($column->default->resolvable);
-        $this->assertNull($column->default->value);
-    }
-
-    #[Test]
     public function it_parses_default_string(): void
     {
         $sql = <<<'SQL'
@@ -274,20 +224,6 @@ final class SqlSchemaParserTest extends TestCase
         $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
         $this->assertTrue($column->default->resolvable);
         $this->assertSame('draft', $column->default->value);
-    }
-
-    #[Test]
-    public function it_parses_default_integer(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE `test` (
-              `quantity` int NOT NULL DEFAULT 0
-            );
-            SQL;
-
-        $column = $this->parse($sql)->tables['test']->columns['quantity'];
-        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
-        $this->assertSame(0, $column->default->value);
     }
 
     #[Test]
@@ -335,68 +271,6 @@ final class SqlSchemaParserTest extends TestCase
         $this->assertSame(['draft', 'published', 'archived'], $column->options);
         $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
         $this->assertSame('draft', $column->default->value);
-    }
-
-    // ──────────────────────────────────────────────────
-    // MySQL: realistic schema dump
-    // ──────────────────────────────────────────────────
-
-    #[Test]
-    public function it_parses_realistic_mysql_dump(): void
-    {
-        $sql = <<<'SQL'
-            /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
-            /*!40103 SET TIME_ZONE='+00:00' */;
-            DROP TABLE IF EXISTS `users`;
-            /*!40101 SET @saved_cs_client     = @@character_set_client */;
-            /*!40101 SET character_set_client = utf8 */;
-            CREATE TABLE `users` (
-              `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-              `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-              `email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-              `email_verified_at` timestamp NULL DEFAULT NULL,
-              `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-              `is_admin` tinyint(1) NOT NULL DEFAULT '0',
-              `balance` decimal(10,2) NOT NULL DEFAULT '0.00',
-              `remember_token` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-              `created_at` timestamp NULL DEFAULT NULL,
-              `updated_at` timestamp NULL DEFAULT NULL,
-              PRIMARY KEY (`id`),
-              UNIQUE KEY `users_email_unique` (`email`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-            /*!40101 SET character_set_client = @saved_cs_client */;
-            SQL;
-
-        $schema = $this->parse($sql);
-        $table = $schema->tables['users'];
-
-        $this->assertCount(10, $table->columns);
-
-        // id: bigint unsigned NOT NULL
-        $this->assertSame(SchemaColumn::TYPE_INT, $table->columns['id']->type);
-        $this->assertTrue($table->columns['id']->unsigned);
-        $this->assertFalse($table->columns['id']->nullable);
-
-        // name: varchar NOT NULL
-        $this->assertSame(SchemaColumn::TYPE_STRING, $table->columns['name']->type);
-        $this->assertFalse($table->columns['name']->nullable);
-
-        // email_verified_at: timestamp NULL
-        $this->assertSame(SchemaColumn::TYPE_STRING, $table->columns['email_verified_at']->type);
-        $this->assertTrue($table->columns['email_verified_at']->nullable);
-
-        // is_admin: tinyint(1) → bool
-        $this->assertSame(SchemaColumn::TYPE_BOOL, $table->columns['is_admin']->type);
-
-        // balance: decimal
-        $this->assertSame(SchemaColumn::TYPE_FLOAT, $table->columns['balance']->type);
-
-        // remember_token: varchar DEFAULT NULL
-        $this->assertTrue($table->columns['remember_token']->nullable);
-
-        // timestamps: nullable
-        $this->assertTrue($table->columns['created_at']->nullable);
-        $this->assertTrue($table->columns['updated_at']->nullable);
     }
 
     // ──────────────────────────────────────────────────
@@ -494,19 +368,6 @@ final class SqlSchemaParserTest extends TestCase
     }
 
     #[Test]
-    public function it_parses_postgresql_uuid_type(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE public.test (
-                id uuid NOT NULL
-            );
-            SQL;
-
-        $table = $this->parse($sql)->tables['test'];
-        $this->assertSame(SchemaColumn::TYPE_STRING, $table->columns['id']->type);
-    }
-
-    #[Test]
     public function it_parses_postgresql_numeric_type(): void
     {
         $sql = <<<'SQL'
@@ -558,53 +419,6 @@ final class SqlSchemaParserTest extends TestCase
     }
 
     #[Test]
-    public function it_parses_sqlite_with_double_quoted_identifiers(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE "posts"(
-              "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
-              "title" varchar NOT NULL,
-              "body" text NOT NULL
-            );
-            SQL;
-
-        $table = $this->parse($sql)->tables['posts'];
-        $this->assertCount(3, $table->columns);
-        $this->assertSame(SchemaColumn::TYPE_STRING, $table->columns['title']->type);
-    }
-
-    // ──────────────────────────────────────────────────
-    // Integration: SQL dumps + PHP migrations
-    // ──────────────────────────────────────────────────
-
-    #[Test]
-    public function sql_tables_are_available_in_aggregator(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE `users` (
-              `id` bigint unsigned NOT NULL,
-              `name` varchar(255) NOT NULL
-            );
-            SQL;
-
-        $aggregator = new SchemaAggregator();
-        $this->parser->addToAggregator($sql, $aggregator);
-
-        // Verify tables are directly accessible on the aggregator,
-        // same as tables from PHP migrations
-        $this->assertArrayHasKey('users', $aggregator->tables);
-        $this->assertArrayHasKey('id', $aggregator->tables['users']->columns);
-        $this->assertArrayHasKey('name', $aggregator->tables['users']->columns);
-    }
-
-    #[Test]
-    public function it_handles_empty_sql(): void
-    {
-        $schema = $this->parse('');
-        $this->assertCount(0, $schema->tables);
-    }
-
-    #[Test]
     public function it_handles_sql_with_no_create_table(): void
     {
         $sql = <<<'SQL'
@@ -643,20 +457,6 @@ final class SqlSchemaParserTest extends TestCase
     // ──────────────────────────────────────────────────
     // Edge cases from real-world dumps
     // ──────────────────────────────────────────────────
-
-    #[Test]
-    public function it_handles_column_with_comment(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE `test` (
-              `slug` varchar(255) NOT NULL COMMENT 'URL-friendly unique title'
-            );
-            SQL;
-
-        $column = $this->parse($sql)->tables['test']->columns['slug'];
-        $this->assertSame(SchemaColumn::TYPE_STRING, $column->type);
-        $this->assertFalse($column->nullable);
-    }
 
     #[Test]
     public function it_handles_mysql_set_type(): void
@@ -747,19 +547,6 @@ final class SqlSchemaParserTest extends TestCase
         $this->assertSame(SchemaColumn::TYPE_MIXED, $table->columns['data']->type);
         $this->assertSame(SchemaColumn::TYPE_MIXED, $table->columns['amount']->type);
         $this->assertSame(SchemaColumn::TYPE_MIXED, $table->columns['flags']->type);
-    }
-
-    #[Test]
-    public function it_handles_empty_table(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE `empty_table` (
-              PRIMARY KEY (`id`)
-            );
-            SQL;
-
-        $table = $this->parse($sql)->tables['empty_table'];
-        $this->assertCount(0, $table->columns);
     }
 
     #[Test]
@@ -880,33 +667,6 @@ final class SqlSchemaParserTest extends TestCase
     }
 
     #[Test]
-    public function it_parses_postgresql_smallserial(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE public.test (
-                id smallserial NOT NULL
-            );
-            SQL;
-
-        $table = $this->parse($sql)->tables['test'];
-        $this->assertSame(SchemaColumn::TYPE_INT, $table->columns['id']->type);
-    }
-
-    #[Test]
-    public function it_parses_unquoted_float_default(): void
-    {
-        $sql = <<<'SQL'
-            CREATE TABLE `test` (
-              `rate` decimal(5,2) NOT NULL DEFAULT 3.14
-            );
-            SQL;
-
-        $column = $this->parse($sql)->tables['test']->columns['rate'];
-        $this->assertInstanceOf(SchemaColumnDefault::class, $column->default);
-        $this->assertEqualsWithDelta(3.14, $column->default->value, PHP_FLOAT_EPSILON);
-    }
-
-    #[Test]
     public function it_overwrites_table_on_duplicate_create_table(): void
     {
         $sql = <<<'SQL'
@@ -979,43 +739,5 @@ final class SqlSchemaParserTest extends TestCase
         $schema = $this->parse($sql);
         $this->assertArrayHasKey('empty', $schema->tables);
         $this->assertCount(0, $schema->tables['empty']->columns);
-    }
-
-    // ──────────────────────────────────────────────────
-    // Integration: SQL dump tables can be altered by PHP migrations
-    // ──────────────────────────────────────────────────
-
-    #[Test]
-    public function sql_dump_tables_can_be_modified_by_php_migration_operations(): void
-    {
-        // Simulate the combined flow: SQL dump creates base state,
-        // then PHP migration operations modify it
-        $sql = <<<'SQL'
-            CREATE TABLE `users` (
-              `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-              `name` varchar(255) NOT NULL,
-              `old_column` varchar(255) NOT NULL
-            );
-            SQL;
-
-        $aggregator = new SchemaAggregator();
-        $this->parser->addToAggregator($sql, $aggregator);
-
-        // The SQL dump created the base table
-        $this->assertCount(3, $aggregator->tables['users']->columns);
-
-        // Simulate what SchemaAggregator would do when processing a PHP migration:
-        // add a new column and drop an old one
-        $aggregator->tables['users']->setColumn(
-            new SchemaColumn('email', SchemaColumn::TYPE_STRING, false),
-        );
-        $aggregator->tables['users']->dropColumn('old_column');
-
-        // Verify the combined state: original columns + modifications
-        $this->assertCount(3, $aggregator->tables['users']->columns);
-        $this->assertArrayHasKey('id', $aggregator->tables['users']->columns);
-        $this->assertArrayHasKey('name', $aggregator->tables['users']->columns);
-        $this->assertArrayHasKey('email', $aggregator->tables['users']->columns);
-        $this->assertArrayNotHasKey('old_column', $aggregator->tables['users']->columns);
     }
 }

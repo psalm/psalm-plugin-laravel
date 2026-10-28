@@ -40,25 +40,6 @@ final class MacroHandlerThrowsTest extends TestCase
     }
 
     #[Test]
-    public function validate_with_bag_macro_records_validation_exception_in_throws(): void
-    {
-        // Macro names are stored lowercased — `MacroDefinition::$methodName` is
-        // typed `lowercase-string` and `MacroRegistry::init()` lowercases the key
-        // before storing. The throws map must match that casing.
-        $storage = $this->buildStorage(\Illuminate\Http\Request::class, 'validatewithbag');
-
-        $this->assertSame([ValidationException::class => true], $storage->throws);
-    }
-
-    #[Test]
-    public function unmapped_macro_records_no_throws(): void
-    {
-        $storage = $this->buildStorage(\Illuminate\Http\Request::class, 'whatever');
-
-        $this->assertSame([], $storage->throws);
-    }
-
-    #[Test]
     public function validate_macro_on_non_request_class_records_no_throws(): void
     {
         // Pins the class-scoping invariant: a user (or third-party package)

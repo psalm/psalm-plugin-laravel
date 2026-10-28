@@ -163,6 +163,7 @@ function cookie($name = null, $value = null, $minutes = 0, $path = null, $domain
  * @psalm-taint-unescape user_secret
  * @psalm-taint-unescape system_secret
  * @psalm-flow ($value) -> return
+ * @psalm-taint-specialize
  */
 function decrypt($value, $unserialize = true) {}
 
@@ -195,6 +196,7 @@ function dispatch_sync($job, $handler = null) {}
  * @psalm-taint-escape user_secret
  * @psalm-taint-escape system_secret
  * @psalm-flow ($value) -> return
+ * @psalm-taint-specialize
  */
 function encrypt($value, $serialize = true): string {}
 
@@ -413,9 +415,11 @@ function view($view = null, $data = [], $mergeData = []) {}
 /**
  * Retrieve an old input item.
  *
+ * Forwards to `Request::old()`, whose stub explains why a keyed read is `mixed`.
+ *
  * @param  string|null  $key
- * @param  \Illuminate\Database\Eloquent\Model|string|array|null  $default
- * @return string|array|null
+ * @param  mixed  $default
+ * @return ($key is null ? array<array-key, mixed>|null : mixed)
  *
  * @psalm-taint-source input
  */

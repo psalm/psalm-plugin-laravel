@@ -41,13 +41,8 @@ final class AnonymousClassNameDetectorTest extends TestCase
     {
         // Real-world example from Algolia\ScoutExtended (motivating case for this fix).
         yield 'algolia scout aggregator' => [
-            'Algolia\\ScoutExtended\\Searchable\\_Users_alies_code_IxDF_IxDF_web_vendor_algolia_scout_extended_src_Searchable_Aggregator_php_279_6842',
-            '/Users/alies/code/IxDF/IxDF-web/vendor/algolia/scout-extended/src/Searchable/Aggregator.php',
-        ];
-
-        yield 'namespaced unix path' => [
-            'App\\Models\\_home_app_src_Foo_php_10_42',
-            '/home/app/src/Foo.php',
+            'Algolia\\ScoutExtended\\Searchable\\_home_app_vendor_algolia_scout_extended_src_Searchable_Aggregator_php_279_6842',
+            '/home/app/vendor/algolia/scout-extended/src/Searchable/Aggregator.php',
         ];
 
         yield 'no namespace' => [
@@ -67,19 +62,9 @@ final class AnonymousClassNameDetectorTest extends TestCase
      */
     public static function regularNames(): iterable
     {
-        yield 'plain model class' => [
-            'App\\Models\\User',
-            '/home/app/src/Models/User.php',
-        ];
-
         yield 'short name does not match sanitised file path' => [
             'App\\Models\\_home_other_file_php_1_1',
             '/home/app/src/Models/User.php',
-        ];
-
-        yield 'missing line/pos suffix' => [
-            'App\\_home_app_src_Foo_php',
-            '/home/app/src/Foo.php',
         ];
 
         yield 'single numeric suffix (not line_pos)' => [

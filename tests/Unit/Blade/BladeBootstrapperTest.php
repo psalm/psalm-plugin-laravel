@@ -1,0 +1,955 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
+
+use Illuminate\Container\Container;
+use Illuminate\Events\Dispatcher;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\View\Compilers\BladeCompiler;
+use Illuminate\View\Engines\EngineResolver;
+use Illuminate\View\Factory;
+use Illuminate\View\FileViewFinder;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
+use Psalm\LaravelPlugin\Blade\ContractRegistry;
+use Psalm\LaravelPlugin\Blade\PreludeBuilder;
+use Psalm\LaravelPlugin\Blade\ShadowRegistry;
+use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
+use Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer;
+
+#[CoversClass(BladeBootstrapper::class)]
+final class BladeBootstrapperTest extends TestCase
+{
+    private string $root;
+
+    private string $viewDir;
+
+    private string $shadowDir;
+
+    private RecordingProgress $progress;
+
+    protected function setUp(): void
+    {
+        $root = \tempnam(\sys_get_temp_dir(), 'blade-boot-');
+        $this->assertIsString($root);
+        \unlink($root);
+        \mkdir($root . '/views', 0o777, true);
+
+        $this->root = $root;
+        $this->viewDir = $root . '/views';
+        $this->shadowDir = $root . '/cache/blade';
+        $this->progress = new RecordingProgress();
+
+        // This suite calls BladeBootstrapper directly, bypassing Plugin::resetInvocationState(), so
+        // the registries have to be reset here or an earlier test's compile failure/registration
+        // leaks into this one.
+        ViewReferenceRegistry::reset();
+        ContractRegistry::reset();
+        ShadowRegistry::reset();
+        PathCaseCanonicalizer::reset();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->deleteRecursively($this->root);
+    }
+
+    private function deleteRecursively(string $path): void
+    {
+        // A symlink must be unlinked, never descended into or rmdir'd: descending would delete
+        // through the link and rmdir() refuses a link.
+        if (\is_link($path) || \is_file($path)) {
+            \unlink($path);
+
+            return;
+        }
+
+        if (!\is_dir($path)) {
+            return;
+        }
+
+        foreach (\array_diff(\scandir($path) ?: [], ['.', '..']) as $entry) {
+            $this->deleteRecursively($path . '/' . $entry);
+        }
+
+        \rmdir($path);
+    }
+
+    private function writeTemplate(string $name, string $contents): string
+    {
+        $path = $this->viewDir . '/' . $name;
+        \mkdir(\dirname($path), 0o777, true);
+        \file_put_contents($path, $contents);
+
+        return (string) \realpath($path);
+    }
+
+    /** A container with both bindings the bootstrapper needs. */
+    private function app(): Container
+    {
+        $container = new Container();
+        $container->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $container->instance('view.finder', new FileViewFinder(new Filesystem(), [$this->viewDir]));
+
+        return $container;
+    }
+
+    private function bootstrapper(Container $app, RecordingShadowRegistrar $registrar): BladeBootstrapper
+    {
+        return new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir);
+    }
+
+    /**
+     * True when a directory's upper/lower-cased spelling also resolves to it, on THIS filesystem.
+     * Case (in)sensitivity is a filesystem capability, never assumed from the OS: this is what
+     * gates the two case-variant tests below to whichever half of the pair this machine can hold.
+     */
+    private function filesystemIsCaseInsensitive(): bool
+    {
+        $lower = $this->root . '/case-probe';
+        \mkdir($lower, 0o777, true);
+
+        return \is_dir($this->root . '/CASE-PROBE');
+    }
+
+    #[Test]
+    public function compiles_a_template_and_registers_both_sides_with_psalm(): void
+    {
+        $template = $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([$template], $registrar->reportableTemplates, 'the blade path is what becomes reportable');
+        $this->assertCount(1, $registrar->analyzedShadows);
+
+        $shadow = $registrar->analyzedShadows[0];
+        $this->assertStringStartsWith($this->shadowDir, $shadow, 'shadows belong in the configured cache dir');
+        $this->assertNotSame($template, $shadow, 'the shadow is never the blade path itself');
+        $this->assertFileExists($shadow);
+        $this->assertStringContainsString('echo e($name)', (string) \file_get_contents($shadow));
+        $this->assertFileExists($this->shadowDir . '/manifest.php');
+    }
+
+    /**
+     * `loadViewsFrom($dir, $namespace)` puts its directory in the finder's `getHints()`, never
+     * `getPaths()` — a template that lives ONLY there was invisible to discovery entirely (#1497).
+     * It also has to register under the QUALIFIED `ns::name`, never the bare dotted name: call
+     * sites store `view('pkg::widget')` verbatim, so an unqualified registration both misses the
+     * real name and fabricates one nothing ever resolves to.
+     */
+    #[Test]
+    public function discovers_a_template_registered_only_through_a_finder_namespace_hint(): void
+    {
+        $hintDir = $this->root . '/package-views';
+        \mkdir($hintDir, 0o777, true);
+        $template = $hintDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
+        $finder->addNamespace('pkg', $hintDir);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([$template], $registrar->reportableTemplates);
+        $this->assertCount(1, $registrar->analyzedShadows);
+        $this->assertNotNull(ContractRegistry::contractFor('pkg::widget'), 'must register under the qualified name');
+        $this->assertNull(ContractRegistry::contractFor('widget'), 'must not also register unqualified');
+    }
+
+    /**
+     * A published override (`resources/views/vendor/pkg/widget.blade.php`) sits under BOTH the main
+     * root and the namespace's first hint — the same file legitimately owns two names,
+     * `vendor.pkg.widget` and `pkg::widget`. `ViewName::resolve()` used to return only the first
+     * matching root, silently dropping the qualified name a caller might use.
+     */
+    #[Test]
+    public function a_published_override_registers_under_both_its_qualified_and_unqualified_name(): void
+    {
+        $overrideDir = $this->viewDir . '/vendor/pkg';
+        \mkdir($overrideDir, 0o777, true);
+        $template = $overrideDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        \realpath($template);
+
+        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
+        $finder->addNamespace('pkg', $overrideDir);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertNotNull(ContractRegistry::contractFor('pkg::widget'));
+        $this->assertNotNull(ContractRegistry::contractFor('vendor.pkg.widget'));
+    }
+
+    /**
+     * A namespace can carry several hint roots where an EARLIER one sits inside the Composer vendor
+     * directory (filtered from discovery) and a later, project-local one survives. Laravel still
+     * resolves `pkg::widget` to the vendor file, so the surviving root's same-named template must
+     * NOT claim the name: claiming it would mark the local file as covered by references that never
+     * reach it, and check callers against a contract Laravel never renders. The local template is
+     * still discovered and analyzed — it just owns no view name.
+     */
+    #[Test]
+    public function a_hint_template_shadowed_by_a_filtered_vendor_root_does_not_claim_the_name(): void
+    {
+        $fakeVendor = $this->root . '/fake-vendor';
+        $vendorPkgViews = $fakeVendor . '/acme/pkg/views';
+        \mkdir($vendorPkgViews, 0o777, true);
+        \file_put_contents($vendorPkgViews . '/widget.blade.php', "<p>vendor</p>\n");
+
+        $localDir = $this->root . '/extra-views';
+        \mkdir($localDir, 0o777, true);
+        $local = $localDir . '/widget.blade.php';
+        \file_put_contents($local, "<p>{{ \$name }}</p>\n");
+        $local = (string) \realpath($local);
+
+        $finder = new FileViewFinder(new Filesystem(), [$this->viewDir]);
+        $finder->addNamespace('pkg', [$vendorPkgViews, $localDir]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        (new BladeBootstrapper($app, $registrar, $this->progress, $this->shadowDir, vendorDirOverride: $fakeVendor))->boot();
+
+        $this->assertNull(ContractRegistry::contractFor('pkg::widget'), 'the filtered vendor root still owns the name');
+        $this->assertSame([$local], $registrar->reportableTemplates, 'the local template is still analyzed');
+    }
+
+    /**
+     * #1552: the same physical view root reaching the finder twice under different case (a
+     * published-override-style hint vs. its default-root spelling, or two roots a project
+     * configured redundantly) must collapse to ONE discovered template, not double it. `realpath()`
+     * cannot do this alone — it preserves the caller's casing on a case-insensitive filesystem — so
+     * this only exercises the fix, {@see \Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer}, when
+     * the machine running the suite actually has one.
+     */
+    #[Test]
+    public function two_case_variant_spellings_of_the_same_view_root_collapse_into_one_shadow(): void
+    {
+        if (!$this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-insensitive filesystem to open one directory under two spellings');
+        }
+
+        $casedDir = $this->root . '/Resources/views';
+        \mkdir($casedDir, 0o777, true);
+        $template = $casedDir . '/widget.blade.php';
+        \file_put_contents($template, "<p>{{ \$name }}</p>\n");
+        $template = (string) \realpath($template);
+
+        $lowerSpelling = $this->root . '/resources/views';
+
+        $finder = new FileViewFinder(new Filesystem(), [$casedDir, $lowerSpelling]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [$template],
+            $registrar->reportableTemplates,
+            'the two spellings of one physical root must not double the discovered templates',
+        );
+        $this->assertCount(1, $registrar->analyzedShadows, 'one physical template must produce exactly one shadow');
+    }
+
+    /**
+     * The mirror of the test above: on a case-SENSITIVE filesystem, two directories differing only
+     * by case are two real, distinct dirents holding two real, distinct templates — collapsing them
+     * would be a regression, not a fix.
+     */
+    #[Test]
+    public function two_distinct_dirents_differing_only_by_case_stay_two_separate_shadows(): void
+    {
+        if ($this->filesystemIsCaseInsensitive()) {
+            $this->markTestSkipped('needs a case-sensitive filesystem to hold two same-named-but-cased dirents');
+        }
+
+        $upperDir = $this->root . '/Resources/views';
+        $lowerDir = $this->root . '/resources/views';
+        \mkdir($upperDir, 0o777, true);
+        \mkdir($lowerDir, 0o777, true);
+        \file_put_contents($upperDir . '/widget.blade.php', "<p>upper</p>\n");
+        \file_put_contents($lowerDir . '/widget.blade.php', "<p>lower</p>\n");
+
+        $finder = new FileViewFinder(new Filesystem(), [$upperDir, $lowerDir]);
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->instance('view.finder', $finder);
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertCount(2, $registrar->analyzedShadows, 'two physically distinct templates must stay two shadows');
+    }
+
+    /**
+     * A boot can bind 'view' with a closure that needs runtime-only state and throws under the
+     * plugin's partial boot, while still binding a perfectly good 'view.finder'. The throw must
+     * fall through to the fallback, not disable Blade analysis for the run.
+     */
+    #[Test]
+    public function a_throwing_view_binding_falls_back_to_the_view_finder_binding(): void
+    {
+        $template = $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+        $app->bind('view', static function (): never {
+            throw new \RuntimeException('needs runtime-only state');
+        });
+        $app->instance('view.finder', new FileViewFinder(new Filesystem(), [$this->viewDir]));
+
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([$template], $registrar->reportableTemplates);
+    }
+
+    #[Test]
+    public function queues_the_ambient_prelude_classes_for_scanning_on_a_fresh_compile(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertSame(PreludeBuilder::ambientClassNames(), $registrar->queuedClassLikes);
+        // Confirm, not assume: this plain template's shadow carries no string literal at all, so it
+        // must not be mistaken for a (vacuous) pass on the #1505 wiring below.
+        $this->assertSame([], $registrar->queuedResolvableClassLikes);
+    }
+
+    private function appWithViewFactory(): Container
+    {
+        $app = $this->app();
+        $app->instance('view', new Factory(new EngineResolver(), $app->make('view.finder'), new Dispatcher()));
+
+        return $app;
+    }
+
+    /** `$app` is shared into every view by the framework, so no call site passes it: it is no contract. */
+    #[Test]
+    public function framework_shared_data_is_never_a_contract_but_stays_declared(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->share('siteName', 'x');
+        $this->writeTemplate(
+            'profile.blade.php',
+            "<?php /** @var \\Illuminate\\Foundation\\Application \$app */ ?>\n<?php /** @var string \$siteName */ ?>\n<?php /** @var int \$count */ ?>\n<p>{{ \$count }}</p>\n",
+        );
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $contract = ContractRegistry::contractFor('profile');
+        $this->assertNotNull($contract);
+        $this->assertSame(['count'], \array_keys($contract->vars));
+        $this->assertContains('siteName', $contract->rawDeclaredVariables);
+    }
+
+    #[Test]
+    public function a_marker_problem_on_a_shared_name_is_not_published(): void
+    {
+        $app = $this->appWithViewFactory();
+        $app->make('view')->share('siteName', 'x');
+        $this->writeTemplate('profile.blade.php', "<?php /** @var string \$siteName = null */ /** @var string \$other = null */ ?>\n<p>{{ \$other }}</p>\n");
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $problems = ContractRegistry::problemsFor($this->viewDir . '/profile.blade.php');
+        $this->assertCount(1, $problems);
+        $this->assertStringContainsString('$other', $problems[0][1]);
+    }
+
+    /**
+     * A class composer (`Class`, `Class@method`), creator or wildcard composer is recorded as the
+     * class and method that will run, and the class is queued so Psalm has its storage when the keys
+     * are read. A view nobody composes records nothing: wildcard observers registered straight on
+     * the dispatcher (a debugging package's view watcher) are no composers.
+     */
+    #[Test]
+    public function class_composers_creators_and_wildcard_composers_are_recorded_as_class_and_method(): void
+    {
+        $app = $this->appWithViewFactory();
+        $view = $app->make('view');
+        $view->composer('composed', '\\App\\ProfileComposer');
+        $view->composer('composed', 'App\\Other@Build');
+        $view->creator('created', 'App\\Maker');
+        $view->composer('admin.*', 'App\\AdminComposer');
+        $view->getDispatcher()->listen('composing:*', static fn(): null => null);
+        $view->getDispatcher()->listen('*', static fn(): null => null);
+
+        foreach (['composed', 'created', 'admin/page', 'plain'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        }
+
+        $registrar = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $sources = ContractRegistry::composerSources();
+        \ksort($sources);
+
+        $this->assertSame(
+            [
+                'admin.page' => [['App\\AdminComposer', 'compose']],
+                'composed' => [['App\\ProfileComposer', 'compose'], ['App\\Other', 'build']],
+                'created' => [['App\\Maker', 'create']],
+            ],
+            $sources,
+        );
+
+        foreach (['App\\ProfileComposer', 'App\\Other', 'App\\Maker', 'App\\AdminComposer'] as $class) {
+            $this->assertContains($class, $registrar->queuedClassLikes);
+        }
+    }
+
+    /**
+     * A user closure, or a listener registered straight on the dispatcher for the exact view name,
+     * leaves the view unknown, and one such listener makes the whole view unknown.
+     */
+    #[Test]
+    public function a_listener_that_is_not_a_class_composer_leaves_the_view_unknown(): void
+    {
+        $app = $this->appWithViewFactory();
+        $view = $app->make('view');
+        $view->composer('closure', static fn(): null => null);
+        $view->composer('mixed', 'App\\Known');
+        $view->composer('mixed', static fn(): null => null);
+        $view->getDispatcher()->listen('composing: raw', 'App\\Listener@handle');
+
+        foreach (['closure', 'mixed', 'raw', 'plain'] as $name) {
+            $this->writeTemplate("{$name}.blade.php", "<?php /** @var int \$n */ ?>\n<p>{{ \$n }}</p>\n");
+        }
+
+        $this->bootstrapper($app, new RecordingShadowRegistrar())->boot();
+
+        $sources = ContractRegistry::composerSources();
+        \ksort($sources);
+
+        $this->assertSame(['closure' => null, 'mixed' => null, 'raw' => null], $sources);
+    }
+
+    /**
+     * #1505: a compiled shadow's PHP string literal naming a class (the shape a vendor directive
+     * that writes `app('Vendor\Package\Class')::method()` compiles to) must be handed to the
+     * registrar's speculative-queueing method, separate from the ambient list above.
+     */
+    #[Test]
+    public function literal_named_classes_in_a_compiled_shadow_are_queued_for_scanning_on_a_fresh_compile(): void
+    {
+        $this->writeTemplate('widget.blade.php', "<p>{{ \$name }}</p>\n@php\necho 'Vendor\\Package\\Widget';\n@endphp\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertSame(['Vendor\Package\Widget'], $registrar->queuedResolvableClassLikes);
+    }
+
+    /**
+     * Same shape, second run: `ShadowCompiler` never runs on a warm manifest hit (see
+     * `BladeBootstrapper::compileAll()`'s `isFresh()` branch), so the extraction must come off the
+     * shadow FILE on disk rather than the fresh compile result the first run produced.
+     */
+    #[Test]
+    public function literal_named_classes_are_queued_on_a_warm_manifest_run_too(): void
+    {
+        $this->writeTemplate('widget.blade.php', "<p>{{ \$name }}</p>\n@php\necho 'Vendor\\Package\\Widget';\n@endphp\n");
+        $this->bootstrapper($this->app(), new RecordingShadowRegistrar())->boot();
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        $this->assertSame(['Vendor\Package\Widget'], $second->queuedResolvableClassLikes);
+    }
+
+    #[Test]
+    public function finds_templates_in_nested_directories_and_ignores_other_files(): void
+    {
+        $nested = $this->writeTemplate('mail/welcome.blade.php', "{{ \$subject }}\n");
+        $this->writeTemplate('notes.txt', 'not a template');
+        $this->writeTemplate('legacy.php', '<?php echo 1;');
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertSame([$nested], $registrar->reportableTemplates);
+    }
+
+    #[Test]
+    public function an_unchanged_template_is_not_recompiled_but_is_still_registered(): void
+    {
+        $template = $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $first)->boot();
+
+        // A marker only a recompile would overwrite.
+        $shadow = $first->analyzedShadows[0];
+        \file_put_contents($shadow, "<?php // reused\n");
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        $this->assertSame("<?php // reused\n", (string) \file_get_contents($shadow));
+        $this->assertSame([$template], $second->reportableTemplates);
+        $this->assertSame([$shadow], $second->analyzedShadows);
+    }
+
+    #[Test]
+    public function an_edited_template_is_recompiled(): void
+    {
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $first)->boot();
+
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$title }}</p>\n");
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        $this->assertStringContainsString('echo e($title)', (string) \file_get_contents($second->analyzedShadows[0]));
+    }
+
+    #[Test]
+    public function a_shadow_whose_template_disappeared_is_pruned(): void
+    {
+        $template = $this->writeTemplate('gone.blade.php', "{{ \$x }}\n");
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $first)->boot();
+        $shadow = $first->analyzedShadows[0];
+
+        \unlink($template);
+        $this->writeTemplate('kept.blade.php', "{{ \$y }}\n");
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $second)->boot();
+
+        $this->assertFileDoesNotExist($shadow);
+        $this->assertCount(1, $second->analyzedShadows);
+    }
+
+    #[Test]
+    public function a_directory_scan_failure_does_not_prune_a_shadow_it_could_not_rediscover(): void
+    {
+        $nested = $this->viewDir . '/protected';
+        \mkdir($nested, 0o777, true);
+        $this->writeTemplate('protected/still-here.blade.php', "{{ \$x }}\n");
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($this->app(), $first)->boot();
+        $shadow = $first->analyzedShadows[0];
+        $this->assertFileExists($shadow);
+
+        // The template is untouched, but a transient permission failure hides it from this
+        // run's scan: findTemplates() cannot tell that apart from the template being gone, so
+        // it must record a failure instead of silently returning an incomplete list.
+        \chmod($nested, 0o000);
+
+        try {
+            $second = new RecordingShadowRegistrar();
+            $this->bootstrapper($this->app(), $second)->boot();
+
+            $this->assertFileExists($shadow, 'a transient scan failure must not prune a shadow it never confirmed as gone');
+            $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
+            $this->assertStringContainsString('could not be read', \implode("\n", $this->progress->debugMessages));
+        } finally {
+            \chmod($nested, 0o777);
+        }
+    }
+
+    #[Test]
+    public function degrades_when_the_blade_compiler_is_unbound(): void
+    {
+        $app = new Container();
+        $app->instance('view.finder', new FileViewFinder(new Filesystem(), [$this->viewDir]));
+        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $bootstrapper = $this->bootstrapper($app, $registrar);
+        $bootstrapper->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $this->assertStringContainsString('blade.compiler', $this->progress->warningText());
+        $this->assertSame(0, $registrar->markCalls);
+        $this->assertSame([], $registrar->analyzedShadows);
+        $this->assertDirectoryDoesNotExist($this->shadowDir);
+    }
+
+    #[Test]
+    public function falls_back_to_the_view_factory_finder_when_view_finder_is_unbound(): void
+    {
+        $template = $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
+        $app = new Container();
+        $app->instance('blade.compiler', new BladeCompiler(new Filesystem(), $this->root . '/compiled'));
+
+        $factory = $this->createStub(\Illuminate\View\Factory::class);
+        $factory->method('getFinder')->willReturn(new FileViewFinder(new Filesystem(), [$this->viewDir]));
+        $app->instance('view', $factory);
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($app, $registrar)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([$template], $registrar->reportableTemplates);
+    }
+
+    #[Test]
+    public function degrades_when_the_cache_directory_cannot_be_created(): void
+    {
+        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
+        // A regular file where the shadow directory should go: mkdir cannot win.
+        \mkdir(\dirname($this->shadowDir), 0o777, true);
+        \file_put_contents($this->shadowDir, 'in the way');
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $this->assertStringContainsString($this->shadowDir, $this->progress->warningText());
+        $this->assertSame(0, $registrar->markCalls);
+    }
+
+    #[Test]
+    public function a_template_that_fails_to_compile_is_reported_once_and_the_rest_still_register(): void
+    {
+        $broken = $this->writeTemplate('broken.blade.php', "{{ \$x }}\n@unparseable\n");
+        $healthy = $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        // Compile failure is a Throwable out of the Blade compiler; force one deterministically.
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        $this->bootstrapper($app, $registrar)->boot();
+
+        // The compile failure is an issue instead, so it is not named in a warning `--no-progress` would discard.
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame(
+            [[$broken, "{{ \$x }}\n@unparseable\n", 'unexpected end of file']],
+            $registrar->compileFailures,
+        );
+        $this->assertStringContainsString("skipped Blade template '{$broken}'", \implode("\n", $this->progress->debugMessages));
+        // Every discovered template is reportable, not only the ones that compiled, so findings
+        // from a healthy shadow can be remapped to its template, and the failure reported on it.
+        $this->assertSame([$broken, $healthy], $registrar->reportableTemplates);
+        $this->assertCount(1, $registrar->analyzedShadows);
+    }
+
+    /** One template's `@props` contract once threw out of compileAll() and disabled Blade for the run (#1848). */
+    #[Test]
+    public function an_integer_props_name_does_not_disable_blade_for_the_run(): void
+    {
+        $component = $this->writeTemplate('props-int.blade.php', "@props(['1' => 'x', '2'])\n<div>{{ \$attributes }}</div>\n");
+        $healthy = $this->writeTemplate('healthy.blade.php', "{{ \$y }}\n");
+        $registrar = new RecordingShadowRegistrar();
+
+        $this->assertTrue($this->bootstrapper($this->app(), $registrar)->boot());
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertSame([], $registrar->compileFailures);
+        $this->assertEqualsCanonicalizing([$component, $healthy], $registrar->reportableTemplates);
+        $this->assertCount(2, $registrar->analyzedShadows);
+    }
+
+    #[Test]
+    public function a_compile_failure_is_reported_even_when_no_template_compiled(): void
+    {
+        $broken = $this->writeTemplate('broken.blade.php', "@unparseable\n");
+        $registrar = new RecordingShadowRegistrar();
+        $app = $this->app();
+        $app->instance('blade.compiler', new ThrowingBladeCompiler(new Filesystem(), $this->root . '/compiled', '@unparseable'));
+
+        // Nothing joins the analysis, but a one-template app must not go silent under --no-progress.
+        $this->assertFalse($this->bootstrapper($app, $registrar)->boot());
+
+        $this->assertSame([$broken], $registrar->reportableTemplates);
+        $this->assertSame([[$broken, "@unparseable\n", 'unexpected end of file']], $registrar->compileFailures);
+        $this->assertSame([], $registrar->analyzedShadows);
+        $this->assertSame([], ViewReferenceRegistry::templates(), 'no template facts on a run that never activated');
+        $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
+    }
+
+    /**
+     * Degradation is all-or-nothing (#1518). ContractRegistry and ViewReferenceRegistry feed
+     * call-site validation and template annotation, so a run whose templates never became
+     * reportable must leave both empty.
+     */
+    #[Test]
+    public function publishes_no_template_facts_when_activation_fails(): void
+    {
+        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
+        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
+
+        $booted = $this->bootstrapper($this->app(), $registrar)->boot();
+
+        $this->assertFalse($booted);
+        $this->assertNull(ContractRegistry::contractFor('profile'), 'a contract nothing can remap must not reach call sites');
+        $this->assertSame([], ViewReferenceRegistry::templates());
+
+        $shadows = $this->shadowFiles();
+        $this->assertCount(1, $shadows, 'the shadow was written to disk; only its publication is withheld');
+
+        foreach ($shadows as $shadow) {
+            $this->assertNull(ShadowRegistry::entryFor($shadow));
+        }
+
+        $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
+    }
+
+
+    /**
+     * Shadow files written this run, straight off disk: on the failure path the registrar never
+     * receives them, so the bootstrapper's own return value cannot name them.
+     *
+     * @return list<string>
+     */
+    private function shadowFiles(): array
+    {
+        $shadows = [];
+
+        foreach (\glob($this->shadowDir . '/*.php') ?: [] as $path) {
+            if (\basename($path) !== 'manifest.php') {
+                $shadows[] = $path;
+            }
+        }
+
+        return $shadows;
+    }
+
+    #[Test]
+    public function warns_once_when_no_templates_are_discovered(): void
+    {
+        $registrar = new RecordingShadowRegistrar();
+
+        $bootstrapper = $this->bootstrapper($this->app(), $registrar);
+        $bootstrapper->boot();
+
+        $this->assertCount(1, $this->progress->warnings);
+        $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
+        $this->assertSame(0, $registrar->markCalls);
+        $this->assertNull($bootstrapper->disabled(), 'an empty view tree is not a disable: failOnInternalError must not fire');
+    }
+
+    /**
+     * #1517: a custom directive's handler is a closure loaded from a separate PHP file. The
+     * template that uses the directive never changes, but the directive's own implementation
+     * does — the fingerprint has to fold in the compiler environment, not just the template
+     * source, or the second run reuses the first run's (now stale) shadow.
+     */
+    #[Test]
+    public function a_custom_directive_swapped_between_runs_recompiles_even_though_the_template_did_not_change(): void
+    {
+        $directiveFile = $this->root . '/directive.php';
+        \file_put_contents($directiveFile, "<?php\nreturn static function (\$expression) { return '<?php echo \"MARK-V1\"; ?>'; };\n");
+        $template = $this->writeTemplate('uses-directive.blade.php', "@marker\n");
+
+        $app = $this->app();
+        /** @var BladeCompiler $compiler */
+        $compiler = $app->make('blade.compiler');
+        /** @var callable $handler */
+        $handler = include $directiveFile;
+        $compiler->directive('marker', $handler);
+
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($app, $first)->boot();
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertStringContainsString('MARK-V1', (string) \file_get_contents($first->analyzedShadows[0]));
+
+        \file_put_contents($directiveFile, "<?php\nreturn static function (\$expression) { return '<?php echo \"MARK-V2\"; ?>'; };\n");
+
+        $secondApp = $this->app();
+        /** @var BladeCompiler $secondCompiler */
+        $secondCompiler = $secondApp->make('blade.compiler');
+        /** @var callable $secondHandler */
+        $secondHandler = include $directiveFile;
+        $secondCompiler->directive('marker', $secondHandler);
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertSame([$template], $second->reportableTemplates);
+        $this->assertStringContainsString(
+            'MARK-V2',
+            (string) \file_get_contents($second->analyzedShadows[0]),
+            'a directive edited between runs must recompile the shadow even though the template itself is unchanged',
+        );
+    }
+
+    /**
+     * The compiler-environment hash must be stable across two runs that register the exact same
+     * directive: otherwise every project with even one custom directive would recompile on every
+     * single run and the freshness cache would never hit.
+     */
+    #[Test]
+    public function the_same_custom_directive_registered_twice_reuses_the_same_shadow(): void
+    {
+        $this->writeTemplate('uses-directive.blade.php', "@marker\n");
+
+        $registerMarker = function (Container $app): void {
+            /** @var BladeCompiler $compiler */
+            $compiler = $app->make('blade.compiler');
+            $compiler->directive('marker', static fn(string $expression): string => '<?php echo "MARK"; ?>');
+        };
+
+        $firstApp = $this->app();
+        $registerMarker($firstApp);
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($firstApp, $first)->boot();
+        $shadow = $first->analyzedShadows[0];
+        \file_put_contents($shadow, "<?php // reused\n");
+
+        $secondApp = $this->app();
+        $registerMarker($secondApp);
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertSame([$shadow], $second->analyzedShadows, 'the same environment must resolve to the same shadow path');
+        $this->assertSame("<?php // reused\n", (string) \file_get_contents($shadow), 'a fresh hit must not rewrite the shadow');
+    }
+
+    /**
+     * `if()` stores the user's callback in the compiler's `$conditions` array, distinct from the
+     * wrapper directives it also registers (which live in `$customDirectives` and never change).
+     * Editing only the condition callback must still invalidate the cache, even though nothing in
+     * `getCustomDirectives()` or the template moved.
+     */
+    #[Test]
+    public function editing_a_blade_if_condition_callback_invalidates_the_cache(): void
+    {
+        $conditionFile = $this->root . '/condition.php';
+        \file_put_contents($conditionFile, "<?php\nreturn static fn (): bool => true;\n");
+        $this->writeTemplate('uses-condition.blade.php', "@disco\nyes\n@endisco\n");
+
+        $firstApp = $this->app();
+        /** @var BladeCompiler $firstCompiler */
+        $firstCompiler = $firstApp->make('blade.compiler');
+        /** @var callable(): bool $firstCallback */
+        $firstCallback = include $conditionFile;
+        $firstCompiler->if('disco', $firstCallback);
+
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($firstApp, $first)->boot();
+
+        \file_put_contents($conditionFile, "<?php\nreturn static fn (): bool => false;\n");
+
+        $secondApp = $this->app();
+        /** @var BladeCompiler $secondCompiler */
+        $secondCompiler = $secondApp->make('blade.compiler');
+        /** @var callable(): bool $secondCallback */
+        $secondCallback = include $conditionFile;
+        $secondCompiler->if('disco', $secondCallback);
+
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertNotSame(
+            $first->analyzedShadows[0],
+            $second->analyzedShadows[0],
+            'an edited condition callback must produce a different shadow path even though the template did not change',
+        );
+    }
+
+    /**
+     * #1517 M3: positive-side coverage for the `$trustedEnvironment && $manifest->isFresh(...)`
+     * gate (`BladeBootstrapper::compileAll()`). An internal-function directive handler
+     * (`getFileName()` returns `false`) makes `CompilerEnvironment::describe()` report
+     * `trustworthy = false`, which must (a) stay out of the warnings (debug only, #1930), and
+     * (b) force a recompile even on a SECOND run against an unchanged template and an unchanged
+     * (still-untrustworthy) environment — the existing coverage only pins the negative side
+     * (`assertSame([], $this->progress->warnings)` elsewhere in this suite).
+     */
+    #[Test]
+    public function an_untrustworthy_environment_recompiles_every_run_without_a_warning(): void
+    {
+        $registerUntrustedDirective = static function (Container $app): void {
+            /** @var BladeCompiler $compiler */
+            $compiler = $app->make('blade.compiler');
+            $compiler->directive('shout', 'strtoupper');
+        };
+
+        $this->writeTemplate('profile.blade.php', "<p>{{ \$name }}</p>\n");
+
+        $firstApp = $this->app();
+        $registerUntrustedDirective($firstApp);
+        $first = new RecordingShadowRegistrar();
+        $this->bootstrapper($firstApp, $first)->boot();
+
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $debug = \implode('', $this->progress->debugMessages);
+        $this->assertStringContainsString('1 compiler input cannot be fingerprinted', $debug);
+        $this->assertStringContainsString("directive 'shout' (internal function", $debug);
+
+        // A marker only a recompile would overwrite.
+        $shadow = $first->analyzedShadows[0];
+        \file_put_contents($shadow, "<?php // stale\n");
+
+        $secondApp = $this->app();
+        $registerUntrustedDirective($secondApp);
+        $second = new RecordingShadowRegistrar();
+        $this->bootstrapper($secondApp, $second)->boot();
+
+        $this->assertNotSame(
+            "<?php // stale\n",
+            (string) \file_get_contents($second->analyzedShadows[0]),
+            'an untrustworthy environment must force a recompile even though nothing else changed',
+        );
+    }
+
+    /** The caller throws instead (Plugin::initBladeAnalysis()), so warning here would report the disable twice. */
+    #[Test]
+    public function a_disable_under_fail_on_internal_error_is_recorded_without_a_warning(): void
+    {
+        $app = new Container();
+        $app->instance('view.finder', new FileViewFinder(new Filesystem(), [$this->viewDir]));
+
+        $bootstrapper = new BladeBootstrapper($app, new RecordingShadowRegistrar(), $this->progress, $this->shadowDir, failOnInternalError: true);
+
+        $this->assertFalse($bootstrapper->boot());
+        $this->assertSame([], $this->progress->warnings, $this->progress->warningText());
+        $this->assertStringContainsString("the 'blade.compiler' service is not bound", (string) $bootstrapper->disabled()?->getMessage());
+    }
+
+    /** Unreadable view roots with nothing found elsewhere leave Blade with nothing: a disable, not a silent zero. */
+    #[Test]
+    public function unreadable_view_roots_with_no_template_discovered_disable_blade(): void
+    {
+        $nested = $this->viewDir . '/protected';
+        \mkdir($nested, 0o777, true);
+        $this->writeTemplate('protected/unreachable.blade.php', "{{ \$x }}\n");
+        \chmod($nested, 0o000);
+
+        try {
+            $bootstrapper = $this->bootstrapper($this->app(), new RecordingShadowRegistrar());
+            $this->assertFalse($bootstrapper->boot());
+        } finally {
+            \chmod($nested, 0o777);
+        }
+
+        $this->assertStringContainsString('1 view directory could not be read', (string) $bootstrapper->disabled()?->getMessage());
+        $this->assertStringContainsString('Blade template analysis is disabled for this run', $this->progress->warningText());
+        $this->assertStringContainsString('Blade template(s) were skipped', $this->progress->warningText());
+    }
+}

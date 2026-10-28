@@ -8,48 +8,43 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\PivotColumnResolver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TObjectWithProperties;
 use Psalm\Type\Union;
 
 /**
  * Returns the precise generic relation type for user-defined relationship methods on Models.
  *
- * Without this handler, `(new WorkOrder())->invoice()` resolves to `HasOne<Model, Model>`
- * even when the method body is `return $this->hasOne(Invoice::class)` and the docblock
- * says `@psalm-return HasOne<Invoice, $this>`. Two Psalm limitations cause the collapse:
- *
- * 1. The `class-string<TRelatedModel>` argument's TRelatedModel binding is not propagated
- *    to the stub's `@return HasOne<TRelatedModel, $this>` return.
- * 2. `$this` in template position is not substituted with the late-static-bound class.
- *    The handler binds the receiver class itself, keeping the `&static` marker when the
- *    call is made on `$this` inside a non-final model (#1614).
- *
- * Both collapses happen before any handler registered on the Relation hierarchy can
- * observe a useful generic — the called-on type already arrives at `getRelated()` etc.
- * with `[Model, Model]` template params. Fixing the upstream method's return is the
- * only path that lets the existing stub `@return TRelatedModel` resolve correctly.
+ * Relationship methods are usually written without a docblock return, or with only a native
+ * `: HasOne`, and Psalm types callers from the DECLARED return alone: it never uses the
+ * type it infers from the method body. So `(new WorkOrder())->invoice()` with body
+ * `return $this->hasOne(Invoice::class)` resolves to `mixed` (no declared return) or to
+ * `HasOne<Model, Model>` (native `: HasOne`, template bounds), even though the factory call
+ * itself infers `HasOne<Invoice, WorkOrder&static>`. A docblock
+ * `@return HasOne<Invoice, $this>` already resolves natively; this handler covers the
+ * undocumented majority. It binds the receiver class itself, keeping the `&static` marker
+ * when the call is made on `$this` inside a non-final model (#1614).
  *
  * Strategy: at codebase population time, {@see ModelRegistrationHandler} registers this
  * closure per concrete Model class. For every method call dispatched on the model,
  * {@see RelationMethodParser} parses the AST body to detect a relation factory call
  * (`$this->hasOne(X::class)`, `$this->belongsTo(X::class)`, ...) and returns the
  * properly templated concrete relation type (e.g. `HasOne<Invoice, WorkOrder>`,
- * `BelongsToMany<Tag, Post>`, not `Relation<...>`). `MorphTo` can be narrowed when the
- * related model is statically declared via a docblock generic
- * (`@phpstan-return MorphTo<User|Post, $this>` — read by
- * {@see RelationMethodParser::extractDocblockRelatedModelType}); without that the
- * handler defers because the related class is determined at runtime. `HasOneThrough`
+ * `BelongsToMany<Tag, Post>`, not `Relation<...>`). `MorphTo` is deferred because its
+ * target is selected at runtime; Psalm resolves a declared MorphTo generic natively.
+ * `HasOneThrough`
  * and `HasManyThrough` require both factory class-string args (related and intermediate)
  * to resolve statically. The declaring-model generic comes from the receiver
  * (`$bindingClass`), not a factory arg, so it is always available; if either factory
@@ -64,6 +59,7 @@ use Psalm\Type\Union;
  * pivot default (`Pivot` / `MorphPivot`) and slot 4 with `'pivot'` — emitting only 2
  * triggers `MissingTemplateParam` on consumers because Psalm rejects a partial form
  * even when the stub declares a default via `@template T of … = Default` (see #883).
+ * Captured `->withPivot()` / `->withTimestamps()` columns refine that default to `Pivot&object{...}` (#1944).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
  * @internal
@@ -162,6 +158,60 @@ final class ModelRelationReturnTypeHandler
         // is less specific than a declared `HasMany<Post, $this>` (LessSpecificReturnStatement).
         $bindingIsStatic = self::isStaticReceiver($source, $event->getStmt(), $bindingClass);
 
+        $type = self::relationType(
+            $source->getCodebase(),
+            $declaringClass,
+            $bindingClass,
+            $methodName,
+            $bindingIsStatic,
+        );
+
+        // A declared pivot shape is the user's contract, and Psalm keeps it for callers on its own (#1944).
+        return $type instanceof Union && self::declaresPivotShape($source->getCodebase(), $declaringClass, $methodName) ? null : $type;
+    }
+
+    /** @psalm-capabilities read-props */
+    private static function declaresPivotShape(Codebase $codebase, string $declaringClass, string $methodName): bool
+    {
+        try {
+            $methodId = $codebase->methods->getDeclaringMethodId(MethodIdentifier::wrap($declaringClass . '::' . $methodName));
+            $declared = $methodId instanceof MethodIdentifier ? $codebase->methods->getStorage($methodId)->return_type : null;
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return false;
+        }
+
+        foreach ($declared?->getAtomicTypes() ?? [] as $atomic) {
+            if (!$atomic instanceof TGenericObject || !\is_a($atomic->value, BelongsToMany::class, true)) {
+                continue;
+            }
+
+            foreach (($atomic->type_params[2] ?? null)?->getAtomicTypes() ?? [] as $pivot) {
+                if ($pivot instanceof TObjectWithProperties || ($pivot instanceof TNamedObject && \array_filter(
+                    $pivot->extra_types,
+                    static fn(Type\Atomic $extra): bool => $extra instanceof TObjectWithProperties,
+                ) !== [])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The type a call of the relation method `$methodName` returns when its receiver binds to
+     * `$bindingClass`, or null when the method is not a resolvable relation factory. Shared with
+     * {@see RelationCallbackParamsHandler}, which needs the Relation an eager-load constraint receives.
+     *
+     * @internal
+     */
+    public static function relationType(
+        Codebase $codebase,
+        string $declaringClass,
+        string $bindingClass,
+        string $methodName,
+        bool $bindingIsStatic,
+    ): ?Union {
         // Cache keyed by the (declaring, binding, static) tuple — the Union returned for
         // BaseUser::posts dispatched on User differs from BaseUser::posts dispatched
         // on AdminUser, since each binds a different TDeclaringModel.
@@ -171,23 +221,21 @@ final class ModelRelationReturnTypeHandler
             return self::$unionCache[$cacheKey];
         }
 
-        $codebase = $source->getCodebase();
-
         try {
             $parsed = RelationMethodParser::parse($codebase, $declaringClass, $methodName, $bindingClass);
 
             if ($parsed === null) {
                 $result = null;
             } else {
-                $relatedModelType = self::resolveRelatedModelType($parsed, $codebase, $declaringClass, $methodName);
+                $relatedModelType = self::resolveRelatedModelType($parsed);
 
                 $result = $relatedModelType instanceof \Psalm\Type\Union
                     ? self::buildRelationType(
+                        $codebase,
                         $parsed['relationClass'],
                         $relatedModelType,
                         $parsed['intermediateModel'],
-                        $parsed['pivotModel'],
-                        $parsed['accessor'],
+                        $parsed,
                         $bindingClass,
                         $bindingIsStatic,
                     )
@@ -221,8 +269,6 @@ final class ModelRelationReturnTypeHandler
      * Psalm dispatches this provider once per receiver atomic but the receiver Union is shared,
      * so a mixed receiver (`T|Class&static`) can't tell which alternative is being resolved.
      * Only a single-atomic receiver is narrowed; anything else keeps the plain class.
-     *
-     * @psalm-capabilities read-props
      */
     private static function isStaticReceiver(
         StatementsAnalyzer $source,
@@ -246,29 +292,17 @@ final class ModelRelationReturnTypeHandler
     }
 
     /**
-     * Resolve the related-model Union for the parsed relation. Most factories return a
-     * single Model FQCN via `relatedModel`; polymorphic `morphTo` returns null there
-     * but may declare its target via `@psalm-return MorphTo<User|Post, $this>`, which
-     * {@see RelationMethodParser::extractDocblockRelatedModelType} reads from the
-     * docblock. Returns null when neither path produces a usable type.
+     * Resolve the related-model Union for the parsed relation. Polymorphic `morphTo`
+     * returns null because its target is runtime-selected. Returns null when no statically
+     * known target exists.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, nullable: bool} $parsed
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
+     * @psalm-pure
      */
-    private static function resolveRelatedModelType(
-        array $parsed,
-        Codebase $codebase,
-        string $declaringClass,
-        string $methodName,
-    ): ?Union {
+    private static function resolveRelatedModelType(array $parsed): ?Union
+    {
         if ($parsed['relatedModel'] !== null) {
             return new Union([new TNamedObject($parsed['relatedModel'])]);
-        }
-
-        // morphTo: the factory's first arg is not a class-string, so the parser yields
-        // null. Fall back to the docblock generic for users who annotated their morphTo
-        // with the candidate model union.
-        if ($parsed['relationClass'] === MorphTo::class) {
-            return RelationMethodParser::extractDocblockRelatedModelType($codebase, $declaringClass, $methodName);
         }
 
         return null;
@@ -294,15 +328,14 @@ final class ModelRelationReturnTypeHandler
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
      *
      * @param class-string $relationClass
-     *
-     * @psalm-pure
+     * @param array{pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, ...} $pivot
      */
     private static function buildRelationType(
+        Codebase $codebase,
         string $relationClass,
         Union $relatedModel,
         ?string $intermediateModel,
-        ?string $pivotModel,
-        ?string $accessor,
+        array $pivot,
         string $bindingClass,
         bool $bindingIsStatic,
     ): ?Union {
@@ -344,8 +377,19 @@ final class ModelRelationReturnTypeHandler
         // the corresponding stub default.
         $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;
         if ($pivotDefault !== null) {
-            $typeParams[] = new Union([new TNamedObject($pivotModel ?? $pivotDefault)]);
-            $typeParams[] = new Union([TLiteralString::make($accessor ?? 'pivot')]);
+            $pivotType = new TNamedObject($pivot['pivotModel'] ?? $pivotDefault);
+            // `using(X::class)` refines X itself, from its own types and, on a visible chain, the relation table.
+            if ($pivot['pivotColumns'] !== [] && $pivot['pivotTable'] !== false) {
+                $using = PivotColumnResolver::usingFor($codebase, $pivot['pivotModel'], $pivot['pivotVisible']);
+                $pivotType = PivotColumnResolver::refine(
+                    $pivotType,
+                    PivotColumnResolver::columnTypes($codebase, $pivot['pivotTable'], $pivot['pivotColumns'], $bindingClass, $pivot['pivotVisible'], $using),
+                    $using,
+                ) ?? $pivotType;
+            }
+
+            $typeParams[] = new Union([$pivotType]);
+            $typeParams[] = new Union([TLiteralString::make($pivot['accessor'] ?? 'pivot')]);
         }
 
         return new Union([new TGenericObject($relationClass, $typeParams)]);

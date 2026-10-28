@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Concerns\GuardsAttributes;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOneOrMany;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
@@ -15,10 +21,13 @@ use PhpParser\Node\Scalar\String_;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
@@ -33,6 +42,13 @@ use Psalm\Type\Union;
  * case/separator-insensitively (a JSON-path key by its base column). Self-silences when the model has
  * no column schema, on non-literal arrays/keys, and on ambiguous (non-single-model) receivers, so an
  * always-on rule never floods. Per-expression hook like {@see ModelMakeHandler}; cheap AST rejects first.
+ *
+ * #1679 extends the check to creation calls on Builder and relation receivers (`Post::query()->create()`,
+ * `$user->posts()->createMany()`), resolving the model the call fills from the receiver's projected
+ * `TModel` / `TRelatedModel`. Those receivers use their own per-class method allowlists
+ * ({@see self::CREATION_RECEIVERS}) rather than {@see self::MASS_ASSIGNMENT_METHODS}: only calls that go
+ * through `fill()` qualify, and `Builder::update()` / `HasMany::update()` are query-builder writes that
+ * bypass it (the keys are raw column names), so they stay out.
  */
 final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInterface
 {
@@ -56,6 +72,86 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
         'updateorfail' => true,
     ];
 
+    /**
+     * Builder/relation creation methods taking one attribute map (`$attributes`) that fill the model.
+     * `make*` build an unsaved instance; the value `false` marks a map method, `true` a list method.
+     *
+     * @var array<lowercase-string, false>
+     */
+    private const MAP_CREATION_METHODS = [
+        'make' => false,
+        'create' => false,
+        'createquietly' => false,
+        'forcecreate' => false,
+        'forcecreatequietly' => false,
+    ];
+
+    /**
+     * Relation methods taking a list of attribute maps (`$records`).
+     *
+     * @var array<lowercase-string, true>
+     */
+    private const LIST_CREATION_METHODS = [
+        'makemany' => true,
+        'createmany' => true,
+        'createmanyquietly' => true,
+        'forcecreatemany' => true,
+        'forcecreatemanyquietly' => true,
+    ];
+
+    /**
+     * Receiver class => [template carrying the filled model, methods that receiver fills it through,
+     * delegated hooks those methods run on the way to the model]. A userland override of a hook can
+     * rename keys like an override of a listed method, so hooks join the override scan only.
+     * BelongsToMany declares only `create*`; its `make`/`forceCreate` reach the Builder through
+     * `__call`, so they are not listed. Its second argument is pivot data and is never inspected.
+     *
+     * @var array<class-string, array{string, array<lowercase-string, bool>, list<lowercase-string>}>
+     */
+    private const CREATION_RECEIVERS = [
+        Builder::class => ['TModel', self::MAP_CREATION_METHODS, ['newmodelinstance']],
+        HasOneOrMany::class => [
+            'TRelatedModel',
+            [...self::MAP_CREATION_METHODS, ...self::LIST_CREATION_METHODS],
+            ['setforeignattributesforcreate'],
+        ],
+        BelongsToMany::class => [
+            'TRelatedModel',
+            ['create' => false, 'createquietly' => false, 'createmany' => true, 'createmanyquietly' => true],
+            [],
+        ],
+    ];
+
+    /**
+     * The only framework classes that declare a scanned builder/relation method (verified against
+     * laravel/framework). The check is by exact declaring class, not an `Illuminate\` namespace prefix: a
+     * userland class can live in that namespace. A future framework redeclaration outside this list only
+     * costs a false negative.
+     *
+     * @var list<class-string>
+     */
+    private const TRUSTED_RECEIVER_DECLARERS = [
+        Builder::class,
+        HasOneOrMany::class,
+        MorphOneOrMany::class,
+        MorphMany::class,
+        BelongsToMany::class,
+    ];
+
+    /**
+     * Model methods that decide which keys mass assignment accepts and how the model is built. A model
+     * lineage (including a trait) redeclaring one outside {@see self::TRUSTED_MODEL_DECLARERS} can admit
+     * a virtual key that is no column (a custom-fields trait widening `isFillable()`), so the model's
+     * attribute set no longer bounds what is assignable. `setAttribute()`-only overrides are not scanned.
+     * Caveat: Psalm's declaring-method map is wrong under trait `insteadof` (vimeo/psalm#12113), so such models may be misjudged.
+     *
+     * @var list<lowercase-string>
+     */
+    private const MODEL_FILL_METHODS = ['fill', 'forcefill', 'newinstance', 'isfillable', 'fillablefromarray'];
+
+    /** @var list<class-string> */
+    private const TRUSTED_MODEL_DECLARERS = [Model::class, GuardsAttributes::class];
+
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
@@ -73,24 +169,24 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return null;
         }
 
-        if (!isset(self::MASS_ASSIGNMENT_METHODS[\strtolower($expr->name->name)])) {
+        $lowerMethod = \strtolower($expr->name->name);
+        $isListMethod = isset(self::LIST_CREATION_METHODS[$lowerMethod]);
+
+        if (
+            !isset(self::MASS_ASSIGNMENT_METHODS[$lowerMethod])
+            && !isset(self::MAP_CREATION_METHODS[$lowerMethod])
+            && !$isListMethod
+        ) {
             return null;
         }
 
-        // The attribute map is the first positional argument. Bail on a first-class callable,
-        // argument unpacking, a named argument for another parameter, or a non-literal array —
-        // none expose enumerable literal keys.
-        $arg = $expr->args[0] ?? null;
+        // The attribute map (or, for the `*Many` list methods, the records list) is the first positional
+        // argument, or the argument named `attributes` / `records` wherever it sits (`create(joining: [...],
+        // attributes: [...])`). Bail on a first-class callable, argument unpacking, or a non-literal array
+        // — none expose enumerable literal keys.
+        $arg = self::dataArgument($expr->args, $isListMethod ? 'records' : 'attributes');
 
-        if (!$arg instanceof Arg || $arg->unpack) {
-            return null;
-        }
-
-        if ($arg->name instanceof Identifier && $arg->name->name !== 'attributes') {
-            return null;
-        }
-
-        $array = $arg->value;
+        $array = $arg?->value;
 
         if (!$array instanceof Array_) {
             return null;
@@ -106,11 +202,23 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
 
         $codebase = $event->getCodebase();
 
-        $modelClass = $expr instanceof StaticCall
-            ? self::staticReceiverModel($expr, $event->getStatementsSource(), $codebase)
-            : self::instanceReceiverModel($expr, $event, $codebase);
+        if ($expr instanceof StaticCall) {
+            // Static calls only ever target a Model; `Model::make()` is ModelMakeHandler's.
+            $modelClass = isset(self::MASS_ASSIGNMENT_METHODS[$lowerMethod])
+                ? self::staticReceiverModel($expr, $event->getStatementsSource(), $codebase)
+                : null;
+            $resolved = $modelClass === null ? null : [$modelClass, $modelClass];
+        } else {
+            $resolved = self::instanceReceiver($expr, $lowerMethod, $event, $codebase);
+        }
 
-        if ($modelClass === null) {
+        if ($resolved === null) {
+            return null;
+        }
+
+        [$modelClass, $receiverClass] = $resolved;
+
+        if (self::declaresUserlandMethod($modelClass, null, self::MODEL_FILL_METHODS, self::TRUSTED_MODEL_DECLARERS, $codebase)) {
             return null;
         }
 
@@ -136,47 +244,50 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return null;
         }
 
-        // Collect the literal string keys; positional (list-style) and dynamic keys carry no
-        // property name to validate and are dropped.
-        $rawKeys = [];
+        $allowedKeys = self::allowedKeys($metadata, $modelClass, $codebase);
+        $receiverName = self::shortClassName($receiverClass);
+        $modelName = self::shortClassName($modelClass);
 
-        foreach ($array->items as $item) {
-            // $item is null only for skipped destructuring slots (`[, $x]`), never in a value array.
-            $key = $item?->key;
+        // A list method checks each literal map in the list; non-literal items carry no keys. Only a pure
+        // keyless list is checked: a spread or an explicit outer key can merge or overwrite records, so
+        // which maps are really used is not statically known.
+        /** @var list<Array_> $maps */
+        $maps = [];
 
-            if ($key instanceof String_) {
-                $rawKeys[] = $key->value;
+        if ($isListMethod) {
+            foreach ($array->items as $item) {
+                if ($item->unpack || $item->key !== null) {
+                    return null;
+                }
+
+                if ($item->value instanceof Array_) {
+                    $maps[] = $item->value;
+                }
             }
+        } else {
+            $maps[] = $array;
         }
 
-        $unknown = self::unknownKeys(self::allowedKeys($metadata, $modelClass, $codebase), $rawKeys);
+        foreach ($maps as $map) {
+            foreach ($map->items as $item) {
+                // Positional (list-style) and dynamic keys carry no property name and are dropped. A
+                // duplicated unknown key is reported at each of its occurrences, at the key node.
+                $key = $item->key;
 
-        if ($unknown === []) {
-            return null;
-        }
+                if (!$key instanceof String_ || self::unknownKeys($allowedKeys, [$key->value]) === []) {
+                    continue;
+                }
 
-        // Re-walk the items to emit at each offending key node (precise location), keyed by the
-        // verdict above. A duplicated unknown key is reported at each of its occurrences.
-        $unknownSet = \array_fill_keys($unknown, true);
-        $shortName = self::shortClassName($modelClass);
-        $methodName = $expr->name->name;
-
-        foreach ($array->items as $item) {
-            $key = $item?->key;
-
-            if (!$key instanceof String_ || !isset($unknownSet[$key->value])) {
-                continue;
+                IssueBuffer::accepts(
+                    new UnknownModelAttribute(
+                        "{$receiverName}::{$expr->name->name}() is assigned an unknown attribute '{$key->value}'. "
+                        . "It matches no column, cast, accessor, relation, \$appends entry, or @property "
+                        . "of {$modelName} — check for a typo.",
+                        new CodeLocation($event->getStatementsSource(), $key),
+                    ),
+                    $event->getStatementsSource()->getSuppressedIssues(),
+                );
             }
-
-            IssueBuffer::accepts(
-                new UnknownModelAttribute(
-                    "{$shortName}::{$methodName}() is assigned an unknown attribute '{$key->value}'. "
-                    . "It matches no column, cast, accessor, relation, \$appends entry, or @property "
-                    . "of {$shortName} — check for a typo.",
-                    new CodeLocation($event->getStatementsSource(), $key),
-                ),
-                $event->getStatementsSource()->getSuppressedIssues(),
-            );
         }
 
         return null;
@@ -343,14 +454,45 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
     }
 
     /**
-     * Resolve the model FQCN of an instance call's receiver, or null when the receiver type is not
-     * unambiguously a single Eloquent model. Every atomic of the type must be that same model; a
-     * union mixing in a Builder/Relation/Collection, `null`, or a different model is skipped to avoid
-     * a false positive. Mirrors {@see ImplicitQueryBuilderCallHandler}.
+     * The argument carrying the attribute map / records list: a named argument matching `$paramName`
+     * wherever it sits, else the first positional argument. Null when there is none, it is unpacked, or
+     * the call is a first-class callable.
      *
-     * @return class-string<Model>|null
+     * @param array<array-key, \PhpParser\Node> $args
+     *
+     * @psalm-capabilities read-props
      */
-    private static function instanceReceiverModel(MethodCall $expr, AfterExpressionAnalysisEvent $event, Codebase $codebase): ?string
+    private static function dataArgument(array $args, string $paramName): ?Arg
+    {
+        $first = $args[0] ?? null;
+
+        if (!$first instanceof Arg) {
+            return null;
+        }
+
+        if (!$first->name instanceof Identifier) {
+            return $first->unpack ? null : $first;
+        }
+
+        foreach ($args as $arg) {
+            if ($arg instanceof Arg && !$arg->unpack && $arg->name?->name === $paramName) {
+                return $arg;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve the model an instance call fills plus the receiver class to name in the message, or null
+     * when the receiver is not unambiguously one Eloquent model. Every atomic of the type must be that
+     * same model (the original Model path) or a Builder/relation projecting to that same model; a union
+     * mixing in `null`, another type, a different model, or a Model with a Builder/relation is skipped
+     * to avoid a false positive. Mirrors {@see ImplicitQueryBuilderCallHandler}.
+     *
+     * @return array{class-string<Model>, string}|null
+     */
+    private static function instanceReceiver(MethodCall $expr, string $lowerMethod, AfterExpressionAnalysisEvent $event, Codebase $codebase): ?array
     {
         $receiverType = $event->getStatementsSource()->getNodeTypeProvider()->getType($expr->var);
 
@@ -359,20 +501,161 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
         }
 
         $modelClass = null;
+        $receiverClass = '';
+        $isModelReceiver = null;
 
         foreach ($receiverType->getAtomicTypes() as $atomicType) {
-            if (!$atomicType instanceof TNamedObject || !self::isModelSubclass($atomicType->value, $codebase)) {
+            if (!$atomicType instanceof TNamedObject) {
                 return null;
             }
 
-            if ($modelClass === null) {
-                $modelClass = $atomicType->value;
-            } elseif ($modelClass !== $atomicType->value) {
+            if (self::isModelSubclass($atomicType->value, $codebase)) {
+                $isModel = true;
+                $candidate = isset(self::MASS_ASSIGNMENT_METHODS[$lowerMethod]) ? $atomicType->value : null;
+            } else {
+                $isModel = false;
+                $candidate = self::creationReceiverModel($atomicType, $lowerMethod, $codebase);
+            }
+
+            if (
+                $candidate === null
+                || ($isModelReceiver !== null && $isModelReceiver !== $isModel)
+                || ($modelClass !== null && $modelClass !== $candidate)
+            ) {
                 return null;
+            }
+
+            $modelClass = $candidate;
+            $isModelReceiver = $isModel;
+            $receiverClass = $receiverClass === '' ? $atomicType->value : $receiverClass;
+        }
+
+        return [$modelClass, $receiverClass];
+    }
+
+    /**
+     * The model a Builder/relation receiver fills through `$lowerMethod`, projected from the receiver's
+     * `TModel` / `TRelatedModel` ({@see CREATION_RECEIVERS}). Null (decline) when the method is not on
+     * that receiver's allowlist, the receiver is an intersection, or the template does not project to
+     * exactly one concrete Model subclass (unresolved template, `Model` itself, union, no `@extends`).
+     *
+     * @return class-string<Model>|null
+     * @psalm-capabilities read-props
+     */
+    private static function creationReceiverModel(TNamedObject $atomic, string $lowerMethod, Codebase $codebase): ?string
+    {
+        if ($atomic->extra_types !== []) {
+            return null;
+        }
+
+        foreach (self::CREATION_RECEIVERS as $ancestor => [$template, $methods, $hooks]) {
+            if (!isset($methods[$lowerMethod]) || !ClassLineage::isA($codebase, $atomic->value, $ancestor)) {
+                continue;
+            }
+
+            /** @var list<lowercase-string> $scanned the allowlist keys and hooks are lowercase literals */
+            $scanned = [...\array_keys($methods), ...$hooks];
+
+            if (self::declaresUserlandMethod($atomic->value, $lowerMethod, $scanned, self::TRUSTED_RECEIVER_DECLARERS, $codebase)) {
+                return null;
+            }
+
+            $projected = ClassLineage::projectedTemplate($codebase, $atomic, $ancestor, $template);
+
+            // `Builder<Post&ChildPost>`: the strict-one-model check reads only the head class, which
+            // would validate against Post's columns while the call fills the narrower type.
+            foreach ($projected?->getAtomicTypes() ?? [] as $projectedAtomic) {
+                if ($projectedAtomic instanceof TNamedObject && $projectedAtomic->extra_types !== []) {
+                    return null;
+                }
+            }
+
+            $modelClass = ModelPropertyResolver::extractExactlyOneModelFromUnion($projected, $codebase);
+
+            // The unbound `Model` is what a generic bound degrades to, never a model whose columns exist.
+            return $modelClass === Model::class ? null : $modelClass;
+        }
+
+        return null;
+    }
+
+    /**
+     * Does a class outside `$trusted` declare something the call runs through? A userland override may map
+     * or admit keys (`headline` → `title`, a virtual `custom_fields`), and Laravel's `createQuietly()` /
+     * `createManyQuietly()` go through `create()` / `createMany()`, so one override makes every scanned
+     * name's keys unprovable. Unreadable storage declines too.
+     *
+     * @param class-string           $class
+     * @param list<lowercase-string> $scanned  methods (and delegated hooks) to scan
+     * @param list<class-string>     $trusted
+     * @psalm-capabilities read-props
+     */
+    private static function declaresUserlandMethod(string $class, ?string $calledMethod, array $scanned, array $trusted, Codebase $codebase): bool
+    {
+        try {
+            $storage = $codebase->classlike_storage_provider->get($class);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return true;
+        }
+
+        $declaringClasses = [];
+
+        foreach ($scanned as $method) {
+            $declaring = $storage->declaring_method_ids[$method] ?? null;
+
+            if ($declaring instanceof MethodIdentifier) {
+                $declaringClasses[$method] = $declaring->fq_class_name;
             }
         }
 
-        return $modelClass;
+        return self::hasUserlandOverride($calledMethod, $declaringClasses, $scanned, $trusted);
+    }
+
+    /**
+     * Pure verdict over the declaring class of each scanned method. A given called method must be declared
+     * by a trusted class (else its behaviour is unknown: decline). Every other scanned name declines only
+     * when it IS declared by an untrusted class; an absent name is ignored — BelongsToMany's `*Quietly`
+     * methods do not exist at the Laravel 12.x floor, and their absence is not an override.
+     *
+     * @param array<lowercase-string, string> $declaringClasses declaring class per scanned name; absent names omitted
+     * @param list<lowercase-string>          $scanned
+     * @param list<class-string>              $trusted
+     *
+     * @psalm-pure
+     */
+    public static function hasUserlandOverride(?string $calledMethod, array $declaringClasses, array $scanned, array $trusted): bool
+    {
+        if ($calledMethod !== null && !self::isTrustedDeclarer($declaringClasses[$calledMethod] ?? null, $trusted)) {
+            return true;
+        }
+
+        foreach ($scanned as $method) {
+            if (isset($declaringClasses[$method]) && !self::isTrustedDeclarer($declaringClasses[$method], $trusted)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<class-string> $trusted
+     *
+     * @psalm-pure
+     */
+    private static function isTrustedDeclarer(?string $declaringClass, array $trusted): bool
+    {
+        if ($declaringClass === null) {
+            return false;
+        }
+
+        foreach ($trusted as $class) {
+            if (\strcasecmp($class, $declaringClass) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
