@@ -1,0 +1,127 @@
+---
+title: Performance Benchmark
+parent: Contributing
+nav_order: 11
+---
+
+<h1>Performance Benchmark</h1>
+
+<p>
+  Psalm wall time and peak memory with the plugin on <a href="https://github.com/monicahq/monica">Monica</a>
+  (pinned release, PHP 8.3, mean of 3 <code>hyperfine</code> runs), recorded by the
+  <a href="https://github.com/psalm/psalm-plugin-laravel/blob/4.x/.github/workflows/benchmark.yml"><code>Benchmark</code> workflow</a>
+  on every push to <code>4.x</code> that touches plugin code. Raw history:
+  <a href="https://github.com/psalm/psalm-plugin-laravel/blob/gh-pages/dev/bench/data.js"><code>gh-pages:dev/bench/data.js</code></a>.
+  Click a point to open its commit.
+</p>
+
+<p id="bench-status">Loading benchmark data…</p>
+<div id="bench-charts"></div>
+
+<style>
+  .bench-chart { position: relative; height: 320px; margin-bottom: 2rem; }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.6.1/dist/chart.umd.min.js"
+        integrity="sha384-Emf5ZVIUiarAdhkgtqK+5/Z5qIvM6QoVrS+qAVtfyZVuD5lIHrac0me485+Antp0"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"
+        integrity="sha384-cVMg8E3QFwTvGCDuK+ET4PD341jF3W8nO1auiXfuZNQkzbUUiBGLsIQUE+b1mxws"
+        crossorigin="anonymous"></script>
+<script type="module">
+  const DATA_URL = 'https://raw.githubusercontent.com/psalm/psalm-plugin-laravel/gh-pages/dev/bench/data.js';
+  const COLOR = '#7253ed';
+
+  const status = document.getElementById('bench-status');
+  const container = document.getElementById('bench-charts');
+
+  let data;
+  try {
+    const response = await fetch(DATA_URL);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    // data.js is a script (`window.BENCHMARK_DATA = {...}`), but raw.githubusercontent.com serves it
+    // as text/plain with `nosniff`, so browsers refuse it as <script src>; parse the JSON payload instead.
+    const text = await response.text();
+    data = JSON.parse(text.slice(text.indexOf('{')));
+  } catch (error) {
+    status.textContent = `Could not load benchmark data: ${error.message}`;
+    throw error;
+  }
+
+  status.textContent = `Last update: ${new Date(data.lastUpdate).toLocaleString()}`;
+
+  for (const [suite, entries] of Object.entries(data.entries)) {
+    const suiteHeading = document.createElement('h2');
+    suiteHeading.textContent = suite;
+    container.append(suiteHeading);
+
+    const series = new Map();
+    for (const { commit, benches } of entries) {
+      for (const bench of benches) {
+        if (!series.has(bench.name)) {
+          series.set(bench.name, []);
+        }
+        series.get(bench.name).push({ commit, bench });
+      }
+    }
+
+    for (const [name, points] of series) {
+      // Entries are in run order; rebased or re-run commits would zigzag a time axis.
+      points.sort((a, b) => Date.parse(a.commit.timestamp) - Date.parse(b.commit.timestamp));
+      const heading = document.createElement('h3');
+      heading.textContent = name;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'bench-chart';
+      const canvas = document.createElement('canvas');
+      wrapper.append(canvas);
+      container.append(heading, wrapper);
+
+      new Chart(canvas, {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: name,
+            data: points.map(({ commit, bench }) => ({ x: Date.parse(commit.timestamp), y: bench.value })),
+            borderColor: COLOR,
+            backgroundColor: `${COLOR}33`,
+            fill: true,
+            pointRadius: 3,
+          }],
+        },
+        options: {
+          maintainAspectRatio: false,
+          scales: {
+            x: { type: 'time', title: { display: true, text: 'commit date' } },
+            y: { beginAtZero: true, title: { display: true, text: points[0].bench.unit } },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: ([item]) => points[item.dataIndex].commit.message.split('\n')[0],
+                afterTitle: ([item]) => {
+                  const { id, timestamp } = points[item.dataIndex].commit;
+                  return `${id.slice(0, 7)} · ${new Date(timestamp).toLocaleString()}`;
+                },
+                label: (item) => {
+                  const { value, unit, range } = points[item.dataIndex].bench;
+                  return range ? `${value} ${unit} (${range})` : `${value} ${unit}`;
+                },
+              },
+            },
+          },
+          onHover: (event, elements) => {
+            event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+          },
+          onClick: (_event, elements) => {
+            if (elements.length > 0) {
+              window.open(points[elements[0].index].commit.url, '_blank', 'noopener');
+            }
+          },
+        },
+      });
+    }
+  }
+</script>
