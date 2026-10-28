@@ -135,7 +135,7 @@ See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more 
 <details>
 <summary><b>How it works</b></summary>
 
-Under the hood the plugin boots your actual Laravel application (or an [Orchestra Testbench](https://github.com/orchestral/testbench) skeleton when analyzing a package).
+Under the hood the plugin boots your actual Laravel application (or, when analyzing a package, an [Orchestra Testbench](https://github.com/orchestral/testbench) skeleton: require `orchestra/testbench` in the package's dev dependencies).
 This is not a just a classic static read of your code: config is loaded, facade aliases are resolved via `Illuminate\Foundation\AliasLoader` (including aliases from `config/app.php` and package discovery), and service providers run.
 It also ships hand-crafted stubs for taint analysis and special cases.
 
