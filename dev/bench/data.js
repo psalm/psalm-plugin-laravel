@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793196207108,
+  "lastUpdate": 1793204183058,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17075,6 +17075,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1300,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ebefa273cea8fbcf1fadfc8b3def466b94a66434",
+          "message": "Benchmark on Bencher Bare Metal for `4.x`, `3.x`, and pull requests (#2150)\n\n* ci: benchmark on Bencher Bare Metal for 4.x, 3.x, and pull requests\n\nA secretless build workflow bakes Monica and the plugin into an image, and a workflow_run half pushes it to Bencher and runs it on bare metal, so fork PRs are covered without running their code next to secrets.\n\n* ci(bencher): install the CLI from the checksummed release instead of the unverified action\n\n* ci(bencher): address zizmor findings and keep base-branch runs from cancelling\n\n* ci(bencher): drop the composer cache from the benchmark image\n\n* ci(bencher): fit the free-tier job limit and retry registry pushes",
+          "timestamp": "2026-10-28T17:13:20+01:00",
+          "tree_id": "7d4c635a917f50bceec5161939205e08fd623c89",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ebefa273cea8fbcf1fadfc8b3def466b94a66434"
+        },
+        "date": 1793204181459,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.47,
+            "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1287,
             "unit": "MB"
           }
         ]
