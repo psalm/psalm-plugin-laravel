@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793226135921,
+  "lastUpdate": 1793234637862,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17175,6 +17175,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 25.07,
             "range": "± 0.72",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1289,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "327c52e055fa7a94dddf4110d88a9b97a6ead40f",
+          "message": "chore(rector): drop removed skip rule and hold phpstan below 2.3.4\n\n- Remove the FlipTypeControlToUseExclusiveTypeRector skip: the rule is\n  deprecated in Rector 2.8 and no longer part of any prepared set.\n- Hold phpstan/phpstan below 2.3.4 in require-dev. PHPStan 2.3.4 builds\n  CallableTypeNode with a FullyQualifiedNameNode, while Rector 2.8.2\n  bundles a phpdoc-parser whose constructor only accepts\n  IdentifierTypeNode, so Rector crashes on files with closures.",
+          "timestamp": "2026-10-29T01:40:10+01:00",
+          "tree_id": "f4c8408a901e364902091dc8efa628245ae763f4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/327c52e055fa7a94dddf4110d88a9b97a6ead40f"
+        },
+        "date": 1793234636108,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 42.74,
+            "range": "± 1.18",
             "unit": "s"
           },
           {
