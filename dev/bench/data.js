@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793309761466,
+  "lastUpdate": 1793310069619,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17280,6 +17280,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 40.94,
             "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1288,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8d9c530742fe5d0586b14194f915330df1d009d0",
+          "message": "Type model timestamps and every Eloquent date as the configured date class (#2163)\n\n* fix(eloquent): type date casts as the configured Date::use() class\n\nThe date, datetime and custom_datetime casts were always Illuminate\\Support\\Carbon.\nThey now share one resolver (CastResolver) with the withPivot() timestamp\ncolumns: a configured class is that class, a callable or factory is mixed.\nimmutable_* casts stay CarbonImmutable.\n\nRefs #1999\n\n* fix(eloquent): trust a configured date class only when it is a Carbon\n\nDateFactory forwards instance()/parse()/createFromFormat() to the configured\nclass, so only CarbonInterface's static returns prove the resulting type; any\nother class types the dates as mixed. Also reset Date::use() state between\nplugin invocations so a previous app's date class does not leak into casts.\n\nRefs #1999\n\n* test: cover the mixed date-class outcomes in process, not with Psalm runs\n\n* test: drop generated Laravel bootstrap caches committed by the 4.x merge\n\n* fix(eloquent): type date casts through a stock Carbon factory's class\n\nDate::useFactory(new FactoryImmutable()) builds every date as\n$className::$method() (Carbon\\Factory::__call()), so its getClassName()\ngets the same CarbonInterface check as a configured class. A factory\nsubclass or any other factory object stays mixed.\n\nRefs #1999\n\n* feat(dates): resolve the configured date class in one place\n\nConfiguredDateClass reads Date::use() from the booted app once for model\ncasts, pivot timestamps and the Date facade. The facade no longer samples\nnow(). A callable or a non-stock factory now types dates as\nCarbon\\CarbonInterface instead of mixed: Eloquent itself calls Carbon-only\nmethods on those results. AutoloadOnce is shared with CastResolver so an\nunscanned configured class is loaded at most once.\n\n* fix(eloquent): type getDates() columns as dates\n\nEloquent converts every getDates() column (created_at/updated_at when the\nmodel uses timestamps) through asDateTime(). The registry now adds an\nimplicit datetime cast for each such column without an explicit cast, so\nthey read as the configured date class instead of the raw schema string.\nPivot models stay with PivotColumnResolver.\n\nA column with a get accessor gets no implicit cast: the accessor receives\nthe raw value, so the date never surfaces. Builder pluck() keys read the\nraw schema type (Laravel hydrates only the value column), and in-memory\npluck() keys of a __toString() object are strings, as Arr::pluck() casts them.\n\nFixes #2001\n\n* feat(eloquent): type Model::freshTimestamp() as the configured date class\n\n* docs: record the model date typing decisions\n\n* fix(eloquent): keep set-only Attribute timestamps as dates, leave in-memory date pluck keys as array-key\n\nA set-only Attribute<never, ...> has no getter, so Laravel still\ndate-converts the column; the accessor check now reads the registry's\nclassified accessors instead of hasAttributeMutator(). Arr::pluck()\nstringifies a Carbon key through its toStringFormat, which may be\nnumeric and become an int key, so in-memory date keys stay array-key.\nDocs scope the CarbonInterface trust for callables to what it is.\n\n* test: restore the callable date arm dropped by the 4.x merge",
+          "timestamp": "2026-10-29T22:38:31+01:00",
+          "tree_id": "bd2ce21caf2c7d17fbd4c09a48a507499ce9bdba",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8d9c530742fe5d0586b14194f915330df1d009d0"
+        },
+        "date": 1793310067547,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 24.86,
+            "range": "± 0.25",
             "unit": "s"
           },
           {
