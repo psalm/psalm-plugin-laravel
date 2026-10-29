@@ -205,8 +205,9 @@ final class CastResolverTest extends TestCase
 
     /**
      * `Date::use()` decides what a `date` cast hands back (#1999). Only a configured Carbon class is provably the
-     * type: a callable, a factory, a class that is no Carbon (its `createFromFormat()` may return anything) and
-     * a class Psalm never scanned are all `mixed`. `immutable_*` casts ignore `Date::use()`.
+     * type, whether named directly or through a stock Carbon factory: a callable, a factory subclass, a class that is
+     * no Carbon (its `createFromFormat()` may return anything) and a class Psalm never scanned are all `mixed`.
+     * `immutable_*` casts ignore `Date::use()`.
      *
      * The Carbon case sits in the same test, so the `mixed` outcomes cannot be a resolver that always says `mixed`.
      */
@@ -227,7 +228,15 @@ final class CastResolverTest extends TestCase
         DateFactory::useCallable(static fn(mixed $date): mixed => $date);
         $this->assertSame('mixed', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
 
-        DateFactory::useFactory(new \Carbon\Factory());
+        // A stock factory builds through its class name, so it gets the same Carbon check as a configured class.
+        DateFactory::useFactory(new \Carbon\Factory([], 'DateCastCarbon'));
+        $this->assertSame('DateCastCarbon|null', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
+
+        DateFactory::useFactory(new \Carbon\FactoryImmutable([], 'DateCastPlain'));
+        $this->assertSame('mixed', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
+
+        // A subclass may override `__call()`, so its class name proves nothing.
+        DateFactory::useFactory(new class ([], 'DateCastCarbon') extends \Carbon\Factory {});
         $this->assertSame('mixed', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
 
         DateFactory::useDefault();

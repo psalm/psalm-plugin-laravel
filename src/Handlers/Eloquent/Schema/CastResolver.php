@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Carbon\CarbonInterface;
+use Carbon\Factory;
+use Carbon\FactoryImmutable;
 use Illuminate\Contracts\Database\Eloquent\Castable;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes;
@@ -237,7 +239,7 @@ final class CastResolver
 
     /**
      * The date class `Date::use()` left in the booted app, read from DateFactory's statics: `mixed` when a
-     * callable or a factory builds the dates (the class is unknowable), `Illuminate\Support\Carbon` when
+     * callable or a non-stock factory builds the dates (the class is unknowable), `Illuminate\Support\Carbon` when
      * unconfigured. A configured class must be a Carbon in Psalm's storage: a TNamedObject without storage breaks analysis.
      *
      * `immutable_*` casts are not routed here: HasAttributes builds them with CarbonImmutable whatever
@@ -252,8 +254,18 @@ final class CastResolver
         $callable = $read('callable');
         $factory = $read('factory');
 
-        if ($callable !== null || $factory !== null) {
+        if ($callable !== null) {
             return Type::getMixed();
+        }
+
+        if ($factory !== null) {
+            // A stock Carbon factory builds every date as `$className::$method()` (`Factory::__call()`); a subclass
+            // or another factory object may build anything.
+            if (!$factory instanceof Factory || !\in_array($factory::class, [Factory::class, FactoryImmutable::class], true)) {
+                return Type::getMixed();
+            }
+
+            $class = $factory->getClassName();
         }
 
         if ($class === null) {
