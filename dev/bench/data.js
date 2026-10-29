@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793234637862,
+  "lastUpdate": 1793263635041,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17215,6 +17215,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1289,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "6c3f022eab6e640c2b30d275ff5a6f7ff7e1f5fa",
+          "message": "chore(deps): require rector 2.8.3 and drop the phpstan hold\n\nRector 2.8.3 fixes the CallableTypeNode crash under PHPStan 2.3.4\n(rectorphp/rector#9947), so the temporary phpstan/phpstan <2.3.4 hold\nis no longer needed.",
+          "timestamp": "2026-10-29T09:43:18+01:00",
+          "tree_id": "3c18ede09cd716ce5592e9c3153a1a7159ec7a8d",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6c3f022eab6e640c2b30d275ff5a6f7ff7e1f5fa"
+        },
+        "date": 1793263633096,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 43.98,
+            "range": "± 0.35",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1288,
             "unit": "MB"
           }
         ]
