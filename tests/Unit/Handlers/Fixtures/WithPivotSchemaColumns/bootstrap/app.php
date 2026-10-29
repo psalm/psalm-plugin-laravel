@@ -9,7 +9,6 @@ use Illuminate\Support\DateFactory;
 // Lets a test run configure the app's date class the way a service provider would (`Date::use()`).
 match (\getenv('WITH_PIVOT_DATE')) {
     'immutable' => DateFactory::use(CarbonImmutable::class),
-    'callable' => DateFactory::use(static fn(mixed $date): mixed => $date),
     default => null,
 };
 

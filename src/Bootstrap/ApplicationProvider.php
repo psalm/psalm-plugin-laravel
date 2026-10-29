@@ -101,6 +101,8 @@ final class ApplicationProvider
         // name that belonged only to the previous application could still resolve.
         \Illuminate\Foundation\AliasLoader::getInstance()->setAliases([]);
         \Illuminate\Container\Container::setInstance();
+        // `Date::use()` state is a static the app's own boot sets again; it must not outlive its application.
+        \Illuminate\Support\DateFactory::useDefault();
     }
 
     /**

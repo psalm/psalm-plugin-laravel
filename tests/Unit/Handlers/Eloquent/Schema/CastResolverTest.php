@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Eloquent\Schema;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Casts\ArrayObject as EloquentArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsCollection;
 use Illuminate\Database\Eloquent\Casts\AsStringable;
 use Illuminate\Support\Collection as IlluminateCollection;
+use Illuminate\Support\DateFactory;
 use Illuminate\Support\Stringable as IlluminateStringable;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -35,6 +37,9 @@ final class CastResolverTest extends TestCase
 {
     private Codebase $codebase;
 
+    /** @var list<string> */
+    private const DATE_STORAGE_CLASSES = ['DateCastCarbon', 'DateCastPlain'];
+
     #[\Override]
     protected function setUp(): void
     {
@@ -42,6 +47,16 @@ final class CastResolverTest extends TestCase
         $this->codebase = (new \ReflectionClass(Codebase::class))->newInstanceWithoutConstructor();
         $this->codebase->classlike_storage_provider = new ClassLikeStorageProvider();
         $this->codebase->classlikes = (new \ReflectionClass(ClassLikes::class))->newInstanceWithoutConstructor();
+    }
+
+    #[\Override]
+    protected function tearDown(): void
+    {
+        // `Date::use()` is a static of the framework, and ClassLikeStorageProvider keeps its storage in a static too.
+        DateFactory::useDefault();
+        foreach (self::DATE_STORAGE_CLASSES as $class) {
+            $this->codebase->classlike_storage_provider->remove($class);
+        }
     }
 
     /** @return iterable<string, array{0: string, 1: string}> */
@@ -178,6 +193,67 @@ final class CastResolverTest extends TestCase
         );
 
         $this->assertSame(CastResolverBackedEnum::class, (string) $union);
+    }
+
+    /** @return iterable<string, array{0: string}> */
+    public static function dateCastProvider(): iterable
+    {
+        yield 'date' => ['date'];
+        yield 'datetime' => ['datetime'];
+        yield 'custom_datetime' => ['custom_datetime'];
+    }
+
+    /**
+     * `Date::use()` decides what a `date` cast hands back (#1999). Only a configured Carbon class is provably the
+     * type, whether named directly or through a stock Carbon factory: a callable, a factory subclass, a class that is
+     * no Carbon (its `createFromFormat()` may return anything) and a class Psalm never scanned are all `mixed`.
+     * `immutable_*` casts ignore `Date::use()`.
+     *
+     * The Carbon case sits in the same test, so the `mixed` outcomes cannot be a resolver that always says `mixed`.
+     */
+    #[Test]
+    #[DataProvider('dateCastProvider')]
+    public function it_types_date_casts_as_the_configured_date_class(string $cast): void
+    {
+        $storage = $this->codebase->classlike_storage_provider;
+        $storage->create('DateCastCarbon')->class_implements = [\strtolower(CarbonInterface::class) => CarbonInterface::class];
+        $storage->create('DateCastPlain');
+
+        $this->assertSame('DateCastCarbon|null', (string) $this->resolveWithDateClass('DateCastCarbon', $cast));
+        $this->assertSame('DateCastCarbon', (string) $this->resolveWithDateClass('DateCastCarbon', $cast, nullable: false));
+
+        $this->assertSame('mixed', (string) $this->resolveWithDateClass('DateCastPlain', $cast));
+        $this->assertSame('mixed', (string) $this->resolveWithDateClass('DateCastUnscanned', $cast));
+
+        DateFactory::useCallable(static fn(mixed $date): mixed => $date);
+        $this->assertSame('mixed', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
+
+        // A stock factory builds through its class name, so it gets the same Carbon check as a configured class.
+        DateFactory::useFactory(new \Carbon\Factory([], 'DateCastCarbon'));
+        $this->assertSame('DateCastCarbon|null', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
+
+        DateFactory::useFactory(new \Carbon\FactoryImmutable([], 'DateCastPlain'));
+        $this->assertSame('mixed', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
+
+        // A subclass may override `__call()`, so its class name proves nothing.
+        DateFactory::useFactory(new class ([], 'DateCastCarbon') extends \Carbon\Factory {});
+        $this->assertSame('mixed', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
+
+        DateFactory::useDefault();
+        $this->assertSame(\Illuminate\Support\Carbon::class . '|null', (string) CastResolver::resolve($this->codebase, $cast, nullable: true));
+
+        DateFactory::useCallable(static fn(mixed $date): mixed => $date);
+        $this->assertSame(
+            \Carbon\CarbonImmutable::class . '|null',
+            (string) CastResolver::resolve($this->codebase, 'immutable_' . $cast, nullable: true),
+        );
+    }
+
+    private function resolveWithDateClass(string $dateClass, string $cast, bool $nullable = true): \Psalm\Type\Union
+    {
+        DateFactory::useClass($dateClass);
+
+        return CastResolver::resolve($this->codebase, $cast, $nullable);
     }
 
     #[Test]

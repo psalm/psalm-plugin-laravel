@@ -7,11 +7,12 @@ namespace WithPivotFixture;
 use WithPivotFixture\Models\Crew;
 use WithPivotFixture\Models\Ledger;
 use WithPivotFixture\Models\Odd;
+use WithPivotFixture\Models\Post;
 use WithPivotFixture\Models\Sheet;
 use WithPivotFixture\Models\Squad;
 use WithPivotFixture\Models\Team;
 
-function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $sheet, Odd $odd): void
+function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $sheet, Odd $odd, Post $post): void
 {
     $_members = $team->members();
     /** @psalm-trace $_members */
@@ -56,6 +57,18 @@ function probes(Team $team, Squad $squad, Crew $crew, Ledger $ledger, Sheet $she
 
     $_branched = $team->branchedStamps(true);
     /** @psalm-trace $_branched */
+
+    $_published_at = $post->published_at;
+    /** @psalm-trace $_published_at */
+
+    $_reviewed_on = $post->reviewed_on;
+    /** @psalm-trace $_reviewed_on */
+
+    $_archived_at = $post->archived_at;
+    /** @psalm-trace $_archived_at */
+
+    $_deleted_at = $post->deleted_at;
+    /** @psalm-trace $_deleted_at */
 
     $_scored = $team->scored();
     /** @psalm-trace $_scored */

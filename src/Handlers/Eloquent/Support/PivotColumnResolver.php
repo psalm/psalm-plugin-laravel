@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Concerns\AsPivot;
 use Illuminate\Database\Eloquent\Relations\MorphPivot;
 use Illuminate\Database\Eloquent\Relations\Pivot;
-use Illuminate\Support\DateFactory;
 use Illuminate\Support\Str;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
@@ -278,7 +277,7 @@ final class PivotColumnResolver
             if ($own instanceof Union) {
                 $types[$column] = $own;
             } elseif ($parent !== null && ($column === $parent[0] || $column === $parent[1])) {
-                $types[$column] = ($dates ? self::dateType($codebase, $schemaColumn?->nullable ?? true) : null) ?? Type::getMixed();
+                $types[$column] = $dates ? CastResolver::resolve($codebase, 'datetime', $schemaColumn?->nullable ?? true) : Type::getMixed();
             } elseif (
                 $parent === null || $schemaColumn === null
                 // A plain pivot's forceFill() runs before it has a parent, so it date-normalizes the DEFAULT
@@ -405,34 +404,6 @@ final class PivotColumnResolver
         }
 
         return [$columns[0], $columns[1]];
-    }
-
-    /**
-     * The configured date class, as `Date::use()` left it in the booted app: null when a callable or a factory
-     * builds the dates (the class is unknowable), the framework default when unconfigured.
-     */
-    private static function dateType(Codebase $codebase, bool $nullable): ?Union
-    {
-        [$class, $callable, $factory] = \array_map(
-            static fn(string $name): mixed => (new \ReflectionProperty(DateFactory::class, $name))->getValue(),
-            ['dateClass', 'callable', 'factory'],
-        );
-
-        if ($callable !== null || $factory !== null) {
-            return null;
-        }
-
-        if ($class === null) {
-            return CastResolver::resolve($codebase, 'datetime', $nullable);
-        }
-
-        if (!\is_string($class) || !$codebase->classlikes->classExists($class)) {
-            return null;
-        }
-
-        $type = new Union([new TNamedObject($class)]);
-
-        return $nullable ? Type::combineUnionTypes($type, Type::getNull()) : $type;
     }
 
     /** @psalm-pure */
