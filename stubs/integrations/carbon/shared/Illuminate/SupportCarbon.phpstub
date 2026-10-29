@@ -5,9 +5,7 @@ namespace Illuminate\Support;
 use Carbon\Carbon as BaseCarbon;
 
 /**
- * Same `$timestamp` read/write split as Carbon.phpstub. Psalm populates this class before the plugin stubs
- * re-scan its parent, so it keeps the parent's stale `float|int|string` unless it declares the property itself.
- * The header is copied verbatim from vendor/laravel/framework/src/Illuminate/Support/Carbon.php.
+ * Psalm populates this class before the parent stub re-scan, so it must declare `$timestamp` itself.
  *
  * @property-read int $timestamp
  * @property-write int|float|string $timestamp

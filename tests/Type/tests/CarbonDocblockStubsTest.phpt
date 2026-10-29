@@ -8,23 +8,24 @@
  *   - `@property int|float|string $timestamp` (CarbonInterface.php:60, Traits/Date.php:69)
  *     describes the setter input; the getter returns `(int)` (Traits/Date.php:1162-1164).
  *
+ * `CarbonInterface`-typed receivers keep Carbon's `int|array` `$syntax`: redeclaring the interface
+ * breaks `MethodSignatureMismatch` checks on subclasses.
+ *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/2164
  */
 
 use Carbon\CarbonImmutable;
-use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
-function diff_bool_syntax(Carbon $c, CarbonImmutable $i, CarbonInterface $iface): string
+function diff_bool_syntax(Carbon $c, CarbonImmutable $i): string
 {
     return $c->diffForHumans(Carbon::now(), true)
         . $i->diffForHumans(CarbonImmutable::now(), true)
-        . $iface->diffForHumans(null, true)
         . $c->diffForHumans(null, ['syntax' => 1])
         . $c->diffForHumans();
 }
 
-function alias_bool_syntax(Carbon $c, CarbonInterface $iface): string
+function alias_bool_syntax(Carbon $c): string
 {
     return $c->from(null, true)
         . (string) $c->since(null, true)
@@ -32,10 +33,7 @@ function alias_bool_syntax(Carbon $c, CarbonInterface $iface): string
         . $c->until(null, true)
         . $c->fromNow(true)
         . $c->toNow(true)
-        . $c->ago(true)
-        . $iface->fromNow(true)
-        . $iface->toNow(true)
-        . $iface->ago(true);
+        . $c->ago(true);
 }
 
 function timestamp_read(Carbon $c, CarbonImmutable $i): string

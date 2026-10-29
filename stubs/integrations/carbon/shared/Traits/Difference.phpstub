@@ -3,9 +3,7 @@
 namespace Carbon\Traits;
 
 /**
- * Carbon documents `@param int|array $syntax` (Traits/Difference.php:508 and the `from`/`since`/`to`/`until`/
- * `fromNow`/`toNow`/`ago` aliases), but diffForHumans() casts it `(int)` (Traits/Difference.php:558),
- * so `true` (absolute diff) is valid. `bool` is added to the documented type; every alias funnels into that cast.
+ * Carbon documents `int|array` for `$syntax` (Traits/Difference.php:508) but casts it `(int)` (:558), so `bool` is valid.
  */
 trait Difference
 {
