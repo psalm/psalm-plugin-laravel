@@ -396,6 +396,8 @@ final class ModelMetadataRegistryBuilder
                     $instance,
                     $tableSchema,
                     $schemaComplete,
+                    $accessors,
+                    ($completeSections & ModelMetadata::SECTION_METHODS) !== 0,
                 ),
                 [],
             )
@@ -1425,6 +1427,8 @@ final class ModelMetadataRegistryBuilder
 
     /**
      * @param class-string<Model> $modelFqcn
+     * @param array<non-empty-lowercase-string, AccessorInfo> $accessors
+     * @param bool $accessorsKnown whether the accessor classification is trustworthy (SECTION_METHODS complete)
      * @return array<non-empty-string, CastInfo>
      */
     private static function computeCasts(
@@ -1433,6 +1437,8 @@ final class ModelMetadataRegistryBuilder
         Model $instance,
         TableSchema $schema,
         bool $schemaComplete,
+        array $accessors,
+        bool $accessorsKnown,
     ): array {
         // 1. Laravel's base getCasts() returns $this->casts, prepending an implicit key cast when
         //    the model is incrementing. initializeHasAttributes() normally merges casts() during
@@ -1489,21 +1495,24 @@ final class ModelMetadataRegistryBuilder
         //    Not for a pivot model: a relation hydrates it through AsPivot::fromRawAttributes(), which
         //    overwrites `$timestamps` per row from the selected columns, so this instance's value proves
         //    nothing. PivotColumnResolver types a pivot's dates from the relation call instead.
-        //    Not for a column with an accessor either: transformModelValue() calls it with the RAW value
-        //    before any date conversion, so the date never surfaces through an attribute read, and leaving no
-        //    cast keeps pluck()/aggregates/groupBy() on the schema type they had before dates were modeled.
-        //    hasAttributeMutator() only reflects the return type; hasAttributeGetMutator() would INVOKE the
-        //    user's Attribute factory on this constructor-less instance, and a factory that throws there
-        //    would withhold the whole casts section.
+        //    Not for a column with a GETTER either: transformModelValue() calls it with the RAW value before any
+        //    date conversion, so the date never surfaces, and leaving no cast keeps pluck()/aggregates/groupBy()
+        //    on the schema type. Read from the classified accessors (storage only): a set-only `Attribute` is
+        //    no accessor, so it keeps the date. Never from the instance: hasAttributeGetMutator() would INVOKE the
+        //    user's Attribute factory here, and one that throws would withhold the whole casts section.
         if (!\in_array(AsPivot::class, \class_uses_recursive($instance), true)) {
             foreach ($instance->getDates() as $dateColumn) {
-                if (
-                    \is_string($dateColumn)
-                    && $dateColumn !== ''
-                    && !\array_key_exists($dateColumn, $merged)
-                    && !$instance->hasGetMutator($dateColumn)
-                    && !$instance->hasAttributeMutator($dateColumn)
-                ) {
+                if (!\is_string($dateColumn) || $dateColumn === '' || \array_key_exists($dateColumn, $merged)) {
+                    continue;
+                }
+
+                // Unknown accessors cannot prove the column uncast: withhold the section, as for getDates().
+                if (!$accessorsKnown) {
+                    throw new \LogicException('accessor classification unavailable');
+                }
+
+                $accessorKey = EloquentModelMethods::accessorPropertyKey($dateColumn);
+                if ($accessorKey === null || !isset($accessors[$accessorKey])) {
                     $merged[$dateColumn] = 'datetime';
                 }
             }

@@ -53,6 +53,11 @@ return new class extends Migration {
             $table->timestamps();
         });
 
+        Schema::create('drafts', function (Blueprint $table): void {
+            $table->id();
+            $table->timestamps();
+        });
+
         Schema::create('settings', function (Blueprint $table): void {
             $table->id();
             $table->boolean('flag');

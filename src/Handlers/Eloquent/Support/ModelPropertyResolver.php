@@ -21,7 +21,6 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\NodeTypeProvider;
-use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
@@ -29,7 +28,6 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TIterable;
 use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\Atomic\TString;
 use Psalm\Type\Union;
 
 /**
@@ -263,8 +261,7 @@ final class ModelPropertyResolver
      *
      * $queryPath: Eloquent `Builder::pluck()` runs the query and hydrates ONLY the value column through the
      * model, so its key column is the raw driver value: a date key (the implicit date cast of a `getDates()`
-     * column included) then takes the schema type, not Carbon. The in-memory paths (Collection, `Arr::pluck()`)
-     * stringify a date key instead.
+     * column included) then takes the schema type, not Carbon. The in-memory paths keep the cast-aware type.
      *
      * @param class-string<Model> $modelClass
      * @return array{Union, Union}|null [keyType, valueType]; null when the column isn't a
@@ -480,8 +477,9 @@ final class ModelPropertyResolver
      * combined with an equally-unresolved key column means neither axis narrowed, so
      * the caller defers to the stub entirely instead of restating its default).
      *
-     * On the query path ({@see self::resolvePluckColumnTypes()}) a DATE key takes the column's raw schema type;
-     * in memory a date key is its string. Every other key keeps the cast-aware type.
+     * On the query path ({@see self::resolvePluckColumnTypes()}) a DATE key takes the column's raw schema type.
+     * Every other key keeps the cast-aware type; an in-memory date key is no array-key (Arr::pluck() stringifies
+     * it through the configured `toStringFormat`, which can be numeric), so it falls back like any object.
      *
      * @param class-string<Model> $modelClass
      */
@@ -520,11 +518,8 @@ final class ModelPropertyResolver
             $isDate = $isDate || self::isDateObject($codebase, $atomic);
         }
 
-        if ($isDate) {
-            // In memory, Arr::pluck() turns the date into its string; on a query path the key is the raw column.
-            $keyPropertyType = $queryPath
-                ? (self::resolveRawKeyType($modelClass, $keyColumn) ?? $keyPropertyType)
-                : self::stringifyDateKeys($codebase, $keyPropertyType);
+        if ($isDate && $queryPath) {
+            $keyPropertyType = self::resolveRawKeyType($modelClass, $keyColumn) ?? $keyPropertyType;
         }
 
         if (!UnionTypeComparator::isContainedBy($codebase, $keyPropertyType, Type::getArrayKey())) {
@@ -560,29 +555,5 @@ final class ModelPropertyResolver
     private static function isDateObject(Codebase $codebase, Atomic $atomic): bool
     {
         return $atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, \DateTimeInterface::class);
-    }
-
-    /**
-     * Each date object atomic of a pluck key that declares `__toString()` becomes `string`, as `Arr::pluck()`
-     * casts it; every other atomic is kept (another object's string may be integer-form, and PHP then
-     * coerces the key to int).
-     *
-     * @psalm-mutation-free
-     */
-    private static function stringifyDateKeys(Codebase $codebase, Union $keyType): Union
-    {
-        $mapped = [];
-        foreach ($keyType->getAtomicTypes() as $atomic) {
-            // Populated storage lists inherited and trait methods in declaring_method_ids; unscanned classes
-            // have no storage (ClassLineage::storage() never throws), and stay as they are.
-            $storage = self::isDateObject($codebase, $atomic) && $atomic instanceof TNamedObject
-                ? ClassLineage::storage($codebase, $atomic->value)
-                : null;
-            $mapped[] = $storage instanceof ClassLikeStorage && isset($storage->declaring_method_ids['__tostring'])
-                ? new TString()
-                : $atomic;
-        }
-
-        return new Union($mapped);
     }
 }

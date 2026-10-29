@@ -82,10 +82,10 @@ final class ModelDatesEmissionTest extends TestCase
         $this->assertContains("\$_pluck_updated_collection: Illuminate\Support\Collection<int, {$date}>", $traces);
 
         // Builder::pluck() hydrates only the value column, so its key is the raw driver value: a NOT NULL date
-        // column is still a string key. The in-memory Collection reads the hydrated date, which Arr::pluck() casts
-        // to its string through __toString(): a string key as well.
+        // column is still a string key. In memory the key is the hydrated date, which Arr::pluck() stringifies with
+        // the factory's `toStringFormat` (possibly numeric, hence an int key): no precise key, so array-key.
         $this->assertContains('$_pluck_key_builder: Illuminate\Support\Collection<string, int>', $traces);
-        $this->assertContains('$_pluck_key_collection: Illuminate\Support\Collection<string, int>', $traces);
+        $this->assertContains('$_pluck_key_collection: Illuminate\Support\Collection<array-key, int>', $traces);
 
         // Only a date key is rewritten; every other cast keeps the stub-compatible key it had before dates were modeled:
         // a `bool` column cast to int is an int key (not the raw `bool`), and an enum or Stringable key stays array-key.
@@ -93,6 +93,9 @@ final class ModelDatesEmissionTest extends TestCase
         $this->assertContains('$_key_level: Illuminate\Support\Collection<array-key, int>', $traces);
         $this->assertContains('$_key_sku: Illuminate\Support\Collection<array-key, int>', $traces);
         $this->assertContains('$_key_sku_collection: Illuminate\Support\Collection<array-key, int>', $traces);
+
+        // A set-only `Attribute` is no getter: Laravel still date-converts the column.
+        $this->assertContains("\$_draft_created: {$date}", $traces);
 
         // An `Attribute` factory that throws on the warm-up instance leaves the other casts typed.
         $this->assertContains('$_moody_active: bool|null', $traces);

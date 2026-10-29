@@ -37,10 +37,9 @@ final class ConfiguredDateClass
      *   as a TNamedObject without storage breaks analysis.
      * - A stock `Carbon\Factory` / `FactoryImmutable` (the exact class: a subclass may override `__call()`)
      *   builds every date as `$className::$method()`, so its `getClassName()` gets the same rules.
-     * - A callable, a factory subclass or any other factory: `CarbonInterface`. This trusts Laravel's contract:
-     *   DateFactory's `@method` tags declare Carbon returns, and Eloquent itself calls Carbon-only methods on the
-     *   results (`asDate()` calls `startOfDay()`, `immutable_*` casts call `toImmutable()`), so a non-Carbon
-     *   result breaks the framework. `mixed` left every date in such an app untyped.
+     * - A callable, a factory subclass or any other factory: `CarbonInterface`, a trust rather than a proof.
+     *   DateFactory's `@method` tags declare Carbon, and `date` / `immutable_*` casts call Carbon-only methods;
+     *   a `datetime`-only app may still return a plain `DateTimeInterface`. `mixed` left such apps untyped.
      * - A `Date::swap()`ed or rebound `date` service (the facade root, read first) is judged like a factory: its
      *   class is read when it is a stock Carbon factory, any other object (a `DateFactory` subclass included) is `CarbonInterface`;
      *   only the stock `DateFactory` root defers to the statics.

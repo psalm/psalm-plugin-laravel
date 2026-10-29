@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ModelDatesFixture;
 
 use Illuminate\Notifications\DatabaseNotification;
+use ModelDatesFixture\Models\Draft;
 use ModelDatesFixture\Models\Entry;
 use ModelDatesFixture\Models\Invoice;
 use ModelDatesFixture\Models\Journal;
@@ -110,4 +111,8 @@ function probes(
 
     $_key_sku_collection = Setting::all()->pluck('id', 'sku');
     /** @psalm-trace $_key_sku_collection */
+
+    // A set-only `Attribute` leaves the implicit date cast in place.
+    $_draft_created = Draft::query()->first()?->created_at;
+    /** @psalm-trace $_draft_created */
 }
