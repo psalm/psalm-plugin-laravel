@@ -8,6 +8,7 @@ use Illuminate\Contracts\Database\Eloquent\Castable;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Concerns\AsPivot;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
@@ -1478,6 +1479,35 @@ final class ModelMetadataRegistryBuilder
         // alongside it. Coerce instead of dropping the key so the map — and SECTION_CASTS — stay
         // honest; 'mixed' matches CastsMethodParser's own `$value ?? 'mixed'` convention.
         $merged = \array_map(self::asCastString(...), $merged);
+
+        // 3. Laravel date-converts every getDates() column on read (transformModelValue() runs asDateTime()
+        //    for it, and Builder::pluck() does the same), so such a column reads as the app's date class
+        //    although no cast declares it. Today that is the created/updated pair of a timestamped model,
+        //    sourced from the trait initializers the caller replayed (`$timestamps`, #[WithoutTimestamps],
+        //    #[Table(timestamps:)]) and from a user getDates() override. An explicit cast wins: the cast
+        //    branch precedes the date branch there. `const UPDATED_AT = null` puts a null in the list.
+        //    Not for a pivot model: a relation hydrates it through AsPivot::fromRawAttributes(), which
+        //    overwrites `$timestamps` per row from the selected columns, so this instance's value proves
+        //    nothing. PivotColumnResolver types a pivot's dates from the relation call instead.
+        //    Not for a column with an accessor either: transformModelValue() calls it with the RAW value
+        //    before any date conversion, so the date never surfaces through an attribute read, and leaving no
+        //    cast keeps pluck()/aggregates/groupBy() on the schema type they had before dates were modeled.
+        //    hasAttributeMutator() only reflects the return type; hasAttributeGetMutator() would INVOKE the
+        //    user's Attribute factory on this constructor-less instance, and a factory that throws there
+        //    would withhold the whole casts section.
+        if (!\in_array(AsPivot::class, \class_uses_recursive($instance), true)) {
+            foreach ($instance->getDates() as $dateColumn) {
+                if (
+                    \is_string($dateColumn)
+                    && $dateColumn !== ''
+                    && !\array_key_exists($dateColumn, $merged)
+                    && !$instance->hasGetMutator($dateColumn)
+                    && !$instance->hasAttributeMutator($dateColumn)
+                ) {
+                    $merged[$dateColumn] = 'datetime';
+                }
+            }
+        }
 
         $result = [];
         foreach ($merged as $columnName => $castString) {
