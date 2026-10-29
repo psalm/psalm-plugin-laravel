@@ -257,7 +257,7 @@ final class WhereColumnTaintHandler implements
 
         // Gate on the Codebase graph. Do NOT gate on the statements-analyzer's `data_flow_graph`: taint +
         // unused-var runs wrap THAT in a CombinedFlowGraph, so an instanceof gate there silently disables the fix.
-        if ($event->getCodebase()->taint_flow_graph === null) {
+        if (!$event->getCodebase()->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
             return null;
         }
 
@@ -454,10 +454,6 @@ final class WhereColumnTaintHandler implements
         }
 
         foreach ($argument->items as $item) {
-            if ($item === null) {
-                continue;
-            }
-
             self::$boundValuePositions?->offsetUnset($item);
 
             if (!$item->value instanceof Array_) {
@@ -465,9 +461,7 @@ final class WhereColumnTaintHandler implements
             }
 
             foreach ($item->value->items as $nested_item) {
-                if ($nested_item !== null) {
-                    self::$boundValuePositions?->offsetUnset($nested_item);
-                }
+                self::$boundValuePositions?->offsetUnset($nested_item);
             }
         }
     }
@@ -771,7 +765,7 @@ final class WhereColumnTaintHandler implements
             // A by-reference element can be rewritten between this dispatch and the call — a later
             // element's argument may turn it into an array through the reference, moving it onto
             // `addArrayOfWheres`' nested branch where it becomes the raw column.
-            if ($item === null || $item->unpack || $item->byRef) {
+            if ($item->unpack || $item->byRef) {
                 return null;
             }
 

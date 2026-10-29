@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
+use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -48,7 +49,10 @@ final class AnnotateSafetyTest extends TestCase
 
         $this->assertTemplatesPristine($run['templates']);
         $this->assertIsArray($result['changed'] ?? null);
-        $this->assertCount(17, $result['changed']);
+        // `framed-included` is declared only from an `@includeIsolated` producer, which older Laravel lacks.
+        // `edge-composed` is not declared at all here: with Blade off in the config nobody resolves its composer's
+        // keys, and a composer that cannot be read may write any of them.
+        $this->assertCount(\method_exists(BladeCompiler::class, 'compileIncludeIsolated') ? 20 : 19, $result['changed']);
         $this->assertStringContainsString('+ * @var string $title', (string) ($result['diff'] ?? ''));
     }
 

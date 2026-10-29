@@ -1,0 +1,86 @@
+name: Bencher track
+
+# Second half of bencher.yml (see there): runs from the default branch with secrets for push and
+# PR builds alike. PR identity comes from the API, never from the untrusted build, so a fork PR
+# cannot report into the 4.x/3.x history.
+
+on:
+  # Secrets with a fork-triggered run are the point here: the job never checks out or runs PR code,
+  # it only forwards the built image to Bencher's sandboxed runners (see the header).
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [Bencher]
+    types: [completed]
+
+permissions: {}
+
+# A PR cancels its superseded run; a base-branch run is never cancelled mid-benchmark.
+concurrency:
+  group: bencher-track-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: ${{ github.event.workflow_run.event == 'pull_request' }}
+
+jobs:
+  track:
+    name: Benchmark on bare metal
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read # download the image artifact of the triggering run
+      checks: write # bencher creates the "Bencher Report" check on the benchmarked commit
+      pull-requests: write # bencher posts the results comment on the PR
+    env:
+      BENCHER_API_KEY: ${{ secrets.BENCHER_API_KEY }}
+      IMAGE: registry.bencher.dev/psalm-plugin-laravel:${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bench-image
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Install bencher CLI
+        run: |
+          curl -fsSL -o /tmp/bencher https://github.com/bencherdev/bencher/releases/download/v0.6.14/bencher-v0.6.14-linux-x86-64
+          echo '966cf07ef5bdb33a919c27027380853523b8340e458488cab7bfb780baf3d1c9  /tmp/bencher' | sha256sum --check --strict
+          sudo install -m 755 /tmp/bencher /usr/local/bin/bencher
+
+      - name: Push image to Bencher
+        run: |
+          docker load < image.tar.gz
+          docker tag bench "$IMAGE"
+          echo "$BENCHER_API_KEY" | docker login registry.bencher.dev --username psalm-plugin-laravel --password-stdin
+          # registry.bencher.dev can time out finalizing a large layer; a retry resumes the pushed layers.
+          for attempt in 1 2 3; do
+            docker push --quiet "$IMAGE" && break
+            [[ $attempt == 3 ]] && exit 1
+          done
+
+      - name: Benchmark on bare metal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+        run: |
+          if [[ "$EVENT" == pull_request ]]; then
+            read -r number base base_sha < <(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=$HEAD_OWNER:$BRANCH" \
+              --jq ".[] | select(.head.sha == \"$HEAD_SHA\") | \"\(.number) \(.base.ref) \(.base.sha)\"") \
+              || { echo "::error::No open PR has head $HEAD_SHA"; exit 1; }
+            args=(--branch "pr-$number" --ci-number "$number" --start-point "$base" --start-point-hash "$base_sha"
+              --start-point-clone-thresholds --start-point-reset)
+          else
+            # Thresholds live on the base branches; PR branches clone them from their start point.
+            args=(--branch "$BRANCH" --thresholds-reset
+              --threshold-measure latency --threshold-test t_test --threshold-max-sample-size 64 --threshold-upper-boundary 0.99
+              --threshold-measure peak-memory --threshold-test percentage --threshold-max-sample-size 8 --threshold-upper-boundary 0.05)
+          fi
+          bencher run --project psalm-plugin-laravel --key "$BENCHER_API_KEY" --hash "$HEAD_SHA" \
+            --testbed intel-v1 --spec intel-v1 --image "$IMAGE" --adapter json --file /tmp/bmf.json \
+            --github-actions "$GH_TOKEN" --ci-public-links "${args[@]}" \
+            bash /plugin/tests/Benchmark/bencher.sh /tmp/bmf.json

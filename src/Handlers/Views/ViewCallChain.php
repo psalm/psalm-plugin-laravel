@@ -10,10 +10,17 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
+use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
+use Psalm\Internal\Analyzer\FunctionAnalyzer;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
+use Psalm\Internal\Analyzer\MethodAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\Internal\Analyzer\TraitAnalyzer;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\StatementsSource;
+use Psalm\Storage\MethodStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
@@ -92,6 +99,11 @@ final class ViewCallChain
 
         if (!$chain instanceof self) {
             return null;
+        }
+
+        // No keys added, but the set is no longer closed: the helper's caller completes the view.
+        if (self::isInNonPublicHelper($source)) {
+            $chain = $chain->supplying([[], false]);
         }
 
         $merged = ComponentRenderData::forSource($source);
@@ -286,10 +298,6 @@ final class ViewCallChain
     private static function collectLiteralKeys(Expr\Array_ $array, array $latest): array
     {
         foreach ($array->items as $item) {
-            if ($item === null) {
-                continue;
-            }
-
             if ($item->unpack) {
                 if ($item->value instanceof Expr\Array_) {
                     $latest = self::collectLiteralKeys($item->value, $latest);
@@ -311,9 +319,109 @@ final class ViewCallChain
      */
     private static function isInRenderMethod(StatementsSource $source): bool
     {
-        $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;
+        $analyzer = self::enclosingFunctionLike($source);
 
         return $analyzer instanceof FunctionLikeAnalyzer && \strtolower((string) $analyzer->getMethodName()) === 'render';
+    }
+
+    /**
+     * A named function or a private/protected method is a helper its caller completes:
+     * `function greetingView(): View { return view('greeting'); }` is called as
+     * `greetingView()->with('name', $n)`. A closure stays checked (a route closure is the final
+     * handler), and so does a public method (a controller action, a Mailable's `build()`).
+     *
+     * A trait method is analyzed once, as the trait, so its own visibility is not the effective
+     * one: the classes using the trait may adapt it (`use T { action as public; }`).
+     */
+    private static function isInNonPublicHelper(StatementsSource $source): bool
+    {
+        $analyzer = self::enclosingFunctionLike($source);
+
+        if ($analyzer instanceof FunctionAnalyzer) {
+            return true;
+        }
+
+        if (!$analyzer instanceof MethodAnalyzer) {
+            return false;
+        }
+
+        $storage = $analyzer->getStorage();
+
+        if (!$storage instanceof MethodStorage) {
+            return false;
+        }
+
+        if (!$analyzer->getSource() instanceof TraitAnalyzer) {
+            return $storage->visibility !== ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+        }
+
+        try {
+            return !self::mayBePublicThroughUsers(
+                $source->getCodebase(),
+                \strtolower((string) $analyzer->getFQCLN()),
+                \strtolower((string) $analyzer->getMethodName()),
+                $storage->visibility,
+            );
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            // Not proven non-public: keep the view's key set closed.
+            return false;
+        }
+    }
+
+    /**
+     * Whether a class using the trait exposes its method publicly: through the method's own name
+     * (`use T { m as public; }`) or through an alias under a new name (`use T { m as public n; }`).
+     * A trait used by another trait is followed to the classes using that one. A trait with no user
+     * keeps its declared visibility.
+     *
+     * @param lowercase-string $traitLc
+     * @param lowercase-string $methodLc
+     * @param int $declared the visibility the trait (or the trait using it) gives the method
+     * @throws UnpopulatedClasslikeException
+     * @psalm-capabilities read-props|write-this-props
+     */
+    private static function mayBePublicThroughUsers(Codebase $codebase, string $traitLc, string $methodLc, int $declared): bool
+    {
+        $hasUser = false;
+
+        foreach ($codebase->classlike_storage_provider::getAll() as $user) {
+            if (!isset($user->used_traits[$traitLc])) {
+                continue;
+            }
+
+            $hasUser = true;
+
+            foreach ($user->trait_alias_map as $alias => $original) {
+                if (
+                    $original === $methodLc
+                    && ($user->trait_visibility_map[$alias] ?? null) === ClassLikeAnalyzer::VISIBILITY_PUBLIC
+                ) {
+                    return true;
+                }
+            }
+
+            $visibility = $user->trait_visibility_map[$methodLc] ?? $declared;
+
+            if ($visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC) {
+                return true;
+            }
+
+            if ($user->is_trait && self::mayBePublicThroughUsers($codebase, \strtolower($user->name), $methodLc, $visibility)) {
+                return true;
+            }
+        }
+
+        return !$hasUser && $declared === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+    }
+
+    /**
+     * @psalm-pure
+     */
+    private static function enclosingFunctionLike(StatementsSource $source): ?FunctionLikeAnalyzer
+    {
+        $analyzer = $source instanceof StatementsAnalyzer ? $source->getSource() : null;
+
+        return $analyzer instanceof FunctionLikeAnalyzer ? $analyzer : null;
     }
 
     private static function walk(Expr $expr, StatementsSource $source, bool $trimName): ?self
@@ -666,8 +774,7 @@ final class ViewCallChain
         $candidates = [];
 
         foreach ($views->value->items as $item) {
-            if ($item === null
-                || $item->key instanceof Expr
+            if ($item->key instanceof Expr
                 || !$item->value instanceof String_
                 || $item->value->value !== \trim($item->value->value)
             ) {

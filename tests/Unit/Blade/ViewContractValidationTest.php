@@ -768,6 +768,62 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($this->contractIssues(), 'ComponentRenderPublic.php'));
     }
 
+    /**
+     * #2079: a named function or a private/protected method that returns a bare view is a helper its
+     * caller completes (`helper()->with('name', $n)`), so the data set seen at the `return` is open.
+     */
+    #[Test]
+    public function a_view_returned_by_a_non_public_helper_is_not_reported_missing(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues(), 'NonPublicViewHelpers.php'));
+    }
+
+    #[Test]
+    public function a_non_public_helper_still_has_its_passed_values_type_checked(): void
+    {
+        $reported = $this->forFile($this->contractIssues(), 'NonPublicViewHelperWrongType.php');
+
+        $this->assertSame([self::WRONG_TYPE], \array_column($reported, 'type'), \var_export($reported, true));
+    }
+
+    /**
+     * A public method (a controller action) and a closure (a route closure) are the final handler:
+     * only a non-public helper or a named function is exempt, even a closure inside one.
+     */
+    #[Test]
+    public function a_view_returned_by_a_public_method_or_a_closure_is_still_reported_missing(): void
+    {
+        $issues = $this->contractIssues();
+
+        $this->assertSame(
+            [self::MISSING . ' $name', self::MISSING . ' $name', self::MISSING . ' $name'],
+            $this->variablesOf($this->forFile($issues, 'PublicViewReturners.php')),
+            \var_export($issues, true),
+        );
+    }
+
+    #[Test]
+    public function a_private_trait_method_adapted_to_public_is_still_reported_missing(): void
+    {
+        $reported = $this->forFile($this->contractIssues(), 'TraitAliasToPublic.php');
+
+        $this->assertSame([self::MISSING . ' $name'], $this->variablesOf($reported), \var_export($reported, true));
+    }
+
+    #[Test]
+    public function a_public_trait_method_adapted_to_private_is_not_reported_missing(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues(), 'TraitAliasToPrivate.php'));
+    }
+
+    #[Test]
+    public function a_private_trait_method_aliased_public_under_a_new_name_is_still_reported_missing(): void
+    {
+        $reported = $this->forFile($this->contractIssues(), 'TraitAliasNewName.php');
+
+        $this->assertSame([self::MISSING . ' $name'], $this->variablesOf($reported), \var_export($reported, true));
+    }
+
     #[Test]
     public function a_raw_optional_marker_on_a_type_without_null_is_reported_at_the_declaration(): void
     {

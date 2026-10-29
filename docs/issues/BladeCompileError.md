@@ -6,22 +6,9 @@ nav_order: 13
 
 # BladeCompileError
 
-Emitted on line 1 of a Blade template that the Blade compiler (or the plugin's own declaration parser) threw on. The template is skipped, and the message reads `Template not analyzed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
+Emitted on line 1 of a Blade template that failed to compile (the Blade compiler or the plugin's own declaration parser threw). The template is skipped, and the message reads `Template not analyzed: <cause>`, where the cause is the compiler's own message on one line. Needs [Blade template analysis](../blade.md) enabled.
 
-## Why it matters
-
-A template that does not compile is skipped, and every finding it would have produced disappears with it. A template that used to report issues and now fails to compile would otherwise look like an improvement. The issue is an `error`: it fails the run, survives `--no-progress`, shows up in every `--output-format`, and is recorded by `--set-baseline`.
-
-## Example
-
-```blade
-{{-- resources/views/help.blade.php --}}
-<p>Wrap the card in a @component block.</p>
-```
-
-```text
-ERROR: BladeCompileError - resources/views/help.blade.php:1:1 - Template not analyzed: @component needs arguments; write @@component to print it as text
-```
+A skipped template loses every finding it would have produced, and a template that used to report issues and now fails to compile would otherwise look like an improvement. The issue is therefore an `error`: it fails the run, survives `--no-progress`, shows up in every `--output-format`, and is recorded by `--set-baseline`.
 
 ## Common causes
 

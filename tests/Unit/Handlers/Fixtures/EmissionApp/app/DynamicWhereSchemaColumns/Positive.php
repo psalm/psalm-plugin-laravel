@@ -90,6 +90,19 @@ function query_builder_macro_does_not_veto(UserFilter $filter, Owner $owner): in
     return UserFilter::whereOwnerId(1)->count() + $filter->whereOwnerId(1)->count() + $owner->filters()->whereOwnerId(1)->count();
 }
 
+/** A builder macro or `@method` keeps its own parameter names: the dynamic where `$value` is not imposed. */
+function builder_macros_accept_their_named_parameters(UserFilter $filter, Owner $owner, CustomFilter $custom): void
+{
+    UserFilter::whereOwnerId(id: 5);
+    $filter->whereOwnerId(id: 5);
+    $owner->filters()->whereOwnerId(id: 5);
+    $filter->whereTagId(tag: 'a');
+    $owner->filters()->whereTagId(tag: 'a');
+    $owner->filters()->whereFilterType(type: 'a');
+    $custom->whereKind(kind: 1);
+    $owner->customFilters()->whereKind(kind: 1);
+}
+
 /** A `@method` on the model's custom builder keeps its signature (int param, string return) over the string column. */
 function custom_builder_pseudo_method_wins_on_instance(CustomFilter $filter): string
 {
@@ -114,13 +127,7 @@ function private_model_method_is_not_dispatched(PrivateMethodFilter $filter): in
  */
 function union_with_different_column_types(HasMany $relation): HasMany
 {
-    return $relation->whereUserId(1);
-}
-
-/** A Query\Builder macro's arguments are not column values: no schema param type is imposed. */
-function query_builder_macro_args_are_not_typed_from_the_column(Owner $owner, UserFilter $filter): int
-{
-    return $owner->filters()->whereSlug(['a'])->count() + $filter->whereSlug(['a'])->count();
+    return $relation->whereUserId(new \stdClass());
 }
 
 /** `use T { f as private; }` makes the trait's public method non-public on the model: magic dispatch. */
@@ -129,8 +136,11 @@ function trait_method_adapted_to_private_is_not_dispatched(TraitAdaptedFilter $f
     return $filter->whereState('x')->count();
 }
 
-/** Laravel binds any int; an unsigned column must not demand `int<0, max>`. */
-function unsigned_column_accepts_a_plain_int(int $id): int
+/** The argument is `mixed`, as for where(): the schema's `int<0, max>` column type is not imposed. */
+function schema_column_accepts_any_argument(UserFilter $filter, Owner $owner): int
 {
-    return UserFilter::whereUserId($id)->count();
+    return UserFilter::whereUserId('abc')->count()
+        + $filter->whereUserId(1.5)->count()
+        + $owner->filters()->whereUserId(['a'])->count()
+        + UserFilter::whereUserId(new \stdClass())->count();
 }

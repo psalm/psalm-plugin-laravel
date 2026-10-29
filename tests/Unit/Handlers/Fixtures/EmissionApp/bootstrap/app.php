@@ -26,7 +26,5 @@ Builder::macro('whereTagId', static fn(string $tag): string => $tag);
 // direct model forms; Query\Builder macros never change the Eloquent wrapper's return value.
 Relation::macro('whereFilterType', static fn(string $type): string => $type);
 QueryBuilder::macro('whereOwnerId', static fn(int $id): string => (string) $id);
-// Its argument type differs from the integer `slug`-like column: the macro's args are not column values.
-QueryBuilder::macro('whereSlug', static fn(array $slugs): string => (string) \count($slugs));
 
 return $app;

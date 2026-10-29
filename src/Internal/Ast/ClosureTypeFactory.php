@@ -545,11 +545,7 @@ final class ClosureTypeFactory
         $nextAutoIndex = 0;
         $anyExplicitKey = false;
         foreach ($expr->items as $item) {
-            // `Array_->items` is `list<ArrayItem|null>`: PHP-Parser preserves
-            // `null` for skipped positions inside `list(...)`-style destructuring.
-            // That is destructuring metadata, not a value-producing literal, so
-            // we bail on it.
-            if ($item === null || $item->unpack) {
+            if ($item->unpack) {
                 return null;
             }
 

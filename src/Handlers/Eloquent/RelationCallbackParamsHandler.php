@@ -77,8 +77,16 @@ use Psalm\Type\Union;
  *  - relations: an unresolvable segment, a declared union of relations, a MorphTo on a dot path or under a plain
  *    method (and a morph method on a non-MorphTo), a parsed related model that is an ancestor of the receiver (the
  *    parser pins `static::class` to the declaring class), an eager-load slot with no parsed Relation type;
- *  - signature: a userland override of the method on the dispatched class, a trait other than Laravel's, or, for
- *    static and Relation receivers, on the model's own builder.
+ *  - signature: a userland override of the method or of a method it delegates to (`whereHas()` -> `has()`) on the
+ *    dispatched class, a trait other than Laravel's, or, for static and Relation receivers, on the model's own builder
+ *    (past `hasMorph()` the delegates run on the owner model's builder, so only that one is checked for them);
+ *  - builder: a callback-slot model, or the owner model of a static, Relation or morph call, whose
+ *    `newEloquentBuilder()` is overridden but yields no registered custom builder, unless its declared return type
+ *    (docblock, else native) is the base `Builder` itself, nullable or generic (docblock-only, interface, union,
+ *    intersection or subclass return types name a builder the plugin cannot see, #2080).
+ *    Accepted limits: Psalm ignores `insteadof` (vimeo/psalm#12113), so a trait-composed override may be read from the
+ *    losing trait; a model with both `#[UseEloquentBuilder]`/`$builder` and a docblock-only override is typed with the
+ *    attribute's builder, because `CustomTypeDetector` falls through to it (at runtime the override wins, #2105).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1676
  */
@@ -126,6 +134,32 @@ final class RelationCallbackParamsHandler implements
         'orwherehasmorph' => [2, 'callback', self::MORPH],
         'wheredoesnthavemorph' => [2, 'callback', self::MORPH],
         'orwheredoesnthavemorph' => [2, 'callback', self::MORPH],
+    ];
+
+    /**
+     * Method => the SLOTS-family method it calls with the callback (Laravel's `QueriesRelationships`, identical v12 to
+     * v13), ending at `has()`. A userland override of any link intercepts the callback, so each must be Laravel's.
+     *
+     * @var array<lowercase-string, lowercase-string>
+     */
+    private const DELEGATES = [
+        'doesnthave' => 'has',
+        'wherehas' => 'has',
+        'orwherehas' => 'has',
+        'wheredoesnthave' => 'doesnthave',
+        'orwheredoesnthave' => 'doesnthave',
+        'whererelation' => 'wherehas',
+        'orwhererelation' => 'orwherehas',
+        'wheredoesnthaverelation' => 'wheredoesnthave',
+        'orwheredoesnthaverelation' => 'orwheredoesnthave',
+        'withwherehas' => 'wherehas',
+        'withwhererelation' => 'whererelation',
+        'hasmorph' => 'wherehas',
+        'doesnthavemorph' => 'hasmorph',
+        'wherehasmorph' => 'hasmorph',
+        'orwherehasmorph' => 'hasmorph',
+        'wheredoesnthavemorph' => 'doesnthavemorph',
+        'orwheredoesnthavemorph' => 'doesnthavemorph',
     ];
 
     /**
@@ -244,12 +278,28 @@ final class RelationCallbackParamsHandler implements
 
         // Only Laravel's own signature is rewritten: a userland override (a builder that wraps the callback, or
         // one whose params Psalm inherits from the parent) keeps its own contract. A static or relation-forwarded
-        // call dispatches through the base Builder but runs on the model's own builder, so that class is checked too.
+        // call dispatches through the base Builder but runs on the model's own builder, so that class is checked too,
+        // and must be known: an unknown builder may override anything.
+        $modelBuilder = ModelMethodHandler::getBuilderClassForModel($model);
         $declaring = self::laravelDeclaring($codebase, $dispatched, $method);
         if (!$declaring instanceof MethodIdentifier
-            || ($forwards && !self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($model), $method) instanceof MethodIdentifier)
+            || ($forwards && !self::laravelDeclaring($codebase, $modelBuilder, $method) instanceof MethodIdentifier)
+            || (($forwards || $kind === self::MORPH) && self::hasUnknownBuilder($codebase, $model))
         ) {
             return null;
+        }
+
+        // The family delegates internally, so an override of a delegate intercepts the callback as well. Past
+        // `hasMorph()` the inner `whereHas()` runs inside `$this->where(Closure)`, on the OWNER model's builder.
+        $ownerOnly = $method === 'hasmorph';
+        for ($link = self::DELEGATES[$method] ?? null; $link !== null; $link = self::DELEGATES[$link] ?? null) {
+            foreach ($ownerOnly ? [$modelBuilder] : [$dispatched, ...($forwards ? [$modelBuilder] : [])] as $class) {
+                if (!self::laravelDeclaring($codebase, $class, $link) instanceof MethodIdentifier) {
+                    return null;
+                }
+            }
+
+            $ownerOnly = $ownerOnly || $link === 'hasmorph';
         }
 
         $name = $method === 'withwherehas' ? \explode(':', $relation->value, 2)[0] : $relation->value;
@@ -555,23 +605,74 @@ final class RelationCallbackParamsHandler implements
      * closure with it.
      *
      * @param class-string<Model> $related
-     * @return list<Union>
+     * @return list<Union>|null null: the builder is unknown, see {@see hasUnknownBuilder()}
      */
-    private static function relationSlots(Codebase $codebase, string $related, ?TGenericObject $relation): array
+    private static function relationSlots(Codebase $codebase, string $related, ?TGenericObject $relation): ?array
     {
+        if (self::hasUnknownBuilder($codebase, $related)) {
+            return null;
+        }
+
         $builder = ModelMethodHandler::resolvedBuilderTypeFor($related, $codebase);
 
         return [new Union($relation instanceof TGenericObject ? [$builder, $relation] : [$builder])];
     }
 
     /**
+     * Whether the builder a model's queries run on is one the plugin does not know: `newEloquentBuilder()` is
+     * overridden (it wins over `#[UseEloquentBuilder]` and `$builder`) yet {@see ModelMethodHandler} holds no custom
+     * builder for the model, so it resolves to base `Builder` and would reject the real one. The detector's own result
+     * is asked instead of re-deriving its rule from Psalm storage, which ignores `insteadof` and cannot see its
+     * interface/nullable outcomes. The one legitimate base builder is an override whose EFFECTIVE declared type
+     * (docblock over native) is exactly `Builder`, optionally nullable or generic, with no intersection. Unreadable
+     * storage counts as unknown.
+     */
+    private static function hasUnknownBuilder(Codebase $codebase, string $model): bool
+    {
+        if (ModelMethodHandler::getBuilderClassForModel($model) !== Builder::class) {
+            return false;
+        }
+
+        try {
+            $declaring = $codebase->getDeclaringMethodId($model . '::neweloquentbuilder');
+            $declaring = $declaring === null ? null : MethodIdentifier::wrap($declaring);
+
+            if (!$declaring instanceof MethodIdentifier) {
+                return true;
+            }
+
+            if (\strtolower($declaring->fq_class_name) === \strtolower(Model::class)) {
+                return false;
+            }
+
+            $type = $codebase->methods->getStorage($declaring)->return_type;
+        } catch (\UnexpectedValueException|\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return true;
+        }
+
+        $atomics = \array_values(\array_filter($type?->getAtomicTypes() ?? [], static fn(\Psalm\Type\Atomic $atomic): bool => !$atomic instanceof TNull));
+        $base = $atomics[0] ?? null;
+
+        return \count($atomics) !== 1
+            || !$base instanceof TNamedObject
+            || \strcasecmp($codebase->classlikes->getUnAliasedName($base->value), Builder::class) !== 0
+            || $base->extra_types !== [];
+    }
+
+    /**
      * `($q, $type)`: one builder and one class-string per literal type.
      *
      * @param non-empty-list<class-string<Model>> $types
-     * @return list<Union>
+     * @return list<Union>|null null: the builder is unknown, see {@see hasUnknownBuilder()}
      */
-    private static function morphSlots(Codebase $codebase, array $types): array
+    private static function morphSlots(Codebase $codebase, array $types): ?array
     {
+        foreach ($types as $type) {
+            if (self::hasUnknownBuilder($codebase, $type)) {
+                return null;
+            }
+        }
+
         return [
             new Union(\array_map(
                 static fn(string $type): TNamedObject => ModelMethodHandler::resolvedBuilderTypeFor($type, $codebase),

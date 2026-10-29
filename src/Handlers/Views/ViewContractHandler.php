@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Views;
 
-use Illuminate\Contracts\Support\Renderable;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
-use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
 use Psalm\IssueBuffer;
@@ -21,7 +19,6 @@ use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ReadSetResolver;
 use Psalm\LaravelPlugin\Blade\ViewDataContract;
 use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
-use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\LaravelPlugin\Issues\InvalidViewData;
 use Psalm\LaravelPlugin\Issues\MissingViewData;
@@ -310,7 +307,7 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         // gains no new report.
         if (
             $codebase->isTypeContainedByType($supplied, $declared)
-            || $codebase->isTypeContainedByType(self::renderablesAsString($supplied, $codebase), $declared)
+            || $codebase->isTypeContainedByType(ViewClassProperties::renderablesAsString($supplied, $codebase), $declared)
         ) {
             return;
         }
@@ -323,26 +320,6 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             ),
             $suppressedIssues,
         );
-    }
-
-    /**
-     * What the template receives: `View::gatherData()` swaps every `Renderable` data value for the
-     * string it renders to. A class Psalm never scanned is not proven `Renderable` and stays as is.
-     *
-     * @psalm-mutation-free
-     */
-    private static function renderablesAsString(Type\Union $supplied, Codebase $codebase): Type\Union
-    {
-        $atomics = [];
-
-        foreach ($supplied->getAtomicTypes() as $atomic) {
-            $atomics[] = $atomic instanceof Type\Atomic\TNamedObject
-                && ClassLineage::isA($codebase, $atomic->value, Renderable::class)
-                    ? new Type\Atomic\TString()
-                    : $atomic;
-        }
-
-        return new Type\Union($atomics);
     }
 
     /**

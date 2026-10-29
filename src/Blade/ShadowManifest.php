@@ -28,14 +28,14 @@ final class ShadowManifest
      * the plugin's own checkout and path repositories, this is the only lever that self-invalidates
      * plugin-side derived facts such as the {@see ViewDataContract} cached in slot 5.
      */
-    private const MARKER_PASS_VERSION = 8;
+    private const MARKER_PASS_VERSION = 10;
 
     /** {@see self::isFresh()}: the data-includes slot must have been collected for the entry to count as fresh. */
     public const SLOT_DATA_INCLUDES = 1;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
-     *      shadow path => [template path, lineMap, extendsLine, fingerprint, suppressions, contract,
+     * @var array<string, array{0: string, 1: array<int, int>, 2: string, 3: array<int, list<string>>, 4: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 5: array{0: list<string>, 1: bool}|null}>
+     *      shadow path => [template path, lineMap, fingerprint, suppressions, contract,
      *      dataIncludes]. The final slot is null when its collection pass was disabled.
      */
     private array $entries = [];
@@ -87,7 +87,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: ?int, 3: string, 4: array<int, list<string>>, 5: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 6: array{0: list<string>, 1: bool}|null}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: string, 3: array<int, list<string>>, 4: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 5: array{0: list<string>, 1: bool}|null}>
      *
      * @psalm-mutation-free
      */
@@ -100,19 +100,15 @@ final class ShadowManifest
         $entries = [];
 
         foreach ($data as $shadowPath => $entry) {
-            // Arity 7 gates entries written before the removed references slot. Recompiling is
+            // The exact arity gates entries written with a different slot layout. Recompiling is
             // safer than misreading a derived cache entry of a different shape.
-            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 7) {
+            if (!\is_string($shadowPath) || !\is_array($entry) || \count($entry) !== 6) {
                 continue;
             }
 
-            [$templatePath, $lineMap, $extendsLine, $hash, $suppressions, $contract, $dataIncludes] = \array_values($entry);
+            [$templatePath, $lineMap, $hash, $suppressions, $contract, $dataIncludes] = \array_values($entry);
 
             if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
-                continue;
-            }
-
-            if ($extendsLine !== null && !\is_int($extendsLine)) {
                 continue;
             }
 
@@ -146,7 +142,7 @@ final class ShadowManifest
                 $validLineMap[$shadowLine] = $bladeLine;
             }
 
-            $entries[$shadowPath] = [$templatePath, $validLineMap, $extendsLine, $hash, $validSuppressions, $validContract, $validDataIncludes];
+            $entries[$shadowPath] = [$templatePath, $validLineMap, $hash, $validSuppressions, $validContract, $validDataIncludes];
         }
 
         return $entries;
@@ -311,7 +307,7 @@ final class ShadowManifest
     {
         $entry = $this->entries[$shadowPath] ?? null;
 
-        return $entry === null ? null : new ShadowEntry($entry[0], $entry[1], $entry[4]);
+        return $entry === null ? null : new ShadowEntry($entry[0], $entry[1], $entry[3]);
     }
 
     /**
@@ -324,11 +320,11 @@ final class ShadowManifest
         $shadowPath = $this->shadowPath($templatePath, $source);
         $entry = $this->entries[$shadowPath] ?? null;
 
-        if ($entry === null || $entry[3] !== $this->fingerprint($source) || !\is_file($shadowPath)) {
+        if ($entry === null || $entry[2] !== $this->fingerprint($source) || !\is_file($shadowPath)) {
             return false;
         }
 
-        if (($requiredSlots & self::SLOT_DATA_INCLUDES) !== 0 && $entry[6] === null) {
+        if (($requiredSlots & self::SLOT_DATA_INCLUDES) !== 0 && $entry[5] === null) {
             return false;
         }
 
@@ -360,7 +356,7 @@ final class ShadowManifest
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared] = $entry[5];
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared] = $entry[4];
 
         $contractVars = [];
 
@@ -411,7 +407,6 @@ final class ShadowManifest
         $this->entries[$shadowPath] = [
             $templatePath,
             $shadow->lineMap,
-            $shadow->extendsLine,
             $this->fingerprint($source),
             $shadow->suppressions,
             [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables, $contract->rawDeclaredVariables],
@@ -433,7 +428,7 @@ final class ShadowManifest
      */
     public function dataIncludesFor(string $shadowPath): ?array
     {
-        return $this->entries[$shadowPath][6] ?? null;
+        return $this->entries[$shadowPath][5] ?? null;
     }
 
     /**

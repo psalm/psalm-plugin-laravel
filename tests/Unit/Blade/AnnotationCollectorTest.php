@@ -13,8 +13,10 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\Context;
 use Psalm\Internal\Provider\NodeDataProvider;
 use Psalm\LaravelPlugin\Blade\Annotate\AnnotationCollector;
+use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type;
@@ -25,11 +27,13 @@ final class AnnotationCollectorTest extends TestCase
     protected function setUp(): void
     {
         AnnotationCollector::reset();
+        ContractRegistry::reset();
     }
 
     protected function tearDown(): void
     {
         AnnotationCollector::reset();
+        ContractRegistry::reset();
     }
 
     #[Test]
@@ -149,6 +153,43 @@ final class AnnotationCollectorTest extends TestCase
     }
 
     #[Test]
+    public function declines_a_key_a_view_composer_may_overwrite(): void
+    {
+        // The call site's type is not what the template reads once a composer writes the key.
+        AnnotationCollector::record('home', ['title' => Type::getString(), 'other' => Type::getString()], true);
+        ContractRegistry::registerComposerSources(['home' => [['App\\Composer', 'compose']]]);
+        ContractRegistry::registerComposedKeys(['home' => ['title' => true]]);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+        $this->assertSame('string', AnnotationCollector::typeFor('home', 'other'), 'a key no composer writes keeps its type');
+    }
+
+    #[Test]
+    public function does_not_list_a_disagreement_on_a_key_a_view_composer_owns(): void
+    {
+        // Call sites that disagree on a key the composer writes are not the user's to settle.
+        foreach (['title', 'other'] as $name) {
+            AnnotationCollector::record('home', [$name => $this->objects('App\Post')], true);
+            AnnotationCollector::record('home', [$name => Type::getMixed()], true);
+        }
+
+        ContractRegistry::registerComposerSources(['home' => [['App\\Composer', 'compose']]]);
+        ContractRegistry::registerComposedKeys(['home' => ['title' => true]]);
+
+        $this->assertNull(AnnotationCollector::disagreeingTypes('home', 'title'));
+        $this->assertSame(['App\Post', 'mixed'], AnnotationCollector::disagreeingTypes('home', 'other'), 'a key no composer writes still lists');
+    }
+
+    #[Test]
+    public function declines_every_key_when_a_view_composer_cannot_be_read(): void
+    {
+        AnnotationCollector::record('home', ['title' => Type::getString()], true);
+        ContractRegistry::registerComposerSources(['home' => null]);
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    #[Test]
     public function declines_a_template_parameter_even_though_its_id_parses(): void
     {
         // `T` parses, but as a class named T — a different type than the one observed.
@@ -221,6 +262,64 @@ final class AnnotationCollectorTest extends TestCase
         );
 
         $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
+     * A rendering call in a condition is no statement of its own, so only the compound statement
+     * holding it can see it: `if ($v = view(...))`, `while (...)`, a loop header, a `switch` subject.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function conditionsRenderingView(): iterable
+    {
+        $call = "view('home', ['title' => 42])";
+
+        yield 'if' => ["if (\$v = {$call}) {\n}"];
+        yield 'elseif' => ["if (\$a) {\n} elseif (\$v = {$call}) {\n}"];
+        yield 'while' => ["while (\$v = {$call}) {\n}"];
+        yield 'do while' => ["do {\n} while (\$v = {$call});"];
+        yield 'for' => ["for (\$v = {$call}; \$v; \$v = null) {\n}"];
+        yield 'foreach' => ["foreach ({$call} as \$row) {\n}"];
+        yield 'switch' => ["switch (\$v = {$call}) {\n}"];
+        yield 'case' => ["switch (\$a) {\n    case \$v = {$call}:\n}"];
+    }
+
+    #[Test]
+    #[DataProvider('conditionsRenderingView')]
+    public function marks_a_view_unreadable_when_a_condition_renders_it(string $code): void
+    {
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\n{$code}",
+            [['title' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+    }
+
+    /**
+     * `Factory::first()` renders whichever candidate exists, reached through the facade or the helper.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function firstProducers(): iterable
+    {
+        yield 'facade' => ["return View::first(['home', 'fallback'], ['title' => 42]);"];
+        yield 'fully qualified facade' => ["return \\Illuminate\\Support\\Facades\\View::first(['home', 'fallback'], ['title' => 42]);"];
+        yield 'helper' => ["return view()->first(['home', 'fallback'], ['title' => 42]);"];
+    }
+
+    #[Test]
+    #[DataProvider('firstProducers')]
+    public function marks_every_candidate_of_a_first_call_unreadable(string $code): void
+    {
+        // The second array literal is the candidate list, not data.
+        $this->analyzeStatements(
+            "view('home', ['title' => 'text']);\nview('fallback', ['title' => 'text']);\n{$code}",
+            [['title' => Type::getString()], ['title' => Type::getString()], ['x' => Type::getString()], ['title' => $this->literal(42)]],
+        );
+
+        $this->assertNull(AnnotationCollector::typeFor('home', 'title'));
+        $this->assertNull(AnnotationCollector::typeFor('fallback', 'title'));
     }
 
     #[Test]
@@ -397,13 +496,14 @@ final class AnnotationCollectorTest extends TestCase
         }
     }
 
-    /** Built field by field: the event's constructor also wants a Context and a Codebase this hook never reads. */
+    /** Built field by field: the event's constructor also wants a Codebase this hook never reads. */
     private function statementEvent(Stmt $statement, StatementsSource $source): AfterStatementAnalysisEvent
     {
         $class = new \ReflectionClass(AfterStatementAnalysisEvent::class);
         $event = $class->newInstanceWithoutConstructor();
 
         $class->getProperty('stmt')->setValue($event, $statement);
+        $class->getProperty('context')->setValue($event, new Context());
         $class->getProperty('statements_source')->setValue($event, $source);
 
         return $event;

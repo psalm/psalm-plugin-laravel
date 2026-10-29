@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use Psalm\LaravelPlugin\Blade\BladeDisabledException;
+use Psalm\LaravelPlugin\Bootstrap\TestbenchMissingException;
 
 /**
  * Classifies a {@see \Throwable} raised during plugin initialisation by walking
@@ -38,6 +39,11 @@ final class InternalErrorClassifier
                 ? self::hint($previous)
                 : 'Blade template analysis could not start. The message above names the cause, usually a project '
                     . 'setting (the blade.compiler service, the Blade cacheDir, the view directories), not a plugin bug.';
+        }
+
+        if ($throwable instanceof TestbenchMissingException) {
+            return 'The project has neither a bootstrap/app.php nor Orchestra Testbench installed, so there is no '
+                . 'Laravel application to boot. This is a project setup issue, not a plugin bug.';
         }
 
         foreach (self::frameFiles($throwable) as $file) {

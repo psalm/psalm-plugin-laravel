@@ -42,6 +42,8 @@ final class BladeShadowPruneTest extends TestCase
         // copied template actually uses the @routes/@bogusroute directives they register.
         'app/Providers/RouteHelperStubProvider.php',
         'packages/route-helper/src/RouteGenerator.php',
+        'app/Providers/BlazeStubProvider.php',
+        'packages/blaze/src/BlazeManager.php',
         'bootstrap/app.php',
         'bootstrap/cache/.gitignore',
         'config/view.php',

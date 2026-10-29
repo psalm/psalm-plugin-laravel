@@ -14,6 +14,9 @@ $app->register(new class ($app) extends ServiceProvider {
     public function boot(): void
     {
         $this->loadViewsFrom(\dirname(__DIR__) . '/resources/pkg-views', 'pkg');
+        // Written as a string: the plugin reads the composer's method from the analysed source, so the
+        // class need not be loadable here.
+        $this->app->make('view')->composer('edge-composed', 'AnnotateFixture\\EdgeComposer');
     }
 });
 

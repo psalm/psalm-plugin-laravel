@@ -73,20 +73,13 @@ function test_static_dynamic_where_underscored_multi_word_column(): void {
     /** @psalm-check-type-exact $_ = Builder<Customer> */
 }
 
-// Typed-param hand-off (#928): scalar single-segment + 1 arg must reject wrong type.
-function test_static_dynamic_where_rejects_wrong_scalar_type(): void {
-    Part::whereName(123);
-}
-
-// Non-scalar (CarbonInterface|null) column falls through to variadic mixed.
+// The argument is mixed, whatever the column's type (see DynamicWhereArgumentTypingTest).
 function test_static_dynamic_where_skips_non_scalar_column(): void {
     Customer::whereEmailVerifiedAt('2024-01-01');
     Customer::whereEmailVerifiedAt(null);
 }
 
-// Multi-segment falls through to variadic mixed — wrong types in either position
-// are tolerated (multi-segment intentionally skips typed-param hand-off, mirroring
-// the relation-chain behaviour and Larastan's DynamicWhereParameterReflection).
+// Multi-segment takes one argument per segment and stays variadic mixed.
 function test_static_dynamic_where_multi_segment_falls_back_to_variadic(): void {
     Part::wherePartNumberAndName(123, 456);
 }
@@ -117,5 +110,4 @@ function test_static_dynamic_where_lowercase_spelling(): void {
 
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of App\Models\Part::wherename expects string, but 123 provided
 UndefinedMagicMethod on line %d: Magic method App\Models\Part::wherenonexistentcolumn does not exist

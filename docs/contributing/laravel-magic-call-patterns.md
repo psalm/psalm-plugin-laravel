@@ -28,7 +28,7 @@ For static calls `Class::method()`:
 
 **Key:** `__call`/`__callStatic` only fire when the method is NOT found through steps 1-2.
 
-**Important:** `__call` is itself a regular method — it follows the same own → parent → trait
+**Important:** `__call` is itself a regular method, it follows the same own → parent → trait
 resolution. There is only ever **one** `__call` that fires; PHP does not chain them. If both a
 parent class and a trait define `__call`, the conflict must be resolved explicitly. This is why
 Laravel uses the alias pattern:
@@ -39,7 +39,7 @@ class Relation {
         __call as macroCall;  // rename trait's __call to avoid conflict
     }
 
-    // Own __call — the ONLY one that fires
+    // Own __call, the ONLY one that fires
     public function __call($method, $params)
     {
         // Manually delegate to the trait's version for macros
@@ -58,7 +58,7 @@ class HasMany extends Relation {
 
 The same pattern is used by `Relation`, `Query\Builder`, and other classes that
 combine `Macroable` with custom `__call` forwarding logic. Note: `Eloquent\Builder` does NOT
-use the `Macroable` trait — it has its own independent two-tier macro system (local + global).
+use the `Macroable` trait, it has its own independent two-tier macro system (local + global).
 
 ## Laravel's Major Magic Call Patterns
 
@@ -90,7 +90,7 @@ public function __call($method, $parameters)
 
 **`forwardDecoratedCallTo` behavior** (from `ForwardsCalls` trait, simplified):
 ```php
-// Simplified — actual code validates error message against get_class($object)
+// Simplified, actual code validates error message against get_class($object)
 // and uses named capture groups. Only "method not found" errors are rewritten;
 // all other errors are rethrown as-is.
 protected function forwardCallTo($object, $method, $parameters)
@@ -103,7 +103,7 @@ protected function forwardCallTo($object, $method, $parameters)
     }
 }
 
-// "Decorated" refers to the Decorator pattern — the Relation wraps (decorates) the Builder.
+// "Decorated" refers to the Decorator pattern, the Relation wraps (decorates) the Builder.
 // When the Builder returns itself, the decorator swaps it for $this so the caller
 // stays in the Relation layer instead of dropping down to the Builder.
 protected function forwardDecoratedCallTo($object, $method, $parameters)
@@ -114,7 +114,7 @@ protected function forwardDecoratedCallTo($object, $method, $parameters)
 }
 ```
 
-**Call chain (PHP runtime resolution, not Psalm's — Psalm uses declaring_method_ids + @mixin instead):**
+**Call chain (PHP runtime resolution, not Psalm's, Psalm uses declaring_method_ids + @mixin instead):**
 ```
 $post->comments()->where('approved', true)
   │
@@ -139,7 +139,7 @@ the Relation's first template parameter, resolves that model's effective builder
 custom method signature from Psalm storage. Its return union is then decorated branch by branch:
 Builder subtypes become the original Relation while scalar/model/collection/null branches remain
 unchanged. The same signature is handed to the params provider for direct `Relation::__call`
-dispatch. This must remain storage-only—booting builders can execute application code, and a
+dispatch. This must remain storage-only, booting builders can execute application code, and a
 synthetic method call recursively clones Psalm node data on this hot path.
 
 Method-level templates uniformly degrade to their declared upper bound (normally `mixed`) when
@@ -166,7 +166,7 @@ public function __call($method, $parameters)
     // 1. Local macros (instance-level, stored in $this->localMacros)
     if ($method === 'macro') { ... }
     if ($this->hasMacro($method)) {
-        // Inline execution — passes $this as FIRST positional argument (not via bindTo)
+        // Inline execution, passes $this as FIRST positional argument (not via bindTo)
         array_unshift($parameters, $this);
         $macro = $this->localMacros[$method];
         return $macro(...$parameters);
@@ -174,7 +174,7 @@ public function __call($method, $parameters)
 
     // 2. Global macros (class-level, stored in static::$macros)
     if (static::hasGlobalMacro($method)) {
-        // Also inline execution — binds Closure to $this and calls directly
+        // Also inline execution, binds Closure to $this and calls directly
         $callable = static::$macros[$method];
         if ($callable instanceof Closure) {
             $callable = $callable->bindTo($this, static::class);
@@ -199,7 +199,7 @@ public function __call($method, $parameters)
     return $this;
 }
 
-// Eloquent\Builder::__callStatic() — handles macro/mixin registration
+// Eloquent\Builder::__callStatic(), handles macro/mixin registration
 public static function __callStatic($method, $parameters)
 {
     // 1. 'macro' → register a global macro
@@ -256,7 +256,7 @@ DB::table('users')
        Result: Query\Builder
 ```
 
-**Psalm challenge:** `__callStatic` loses taint context. The generated alias stubs (`class DB extends DatabaseManager`) help with type resolution but don't carry taint annotations. Calling the underlying class directly (`DB::connection()->...`) works correctly for taint analysis.
+**Psalm challenge:** `__callStatic` loses taint context. The generated alias stubs (`class_alias(\Illuminate\Support\Facades\DB::class, 'DB')`) make the root alias resolve to the facade itself, which helps with type resolution, but they don't carry taint annotations. Calling the underlying class directly (`DB::connection()->...`) works correctly for taint analysis.
 
 
 ### 4. Model Attribute Access (`__get` / `__set`)
@@ -271,7 +271,7 @@ public function __get($key)
 }
 
 // Model::getAttribute() resolution order:
-// 1. hasAttribute($key) — single check that covers:
+// 1. hasAttribute($key): single check that covers:
 //    - $attributes array (database columns)
 //    - $casts
 //    - Legacy accessor: getFirstNameAttribute()
@@ -279,10 +279,10 @@ public function __get($key)
 //    - Class castables
 //    All handled inside getAttributeValue() if hasAttribute() is true.
 //
-// 2. method_exists(self::class, $key) — if a method with this name exists
+// 2. method_exists(self::class, $key): if a method with this name exists
 //    on the model but isn't an attribute, return null (or throw in strict mode)
 //
-// 3. isRelation($key) or relationLoaded($key) — load/return the relation
+// 3. isRelation($key) or relationLoaded($key): load/return the relation
 //
 // 4. Otherwise: return null
 //    (or throw if Model::preventAccessingMissingAttributes() is enabled)
@@ -315,10 +315,10 @@ public function __call($method, $parameters)
 {
     // 1. increment/decrement family (increment, decrement, incrementQuietly, etc.)
     // 2. Relation resolvers (registered via Model::resolveRelationUsing())
-    // 3. through{Relation} helper — e.g., $user->throughCars() resolves to
+    // 3. through{Relation} helper: e.g., $user->throughCars() resolves to
     //    $user->through('cars') returning a PendingHasThroughRelationship
     // 4. Forward to newQuery() → Eloquent\Builder
-    //    Uses forwardCallTo (NOT forwardDecoratedCallTo) — returns Builder directly
+    //    Uses forwardCallTo (NOT forwardDecoratedCallTo), returns Builder directly
     return $this->forwardCallTo($this->newQuery(), $method, $parameters);
 }
 ```
@@ -359,7 +359,7 @@ trait Macroable
         static::$macros[$name] = $macro;
     }
 
-    // Instance calls — the trait's own __call throws if no macro found.
+    // Instance calls, the trait's own __call throws if no macro found.
     // Classes like Relation and Builder alias this as `macroCall` and write
     // their own __call that checks macros inline before forwarding.
     public function __call($method, $parameters)
@@ -402,7 +402,7 @@ trait Macroable
 ```
 
 **Classes that use Macroable:**
-- `Eloquent\Builder` — does NOT use the trait; has its own two-tier macro system (see section 2)
+- `Eloquent\Builder`: does NOT use the trait; has its own two-tier macro system (see section 2)
 - `Query\Builder`
 - `Relation` (all relation types)
 - `Collection` / `EloquentCollection`
@@ -437,7 +437,7 @@ Collection::__call():
 ```php
 // Registration (typically in a ServiceProvider::boot())
 Builder::macro('active', function () {
-    /** @var Builder $this — bound by Closure::bindTo */
+    /** @var Builder $this, bound by Closure::bindTo */
     return $this->where('active', true);
 });
 
@@ -450,7 +450,7 @@ User::query()->active();  // works via __call → macro lookup
 **Plugin handler:** `MacroHandler` (with `MacroRegistry`), registered unconditionally. During
 `AfterCodebasePopulated` it reads the booted app's `Macroable::$macros` registries via PHP reflection
 (macros registered in ServiceProviders are populated by then) and injects each macro as a synthesized
-pseudo-method into `ClassLikeStorage::$pseudo_methods` **and** `$pseudo_static_methods` — the same
+pseudo-method into `ClassLikeStorage::$pseudo_methods` **and** `$pseudo_static_methods`, the same
 storage shape Psalm uses for `@method` annotations, so both `$instance->macroName()` and
 `Class::macroName()` resolve. It propagates macros to subclasses (walking `parent_classes`) and to
 facades that proxy to the Macroable owner (via `FacadeMapProvider`, including manager-forwarding
@@ -478,7 +478,7 @@ app()->make(Bar::class) // → resolves to Bar
 app($flag ? 'cache' : 'db') // → CacheManager|DatabaseManager (every literal must resolve, else mixed)
 ```
 
-**Plugin handler:** `ContainerHandler` (implements `FunctionReturnTypeProviderInterface` + `MethodReturnTypeProviderInterface`). Bindings are discovered by booting the real Laravel app at plugin init and iterating the container's registered bindings. `Plugin::__invoke()` also calls `ContainerResolver::queueBoundClassesForScanning()` once at the end of plugin init: it instantiates every binding and queues the resolved classes for Psalm scanning (`store_failure: false`), so resolved types are known before analysis. The pass's results are then discarded (a later binding's closure can rebind an abstract it already resolved), so analysis-time resolution reads the live container. This is not a scan-phase hook: the former `AfterClassLikeVisit` hook on the Application/Container interfaces re-ran every `make()` on each visit (2-5 times per run) and queued the classes while stubs were registering, so Psalm scanned them as stubs. The resolver narrows to an object's class only when Psalm has its storage, otherwise it falls back like an unbound abstract.
+**Plugin handler:** `ContainerHandler` (implements `FunctionReturnTypeProviderInterface` + `MethodReturnTypeProviderInterface`). It resolves bindings from the live container of the real Laravel app booted at plugin init, and narrows to an object's class only when Psalm has its storage; otherwise it falls back like an unbound abstract. `ContainerResolver::queueBoundClassesForScanning()` runs once at the end of plugin init: it instantiates every binding and queues the resolved classes for Psalm scanning (`store_failure: false`), so resolved types are known before analysis, then discards those resolutions because a later binding's closure can rebind an abstract it already resolved. See [the eager-queue decision](decisions.md#why-container-bound-classes-are-queued-eagerly-at-plugin-init) for why this is a plugin-init step and not a scan hook.
 
 
 ## Summary: The Forwarding Chain
@@ -523,7 +523,7 @@ Both are in the `ForwardsCalls` trait. The critical difference:
 | Method                    | Returns `$this` when proxy returns itself?                    | Used by                                                    |
 |---------------------------|---------------------------------------------------------------|------------------------------------------------------------|
 | `forwardCallTo`           | No, returns raw result                                        | Model::__call (returns result as-is), Eloquent\Builder (discards result, returns `$this` manually) |
-| `forwardDecoratedCallTo`  | **Yes** — swaps proxy's `$this` for caller's `$this`          | Relation                                                   |
+| `forwardDecoratedCallTo`  | **Yes**, swaps proxy's `$this` for caller's `$this`          | Relation                                                   |
 
 Note: Eloquent\Builder uses `forwardCallTo` but discards the return value and unconditionally returns `$this`. Relation uses `forwardDecoratedCallTo` which does the `$result === $object ? $this : $result` swap. Both achieve the same effect (fluent chain returns the caller) but through different mechanisms.
 
@@ -538,14 +538,14 @@ Psalm scans all files and builds `ClassLikeStorage` for each class. Multiple sou
 ```
 Priority (lowest → highest, last wins):
 
-1. Native PHP types        — from actual method signatures: function foo(): string
-2. PHPDoc types            — @param, @return, @var override native types
+1. Native PHP types:   from actual method signatures: function foo(): string
+2. PHPDoc types:       @param, @return, @var override native types
                               For @return: @psalm-return > @phpstan-return > @return (explicit priority chain)
                               For @param: all three sources merged by byte offset, not prioritized
-3. Stub files              — MERGE into existing storage, overwriting matching methods
+3. Stub files:         MERGE into existing storage, overwriting matching methods
 ```
 
-During scanning, `@mixin` annotations are just **recorded as metadata** — they are not resolved yet. Stubs merge into the existing `ClassLikeStorage` — methods declared in a stub overwrite matching methods from the vendor scan, but methods NOT in the stub survive from the original scan.
+During scanning, `@mixin` annotations are just **recorded as metadata**, they are not resolved yet. Stubs merge into the existing `ClassLikeStorage`, methods declared in a stub overwrite matching methods from the vendor scan, but methods NOT in the stub survive from the original scan.
 
 **Example:**
 ```php
@@ -559,7 +559,7 @@ public function where($column, $operator = null, $value = null, $boolean = 'and'
 // Stub type wins → return type is self<TModel>
 ```
 
-### Phase 2: Analysis — Method Resolution (where is the method found?)
+### Phase 2, analysis: Method Resolution (where is the method found?)
 
 When Psalm encounters `$obj->method()` during analysis, it follows PHP's own method resolution logic (own → parent → trait → `__call`), with `@mixin` inserted as a Psalm-specific step before `__call`. **First match wins:**
 
@@ -579,23 +579,23 @@ When Psalm encounters `$obj->method()` during analysis, it follows PHP's own met
    - The method is resolved AS IF it were on the mixin class
    - MethodReturnTypeProvider fires for the MIXIN class, not the original
    - Psalm has two mutually exclusive mixin paths (connected by elseif):
-     a. Templated mixins (@mixin T) — checked first. Has two inner guards:
+     a. Templated mixins (@mixin T), checked first. Has two inner guards:
         - isSingle(): rejects union types (e.g., A|B)
         - instanceof TNamedObject: rejects non-object types (e.g., unresolved mixed)
         If either guard fails, neither path produces a result (no fallback to b)
-     b. Named mixins (@mixin ConcreteClass) — checked only when the templated path's
+     b. Named mixins (@mixin ConcreteClass), checked only when the templated path's
         outer guard fails (templatedMixins is empty, or LHS is not TGenericObject,
         or template_types is empty)
      For instance calls: a class with both will only enter path (a)
    - Instance vs static differs: static calls use namedMixins as the entry guard
      (ignoring templatedMixins for triggering), but once inside, build a union from
      both templatedMixins and namedMixins. Instance calls use the mutually exclusive
-     if/elseif structure described above — only one path executes per call.
-   - Mixin resolution is NOT transitive — Psalm calls handleRegularMixins/
+     if/elseif structure described above, only one path executes per call.
+   - Mixin resolution is NOT transitive: Psalm calls handleRegularMixins/
      handleTemplatedMixins once with no loop or recursion. Relation → @mixin Builder
      → @mixin Query\Builder appears to chain only because Query\Builder's methods
      are already in Builder's declaring_method_ids (declared explicitly in the
-     plugin's stubs — @mixin never populates declaring_method_ids).
+     plugin's stubs, @mixin never populates declaring_method_ids).
      The mixin resolves one hop, finding the method on Builder.
      Consequence: Query\Builder methods NOT re-declared on the Eloquent\Builder stub
      are invisible to relations and fall to Relation::__call. MethodForwardingHandler
@@ -617,14 +617,14 @@ When Psalm encounters `$obj->method()` during analysis, it follows PHP's own met
 
 **Why stubs declare fluent methods on Relation:** Without stubs, `$hasMany->where()` would not
 be found in declaring_method_ids (step 1), so Psalm would resolve it via `@mixin Builder` (step 3).
-The call would be dispatched as `Builder::where()`, returning `Builder` — losing the `HasMany` type.
+The call would be dispatched as `Builder::where()`, returning `Builder`, losing the `HasMany` type.
 This is a fundamental mismatch: at runtime `Relation::__call` returns `$this` (the Relation), but
 `@mixin` tells Psalm to resolve the method on Builder, which knows nothing about Relations.
 The plugin solves this by declaring fluent methods directly on Relation (via stubs), so they appear
 in declaring_method_ids and are found at step 1 before mixin resolution.
 The same pattern affects any class that uses `@mixin` to expose fluent methods from a delegate.
 
-### Phase 2: Analysis — Return Type Resolution (what type is returned?)
+### Phase 2, analysis: Return Type Resolution (what type is returned?)
 
 Once the method is found, Psalm determines its return type. **First non-null wins:**
 
@@ -637,7 +637,7 @@ Once the method is found, Psalm determines its return type. **First non-null win
      a. First tries the calling class (e.g., User when calling User::find())
      b. Then tries the declaring class (e.g., Model where find() is defined)
      For the @mixin case: the "calling class" in step a is the mixin target (e.g., Builder),
-     not the original class (e.g., Relation). So a handler for Relation won't fire —
+     not the original class (e.g., Relation). So a handler for Relation won't fire , 
      only a handler for Builder (step a) or the declaring class (step b) will.
      Note: $event->getCalledFqClasslikeName() returns null in step a for ALL
      dispatch (not just mixin). In step b, getCalledFqClasslikeName() returns
@@ -646,7 +646,7 @@ Once the method is found, Psalm determines its return type. **First non-null win
 
 2. @method annotations (pseudo_methods)
    - Checked inside Methods::getMethodReturnType(), after providers return null
-   - Separate from the __call fallback path — these fire for found methods too
+   - Separate from the __call fallback path: these fire for found methods too
 
 3. Stored return type (from scanning phase)
    - This is the merged result of: stub > phpdoc > native (from Phase 1)
@@ -660,14 +660,14 @@ Once the method is found, Psalm determines its return type. **First non-null win
 **Example:** `$post->comments()->where('approved', true)` where `comments()` returns `HasMany<Comment, Post>`:
 
 ```php
-// Method Resolution: found in Relation's declaring_method_ids (via stub) — not via @mixin
+// Method Resolution: found in Relation's declaring_method_ids (via stub), not via @mixin
 // Return Type Resolution: MethodReturnTypeProvider fires for Relation class
 //   → MethodForwardingHandler checks: does Builder::where() return Builder/static?
 //   → Yes → returns HasMany<Comment, Post> (the concrete relation type)
 // Result: HasMany<Comment, Post>
 ```
 
-### Phase 2: Analysis — Property Resolution
+### Phase 2, analysis: Property Resolution
 
 Properties follow a similar but simpler order:
 
@@ -676,7 +676,7 @@ Properties follow a similar but simpler order:
    - Fires BEFORE the declared property check
    - Can completely override whether Psalm considers a property to exist
 
-1. Declared properties (declaring_property_ids — includes own + inherited)
+1. Declared properties (declaring_property_ids: includes own + inherited)
    - Native PHP properties, stub-added properties, inherited from parents
    - PropertyTypeProvider can override the type
 
@@ -684,7 +684,7 @@ Properties follow a similar but simpler order:
 
 3. __get path:
    a. @property annotations (pseudo_property_get_types / pseudo_property_set_types)
-      - NOT in declaring_property_ids — resolved inside the __get handling block
+      - NOT in declaring_property_ids: resolved inside the __get handling block
    b. Actual __get dispatch
       - Returns mixed unless overridden by a plugin handler
 ```
@@ -693,7 +693,7 @@ Properties follow a similar but simpler order:
 
 ```mermaid
 flowchart TD
-    subgraph scanning["SCANNING PHASE — last wins"]
+    subgraph scanning["SCANNING PHASE: last wins"]
         direction TB
         src["Source files<br/><i>native + PHPDoc types</i>"]
         stubs["Stub files<br/><i>merge into storage, overwriting matching methods</i>"]
@@ -704,7 +704,7 @@ flowchart TD
         stubs -. "AfterClassLikeVisit fires per-class<br/><i>during both source and stub scanning</i><br/>removes pseudo static methods,<br/>adds issue suppressions" .-> storage
     end
 
-    subgraph analysis["ANALYSIS PHASE — first non-null wins"]
+    subgraph analysis["ANALYSIS PHASE: first non-null wins"]
         direction TB
 
         subgraph method["Method call: $obj->foo()"]
@@ -764,16 +764,16 @@ flowchart TD
 ### Common Pitfalls for Plugin Development
 
 **1. `@mixin` bypasses your handler**
-If a method is found via `@mixin`, the `MethodReturnTypeProvider` fires for the **mixin target class**, not the original. If you register a handler for `Relation` but the method is found via `@mixin Builder`, your handler for Relation won't fire — only a handler for Builder would.
+If a method is found via `@mixin`, the `MethodReturnTypeProvider` fires for the **mixin target class**, not the original. If you register a handler for `Relation` but the method is found via `@mixin Builder`, your handler for Relation won't fire, only a handler for Builder would.
 
 **Fix:** Declare the method directly on the class (via stub) so it's found at step 1/2 before the mixin.
 
 **2. Stub return type vs handler return type**
-If your handler returns `null` (decline), Psalm uses the stub's declared return type. This is intentional — handlers can selectively override only some calls.
+If your handler returns `null` (decline), Psalm uses the stub's declared return type. This is intentional, handlers can selectively override only some calls.
 
 **3. `$this` vs `static` vs `self` in stubs**
-- `@return $this` / `@return static` — identical in Psalm 7. Both resolve to the concrete class of the instance (e.g., `HasMany` when called on `HasMany`). Preserves template params. `TypeExpander` handles both in the same code path.
-- `@return self` — always the declaring class (e.g., `Relation`), not the subclass.
+- `@return $this` / `@return static`: identical in Psalm 7. Both resolve to the concrete class of the instance (e.g., `HasMany` when called on `HasMany`). Preserves template params. `TypeExpander` handles both in the same code path.
+- `@return self`: always the declaring class (e.g., `Relation`), not the subclass.
 
 For fluent methods on Relation, `@return $this` is correct because it resolves to the concrete relation subclass.
 
@@ -801,7 +801,7 @@ Relation, and Collection. Never add this annotation to classes that rely on `__c
 
 The Relation pattern uses **both**: stubs declare fluent methods so Psalm finds them before `@mixin`,
 then `MethodForwardingHandler` overrides the return type to the concrete relation subclass with
-template parameters. If the stub's `@return $this` were sufficient alone, no handler would be needed —
+template parameters. If the stub's `@return $this` were sufficient alone, no handler would be needed , 
 but the handler ensures template params propagate correctly.
 
 ## Implications for Static Analysis
@@ -810,7 +810,7 @@ but the handler ensures template params propagate correctly.
 |----------------------------|--------------------------------------------------------------|----------------------------------------------------------------------|
 | Relation → Builder fluent  | Relation stubs + `MethodForwardingHandler` + related custom-builder storage resolution | Instance-local builder macros that have no static metadata remain unresolved |
 | Builder → Query\Builder    | `@mixin Query\Builder` on Eloquent\Builder                   | `$passthru` re-declared on Eloquent\Builder for relations (#1734)    |
-| Facade → Service           | Generated alias stubs                                        | Taint annotations lost through `__callStatic`                        |
+| Facade → Service           | Generated `class_alias()` alias stubs                        | Taint annotations lost through `__callStatic`                        |
 | Model → Builder static     | `ModelMethodHandler`                                         | Scopes need `@mixin` or scope handler                                |
 | Model scopes               | `BuilderScopeHandler`                                        | Resolves scope calls on Builder to model scope methods               |
 | Custom collections         | `CustomCollectionHandler`                                    | Narrows `Builder::get()`, `findMany()`, `Model::all()` return types  |

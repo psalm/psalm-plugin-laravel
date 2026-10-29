@@ -20,6 +20,10 @@ To go deeper with PHPT syntax, please check [PHPT](https://qa.php.net/phpt_detai
   verbatim instead of inventing a variant, and add a setting to `psalm-with-optin-custom-issues.xml` rather than
   creating another `psalm-*.xml`. `--threads=1` is shared by every taint fixture because Psalm's parallel workers
   can drop cross-method taint edges when they merge their graphs.
+- A phpt that needs `laravel/ai` runs only in the laravel/ai CI jobs, which select it with `LARAVEL_AI_PHPT_FILTER` in
+  `.github/workflows/tests.yml` (currently the `PromptInjection/` directory plus `Collection/TextResponseCollectionTypesTest`).
+  The main type cells skip it because `laravel/ai` is not installed there. Add a new laravel/ai phpt outside
+  `PromptInjection/` to that filter, otherwise it runs nowhere.
 
 ### `--EXPECTF--` format specifiers
 

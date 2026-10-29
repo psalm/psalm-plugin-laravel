@@ -55,15 +55,13 @@ If a property is not declared via PHPDoc, this setting instructs the plugin how 
 - `migrations` — Parses SQL schema dumps (`php artisan schema:dump`) and PHP migration files to infer column names and types (e.g. `$user->email` resolves to `string`).
 - `none` — Disables migration-based column inference. Use this if you declare column types via `@property` annotations, or if your migrations can't be statically parsed (dynamic schema changes).
 
-For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-option=modelProperties.columnFallback=none` (see [Per-run overrides](#per-run-overrides)).
-
 ## `resolveDynamicWhereClauses`
 
 **default**: `true`
 
 When enabled, the plugin resolves Laravel's [dynamic where methods](https://laravel.com/docs/queries#dynamic-where-clauses) (e.g. `whereTitle('foo')`, `whereFirstName('John')`) on both Eloquent relation chains and direct Model static / instance calls (`User::whereEmail('a@b')`, `$user->whereEmail('a@b')`), preserving the relation or `Builder<TModel>` generic type instead of returning `mixed` or raising `UndefinedMagicMethod`.
 
-Column names are validated against the model's `@property` annotations and, when [`columnFallback`](#columnfallback-values) is `migrations`, against the columns parsed from your migrations. A segment is matched as `Str::snake($segment)` against the exact column name, as Laravel builds the query, so `whereUserId()` matches `user_id` but `whereLine1()` does not match `line_1`. `@property` wins over the migration schema, which also types the single argument of `where{Column}($value)` (casts and nullability included; object and array columns stay untyped). With `columnFallback="none"`, or when the model's schema could not be resolved, only `@property` annotations count. Columns found in neither source are not claimed by the plugin: relation chains fall through to `mixed`, and direct Model calls fall through to `UndefinedMagicMethod`. Custom Eloquent builder methods that happen to start with `where` (e.g. `whereByMake(string)`) are also left to Psalm's normal resolution so their declared return types win. Partial `@property` annotation is therefore safe.
+Column names are validated against the model's `@property` annotations and, when [`columnFallback`](#columnfallback-values) is `migrations`, against the columns parsed from your migrations. A segment is matched as `Str::snake($segment)` against the exact column name, as Laravel builds the query, so `whereUserId()` matches `user_id` but `whereLine1()` does not match `line_1`. `@property` wins over the migration schema. The argument is `mixed`, as with `where()`: Laravel forwards it to `where()`, which accepts null, arrays, expressions, enums, dates and subquery closures, so the column's type is not imposed. With `columnFallback="none"`, or when the model's schema could not be resolved, only `@property` annotations count. Columns found in neither source are not claimed by the plugin: relation chains fall through to `mixed`, and direct Model calls fall through to `UndefinedMagicMethod`. Custom Eloquent builder methods that happen to start with `where` (e.g. `whereByMake(string)`) are also left to Psalm's normal resolution so their declared return types win. Partial `@property` annotation is therefore safe.
 
 Disable if dynamic where resolution conflicts with your codebase.
 
@@ -163,7 +161,7 @@ See [MissingTranslation](issues/MissingTranslation.md) for details.
 
 **default**: `false`
 
-When enabled, the plugin checks that a view name passed to `view()`, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()` (and the `View` facade), `ResponseFactory::view()`/`response()->view()` (and the `Response` facade), `Router::view()` (and the `Route` facade), `MailMessage::view()`/`markdown()`, or `TestResponse::assertViewIs()` references a Blade template that exists on disk.
+When enabled, the plugin checks that a view name passed to `view()`, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()` (and the `View` facade), `ResponseFactory::view()`/`response()->view()` (and the `Response` facade), `Router::view()` (and the `Route` facade), `MailMessage::view()`/`markdown()`/`text()` (including the array form of `view()`), or `TestResponse::assertViewIs()` references a Blade template that exists on disk.
 Only string literal view names are validated — dynamic names and namespaced views (e.g., `mail::html.header`) are skipped.
 
 See [MissingView](issues/MissingView.md) for details.
@@ -245,7 +243,7 @@ See [OctaneIncompatibleBinding](issues/OctaneIncompatibleBinding.md) for details
 
 **default**: `auto`
 
-Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt sink. See [LLM prompt injection](security.md#llm-prompt-injection-owasp-llm012025) for what is covered and for when the integration loads (`laravel/ai >=1.0.0 <2.0.0` only).
+Controls the reporting level of `TaintedLlmPrompt`, raised when untrusted input reaches a `laravel/ai` prompt sink. See [LLM prompt injection](security.md#llm-integration) for what is covered and for when the integration loads (`laravel/ai >=1.0.0 <2.0.0` only).
 
 - element omitted (`auto`): enforced when the supported integration is installed, at Psalm's normal error level.
 - `value="false"`: explicit opt-out. Suppresses only `TaintedLlmPrompt`; model-output taint sources keep their ordinary `Tainted*` findings.
@@ -291,7 +289,7 @@ vendor/bin/psalm-laravel analyze --experimental --plugin-option=modelProperties.
 
 * Keys mirror the XML names; nested settings use a dot (`modelProperties.columnFallback`). `psalm-laravel analyze --help` lists every key with its values.
 * Values: `true` or `false` for every flag, including the tri-state ones (`findOctaneIncompatibleBinding`, `findPromptInjection` and the three `experimental`-derived rules), so an override can force them but cannot restore auto-detection. `modelProperties.columnFallback` takes `migrations` or `none`.
-* Path settings (`configDirectory`, `blade cacheDir`) and `cachePath` are XML-only.
+* Path settings (`configDirectory`, `blade cacheDir`) are XML-only.
 * `--plugin-option=KEY=VALUE` is repeatable (`=` form only); a repeated key is last-wins. `--blade` / `--no-blade` are shorthands for `blade=true|false` and `--experimental` for `experimental=true`, ordered with `--plugin-option`. Precedence per key: command line > `psalm.xml` > default.
 * There is no environment-variable form for a bare `vendor/bin/psalm`; edit `psalm.xml` there.
 * `experimental` is applied after the overrides: `experimental=true` turns on the rules it derives (`findUnconfiguredFilesystemDisks`, `findSerializedQueuedModels`, `findUnregisteredRouteNames`) unless an override or the XML sets one of them explicitly.
@@ -355,8 +353,6 @@ An explicit `<PluginIssue>` entry takes complete ownership of that issue (base l
 ```
 
 Without the outer `errorLevel="info"`, Psalm uses its normal implicit fallback of `error` outside the scoped filter.
-
-For one run without editing `psalm.xml`, use `psalm-laravel analyze --plugin-option=experimental=true` (see [Per-run overrides](#per-run-overrides)).
 
 ## `failOnInternalError`
 

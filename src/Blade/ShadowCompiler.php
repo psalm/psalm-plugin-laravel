@@ -43,6 +43,10 @@ final class ShadowCompiler
         // the whole Psalm command line. Raised here instead (same class and code), it names the directive.
         \set_error_handler($this->throwCompileError(...));
 
+        // Laravel's own compile() sets the path before compileString() and never restores it; a
+        // directive or precompiler reading getPath() sees null otherwise.
+        $this->compiler->setPath($templatePath);
+
         try {
             $compiled = $this->compiler->compileString($marked);
         } catch (\Throwable $throwable) {
@@ -68,7 +72,7 @@ final class ShadowCompiler
         $suppressions = $this->suppressionInjector->resolve($content, $source, $lineMap, $markerPrefix);
         $content = $this->suppressionInjector->inject($content, $source, $lineMap, $markerPrefix);
 
-        return new ShadowResult($content, $lineMap, MarkerPrePass::extendsLine($source), $suppressions);
+        return new ShadowResult($content, $lineMap, $suppressions);
     }
 
     /**

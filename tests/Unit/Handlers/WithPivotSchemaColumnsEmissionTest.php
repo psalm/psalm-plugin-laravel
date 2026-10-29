@@ -44,13 +44,13 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         // Explicit table, at the call site inside the relation body.
         $this->assertContains(
             '$relation: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team&static, ' . self::RELATIONS
-            . "Pivot&object{admin:bool}, 'pivot'>",
+            . "Pivot&object{admin:bool|int}, 'pivot'>",
             $traces,
         );
         // morphToMany: the pluralized morph name.
         $this->assertContains(
             '$_tags: ' . self::RELATIONS . 'MorphToMany<' . self::MODELS . 'Tag, ' . self::MODELS . 'Team, ' . self::RELATIONS
-            . "MorphPivot&object{weight:float}, 'pivot'>",
+            . "MorphPivot&object{weight:float|int|numeric-string}, 'pivot'>",
             $traces,
         );
         // An overridden joiningTableSegment() leaves the table unknown.
@@ -68,7 +68,7 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         // Delegation: the outer columns are typed from the delegated relation's table.
         $this->assertContains(
             '$_admins: ' . self::RELATIONS . 'BelongsToMany<' . self::MODELS . 'User, ' . self::MODELS . 'Team, ' . self::RELATIONS
-            . "Pivot&object{admin:bool}, 'pivot'>",
+            . "Pivot&object{admin:bool|int}, 'pivot'>",
             $traces,
         );
     }

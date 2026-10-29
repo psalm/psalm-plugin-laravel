@@ -289,6 +289,25 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * livewire/blaze rewrites a component tag into a `require` of its compiled function and an
+     * unchecked `ltrim(ob_get_clean())`, which reported UnresolvableInclude and
+     * PossiblyFalseArgument on the tag line. Shadows compile with Blaze disabled, including a debug
+     * mode Blaze cached from config at boot, and the author's own line 2 still reports.
+     */
+    #[Test]
+    public function blaze_compiled_tags_report_nothing_but_the_authors_code_still_reports(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'resources/views/blaze-tag.blade.php';
+        $json = \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR);
+
+        $this->assertSame([], $this->linesFor($issues, 'UnresolvableInclude', $template), $json);
+        $this->assertSame([], $this->linesFor($issues, 'PossiblyFalseArgument', $template), $json);
+        $this->assertSame([2], $this->linesFor($issues, self::ISSUE, $template), $json);
+        $this->assertStringNotContainsString('$__blaze', $this->shadowSourceFor($template));
+    }
+
+    /**
      * Livewire-style precompiled tags fire an untyped `$__split` closure and an over-arity method
      * call on the SAME (mapped) template line, both dropped at shadow emission (#1498) unless the
      * over-arity call is one the template author actually wrote.

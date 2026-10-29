@@ -61,6 +61,16 @@ trait RunsAnnotateFixture
         'arrays' => "{{ count(\$labels) }} {{ count(\$params) }}\n",
         'scoped-host' => "<p>host</p>\n@include('scoped')\n",
         'scoped' => "{{ \$text }}\n",
+        'framed' => "{{ \$content }}\n",
+        'framed-host' => "@includeIsolated('framed-included', ['content' => view('fragment')])\n",
+        'framed-included' => "{{ \$content }}\n",
+        'framed-nested' => "{{ json_encode(\$row) }}\n",
+        'fragment' => "<p>fragment</p>\n",
+        'private-helper' => "{{ \$text }}\n",
+        'edge-cond' => "{{ \$title }}\n",
+        'edge-first' => "{{ \$title }}\n",
+        'edge-first-fallback' => "{{ \$title }}\n",
+        'edge-composed' => "{{ \$title }} {{ \$extra }}\n",
     ];
 
     /**

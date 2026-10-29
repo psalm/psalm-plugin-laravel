@@ -92,6 +92,12 @@ final class AnnotateEndToEndTest extends TestCase
             " * @var list<string> \$labels\n",
             self::TEMPLATES['arrays'],
         )];
+        // `View::gatherData()` renders a top-level Renderable before the template runs, so the
+        // template reads the string, not the View a nested `view()` call returns.
+        yield 'a view() call passed as data is declared as the string it renders to' => ['framed', $declare(
+            " * @var string \$content\n",
+            self::TEMPLATES['framed'],
+        )];
         // A template has no class scope, so `&static` would bind to nothing. It must also not make
         // a `static` Collection and a plain one disagree about the same name.
         yield 'a collection without the late-static marker' => ['collections', $declare(
@@ -99,6 +105,12 @@ final class AnnotateEndToEndTest extends TestCase
             . " * @var class-string<\\Illuminate\\Support\\Collection<int<0, 1>, string>> \$kind\n"
             . " * @var \\Illuminate\\Support\\Collection<int<0, 1>, string> \$missing\n",
             self::TEMPLATES['collections'],
+        )];
+
+        // The composer writes `title` after the call site passes it, so only `extra` has a type to declare.
+        yield 'a key a view composer writes is left to the composer' => ['edge-composed', $declare(
+            " * @var string \$extra\n",
+            self::TEMPLATES['edge-composed'],
         )];
 
         // The callback's own statement records the producer; the enclosing chain is declined, and
@@ -148,6 +160,11 @@ final class AnnotateEndToEndTest extends TestCase
         // passing another type there.
         yield 'a respelled producer blocks the template it really renders (spelled)' => ['pkg:spelled'];
         yield 'a respelled producer blocks the template it really renders (padded)' => ['pkg:padded'];
+        // The second producer is the condition of an `if`, which no statement of its own records.
+        yield 'a producer in a condition' => ['edge-cond'];
+        // `View::first()` renders whichever candidate exists, with another type than the call site that is read.
+        yield 'a View::first() candidate (the first)' => ['edge-first'];
+        yield 'a View::first() candidate (the fallback)' => ['edge-first-fallback'];
     }
 
     #[Test]
@@ -198,6 +215,9 @@ final class AnnotateEndToEndTest extends TestCase
 
         // The site is the including template's own line, never the compiled shadow's cache path.
         $this->assertSame(['site' => "{$site}/resources/views/scoped-host.blade.php:2", 'names' => ['text']], $this->unreadableFor($result, 'scoped'));
+        // #2079: a private helper's bare view is completed by its caller, so it is an open site, not a closed one that supplies nothing.
+        $this->assertNull($this->unknownFor($result, 'private-helper'));
+        $this->assertSame(['site' => "{$site}/app/HelperView.php:19", 'names' => ['text']], $this->unreadableFor($result, 'private-helper'));
 
         foreach (['spelled' => 29, 'padded' => 39] as $name => $line) {
             $this->assertSame(['site' => "{$site}/app/Renderer.php:{$line}", 'names' => ['title']], $this->unreadableFor($result, $name), $name);
@@ -223,6 +243,29 @@ final class AnnotateEndToEndTest extends TestCase
         }
 
         $this->assertNull($this->unknownFor($this->annotateResult(), 'inner'));
+    }
+
+    #[Test]
+    public function a_view_passed_to_an_include_is_declared_as_the_string_it_renders_to(): void
+    {
+        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+            $this->markTestSkipped('@includeIsolated needs Laravel 12.47+');
+        }
+
+        $this->assertSame(
+            "<?php\n/**\n * @var string \$content\n */\n?>\n" . self::TEMPLATES['framed-included'],
+            $this->analyse('annotate')['templates']['framed-included'] ?? null,
+        );
+    }
+
+    /** Laravel renders only top-level Renderables: a View inside an array reaches the template as an object. */
+    #[Test]
+    public function a_view_nested_in_an_array_keeps_its_object_type(): void
+    {
+        $this->assertMatchesRegularExpression(
+            '/@var array\{v: \\\\Illuminate\\\\(?:Contracts\\\\)?View\\\\View\} \$row/',
+            $this->analyse('annotate')['templates']['framed-nested'] ?? '',
+        );
     }
 
     /**
