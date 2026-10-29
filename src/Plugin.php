@@ -442,6 +442,9 @@ final class Plugin implements PluginEntryPointInterface
 
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
+        // Types `Model::freshTimestamp()` (`Date::now()` at runtime) as the app's configured date class.
+        require_once __DIR__ . '/Handlers/Eloquent/FreshTimestampHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\FreshTimestampHandler::class);
         // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
         require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
