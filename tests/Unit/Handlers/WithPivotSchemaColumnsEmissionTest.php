@@ -274,8 +274,14 @@ final class WithPivotSchemaColumnsEmissionTest extends TestCase
         $this->assertContains($this->stampedRelation("{$immutable}|null"), $traces);
         $this->assertSame([], \array_diff($this->modelDates($immutable), $traces));
 
-        // The `mixed` outcomes (a callable, a factory, a class that is no Carbon) need no Psalm run: CastResolverTest
-        // covers them in process, and the pivot timestamps share that resolver.
+        // Date::use(<callable>): the class is unknowable, so every date is the CarbonInterface Laravel's contract promises.
+        $interface = 'Carbon\\CarbonInterface';
+        $traces = $this->runPsalm(['WITH_PIVOT_DATE' => 'callable']);
+        $this->assertContains($this->stampedRelation("{$interface}|null"), $traces);
+        $this->assertSame([], \array_diff($this->modelDates($interface), $traces));
+
+        // A class that is no Carbon needs no Psalm run: ConfiguredDateClassTest covers it in process, and every
+        // consumer shares that resolver.
     }
 
     /**
