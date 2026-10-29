@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793263635041,
+  "lastUpdate": 1793309761466,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17245,6 +17245,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 43.98,
             "range": "± 0.35",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1288,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "874936dfce4dfb7997d95b0bc173aa674ed4cde6",
+          "message": "Type Eloquent date casts as the `Date::use()` class (#2004)\n\n* fix(eloquent): type date casts as the configured Date::use() class\n\nThe date, datetime and custom_datetime casts were always Illuminate\\Support\\Carbon.\nThey now share one resolver (CastResolver) with the withPivot() timestamp\ncolumns: a configured class is that class, a callable or factory is mixed.\nimmutable_* casts stay CarbonImmutable.\n\nRefs #1999\n\n* fix(eloquent): trust a configured date class only when it is a Carbon\n\nDateFactory forwards instance()/parse()/createFromFormat() to the configured\nclass, so only CarbonInterface's static returns prove the resulting type; any\nother class types the dates as mixed. Also reset Date::use() state between\nplugin invocations so a previous app's date class does not leak into casts.\n\nRefs #1999\n\n* test: cover the mixed date-class outcomes in process, not with Psalm runs\n\n* test: drop generated Laravel bootstrap caches committed by the 4.x merge\n\n* fix(eloquent): type date casts through a stock Carbon factory's class\n\nDate::useFactory(new FactoryImmutable()) builds every date as\n$className::$method() (Carbon\\Factory::__call()), so its getClassName()\ngets the same CarbonInterface check as a configured class. A factory\nsubclass or any other factory object stays mixed.\n\nRefs #1999",
+          "timestamp": "2026-10-29T22:32:14+01:00",
+          "tree_id": "671710b7e9cb2c0b7735801f918cb7de417c2a66",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/874936dfce4dfb7997d95b0bc173aa674ed4cde6"
+        },
+        "date": 1793309759406,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.94,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
