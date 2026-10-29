@@ -1,0 +1,94 @@
+<?php
+
+namespace Carbon\Traits;
+
+/**
+ * Carbon documents `@param int|array $syntax` (Traits/Difference.php:508 and the `from`/`since`/`to`/`until`/
+ * `fromNow`/`toNow`/`ago` aliases), but diffForHumans() casts it `(int)` (Traits/Difference.php:558),
+ * so `true` (absolute diff) is valid. `bool` is added to the documented type; every alias funnels into that cast.
+ */
+trait Difference
+{
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function diffForHumans($other = null, $syntax = null, $short = false, $parts = 1, $options = null): string {}
+
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function from($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     */
+    public function since($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function to($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function until($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function fromNow($syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function toNow($syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function ago($syntax = null, $short = false, $parts = 1, $options = null) {}
+}

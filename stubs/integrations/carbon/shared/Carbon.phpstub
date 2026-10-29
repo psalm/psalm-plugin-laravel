@@ -1,0 +1,15 @@
+<?php
+
+namespace Carbon;
+
+use DateTime;
+
+/**
+ * `@property int|float|string $timestamp` (Carbon.php:39) is the setter input; the getter returns `(int)`
+ * (Traits/Date.php:1162-1164). The class docblock, not the trait's, is what Psalm reads first.
+ * The header is copied verbatim from Carbon.php:838.
+ *
+ * @property-read int $timestamp
+ * @property-write int|float|string $timestamp
+ */
+class Carbon extends DateTime implements CarbonInterface {}

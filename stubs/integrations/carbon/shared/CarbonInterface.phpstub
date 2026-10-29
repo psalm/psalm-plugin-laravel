@@ -1,0 +1,105 @@
+<?php
+
+namespace Carbon;
+
+use Carbon\Constants\DiffOptions;
+use Carbon\Constants\Format;
+use Carbon\Constants\TranslationOptions;
+use Carbon\Constants\UnitValue;
+use DateTimeInterface;
+use JsonSerializable;
+
+/**
+ * Carbon documents `@param int|array $syntax` (CarbonInterface.php:1508 and the `from`/`since`/`to`/`until`/
+ * `fromNow`/`toNow`/`ago` aliases), but the implementation casts it `(int)` (Traits/Difference.php:558),
+ * so `true` (absolute diff) is valid. `bool` is added to the documented type.
+ * Interface-typed receivers read this file; class-typed ones read Traits/Difference.phpstub.
+ *
+ * The `extends` clause is copied verbatim from vendor/nesbot/carbon/src/Carbon/CarbonInterface.php:858
+ * (redeclaration wipes parent_interfaces; see "Stub merging" in docs/contributing/README.md).
+ */
+interface CarbonInterface extends DateTimeInterface, JsonSerializable, DiffOptions, Format, TranslationOptions, UnitValue
+{
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function diffForHumans($other = null, $syntax = null, $short = false, $parts = 1, $options = null): string;
+
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function from($other = null, $syntax = null, $short = false, $parts = 1, $options = null);
+
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     */
+    public function since($other = null, $syntax = null, $short = false, $parts = 1, $options = null);
+
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function to($other = null, $syntax = null, $short = false, $parts = 1, $options = null);
+
+    /**
+     * @param \Carbon\Carbon|\DateTimeInterface|string|array<array-key, mixed>|null $other
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function until($other = null, $syntax = null, $short = false, $parts = 1, $options = null);
+
+    /**
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function fromNow($syntax = null, $short = false, $parts = 1, $options = null);
+
+    /**
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function toNow($syntax = null, $short = false, $parts = 1, $options = null);
+
+    /**
+     * @param int|bool|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int|null $options
+     *
+     * @return string
+     */
+    public function ago($syntax = null, $short = false, $parts = 1, $options = null);
+}
