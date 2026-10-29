@@ -64,4 +64,16 @@ final class DateFacadeHandlerTest extends TestCase
 
         $this->assertNull($result);
     }
+
+    #[Test]
+    public function a_date_method_is_mixed_when_the_configured_class_is_no_carbon(): void
+    {
+        // Declining would keep the facade's `Illuminate\Support\Carbon`, which is wrong for such an app.
+        $result = DateFacadeHandler::swapCarbon(new Union([new TNamedObject(Carbon::class), new TNull()]), null);
+
+        $this->assertNotNull($result);
+        $this->assertTrue($result->isMixed());
+
+        $this->assertNull(DateFacadeHandler::swapCarbon(new Union([new TString()]), null));
+    }
 }

@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\DateFactory;
 use Illuminate\Support\Facades\Date;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Internal\ConfiguredDateClass;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -15,6 +16,7 @@ use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
 use Psalm\Storage\MethodStorage;
+use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -27,10 +29,11 @@ use Psalm\Type\Union;
  * project swapped the date class via `Date::use(CarbonImmutable::class)` /
  * `Date::useClass(...)` in a service provider.
  *
- * Mechanism (same as {@see \Psalm\LaravelPlugin\Handlers\Helpers\NowTodayHandler}
- * for the `now()` / `today()` helpers): the plugin has a booted Laravel app, so we
- * call the helper at analysis time and read `get_class()` of the result — capturing
- * whatever the project configured rather than the hardcoded default.
+ * Mechanism: the plugin has a booted Laravel app, so {@see ConfiguredDateClass} reads
+ * the `Date::use()` state it left in `DateFactory` — capturing whatever the project
+ * configured rather than the hardcoded default. It is the same resolver the model date
+ * casts and the `withPivot()` timestamp columns use. The `now()` / `today()` helpers
+ * ({@see \Psalm\LaravelPlugin\Handlers\Helpers\NowTodayHandler}) instead sample the exact call.
  *
  * Rather than enumerate a method list, we read each method's declared `@method`
  * return type from the facade's pseudo-method storage and swap the `Carbon` atomic
@@ -50,19 +53,11 @@ use Psalm\Type\Union;
  */
 final class DateFacadeHandler implements MethodReturnTypeProviderInterface, MethodParamsProviderInterface
 {
-    /**
-     * Resolved configured date class, cached for the analysis run.
-     *
-     * @var ?class-string
-     */
-    private static ?string $configuredClass = null;
-
     /** @var array<string, ?Union> retyped return type per method, cached for the run */
     private static array $returnCache = [];
 
     public static function reset(): void
     {
-        self::$configuredClass = null;
         self::$returnCache = [];
     }
 
@@ -125,7 +120,7 @@ final class DateFacadeHandler implements MethodReturnTypeProviderInterface, Meth
             $declared = self::pseudoMethod($codebase, $methodNameLower)?->return_type;
 
             self::$returnCache[$methodNameLower] = $declared instanceof Union
-                ? self::swapCarbon($declared, self::configuredClass())
+                ? self::swapCarbon($declared, ConfiguredDateClass::type($codebase)?->value)
                 : null;
         }
 
@@ -136,12 +131,13 @@ final class DateFacadeHandler implements MethodReturnTypeProviderInterface, Meth
      * Replace every `Illuminate\Support\Carbon` atomic in $declared with $configured,
      * preserving all other atomics (`null`, `false`, ...). Returns null when $declared
      * contains no `Carbon` atomic — the caller treats that as "not a date-returning
-     * method, defer to Psalm".
+     * method, defer to Psalm". A null $configured (the configured date class is known not to
+     * be a Carbon, see {@see ConfiguredDateClass::type()}) makes a date-returning method `mixed`:
+     * declining would keep the facade's wrong `Illuminate\Support\Carbon`.
      *
-     * @param class-string $configured
      * @psalm-pure
      */
-    public static function swapCarbon(Union $declared, string $configured): ?Union
+    public static function swapCarbon(Union $declared, ?string $configured): ?Union
     {
         $carbonLower = \strtolower(Carbon::class);
         $hasCarbon = false;
@@ -149,6 +145,10 @@ final class DateFacadeHandler implements MethodReturnTypeProviderInterface, Meth
 
         foreach ($declared->getAtomicTypes() as $atomic) {
             if ($atomic instanceof TNamedObject && \strtolower($atomic->value) === $carbonLower) {
+                if ($configured === null) {
+                    return Type::getMixed();
+                }
+
                 $hasCarbon = true;
                 $atomics[] = new TNamedObject($configured);
             } else {
@@ -157,19 +157,6 @@ final class DateFacadeHandler implements MethodReturnTypeProviderInterface, Meth
         }
 
         return $hasCarbon ? new Union($atomics) : null;
-    }
-
-    /** @return class-string */
-    private static function configuredClass(): string
-    {
-        if (self::$configuredClass === null) {
-            // now() delegates to Date::now(); both honour Date::use()/useClass() swaps,
-            // so get_class() yields the project's configured date class (default: Carbon).
-            $instance = \now();
-            self::$configuredClass = \get_class($instance);
-        }
-
-        return self::$configuredClass;
     }
 
     /** @psalm-mutation-free */

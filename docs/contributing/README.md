@@ -216,6 +216,8 @@ Most taint handlers live under the Laravel feature directory whose API they cove
 
 `BelongsToManyWithPivotHandler` adds the literal `withPivot()` and `withTimestamps()` columns to TPivotModel (`Pivot&object{role: string}`), typed from the pivot table's migration (`mixed` when unknown) through `Support\PivotColumnResolver`, which `RelationMethodParser` shares so callers of a relation method see the same shape. The parent's timestamp columns are dates only when the chain provably keeps the plain pivot and the app's `Date::use()` class is known. Behind `using(X::class)` it builds `X&object{...}` from X's own types first (#1998). It declines for a union receiver, a `$table` argument that may name a model class, and a factory called on another model (#1944). `ModelRelationReturnTypeHandler` keeps a relation method's own declared pivot shape for its callers.
 
+`FreshTimestampHandler` types `Model::freshTimestamp()` (`Date::now()` at runtime) as the app's configured date class (`Internal\ConfiguredDateClass`, shared with model casts, pivot timestamps and the `Date` facade), `mixed` when that class is no Carbon. It is registered for `Model` and the `HasTimestamps` trait (Psalm asks for the class declaring the method, which is the trait for a model), so a model that overrides the method keeps its own declared type.
+
 `JsonEncodeTaintHandler` is a second `Handlers/Taint/` handler: core Psalm clears html from `json_encode()` with `JSON_HEX_TAG | JSON_HEX_AMP` but keeps the quoted-text taint by design, so this handler clears it for literal `JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP` (including the Blade `@json` directive's defaults). It is permanent, not a stop-gap: core rejected the has_quotes half (vimeo/psalm#12453).
 
 ### Experimental issue lifecycle

@@ -532,7 +532,10 @@ final class ModelMetadataRegistryTest extends TestCase
         $this->defineAppearingMethod($storage, 'getLabelAttribute', Type::getString());
 
         $expectations = [
-            'runtime configuration' => [ModelMetadata::SECTION_RUNTIME_CONFIGURATION],
+            // The timestamp columns are runtime configuration: computeCasts() reads them through
+            // getDates() -> usesTimestamps(), the same call this section reads. An unreadable one makes the
+            // cast inventory unprovable (a date column would read as uncast), so casts are withheld with it.
+            'runtime configuration' => [ModelMetadata::SECTION_RUNTIME_CONFIGURATION, ModelMetadata::SECTION_CASTS],
             'schema' => [ModelMetadata::SECTION_SCHEMA],
             'casts' => [ModelMetadata::SECTION_CASTS],
             'primary key' => [ModelMetadata::SECTION_PRIMARY_KEY],
@@ -566,13 +569,10 @@ final class ModelMetadataRegistryTest extends TestCase
 
             if ($failure === 'runtime configuration') {
                 $this->assertTrue($metadata->isComplete(
-                    ModelMetadata::SECTION_SCHEMA
-                    | ModelMetadata::SECTION_CASTS
-                    | ModelMetadata::SECTION_PRIMARY_KEY,
+                    ModelMetadata::SECTION_SCHEMA | ModelMetadata::SECTION_PRIMARY_KEY,
                 ));
                 $this->assertTrue($metadata->schema()->has('flag'));
-                $this->assertSame('bool', $metadata->casts()['flag']->psalmType->getId());
-                $this->assertSame('string', $metadata->casts()['code']->psalmType->getId());
+                $this->assertSame([], $metadata->casts());
                 $this->assertSame(PrimaryKeyType::String, $metadata->primaryKey->type);
                 $this->assertFalse($metadata->primaryKey->incrementing);
             }

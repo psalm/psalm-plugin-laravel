@@ -53,6 +53,7 @@ final class BuilderPluckHandler implements MethodReturnTypeProviderInterface
             nodeTypeProvider: $event->getSource()->getNodeTypeProvider(),
             codebase: $event->getSource()->getCodebase(),
             lhsExpr: $lhsExpr,
+            queryPath: true,
         );
     }
 }

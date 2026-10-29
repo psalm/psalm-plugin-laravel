@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
-use Carbon\CarbonInterface;
-use Carbon\Factory;
-use Carbon\FactoryImmutable;
 use Illuminate\Contracts\Database\Eloquent\Castable;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Contracts\Database\Eloquent\CastsInboundAttributes;
@@ -17,10 +14,11 @@ use Illuminate\Database\Eloquent\Casts\AsEncryptedArrayObject;
 use Illuminate\Database\Eloquent\Casts\AsEncryptedCollection;
 use Illuminate\Database\Eloquent\Casts\AsStringable;
 use Illuminate\Support\Collection as IlluminateCollection;
-use Illuminate\Support\DateFactory;
 use Illuminate\Support\Stringable as IlluminateStringable;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Internal\AutoloadOnce;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\LaravelPlugin\Internal\ConfiguredDateClass;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClassString;
@@ -36,7 +34,7 @@ use Psalm\Type\Union;
  * (see .cache/larastan/src/Properties/ModelCastHelper.php) so users of either tool
  * see the same inferred types for the same cast.
  *
- * `date` / `datetime` / `custom_datetime` follow the app's `Date::use()` class ({@see resolveDate()}), the same
+ * `date` / `datetime` / `custom_datetime` follow the app's `Date::use()` class ({@see ConfiguredDateClass}), the same
  * source the `withPivot()` timestamp columns use (#1999).
  *
  * Class lookups on a cast target (enum? Castable? CastsAttributes? ...) are two-tier (#1652):
@@ -44,26 +42,13 @@ use Psalm\Type\Union;
  *    It never loads the target, so a file that raises a deprecation on load cannot drop the casts.
  * 2. Only when Psalm never scanned the target (a string cast such as `'Vendor\Status'` is no
  *    reference, so nothing queues it for scanning): the runtime, as before. The target is autoloaded
- *    at most once per process ({@see autoloadOnce()}); every check then reads only declared classes.
+ *    at most once per process ({@see AutoloadOnce}); every check then reads only declared classes.
  *    A target that fails to load is an unknown cast (mixed).
  *
  * @internal
  */
 final class CastResolver
 {
-    /**
-     * Unscanned cast targets whose autoload was already attempted, keyed by lowercase name. A file that
-     * fails mid-load (Psalm's error handler throws on a deprecation it raises) keeps what it declared
-     * before the failure, so including it again dies with an uncatchable "Cannot redeclare" fatal.
-     *
-     * Deliberately not reset per invocation (code-patterns.md: process-invariant caches need no reset):
-     * it mirrors PHP's process state, which a partial load cannot undo, so a re-invocation in the same
-     * process must not retry the include either.
-     *
-     * @var array<lowercase-string, true>
-     */
-    private static array $autoloadAttempted = [];
-
     /**
      * Resolve a cast string to a Psalm readable type.
      *
@@ -171,7 +156,7 @@ final class CastResolver
             return $storage->is_enum;
         }
 
-        self::autoloadOnce($class);
+        AutoloadOnce::attempt($class);
 
         return \enum_exists($class, false);
     }
@@ -187,28 +172,10 @@ final class CastResolver
             return ClassLineage::isA($codebase, $class, $ancestor);
         }
 
-        self::autoloadOnce($class);
+        AutoloadOnce::attempt($class);
 
         // The guard keeps is_a() from autoloading $class itself; its ancestors are already loaded.
         return (\class_exists($class, false) || \interface_exists($class, false)) && \is_a($class, $ancestor, true);
-    }
-
-    /** See {@see $autoloadAttempted}. */
-    private static function autoloadOnce(string $class): void
-    {
-        $key = \strtolower($class);
-        if (isset(self::$autoloadAttempted[$key])) {
-            return;
-        }
-
-        self::$autoloadAttempted[$key] = true;
-
-        try {
-            // One autoload declares the target whatever its kind (class, interface or enum).
-            \class_exists($class);
-        } catch (\Throwable) {
-            // Failed to load: the checks above then find nothing declared, an unknown cast.
-        }
     }
 
     private static function resolveBaseCast(Codebase $codebase, string $baseCast, bool $nullable): ?Union
@@ -238,49 +205,16 @@ final class CastResolver
     }
 
     /**
-     * The date class `Date::use()` left in the booted app, read from DateFactory's statics: `mixed` when a
-     * callable or a non-stock factory builds the dates (the class is unknowable), `Illuminate\Support\Carbon` when
-     * unconfigured. A configured class must be a Carbon in Psalm's storage: a TNamedObject without storage breaks analysis.
+     * The app's configured date class ({@see ConfiguredDateClass}), `mixed` when it is known not to be a Carbon.
      *
      * `immutable_*` casts are not routed here: HasAttributes builds them with CarbonImmutable whatever
      * `Date::use()` says.
      */
     private static function resolveDate(Codebase $codebase, bool $nullable): Union
     {
-        // The statics are protected with no accessor; `dateClass` is only ever set to a class name by `use()`.
-        $read = static fn(string $name): mixed => (new \ReflectionProperty(DateFactory::class, $name))->getValue();
-        /** @var string|null $class */
-        $class = $read('dateClass');
-        $callable = $read('callable');
-        $factory = $read('factory');
+        $type = ConfiguredDateClass::type($codebase);
 
-        if ($callable !== null) {
-            return Type::getMixed();
-        }
-
-        if ($factory !== null) {
-            // A stock Carbon factory builds every date as `$className::$method()` (`Factory::__call()`); a subclass
-            // or another factory object may build anything.
-            if (!$factory instanceof Factory || !\in_array($factory::class, [Factory::class, FactoryImmutable::class], true)) {
-                return Type::getMixed();
-            }
-
-            $class = $factory->getClassName();
-        }
-
-        if ($class === null) {
-            // No storage lookup: the framework default is always declared.
-            return self::makeNullable(new Union([new TNamedObject(\Illuminate\Support\Carbon::class)]), $nullable);
-        }
-
-        // Only a Carbon is provably what the factory hands back: CarbonInterface's `static` returns bind every
-        // override, while another class's `createFromFormat()` and friends may return anything.
-        $storage = ClassLineage::isA($codebase, $class, CarbonInterface::class) ? ClassLineage::storage($codebase, $class) : null;
-        if (!$storage instanceof ClassLikeStorage) {
-            return Type::getMixed();
-        }
-
-        return self::makeNullable(new Union([new TNamedObject($storage->name)]), $nullable);
+        return $type instanceof TNamedObject ? self::makeNullable(new Union([$type]), $nullable) : Type::getMixed();
     }
 
     /**

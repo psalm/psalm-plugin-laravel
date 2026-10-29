@@ -15,10 +15,14 @@ use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 // type-containment checks in plugins (Psalm's own bundled providers use it directly,
 // and several other handlers in this codebase already depend on Psalm\Internal\*).
 // Re-verify when bumping Psalm to a new minor/major version.
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\NodeTypeProvider;
 use Psalm\Type;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TIterable;
@@ -164,6 +168,8 @@ final class ModelPropertyResolver
      *                                                     (e.g. `$customer->vehicles()` for `$customer->vehicles()->pluck()`).
      *                                                     Used as a fallback when the event's template parameters are
      *                                                     unsubstituted templates (Psalm's @mixin chain limitation).
+     * @param bool $queryPath                              True for a pluck() that runs a query (Eloquent Builder or a
+     *                                                     relation forwarding to it): see {@see self::resolvePluckColumnTypes()}.
      */
     public static function resolvePluckReturnType(
         array $args,
@@ -172,6 +178,7 @@ final class ModelPropertyResolver
         NodeTypeProvider $nodeTypeProvider,
         Codebase $codebase,
         ?\PhpParser\Node\Expr $lhsExpr = null,
+        bool $queryPath = false,
     ): ?Union {
         if ($args === []) {
             return null;
@@ -230,6 +237,7 @@ final class ModelPropertyResolver
             modelClass: $modelClass,
             nodeTypeProvider: $nodeTypeProvider,
             codebase: $codebase,
+            queryPath: $queryPath,
         );
         if ($resolved === null) {
             return null;
@@ -251,6 +259,10 @@ final class ModelPropertyResolver
      * $valueArg/$keyArg are positional — named-argument reordering (pluck(key: 'k', ...))
      * would misindex here; deliberate scope cut, same as the rest of this class.
      *
+     * $queryPath: Eloquent `Builder::pluck()` runs the query and hydrates ONLY the value column through the
+     * model, so its key column is the raw driver value: a date key (the implicit date cast of a `getDates()`
+     * column included) then takes the schema type, not Carbon. The in-memory paths keep the cast-aware type.
+     *
      * @param class-string<Model> $modelClass
      * @return array{Union, Union}|null [keyType, valueType]; null when the column isn't a
      *         string literal, or neither axis narrowed past mixed/array-key.
@@ -261,6 +273,7 @@ final class ModelPropertyResolver
         string $modelClass,
         NodeTypeProvider $nodeTypeProvider,
         Codebase $codebase,
+        bool $queryPath = false,
     ): ?array {
         $argType = $nodeTypeProvider->getType($valueArg->value);
         if (!$argType instanceof Union || !$argType->isSingleStringLiteral()) {
@@ -298,6 +311,7 @@ final class ModelPropertyResolver
                 modelClass: $modelClass,
                 nodeTypeProvider: $nodeTypeProvider,
                 codebase: $codebase,
+                queryPath: $queryPath,
             );
             $keyResolved = $resolvedKeyType instanceof Union;
             $keyType = $resolvedKeyType ?? Type::getArrayKey();
@@ -463,6 +477,10 @@ final class ModelPropertyResolver
      * combined with an equally-unresolved key column means neither axis narrowed, so
      * the caller defers to the stub entirely instead of restating its default).
      *
+     * On the query path ({@see self::resolvePluckColumnTypes()}) a DATE key takes the column's raw schema type.
+     * Every other key keeps the cast-aware type; an in-memory date key is no array-key (Arr::pluck() stringifies
+     * it through the configured `toStringFormat`, which can be numeric), so it falls back like any object.
+     *
      * @param class-string<Model> $modelClass
      */
     private static function resolveKeyType(
@@ -470,6 +488,7 @@ final class ModelPropertyResolver
         string $modelClass,
         NodeTypeProvider $nodeTypeProvider,
         Codebase $codebase,
+        bool $queryPath = false,
     ): ?Union {
         // Cheap AST pre-check: avoid a NodeTypeProvider lookup for non-literal key columns,
         // which is the common case (variables, expressions).
@@ -491,10 +510,50 @@ final class ModelPropertyResolver
             return null;
         }
 
+        // Only a date key changes: Builder::pluck() leaves the key raw, and a date's raw string ('Y-m-d H:i:s')
+        // is never integer-form. Every other cast keeps the cast-aware type: a raw schema type can disagree with
+        // the PHP key (a `bool` column cast to `int`, an enum over '1'|'2').
+        $isDate = false;
+        foreach ($keyPropertyType->getAtomicTypes() as $atomic) {
+            $isDate = $isDate || self::isDateObject($codebase, $atomic);
+        }
+
+        if ($isDate && $queryPath) {
+            $keyPropertyType = self::resolveRawKeyType($modelClass, $keyColumn) ?? $keyPropertyType;
+        }
+
         if (!UnionTypeComparator::isContainedBy($codebase, $keyPropertyType, Type::getArrayKey())) {
             return null;
         }
 
         return $keyPropertyType;
+    }
+
+    /**
+     * Raw driver type of a schema column, nullability included (a NULL key is no array-key, as for a nullable
+     * property); null when the model or the column is unknown.
+     *
+     * @param class-string<Model> $modelClass
+     */
+    private static function resolveRawKeyType(string $modelClass, string $keyColumn): ?Union
+    {
+        $column = ModelMetadataRegistry::for($modelClass)?->schema()->column($keyColumn);
+        if (!$column instanceof ColumnInfo) {
+            return null;
+        }
+
+        $raw = ColumnTypeMapper::mapBaseType($column);
+
+        return $column->nullable ? Type::combineUnionTypes($raw, Type::getNull()) : $raw;
+    }
+
+    /**
+     * Whether the atomic is an object of the `DateTimeInterface` lineage (Carbon and friends), by Psalm storage.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isDateObject(Codebase $codebase, Atomic $atomic): bool
+    {
+        return $atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, \DateTimeInterface::class);
     }
 }
