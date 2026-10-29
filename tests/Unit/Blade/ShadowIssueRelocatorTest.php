@@ -31,6 +31,7 @@ use Psalm\Issue\NullArgument;
 use Psalm\Issue\ParseError;
 use Psalm\Issue\PossiblyInvalidMethodCall;
 use Psalm\Issue\PossiblyUndefinedGlobalVariable;
+use Psalm\Issue\PossiblyUndefinedVariable;
 use Psalm\Issue\RedundantCondition;
 use Psalm\Issue\RedundantConditionGivenDocblockType;
 use Psalm\Issue\ReferenceReusedFromConfusingScope;
@@ -818,6 +819,97 @@ final class ShadowIssueRelocatorTest extends TestCase
             "@php \$attr##BEGIN-COMPONENT-CLASS##ibutes = new \\Illuminate\\View\\ComponentAttributeBag;\n"
                 . "if (isset(\$attr##BEGIN-COMPONENT-CLASS##ibutes) && \$attr##BEGIN-COMPONENT-CLASS##ibutes instanceof Illuminate\\View\\ComponentAttributeBag) {} @endphp\n",
         ];
+    }
+
+    /** The save a `<x-...>` tag compiles for one bookkeeping name (`compileClassComponentOpening()`), as the shadow holds it. */
+    private static function tagSave(string $name): string
+    {
+        return "if (isset(\${$name})) { \$__{$name}Original5194778a3a7b899dcee5619d0610f5cf = \${$name}; }";
+    }
+
+    /**
+     * #2130: inside a directive closure the prelude's top-level declaration is out of scope, and
+     * Psalm reports the `isset()` operand of the tag's compiled save as an undefined variable.
+     */
+    #[Test]
+    #[DataProvider('bookkeepingNames')]
+    public function the_undefined_variable_on_a_compiled_tag_save_is_dropped(string $name): void
+    {
+        $line = '<?php /* blade:abc:3 */ ?>    <?php ' . self::tagSave($name) . ' ?>';
+        $issue = new UndefinedVariable("Cannot find referenced variable \${$name}", self::selectionLocation("isset(\${$name}", \strlen("\${$name}"), $line));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3])));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function bookkeepingNames(): iterable
+    {
+        yield '$component' => ['component'];
+        yield '$attributes' => ['attributes'];
+    }
+
+    /**
+     * Negatives, each differing from the dropped case in ONE gate condition. The dropped name alone
+     * (an author's own read in a closure) must keep reporting.
+     *
+     * @param class-string<CodeIssue> $class
+     */
+    #[Test]
+    #[DataProvider('tagSaveLookAlikes')]
+    public function a_look_alike_of_the_compiled_tag_save_keeps_reporting(string $class, string $name, string $line, string $anchor, string $templateSource = self::TEMPLATE_SOURCE): void
+    {
+        $issue = new $class("Cannot find referenced variable \${$name}", self::selectionLocation($anchor, \strlen("\${$name}"), $line));
+        $relocated = $this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource);
+
+        $this->assertInstanceOf($class, $relocated);
+        $this->assertSame(3, $relocated->code_location->getLineNumber());
+    }
+
+    /** @return iterable<string, array{0: class-string<CodeIssue>, 1: string, 2: string, 3: string, 4?: string}> */
+    public static function tagSaveLookAlikes(): iterable
+    {
+        $save = self::tagSave('component');
+
+        yield 'not an UndefinedVariable' => [PossiblyUndefinedVariable::class, 'component', "<?php {$save} ?>", 'isset($component'];
+        yield "the save's own read, not its isset operand" => [UndefinedVariable::class, 'component', "<?php {$save} ?>", '= $component'];
+        yield "an author's isset" => [UndefinedVariable::class, 'component', '<?php if (isset($component)) { echo 1; } ?>', 'isset($component'];
+        yield "an author's read" => [UndefinedVariable::class, 'attributes', '<?php echo $attributes; ?>', '$attributes'];
+        yield 'a save of the other name' => [UndefinedVariable::class, 'component', '<?php if (isset($component)) { $__attributesOriginal5194778a3a7b899dcee5619d0610f5cf = $component; } ?>', 'isset($component'];
+        yield 'a save of a non-bookkeeping name' => [UndefinedVariable::class, 'row', '<?php ' . \str_replace('component', 'row', $save) . ' ?>', 'isset($row'];
+        yield 'the save written in the template' => [UndefinedVariable::class, 'component', "<?php {$save} ?>", 'isset($component', "<div>\n@php {$save} @endphp\n</div>\n"];
+        yield 'a save that stores another variable' => [UndefinedVariable::class, 'component', '<?php if (isset($component)) { $__componentOriginal5194778a3a7b899dcee5619d0610f5cf = $attributes; } ?>', 'isset($component'];
+        yield "the save's body under another statement" => [UndefinedVariable::class, 'component', '<?php while (isset($component)) { $__componentOriginal5194778a3a7b899dcee5619d0610f5cf = $component; } ?>', 'isset($component'];
+        // The template names the variable anywhere: the shadow's first read of it need not be the
+        // compiled save, so Psalm's one row per scope may be the only signal for an author's read (#2130 review).
+        yield 'a template that reads the name outside a comment' => [UndefinedVariable::class, 'component', "<?php {$save} ?>", 'isset($component', "<div>\n@interact('c', \$row)\n<x-alert :foo=\"\$component\" />\n@endinteract\n</div>\n"];
+        yield 'a name split by a component-class marker' => [UndefinedVariable::class, 'component', "<?php {$save} ?>", 'isset($component', "@php \$f = function () { echo \$comp##BEGIN-COMPONENT-CLASS##onent; }; @endphp\n\n\n"];
+        yield 'a name split by a Blade comment' => [UndefinedVariable::class, 'component', "<?php {$save} ?>", 'isset($component', "@php \$f = function () { echo \$compo{{-- x --}}nent; }; @endphp\n\n\n"];
+        yield 'a mention between comment delimiters inside @php' => [UndefinedVariable::class, 'component', "<?php {$save} ?>", 'isset($component', "@php\n\$f = function () {\n// {{-- example\n{$save}\n// --}}\n};\n@endphp\n"];
+        yield 'the same mention followed by an echo of the name' => [UndefinedVariable::class, 'component', "<?php {$save} ?>", 'isset($component', "@php\n\$f = function () {\n// {{-- example\n{$save}\n// --}}\necho \$component;\n};\n@endphp\n"];
+    }
+
+    /**
+     * The gate reads the template source for the NAME, not for the statement: a template that never
+     * writes `$component`/`$attributes` cannot have an author read of it, so every read in its
+     * shadow is bookkeeping. Only the same variable counts, and only as a whole identifier.
+     */
+    #[Test]
+    #[DataProvider('sourcesNotNamingTheVariable')]
+    public function a_compiled_tag_save_is_dropped_when_the_template_never_names_the_variable(string $name, string $templateSource): void
+    {
+        $line = '<?php /* blade:abc:3 */ ?>    <?php ' . self::tagSave($name) . ' ?>';
+        $issue = new UndefinedVariable("Cannot find referenced variable \${$name}", self::selectionLocation("isset(\${$name}", \strlen("\${$name}"), $line));
+
+        $this->assertFalse($this->relocate($issue, $this->entry([9 => 3]), templateSource: $templateSource));
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function sourcesNotNamingTheVariable(): iterable
+    {
+        yield 'a template with an interact body' => ['component', "<div>\n@interact('c', \$row)\n<x-alert />\n@endinteract\n</div>\n"];
+        yield 'the other bookkeeping name' => ['component', "<div>{{ \$attributes }}</div>\n"];
+        yield 'a longer variable name' => ['component', "{{ \$componentList }} {{ \$component_2 }}\n"];
+        yield 'a longer variable name for the other name' => ['attributes', "{{ \$attributesBag }} {{ \$attributes\u{e9} }}\n"];
     }
 
     /**

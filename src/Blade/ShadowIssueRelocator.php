@@ -35,6 +35,7 @@ use Psalm\Issue\TypeDoesNotContainNull;
 use Psalm\Issue\TypeDoesNotContainType;
 use Psalm\Issue\UndefinedThisPropertyAssignment;
 use Psalm\Issue\UndefinedThisPropertyFetch;
+use Psalm\Issue\UndefinedVariable;
 use Psalm\Issue\UnevaluatedCode;
 use Psalm\Issue\UnusedVariable;
 
@@ -113,6 +114,14 @@ final class ShadowIssueRelocator
 
         // `@entangle('tab')` compiles to `'tab'->value()` (#1908), call text the template never holds.
         if ($issue instanceof InvalidMethodCall && self::isGeneratedLiteralReceiverCall($issue, $target)) {
+            return false;
+        }
+
+        // A vendor directive that wraps its body in a closure (TallStackUI's `@interact`) puts a
+        // `<x-...>` tag's compiled save inside a scope the prelude's top-level `$component`/
+        // `$attributes` declarations do not reach, and Psalm reports the save's `isset()` operand
+        // as undefined (#2130). The `isset()` guard makes the read safe at runtime.
+        if ($issue instanceof UndefinedVariable && self::isGeneratedTagSave($issue, $target)) {
             return false;
         }
 
@@ -800,6 +809,63 @@ final class ShadowIssueRelocator
     {
         return \preg_match('/^Docblock-defined type .+ for \$(?:' . $names . ') is (?:never|always) /', $message) === 1
             || \preg_match('/^Cannot resolve types for \$(?:' . $names . ') - docblock-defined type/', $message) === 1;
+    }
+
+    /**
+     * Whether an issue sits on the `isset()` operand of the save a `<x-...>` tag compiles for
+     * `$component`/`$attributes` (`if (isset($component)) { $__componentOriginal<hash> = $component; }`,
+     * `CompilesComponents::compileClassComponentOpening()`), the first read of the name in a closure
+     * scope the prelude's declaration does not reach (#2130).
+     *
+     * Psalm reports an undeclared name once per scope, at its first read, so the save can be the only
+     * row for an author's own read of the same name (`:foo="$attributes"` on the tag). The drop is
+     * therefore limited to templates that never name the variable: with no author read of it, every
+     * read in the shadow is `isset()`-guarded bookkeeping. "Names" is a union of two readings of the
+     * source, so neither Blade rewrite can hide a mention: component-class markers removed (an
+     * `@php` block is stored before `{{-- --}}` comments are stripped, so PHP inside such a comment
+     * is live), and comments then markers removed (a `$compo{{-- --}}nent` joins into the name).
+     * Residual: a template naming the variable anywhere, even in a comment or as a component view's
+     * own `$attributes` read, keeps the finding on every compiled save inside a directive closure.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isGeneratedTagSave(UndefinedVariable $issue, ShadowTarget $target): bool
+    {
+        $selection = ShadowSelection::of($issue->code_location);
+
+        if (!$selection instanceof ShadowSelection) {
+            return false;
+        }
+
+        $name = \substr($selection->snippet, $selection->start, $selection->end - $selection->start);
+        $open = 'if (isset(';
+
+        // `$name` is one of two literals by the time it reaches the pattern.
+        if (
+            ($name !== '$component' && $name !== '$attributes')
+            || $selection->start < \strlen($open)
+            || \substr($selection->snippet, $selection->start - \strlen($open), \strlen($open)) !== $open
+            || \preg_match('/\G\)\) \{ \$__' . \substr($name, 1) . 'Original[0-9a-f]++ = \\' . $name . '; \}/', $selection->snippet, offset: $selection->end) !== 1
+        ) {
+            return false;
+        }
+
+        return !self::sourceNames($name, $target->templateSource);
+    }
+
+    /**
+     * Whether the template source mentions `$name` (with its `$`) as a whole variable, read both ways
+     * described on {@see self::isGeneratedTagSave()}. Over-matching only keeps a finding.
+     *
+     * @psalm-pure
+     */
+    private static function sourceNames(string $name, string $source): bool
+    {
+        $markers = ['##BEGIN-COMPONENT-CLASS##', '##END-COMPONENT-CLASS##'];
+        $pattern = '/' . \preg_quote($name, '/') . '(?![A-Za-z0-9_\x80-\xff])/';
+
+        return \preg_match($pattern, \str_replace($markers, '', $source)) === 1
+            || \preg_match($pattern, \str_replace($markers, '', (string) \preg_replace('/\{\{--.*?--\}\}/s', '', $source))) === 1;
     }
 
     /**
