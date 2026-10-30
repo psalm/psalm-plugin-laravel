@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793310069619,
+  "lastUpdate": 1793380150997,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17315,6 +17315,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 24.86,
             "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1288,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f41a8b34587e76443d8cc897fe560aeac5611eda",
+          "message": "Read Carbon `$timestamp` as `int` and type `diffForHumans()` `$syntax` as the `DIFF_*` constants (#2165)\n\n* fix(carbon): accept a bool diffForHumans() syntax and read $timestamp as int\n\nCarbon documents $syntax as int|array but casts it with (int), so\ndiffForHumans($other, true) is valid; its @property int|float|string\n$timestamp describes the setter, while the getter returns int. Stub the\nread type as int and keep the wide write type.\n\nRefs #2164\n\n* fix(carbon): drop the CarbonInterface stub, it breaks Carbon subclass signature checks\n\nRe-declaring the interface makes Psalm compare inherited is(),\nisStartOfDay() and isEndOfDay() of every Carbon subclass against narrower\ndocblock types (MethodSignatureMismatch). CarbonInterface-typed receivers\nkeep Carbon's int|array $syntax.\n\n* fix(carbon): type since() as string and cover Carbon\\Carbon #2164\n\n- The phpt only used Illuminate\\Support\\Carbon, so deleting\n  Carbon.phpstub left it green\n\n* fix(carbon): keep Carbon's int|array diffForHumans() syntax\n\nCarbon narrows $syntax on purpose to steer callers to the DIFF_*\nconstants (bool is backward compatibility only), so the plugin no longer\nwidens it. Only the $timestamp read type stays corrected.\n\n* feat(carbon): type diffForHumans() $syntax as the DIFF_* constants\n\nCarbon keeps bool and arbitrary ints only for backward compatibility with\nCarbon 1's $absolute flag (Constants/DiffOptions.php:33-34). Type the\ncurrent API: CarbonInterface::DIFF_*, an options array or null, on\ndiffForHumans() and its from/since/to/until/fromNow/toNow/ago aliases.\nRecord the policy: narrow types enforce the current API.",
+          "timestamp": "2026-10-30T18:05:10+01:00",
+          "tree_id": "b0601103702c98da56e5dfc6ec64c1d6b453f28c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f41a8b34587e76443d8cc897fe560aeac5611eda"
+        },
+        "date": 1793380149381,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 46.74,
+            "range": "± 0.17",
             "unit": "s"
           },
           {
