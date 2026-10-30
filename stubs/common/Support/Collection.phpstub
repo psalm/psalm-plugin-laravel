@@ -353,10 +353,21 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Determine if the collection is empty or not.
      *
+     * Only first() is asserted, once per branch: https://github.com/vimeo/psalm/issues/9994 drops the if-false
+     * assertions of a method with several method-call assertions, and omitting the if-true half would let
+     * Laravel's `@phpstan-assert-if-true null $this->last()` merge in.
+     *
+     * The if-false type is conditional because https://github.com/vimeo/psalm/issues/11533 makes template-expanded
+     * assertions keep only the first union member, so a plain `TValue` would drop null from a nullable TValue
+     * (`int|null` became `int`). A possibly-null TValue resolves to `mixed` (no narrowing).
+     * A nullable TValue whose non-null part is an array, class-string or literal still loses null (see the known-limit phpt).
+     * Once #9994 and #11533 ship, restore `TValue` plus first()/last()/count() on both branches
+     * (including if-true `0 $this->count()`).
+     * Known limits: tests/Type/tests/Collection/CollectionEmptinessAssertionsKnownLimitation.phpt.
+     *
      * @psalm-mutation-free
      * @psalm-assert-if-true null $this->first()
-     * @psalm-assert-if-true 0 $this->count()
-     * @psalm-assert-if-false positive-int $this->count()
+     * @psalm-assert-if-false (TValue is null ? mixed : TValue) $this->first()
      * @return bool
      */
     public function isEmpty() {}
@@ -364,7 +375,11 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Determine if the collection is not empty.
      *
+     * Not asserted on first()/last(): https://github.com/vimeo/psalm/issues/11533 (template-expanded if-true
+     * assertions keep only the first union member), so `Collection<int, A|B>` would narrow first() to `A`.
+     *
      * @psalm-mutation-free
+     * @psalm-assert-if-true positive-int $this->count()
      * @return bool
      */
     public function isNotEmpty() {}
