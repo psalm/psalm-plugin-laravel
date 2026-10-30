@@ -14,8 +14,8 @@ use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
 
 /**
  * #1988: a template finding goes through Psalm's own baseline like a PHP finding. The baseline
- * stores the issue's selected text per file and type, and a relocated finding selects the whole
- * template line ({@see TemplateLocation}), so that line is the entry's `<code>`.
+ * stores the issue's selected text per file and type, and a relocated finding selects the
+ * template line's non-blank span ({@see TemplateLocation}), so that is the entry's `<code>`.
  *
  * A clean report under `--use-baseline` is not vacuous: `findUnusedBaselineEntry` is on by
  * default, so once a flagged line changes the same run reports its entry as unused, next to the

@@ -121,7 +121,7 @@ final class ShadowIssueRelocatorTest extends TestCase
 
         $this->assertInstanceOf(CodeIssue::class, $relocated);
         $this->assertSame(
-            '  <p>first</p>',
+            '<p>first</p>',
             \substr(
                 self::TEMPLATE_SOURCE,
                 $relocated->code_location->raw_file_start,
