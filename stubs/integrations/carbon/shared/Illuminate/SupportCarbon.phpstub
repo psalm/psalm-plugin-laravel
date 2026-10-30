@@ -1,0 +1,13 @@
+<?php
+
+namespace Illuminate\Support;
+
+use Carbon\Carbon as BaseCarbon;
+
+/**
+ * Psalm populates this class before the parent stub re-scan, so it must declare `$timestamp` itself.
+ *
+ * @property-read int $timestamp
+ * @property-write int|float|string $timestamp
+ */
+class Carbon extends BaseCarbon {}
