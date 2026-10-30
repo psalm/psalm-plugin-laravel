@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793397041350,
+  "lastUpdate": 1793404700873,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17385,6 +17385,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 42.56,
             "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1288,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "31378ccd97b00df2a7a6895f02ea7cffce204bb2",
+          "message": "fix(stubs): narrow Collection::first() after an isEmpty() guard (#2170)\n\n`if ($c->isEmpty()) return; $c->first()` stayed `TValue|null`, so a\n`class-string` taken from the collection reported\n`UndefinedClass: Type null cannot be called as a class`.\n\nisEmpty() now asserts `null` on first() when true and\n`(TValue is null ? mixed : TValue)` when false. The old\n`positive-int $this->count()` if-false assertion never applied:\nvimeo/psalm#9994 drops the if-false assertions of a method with several\nmethod-call assertions, and dropping the if-true half would let\nLaravel's `null $this->last()` merge in, so isEmpty() keeps exactly one\nassertion per branch, both on first().\n\nThe conditional form is needed because of vimeo/psalm#11533: Psalm\nexpands a union TValue into one rule per member and keeps only the first\nfor template-expanded assertions, so a plain `TValue` turned\n`Collection<int, int|null>` into `int`. A possibly-null TValue now\nresolves to `mixed` (no narrowing). For the same reason isNotEmpty()\nasserts only `positive-int $this->count()`, not first()/last().\n\nKnown limits, pinned in CollectionEmptinessAssertionsKnownLimitation.phpt:\n- class-string TValue reads `null|string` inside the isEmpty() branch;\n- the narrowing is kept after a call that mutates the collection;\n- UNSOUND: a nullable TValue whose non-null part is an array shape,\n  class-string or literal scalars still loses null after the guard (the\n  rule order from TypeCombiner puts them before `mixed`, #11533);\n- UNSOUND: for a receiver union only the last alternative's assertion\n  applies (Psalm overwrites per alternative), so the result depends on\n  the union order.\n\nFixes #2166",
+          "timestamp": "2026-10-31T00:55:23+01:00",
+          "tree_id": "3aa83e8219d8292561b6a52983921171211ae2c8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/31378ccd97b00df2a7a6895f02ea7cffce204bb2"
+        },
+        "date": 1793404699448,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 30.72,
+            "range": "± 0.97",
             "unit": "s"
           },
           {
