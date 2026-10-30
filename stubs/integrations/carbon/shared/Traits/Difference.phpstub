@@ -1,0 +1,89 @@
+<?php
+
+namespace Carbon\Traits;
+
+use Carbon\Carbon;
+
+/**
+ * Narrowed to the DIFF_* constants: Carbon keeps bool/other ints only for backward compatibility (Constants/DiffOptions.php:33-34).
+ */
+trait Difference
+{
+    /**
+     * @param Carbon|\DateTimeInterface|string|array|null $other
+     * @param \Carbon\CarbonInterface::DIFF_*|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int $options
+     */
+    public function diffForHumans($other = null, $syntax = null, $short = false, $parts = 1, $options = null): string {}
+
+    /**
+     * @param Carbon|\DateTimeInterface|string|array|null $other
+     * @param \Carbon\CarbonInterface::DIFF_*|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int $options
+     *
+     * @return string
+     */
+    public function from($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param Carbon|\DateTimeInterface|string|array|null $other
+     * @param \Carbon\CarbonInterface::DIFF_*|array<array-key, mixed>|null $syntax
+     */
+    public function since($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param Carbon|\DateTimeInterface|string|array|null $other
+     * @param \Carbon\CarbonInterface::DIFF_*|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int $options
+     *
+     * @return string
+     */
+    public function to($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param Carbon|\DateTimeInterface|string|array|null $other
+     * @param \Carbon\CarbonInterface::DIFF_*|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int $options
+     *
+     * @return string
+     */
+    public function until($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param \Carbon\CarbonInterface::DIFF_*|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int $options
+     *
+     * @return string
+     */
+    public function fromNow($syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param \Carbon\CarbonInterface::DIFF_*|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int $options
+     *
+     * @return string
+     */
+    public function toNow($syntax = null, $short = false, $parts = 1, $options = null) {}
+
+    /**
+     * @param \Carbon\CarbonInterface::DIFF_*|array<array-key, mixed>|null $syntax
+     * @param bool $short
+     * @param int $parts
+     * @param int $options
+     *
+     * @return string
+     */
+    public function ago($syntax = null, $short = false, $parts = 1, $options = null) {}
+}

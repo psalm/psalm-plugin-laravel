@@ -62,6 +62,12 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Why:** Users who install or upgrade the plugin should not be greeted with a wall of new errors. The plugin should improve analysis incrementally. Users who want stricter checking can enable it when they're ready.
 
+### Narrow types enforce the current API
+
+**Decision:** When a library keeps a legacy form working only for backward compatibility, the stubs type the current API, not everything the runtime still accepts. Never widen a deliberately narrowed upstream docblock to admit the legacy form. Narrow further when the upstream type is wider than its documented API. Example: Carbon's `diffForHumans()` `$syntax` is typed as the `CarbonInterface::DIFF_*` constants. `true` / `false` (Carbon 1's `$absolute`, kept by the `(int)` cast, `Constants/DiffOptions.php:33-34`) and arbitrary ints are reported.
+
+**Boundary:** this applies to legacy or BC-only forms. A docblock that is merely inaccurate about current behavior (Carbon's `$timestamp` read type) is still corrected to the runtime type. Each such narrowing is a deliberate new report, so note it in the PR body and release notes.
+
 ### Plugin covers Laravel framework only, not third-party packages
 
 **Decision:** The plugin provides type support for `laravel/framework` (Illuminate namespace) and first-party packages that ship with a default Laravel install. Third-party packages (Sanctum, Cashier, Livewire, Filament, etc.) are out of scope unless their model subclasses are naturally discovered.
