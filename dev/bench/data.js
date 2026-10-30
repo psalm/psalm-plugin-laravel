@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793380150997,
+  "lastUpdate": 1793397041350,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17350,6 +17350,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 46.74,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1288,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8cca2df9c3431709ccc3b0dad50f537c5bdf7bed",
+          "message": "fix(blade): start relocated issue locations at the first non-blank character (#2169)\n\nRefs #2167",
+          "timestamp": "2026-10-30T22:46:50+01:00",
+          "tree_id": "8d9665de2e3ce170a92ef9466e5a445b151a73c5",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8cca2df9c3431709ccc3b0dad50f537c5bdf7bed"
+        },
+        "date": 1793397039354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 42.56,
+            "range": "± 0.14",
             "unit": "s"
           },
           {
