@@ -35,6 +35,8 @@ trait Difference
      * @param bool $short
      * @param int $parts
      * @param int|null $options
+     *
+     * @return string
      */
     public function since($other = null, $syntax = null, $short = false, $parts = 1, $options = null) {}
 

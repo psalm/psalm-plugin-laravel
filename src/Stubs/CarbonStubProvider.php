@@ -95,8 +95,10 @@ final class CarbonStubProvider
         // a package the consumer does not actually use.
         //
         // The directory is split by load condition:
-        //   - shared/   — version-independent stubs (the CarbonPeriod lazy-collect helper
-        //                 and the Constants/* interfaces). Always registered.
+        //   - shared/   — version-independent stubs (the CarbonPeriod lazy-collect helper,
+        //                 the Constants/* interfaces, and docblock corrections that re-declare
+        //                 Carbon, CarbonImmutable, Illuminate\Support\Carbon and the
+        //                 Difference trait). Always registered.
         //   - pre-3.12/ — conditional-return narrowings for Carbon's dual-purpose
         //                 getter/setter methods. Registered ONLY for nesbot/carbon < 3.12
         //                 (see the version gate below).

@@ -14,6 +14,7 @@
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/2164
  */
 
+use Carbon\Carbon as BaseCarbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 
@@ -28,7 +29,7 @@ function diff_bool_syntax(Carbon $c, CarbonImmutable $i): string
 function alias_bool_syntax(Carbon $c): string
 {
     return $c->from(null, true)
-        . (string) $c->since(null, true)
+        . $c->since(null, true)
         . $c->to(null, true)
         . $c->until(null, true)
         . $c->fromNow(true)
@@ -45,6 +46,14 @@ function timestamp_read(Carbon $c, CarbonImmutable $i): string
     /** @psalm-check-type-exact $fromImmutable = int */
 
     return 'k:' . $c->timestamp . $i->timestamp . $fromSupport . $fromImmutable;
+}
+
+function base_carbon(BaseCarbon $b): string
+{
+    $fromBase = $b->timestamp;
+    /** @psalm-check-type-exact $fromBase = int */
+
+    return 'k:' . $b->timestamp . $fromBase . $b->diffForHumans(null, true);
 }
 
 function timestamp_write(Carbon $c, CarbonImmutable $i): void
