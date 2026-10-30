@@ -17,6 +17,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\LaravelPlugin\Internal\UnloadableClassDetector;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -90,6 +91,14 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 $storage->stmt_location !== null
                 && AnonymousClassNameDetector::isSynthetic($storage->name, $storage->stmt_location->file_path)
             ) {
+                continue;
+            }
+
+            // Guards the probe below against a compile-time fatal, see UnloadableClassDetector.
+            $unloadable = UnloadableClassDetector::reason($codebase, $storage);
+
+            if ($unloadable !== null) {
+                $codebase->progress->warning("Laravel plugin: skipping model '{$storage->name}': {$unloadable}");
                 continue;
             }
 

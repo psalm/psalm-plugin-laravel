@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Traits\Macroable;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\UnloadableClassDetector;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -93,8 +94,13 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             return;
         }
 
-        $progress = $event->getCodebase()->progress;
-        $rootClass = self::tryGetFacadeRootClass($storage->name, $progress);
+        $codebase = $event->getCodebase();
+
+        if (self::isUnloadable($codebase, $storage)) {
+            return;
+        }
+
+        $rootClass = self::tryGetFacadeRootClass($storage->name, $codebase->progress);
 
         if ($rootClass === null) {
             return;
@@ -154,6 +160,10 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                 continue;
             }
 
+            if (self::isUnloadable($codebase, $storage)) {
+                continue;
+            }
+
             try {
                 if (!\class_exists($storage->name, true)) {
                     // warning (not debug) — debug is a no-op in the default progress, and a user
@@ -185,6 +195,26 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             self::registerHandlersForFacade($codebase, $storage->name, $rootClass);
             self::unsealIfRootForwardsUnknownCalls($codebase, $storage, $rootClass);
         }
+    }
+
+    /**
+     * Warn once per facade (the scan and populate sites both call this) and report whether
+     * {@see UnloadableClassDetector} proves PHP cannot load the class.
+     */
+    private static function isUnloadable(Codebase $codebase, ClassLikeStorage $storage): bool
+    {
+        $reason = UnloadableClassDetector::reason($codebase, $storage);
+
+        if ($reason === null) {
+            return false;
+        }
+
+        if (!isset(self::$failedFacades[$storage->name])) {
+            self::$failedFacades[$storage->name] = true;
+            $codebase->progress->warning("Laravel plugin: skipping facade '{$storage->name}': {$reason}");
+        }
+
+        return true;
     }
 
     /**

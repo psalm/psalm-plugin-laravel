@@ -142,6 +142,18 @@ This is acceptable: the handlers gracefully handle any Model subclass.
 Instead, `ModelRegistrationHandler` registers their static methods as closures via `registerClosure()`.
 Registration order is preserved (relationship > factory > accessor > column).
 
+### Classes PHP cannot compile are skipped before autoload (#2136)
+
+**Decision:** `UnloadableClassDetector` runs before every `class_exists()` / `is_subclass_of()` probe in `AppFacadeRegistrationHandler` and `ModelRegistrationHandler`. A class whose short name clashes with one of its own `use` imports (`use Illuminate\Support\Facades\Cache; class Cache extends Cache {}`) is skipped with a `Laravel plugin: skipping facade|model` warning. Psalm reports the file itself as a `ParseError`.
+
+- **Why:** that clash is a PHP compile-time fatal. It bypasses the `catch (\Throwable)` around the probes and kills the whole run.
+- **Ancestors are checked too:** autoloading a child compiles its parents first, so a healthy `class Child extends Cache` dies on the broken parent.
+- **Case-insensitive:** PHP compares class names case-insensitively, so `strcasecmp`, not Psalm's `!==`.
+- **Rejected, gating on `ClassLikeStorage::$has_visitor_issues`:** Psalm also sets it on the SURVIVING storage for a `DuplicateClass`, including from non-project scanned files (e.g. an `_ide_helper_models.php` in `<extraFiles>` re-declaring every `App\Models\*`), which would silently drop every such model or facade.
+- **Stubbed storages are ignored:** a stub re-declaration replaces the class's `aliases` with the stub's imports, which the runtime file never sees, so a clash there proves nothing (a loadable class and its children must still register).
+- **Known crash boundary:** only imports declared BEFORE the class are seen at the `afterClassLikeVisit` scan hook, because the shared `Aliases` object is still being filled. A `use` placed after the class (PSR-12 forbids it) is also a fatal; it is caught at the populate hook, but a direct `Facade` subclass can still crash in the scan-hook probe. Psalm emits no `ParseError` for that shape either. Not fixed.
+- **Not covered:** other per-call-site autoload probes (`CastResolver`, `SchemaAggregator`, `MacroRegistry`) and other fatal kinds (incompatible signatures, duplicate methods).
+
 ### Why container-bound classes are queued eagerly at plugin init
 
 **Decision:** `Plugin::__invoke()` calls `ContainerResolver::queueBoundClassesForScanning()` once, after `registerStubs()`: it `make()`s every binding and queues each resolved object class (`store_failure: false`) so `app('alias')` narrows to a class Psalm has storage for (#1797).

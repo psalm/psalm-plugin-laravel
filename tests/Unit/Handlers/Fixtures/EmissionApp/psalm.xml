@@ -8,7 +8,14 @@
 >
     <projectFiles>
         <directory name="app" />
+        <ignoreFiles>
+            <!-- Not a project file, so the stub (stubs/compile-fatal.phpstub) supplies its storage. -->
+            <file name="app/CompileFatalClasses/StubbedModel.php" />
+        </ignoreFiles>
     </projectFiles>
+    <stubs>
+        <file name="stubs/compile-fatal.phpstub" />
+    </stubs>
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <!-- Arms the opt-in rules (disks, route names) and promotes UnknownModelAttribute and

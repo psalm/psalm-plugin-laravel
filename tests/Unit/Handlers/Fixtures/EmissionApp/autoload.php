@@ -13,6 +13,7 @@ const EMISSION_APP_NAMESPACES = [
     'AutoloadCrashFixture\\' => 'UndefinedRelationAutoloadCrash',
     'ScopeUnusedCodeFixture\\' => 'SuppressScopeUnusedCode',
     'DynamicWhereFixture\\' => 'DynamicWhereSchemaColumns',
+    'CompileFatalFixture\\' => 'CompileFatalClasses',
     'AppendsFixture\\' => 'UnresolvableAppendedModelAttribute',
     'UnregisteredRouteNameFixture\\' => 'UnregisteredRouteName',
 ];
