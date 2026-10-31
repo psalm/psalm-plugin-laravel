@@ -610,6 +610,9 @@ final class Plugin implements PluginEntryPointInterface
         // singleton at analysis time).
         if ($pluginConfig->resolveConfigReturnTypes) {
             require_once __DIR__ . '/Handlers/Config/ConfigValueReflector.php';
+            require_once __DIR__ . '/Handlers/Config/ConfigSource.php';
+            require_once __DIR__ . '/Handlers/Config/ConfigSourceIndex.php';
+            require_once __DIR__ . '/Handlers/Config/EnvExpressionTyper.php';
             require_once __DIR__ . '/Handlers/Config/ThrowingConfigRepository.php';
             require_once __DIR__ . '/Handlers/Config/ConfigKeyResolver.php';
             require_once __DIR__ . '/Handlers/Helpers/ConfigHelperHandler.php';

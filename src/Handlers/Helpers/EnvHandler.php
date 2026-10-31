@@ -46,8 +46,17 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
-        $second_arg_type = Arg::typeAt($event->getCallArgs(), $event->getStatementsSource(), 1);
+        return self::returnTypeForDefault(Arg::typeAt($event->getCallArgs(), $event->getStatementsSource(), 1));
+    }
 
+    /**
+     * Shared with env-backed config values ({@see \Psalm\LaravelPlugin\Handlers\Config\EnvExpressionTyper}).
+     *
+     * @param Type\Union|null $second_arg_type null when the call passes no default
+     * @psalm-pure
+     */
+    public static function returnTypeForDefault(?Type\Union $second_arg_type): Type\Union
+    {
         // Fall back to string|null when:
         //   - no default argument supplied (env var may not be set → null)
         //   - default has unknown type
