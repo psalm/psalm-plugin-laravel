@@ -737,6 +737,33 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 **Rejected alternatives:**
 - **A `string|null $key` stub.** Silences the `null` default from the original report, but hides a real `null` passed to a hand-written call in any PHP file. It also covers only `null`: `false`, `0`, `[]` defaults and the keyed arm's `NoValue` keep reporting.
 
+## Config
+
+### Env-backed config values are typed from their config file, not the booted app (#1683)
+
+**Decision:** `ConfigKeyResolver` keeps runtime reflection for key presence and shape, but a value whose config-file expression reads the environment is typed from that expression (`ConfigSourceIndex` finds it, `EnvExpressionTyper` types it). `env()` follows the `EnvHandler` model in config files and in code alike (`EnvHandler::returnTypeForDefault()`): `null|string`, or `string` plus the generalised default when that default cannot be null. A runtime `null` without a literal `null` behind it is `mixed`.
+
+**Why:** the booted value is one observation of the analysing machine's env (`.env`, CI secrets, or whoever ran `config:cache`). Typing it made the same code report `NoValue`/`TypeDoesNotContainType` with a variable unset and `RedundantCast`/`RedundantCondition` with it set. The expression is the same everywhere.
+
+**The env model stays at #707:** a set variable is `string`, though `Env::getOption()` maps `true`, `false`, `null` and `empty`. Known cost: `is_string()` on a value with a non-null default (`config('app.url')`) reports `RedundantCondition`, and `=== true` looks impossible. The override guard below still treats those bools and nulls as values the file can produce, otherwise a machine with `FEATURE=true` would fall back to its runtime value.
+
+**Provenance must be certain:**
+- The index mirrors the loader that booted the app: `LoadConfiguration` (app dir, nested directories as dotted keys, framework base merged at the top level and one level under `mergeableOptions()`) or Testbench's loader (its `basePath('config')`, with the plugin's later `configPath()` retarget ignored). Testbench's framework merge is not modelled: dropping a source is safe, attributing a value to the wrong expression is not.
+- Both loaders set a framework config that no app file of the same name consumed after the app files, replacing nested app files below that name (`config/services/postmark.php` without `config/services.php`). Under `LoadConfiguration` the base file is the source; under Testbench there is none.
+- A rebound loader, an opaque file (not exactly one unconditional top-level array `return`), a spread or computed key, a merged integer key, and a workbench config file give no source. A `Foo::class` key is the resolved class name, as PHP stores it.
+- Dots split only the requested key: a literal `'foo.bar'` key inside a file is one item, never the nested file `foo/bar.php`, and nothing below it comes from a nested file either.
+- `env` must resolve to the global function and `Env` to `Illuminate\Support\Env` (php-parser `NameResolver`). An unqualified `env()` in a namespaced file, or a class named `Env` that is not Laravel's, gives no source: a namespaced `env()` declared by any file loaded earlier wins at runtime, and under `config:cache` no config file runs, so neither an own-file scan nor `function_exists()` can prove which function runs.
+- A variable is env-free unless the file may put an env read in it: a statement outside the `return` reads the environment (function declarations and included files too), or code in the `return` that runs while the file loads reads it in an include, an assignment, or a call that sees a variable (a by-reference argument, a mutated object, an invoked closure or anonymous class writing what it captured, a function declared there and called by a later item). Then any variable in a value may hold an env read and is untyped. Only a closure stored as a config value, directly or in a literal array, never runs at load, so nothing in it counts, its declarations and by-reference captures included. A first-class callable `env(...)` reads nothing; a call through a variable (`$read('KEY')`) may be `env()` and is untyped, while an immediately invoked closure reads env only if its body does.
+- An untyped `env()` default gives `mixed`, not `EnvHandler`'s `null|string`: in code Psalm types almost any default, so that fallback is rare there, while in a config file the typer models few shapes, and `null|string` would leave out the default's own type. Typed defaults: literals, PHP and extension constants (an app constant may come from env), Laravel's `*_path()` helpers, `realpath()`, and arithmetic and literal arrays of those. php-parser's `ConstExprEvaluator` computes what it can (`PHP_INT_MAX * 2` is a `float`); integer arithmetic it cannot compute may overflow, so it is `float|int`. A deprecated constant is untyped: reading it raises an error Psalm's handler would rethrow.
+- A runtime value of a kind the expression cannot produce (`'remote'` under `(int) env()`) proves a provider override, so the runtime value is reflected instead. "Can produce" uses what `Env::get()` returns (`bool|null|string` plus the default), not the emitted type. An override of the same kind is indistinguishable and keeps the file's type.
+
+**Rejected alternatives:**
+- **`null` → `mixed` only.** Fixes the unset case; set variables, `config:cache` snapshots and array shapes still follow the machine.
+- **Generalising the default only** (the #752 plan). Fixes absent keys only; a present env-backed key still follows the machine.
+- **Re-evaluating config files with sentinel env values.** Runs user code again and cannot enumerate what `env()` may return.
+- **Psalm's `ExpressionAnalyzer` on config-file nodes.** Internal API, and it emits issues and taint against the caller's file.
+- **`bool|null|string` for a set variable** (what `Env::getOption()` returns). Analysing 21 real apps with it added about 1000 level 3/4 issues, all from `bool` in the union: `InvalidScalarArgument` +363, `PossiblyInvalidOperand` +321, `PossiblyInvalidArgument` +292.
+
 ## Per-Run Overrides
 
 ### One internal transport, bool and enum keys only

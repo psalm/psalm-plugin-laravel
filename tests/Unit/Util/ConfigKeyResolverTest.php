@@ -9,7 +9,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Config\ConfigKeyResolver;
+use Psalm\LaravelPlugin\Handlers\Config\ConfigSourceIndex;
 use Psalm\Type;
+use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
 use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
 
 #[CoversClass(ConfigKeyResolver::class)]
@@ -18,6 +20,7 @@ final class ConfigKeyResolverTest extends TestCase
     // `TLiteralString::make()` and friends read `Config::getInstance()`.
     // Tests that exercise generalizeDefault need the singleton planted.
     use InitializesPsalmConfigSingleton;
+    use CopiesFixtureDirectories;
 
     protected function tearDown(): void
     {
@@ -156,19 +159,26 @@ final class ConfigKeyResolverTest extends TestCase
     }
 
     #[Test]
-    public function resolveCallReturnType_returns_null_when_value_is_null_ignoring_default(): void
+    public function resolveCallReturnType_ignores_the_default_for_a_present_key_typed_from_its_source(): void
     {
-        $repo = $this->fakeRepository(['app.providers' => null]);
-        $resolver = new ConfigKeyResolver($repo);
+        $directory = \sys_get_temp_dir() . '/psalm-laravel-config-' . \bin2hex(\random_bytes(6));
+        \mkdir($directory);
+        \file_put_contents($directory . '/app.php', "<?php return ['providers' => null, 'key' => env('APP_KEY')];");
 
-        $type = $resolver->resolveCallReturnType(
-            'app.providers',
-            new \Psalm\Type\Union([\Psalm\Type\Atomic\TLiteralString::make('fallback')]),
-        );
+        try {
+            $repo = $this->fakeRepository(['app.providers' => null, 'app.key' => null]);
+            $resolver = new ConfigKeyResolver($repo, ConfigSourceIndex::fromDirectories($directory));
+            $default = new \Psalm\Type\Union([new \Psalm\Type\Atomic\TLiteralInt(42)]);
 
-        // Laravel's Arr::get returns the stored null when the key exists
-        // (array_key_exists === true) — the default is NOT applied.
-        $this->assertTrue($type->isNull());
+            // Laravel's Arr::get returns the stored value when the key exists
+            // (array_key_exists === true) — the default is NOT applied.
+            $this->assertSame('null', $resolver->resolveCallReturnType('app.providers', $default)->getId());
+            $this->assertSame('null|string', $resolver->resolveCallReturnType('app.key', $default)->getId());
+            // Without a source, a stored null may be "unset on this machine".
+            $this->assertSame('mixed', (new ConfigKeyResolver($repo))->resolveCallReturnType('app.providers', $default)->getId());
+        } finally {
+            self::removeDirectory($directory);
+        }
     }
 
     #[Test]
@@ -192,6 +202,18 @@ final class ConfigKeyResolverTest extends TestCase
         $generalized = ConfigKeyResolver::generalizeDefault(new \Psalm\Type\Union([$closure]));
 
         $this->assertTrue($generalized->isMixed());
+    }
+
+    #[Test]
+    public function generalizeDefault_invokes_a_closure_default_once(): void
+    {
+        // value() calls the default once, so a closure returning a closure yields that inner closure.
+        $inner = new \Psalm\Type\Atomic\TClosure(params: [], return_type: Type::getInt());
+        $outer = new \Psalm\Type\Atomic\TClosure(params: [], return_type: new \Psalm\Type\Union([$inner]));
+
+        $generalized = ConfigKeyResolver::generalizeDefault(new \Psalm\Type\Union([$outer]));
+
+        $this->assertSame((new \Psalm\Type\Union([$inner]))->getId(), $generalized->getId());
     }
 
     #[Test]

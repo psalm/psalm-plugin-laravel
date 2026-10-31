@@ -4,9 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Util;
 
+use PhpParser\Node\Expr;
+use PhpParser\Node\Stmt\Return_;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitor\NameResolver;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Config\ConfigSource;
+use Psalm\LaravelPlugin\Handlers\Config\ConfigSourceIndex;
 use Psalm\LaravelPlugin\Handlers\Config\ConfigValueReflector;
 use Psalm\Type;
 use Psalm\Type\Atomic\TKeyedArray;
@@ -16,9 +23,89 @@ use Psalm\Type\Atomic\TNamedObject;
 final class ConfigValueReflectorTest extends TestCase
 {
     #[Test]
-    public function reflects_null_to_TNull(): void
+    public function reflects_null_without_a_source_to_mixed(): void
     {
-        $this->assertTrue(ConfigValueReflector::reflect(null)->isNull());
+        // A null with nothing behind it is as likely an env var unset on this machine.
+        $this->assertSame('mixed', ConfigValueReflector::reflect(null)->getId());
+        $this->assertSame('mixed', ConfigValueReflector::reflect(null, $this->source('SOME_CONSTANT'))->getId());
+    }
+
+    #[Test]
+    public function reflects_null_to_TNull_when_the_source_is_a_literal_null(): void
+    {
+        $this->assertTrue(ConfigValueReflector::reflect(null, $this->source('null'))->isNull());
+    }
+
+    #[Test]
+    public function types_an_env_leaf_from_its_source_whatever_the_variable_reads(): void
+    {
+        $source = $this->source("env('FEATURE')");
+
+        $this->assertSame('null|string', ConfigValueReflector::reflect(null, $source)->getId());
+        $this->assertSame('null|string', ConfigValueReflector::reflect('secret', $source)->getId());
+        // Env::get() maps FEATURE=true to a bool, which the source type leaves out but can produce.
+        $this->assertSame('null|string', ConfigValueReflector::reflect(true, $source)->getId());
+    }
+
+    #[Test]
+    public function a_set_variable_is_no_override_when_psalm_folds_what_the_source_produces_into_scalar(): void
+    {
+        // bool|float|int|null|string combines to null|scalar.
+        $source = $this->source("env('TTL', env('FAST') ? 60 : 0.5)");
+
+        $this->assertSame('float|int|string', ConfigValueReflector::reflect(null, $source)->getId());
+        $this->assertSame('float|int|string', ConfigValueReflector::reflect('abc', $source)->getId());
+        $this->assertSame('float|int|string', ConfigValueReflector::reflect(true, $source)->getId());
+    }
+
+    #[Test]
+    public function a_value_the_env_source_cannot_produce_is_a_provider_override_typed_at_runtime(): void
+    {
+        $this->assertSame('string', ConfigValueReflector::reflect('remote', $this->source("(int) env('PORT')"))->getId());
+        $this->assertSame('int', ConfigValueReflector::reflect(8080, $this->source("env('FEATURE')"))->getId());
+        $this->assertSame('list{string}', ConfigValueReflector::reflect(['a'], $this->source("env('FEATURE')"))->getId());
+        $this->assertSame('mixed', ConfigValueReflector::reflect(null, $this->source("(int) env('PORT')"))->getId());
+    }
+
+    #[Test]
+    public function walks_a_literal_array_source_with_the_runtime_keys(): void
+    {
+        $type = ConfigValueReflector::reflect(
+            ['token' => null, 'region' => 'eu', 'added_by_provider' => null],
+            $this->source("['token' => env('TOKEN'), 'region' => 'eu', 'dropped_by_provider' => env('X')]"),
+        );
+
+        $this->assertSame('array{added_by_provider: mixed, region: string, token: null|string}', $type->getId());
+    }
+
+    #[Test]
+    public function a_first_class_env_callable_is_a_stored_closure(): void
+    {
+        $closure = \Closure::fromCallable('strlen');
+
+        $this->assertSame('Closure', ConfigValueReflector::reflect($closure, $this->source('env(...)'))->getId());
+        $this->assertSame('Closure', ConfigValueReflector::reflect($closure, $this->source('\Illuminate\Support\Env::get(...)'))->getId());
+    }
+
+    #[Test]
+    public function types_an_env_reading_array_it_cannot_walk_as_mixed(): void
+    {
+        $type = ConfigValueReflector::reflect([], $this->source("[...explode(',', (string) env('KEYS'))]"));
+
+        $this->assertSame('mixed', $type->getId());
+    }
+
+    private function source(string $expression): ConfigSource
+    {
+        $statements = (new ParserFactory())->createForNewestSupportedVersion()->parse("<?php return {$expression};");
+        $this->assertNotNull($statements);
+        (new NodeTraverser(new NameResolver()))->traverse($statements);
+
+        $return = $statements[0] ?? null;
+        $this->assertInstanceOf(Return_::class, $return);
+        $this->assertInstanceOf(Expr::class, $return->expr);
+
+        return new ConfigSource(ConfigSourceIndex::fromDirectories(null), 'demo', [$return->expr]);
     }
 
     #[Test]
