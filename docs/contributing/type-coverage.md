@@ -48,6 +48,8 @@ $properties = array_map(
 );
 ```
 
+When the loop also needs the key, iterate `array_keys($value)` and pass `$value[$key]` straight into the call: an array fetch consumed inline does not count either (`ConfigValueReflector::reflectArray()`).
+
 Gotcha: arrow functions (`static fn(mixed $x) => ...`) capture `use` variables by value only.
 If by-reference state matters (for example a `&$budget` counter threaded through recursion), keep the long form `function () use (&$budget)`.
 Switching to `fn()` silently breaks mutation propagation across iterations. Cover the budget or limit path with a unit test.
@@ -137,4 +139,4 @@ Storing a `try`-captured value in a local for use after the catch always produce
 1. Restructure so the mixed value is consumed inline inside the `try`. Preferred when the inner call is pure and will not throw. Document that purity in a comment.
 2. Add an `@psalm-var` when restructuring would obscure intent (see pattern 3).
 
-`src/Handlers/Config/ConfigKeyResolver.php::warm()` is the worked example: `ConfigValueReflector::reflect()` is pure, so wrapping it under the same `Throwable` catch as `Repository::has()` and `get()` is acceptable and removes the mixed local.
+`src/Handlers/Config/ConfigKeyResolver.php::warm()` is the worked example: `ConfigValueReflector::reflect()` and `ConfigSourceIndex::find()` do not throw (a config file that fails to parse just has no source), so wrapping them under the same `Throwable` catch as `Repository::has()` and `get()` is acceptable and removes the mixed local.
