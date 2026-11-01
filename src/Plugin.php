@@ -461,7 +461,7 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryCountTypeProvider::class);
         // Injects `@extends Factory<TModel>` on bare factory subclasses that follow Laravel's
         // naming convention but omit the docblock — binds TModel so create()/make() resolve the
-        // concrete model (and silences `MissingTemplateParam` on Psalm 6). See #780.
+        // concrete model (and silences the `MissingTemplateParam` for the omitted TModel). See #780.
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryModelBindingHandler::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).

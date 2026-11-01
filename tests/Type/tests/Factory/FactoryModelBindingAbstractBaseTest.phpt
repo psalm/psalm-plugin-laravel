@@ -102,3 +102,4 @@ namespace App\Sandbox\AbstractBase {
 }
 ?>
 --EXPECTF--
+MissingTemplateParam on line %d: Database\Factories\CitadelFactory has missing template params when extending Database\Factories\AbstractBastionFactory, expecting 1

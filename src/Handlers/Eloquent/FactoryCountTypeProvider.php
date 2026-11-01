@@ -23,16 +23,16 @@ use Psalm\Type\Union;
  * `create()` / `make()` / `createQuietly()` resolve to either a single model
  * or a collection.
  *
- * The Factory stub declares a second template `TCount` (default `null`) and
- * uses a conditional return on `create`/`make`/`createQuietly`:
+ * The Factory stub declares a second template `TCount` (default `int|null`, its
+ * bound) and uses a conditional return on `create`/`make`/`createQuietly`:
  *
  *     (TCount is null|0|1 ? TModel : Collection<int, TModel>)
  *
  * The handler maps literal arguments `0` and `1` to a plural sentinel because
  * Laravel's runtime returns a `Collection` for any non-null `count`, including
- * 0 and 1. A user subclass extending `Factory<X>` with one template arg leaves
- * `TCount` at its `int|null` bound, which since Psalm 7.0.0-rc6 resolves the
- * conditional to both branches (see FactoryUnboundCountKnownLimitation.phpt).
+ * 0 and 1. A user subclass extending `Factory<X>` with one template arg takes the
+ * `int|null` default, which resolves the conditional to both branches (see
+ * FactoryBoundCountDefaultTest.phpt).
  *
  * For the conditional to fire, the receiver type needs both template params
  * populated. User-defined factory subclasses (`class UserFactory extends
