@@ -85,38 +85,51 @@ final class HigherOrderCollectionProxyHandler implements
     private const PROXY_CLASS_LOWER = 'illuminate\support\higherordercollectionproxy';
 
     /**
-     * Proxy properties that return the original collection (passthrough).
-     * The called method's return value is ignored — these methods operate
-     * on items for side effects or filtering.
+     * Every proxy name the handler models, mapped to the shape of its result ({@see resolveProxyReturnType()}).
      *
-     * Note: `when` and `unless` are intentionally excluded here. At runtime,
-     * `$collection->when->method()` calls `$collection->when(fn($v) => $v->method())`,
-     * which — since the callable is passed as `$value` with no `$callback` — returns
-     * `HigherOrderWhenProxy`, not the collection. These are unusual proxy uses and
-     * are not modelled here to avoid false-negative type narrowing.
+     * - passthrough: the original collection; the called method's return value is ignored (side effects, filters).
+     * - boolean, average, percentage, sum: fixed result types, independent of the called method.
+     * - first/last: TValue|null; sole: TValue.
+     * - max/min: the item-level result or null.
+     * - map, flatmap, groupby, partition, keyby: a new collection built from the items.
+     *
+     * `when` and `unless` are intentionally absent. At runtime `$collection->when->method()` calls
+     * `$collection->when(fn($v) => $v->method())`, which (the callable being passed as `$value` with no
+     * `$callback`) returns `HigherOrderWhenProxy`, not the collection. These are unusual proxy uses and are not
+     * modelled to avoid false-negative type narrowing.
      */
-    private const PASSTHROUGH_METHODS = [
-        'each',
-        'filter',
-        'reject',
-        'skipuntil',
-        'skipwhile',
-        'sortby',
-        'sortbydesc',
-        'takeuntil',
-        'takewhile',
-        'unique',
-        'until',
-    ];
-
-    /** Proxy properties that return a boolean result. */
-    private const BOOLEAN_METHODS = [
-        'contains',
-        'doesntcontain',
-        'every',
-        'hasmany',
-        'hassole',
-        'some',
+    private const PROXY_KINDS = [
+        'each' => 'passthrough',
+        'filter' => 'passthrough',
+        'reject' => 'passthrough',
+        'skipuntil' => 'passthrough',
+        'skipwhile' => 'passthrough',
+        'sortby' => 'passthrough',
+        'sortbydesc' => 'passthrough',
+        'takeuntil' => 'passthrough',
+        'takewhile' => 'passthrough',
+        'unique' => 'passthrough',
+        'until' => 'passthrough',
+        'contains' => 'boolean',
+        'doesntcontain' => 'boolean',
+        'every' => 'boolean',
+        'hasmany' => 'boolean',
+        'hassole' => 'boolean',
+        'some' => 'boolean',
+        'average' => 'average',
+        'avg' => 'average',
+        'percentage' => 'percentage',
+        'sum' => 'sum',
+        'first' => 'first-last',
+        'last' => 'first-last',
+        'sole' => 'sole',
+        'max' => 'max-min',
+        'min' => 'max-min',
+        'map' => 'map',
+        'flatmap' => 'flatmap',
+        'groupby' => 'groupby',
+        'partition' => 'partition',
+        'keyby' => 'keyby',
     ];
 
     // -------------------------------------------------------------------------
@@ -319,123 +332,74 @@ final class HigherOrderCollectionProxyHandler implements
         Codebase $codebase,
         string $calledMethod,
     ): ?Union {
-        // Boolean proxy methods — return type doesn't depend on the called method
-        if (\in_array($proxyMethod, self::BOOLEAN_METHODS, true)) {
-            return Type::getBool();
+        $kind = self::PROXY_KINDS[$proxyMethod] ?? null;
+        if ($kind === null) {
+            // Unknown proxy method — defer to Psalm's default
+            return null;
         }
 
-        // Numeric aggregation proxies — return types don't depend on the called method.
-        // avg/average: $reduced[0] / $reduced[1] → float|int|null (div of two ints yields int when exact).
-        if (\in_array($proxyMethod, ['average', 'avg'], true)) {
-            return new Union([new Type\Atomic\TFloat(), new Type\Atomic\TInt(), new Type\Atomic\TNull()]);
-        }
-
-        // percentage: wraps round() → always float|null (never int, unlike avg/average).
-        if ($proxyMethod === 'percentage') {
-            return new Union([new Type\Atomic\TFloat(), new Type\Atomic\TNull()]);
-        }
-
-        // sum: $result + $callback(...) → always int|float (string callees produce TypeError at runtime).
-        if ($proxyMethod === 'sum') {
-            return new Union([new Type\Atomic\TInt(), new Type\Atomic\TFloat()]);
-        }
-
-        // first/last — returns TValue|null
-        if ($proxyMethod === 'first' || $proxyMethod === 'last') {
-            return Type::combineUnionTypes($tValue, Type::getNull());
-        }
-
-        // sole — returns the single matching item (throws when none or several match), never null
-        if ($proxyMethod === 'sole') {
-            return $tValue;
-        }
-
-        // max/min — use reduce() with null as the initial value, so null is always a possible result
-        // for empty collections (common with empty query results). The method return type is included
-        // to preserve precision (e.g. getPrice(): int → int|null instead of mixed|null).
-        if ($proxyMethod === 'max' || $proxyMethod === 'min') {
-            $methodReturnType = self::resolveMethodReturnTypeOnValue(
-                $tValue,
-                $calledMethod,
-                $codebase,
-            ) ?? Type::getMixed();
-            return Type::combineUnionTypes($methodReturnType, Type::getNull());
-        }
-
-        // map — return type depends on collection class and what the mapped method returns:
-        // - LazyCollection::map() returns LazyCollection (static) → use $collectionClass
-        // - EloquentCollection::map() returns static only when mapped values are Model instances;
-        //   otherwise it falls back to Support\Collection (via toBase()). Since proxy map calls
-        //   extract scalar values (e.g. ->map->getKey()), always return base Collection here.
-        // - Support\Collection::map() returns Collection → use $collectionClass (same class)
-        if ($proxyMethod === 'map') {
-            $methodReturnType = self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase);
-            $mapClass = ClassLineage::isA($codebase, $collectionClass, EloquentCollection::class) ? Collection::class : $collectionClass;
-
-            return new Union([
-                new TGenericObject($mapClass, [
+        return match ($kind) {
+            // The same collection type (preserves the concrete subtype)
+            'passthrough' => new Union([new TGenericObject($collectionClass, [$tKey, $tValue])]),
+            'boolean' => Type::getBool(),
+            // avg/average: $reduced[0] / $reduced[1] → float|int|null (div of two ints yields int when exact).
+            'average' => new Union([new Type\Atomic\TFloat(), new Type\Atomic\TInt(), new Type\Atomic\TNull()]),
+            // percentage: wraps round() → always float|null (never int, unlike avg/average).
+            'percentage' => new Union([new Type\Atomic\TFloat(), new Type\Atomic\TNull()]),
+            // sum: $result + $callback(...) → always int|float (string callees produce TypeError at runtime).
+            'sum' => new Union([new Type\Atomic\TInt(), new Type\Atomic\TFloat()]),
+            'first-last' => Type::combineUnionTypes($tValue, Type::getNull()),
+            // sole — the single matching item (throws when none or several match), never null
+            'sole' => $tValue,
+            // max/min — reduce() with null as the initial value, so null is always a possible result for empty
+            // collections (common with empty query results). The method return type is included to preserve
+            // precision (e.g. getPrice(): int → int|null instead of mixed|null).
+            'max-min' => Type::combineUnionTypes(
+                self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed(),
+                Type::getNull(),
+            ),
+            // map — LazyCollection::map() and Support\Collection::map() return the same class. EloquentCollection::map()
+            // returns static only when mapped values are Model instances, otherwise Support\Collection (via toBase()).
+            // Since proxy maps extract plain values (e.g. ->map->getKey()), Eloquent always gives the base Collection.
+            'map' => new Union([
+                new TGenericObject(self::toBaseClass($collectionClass, $codebase), [
                     $tKey,
-                    $methodReturnType ?? Type::getMixed(),
+                    self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed(),
                 ]),
-            ]);
-        }
-
-        // flatMap — inner structure is unpacked; static return type preserves LazyCollection.
-        // EloquentCollection falls back to base Collection; key widened to array-key.
-        if ($proxyMethod === 'flatmap') {
-            $flatMapClass = ClassLineage::isA($codebase, $collectionClass, EloquentCollection::class)
-                ? Collection::class
-                : $collectionClass;
-            return new Union([
-                new TGenericObject($flatMapClass, [Type::getArrayKey(), Type::getMixed()]),
-            ]);
-        }
-
-        // groupBy — outer key is array-key, inner is re-indexed (preserveKeys defaults to false)
-        if ($proxyMethod === 'groupby') {
-            $innerCollection = new TGenericObject($collectionClass, [Type::getInt(), $tValue]);
-
-            return new Union([
+            ]),
+            // flatMap — inner structure is unpacked; static return type preserves LazyCollection.
+            // EloquentCollection falls back to base Collection; key widened to array-key.
+            'flatmap' => new Union([
+                new TGenericObject(self::toBaseClass($collectionClass, $codebase), [Type::getArrayKey(), Type::getMixed()]),
+            ]),
+            // groupBy — outer key is array-key, inner is re-indexed (preserveKeys defaults to false)
+            'groupby' => new Union([
                 new TGenericObject($collectionClass, [
                     Type::getArrayKey(),
-                    new Union([$innerCollection]),
+                    new Union([new TGenericObject($collectionClass, [Type::getInt(), $tValue])]),
                 ]),
-            ]);
-        }
-
-        // partition — always two buckets (truthy/falsy), keyed 0 and 1.
-        // EloquentCollection::partition() calls parent::partition()->toBase(), making the outer
-        // bucket a base Collection regardless of the receiver.
-        if ($proxyMethod === 'partition') {
-            $innerCollection = new TGenericObject($collectionClass, [$tKey, $tValue]);
-            $outerClass = ClassLineage::isA($codebase, $collectionClass, EloquentCollection::class)
-                ? Collection::class
-                : $collectionClass;
-
-            return new Union([
-                new TGenericObject($outerClass, [
+            ]),
+            // partition — always two buckets (truthy/falsy), keyed 0 and 1. EloquentCollection::partition() calls
+            // parent::partition()->toBase(), making the outer bucket a base Collection regardless of the receiver.
+            'partition' => new Union([
+                new TGenericObject(self::toBaseClass($collectionClass, $codebase), [
                     Type::getInt(),
-                    new Union([$innerCollection]),
+                    new Union([new TGenericObject($collectionClass, [$tKey, $tValue])]),
                 ]),
-            ]);
-        }
+            ]),
+            // keyBy — re-keys by method return value
+            'keyby' => new Union([new TGenericObject($collectionClass, [Type::getArrayKey(), $tValue])]),
+        };
+    }
 
-        // keyBy — re-keys by method return value
-        if ($proxyMethod === 'keyby') {
-            return new Union([
-                new TGenericObject($collectionClass, [Type::getArrayKey(), $tValue]),
-            ]);
-        }
-
-        // Passthrough proxy methods — return the same collection type (preserves concrete subtype)
-        if (\in_array($proxyMethod, self::PASSTHROUGH_METHODS, true)) {
-            return new Union([
-                new TGenericObject($collectionClass, [$tKey, $tValue]),
-            ]);
-        }
-
-        // Unknown proxy method — defer to Psalm's default
-        return null;
+    /**
+     * Support\Collection for an Eloquent collection, whose map-like methods return `toBase()` results.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function toBaseClass(string $collectionClass, Codebase $codebase): string
+    {
+        return ClassLineage::isA($codebase, $collectionClass, EloquentCollection::class) ? Collection::class : $collectionClass;
     }
 
     /**
