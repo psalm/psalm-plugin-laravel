@@ -35,6 +35,11 @@ permissions:
   contents: read
 
 env:
+  # Psalm requires `psalm/plugin-laravel: ^4.17.4`. A checkout has no tag, so Composer guesses a root
+  # version that fails that constraint and silently resolves an older Psalm without template defaults
+  # (composer.json `conflict` turns that into a solve error). Stating the branch version keeps the root
+  # a valid 4.x.
+  COMPOSER_ROOT_VERSION: 4.x-dev
   # PHPUnit --filter regex over psalm-tester data-set names (phpt paths relative to
   # tests/Type/tests): the laravel/ai-dependent phpts, run by the laravel/ai jobs.
   LARAVEL_AI_PHPT_FILTER: 'PromptInjection/|Collection/TextResponseCollectionTypesTest'

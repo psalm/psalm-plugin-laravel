@@ -19,6 +19,13 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Psalm requires `psalm/plugin-laravel: ^4.17.4`. A checkout has no tag, so Composer guesses a root
+  # version that fails that constraint and silently resolves an older Psalm without template defaults
+  # (composer.json `conflict` turns that into a solve error). Stating the branch version keeps the root
+  # a valid 4.x.
+  COMPOSER_ROOT_VERSION: 4.x-dev
+
 jobs:
   fix:
     name: Auto-fix code style

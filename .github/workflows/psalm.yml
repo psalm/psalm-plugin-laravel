@@ -25,6 +25,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  # Psalm requires `psalm/plugin-laravel: ^4.17.4`. A checkout has no tag, so Composer guesses a root
+  # version that fails that constraint and silently resolves an older Psalm without template defaults
+  # (composer.json `conflict` turns that into a solve error). Stating the branch version keeps the root
+  # a valid 4.x.
+  COMPOSER_ROOT_VERSION: 4.x-dev
   PHP_VERSION: '8.4'
   # Psalm sizes the two phases separately: --threads covers analysis, --scan-threads covers
   # scanning (Cli\Psalm::getThreads()), and scanning is the bulk of this job: 187 analysed

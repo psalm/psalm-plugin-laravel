@@ -89,6 +89,11 @@ jobs:
             runner: macos-15
             kind: package
     runs-on: ${{ matrix.runner }}
+    env:
+      # The checked-out ref is the Composer root of the dev-dependency install below, and a checkout has no
+      # tag: without a branch version Composer guesses one that fails Psalm's `psalm/plugin-laravel: ^4.17.4`
+      # and resolves an older Psalm. `<ref>-dev` is `4.x-dev` / `3.x-dev`.
+      COMPOSER_ROOT_VERSION: ${{ matrix.ref }}-dev
     steps:
       # NOTE: step-security/harden-runner is intentionally NOT used here.
       # It only supports Linux runners; on Windows/macOS its post-step fails

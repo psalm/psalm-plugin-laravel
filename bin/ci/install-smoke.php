@@ -306,8 +306,10 @@ if ($projectKind === 'package') {
 // prefer-stable true`". The path repository points `require` at the current
 // checkout instead of a published tag.
 
+// `versions` pins the plugin's version: Psalm requires `psalm/plugin-laravel: ^4.17.4`, and a path checkout
+// without a tag can be guessed as a version that fails it, which silently resolves an older Psalm.
 $repoJson = \json_encode(
-    ['type' => 'path', 'url' => $pluginPath, 'options' => ['symlink' => false]],
+    ['type' => 'path', 'url' => $pluginPath, 'options' => ['symlink' => false, 'versions' => ['psalm/plugin-laravel' => '4.x-dev']]],
     \JSON_THROW_ON_ERROR,
 );
 $configSteps = [

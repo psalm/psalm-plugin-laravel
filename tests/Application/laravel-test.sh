@@ -237,7 +237,10 @@ echo count($cmds);
 info "Generated ${GENERATED_COUNT} example classes"
 
 info "Installing psalm/plugin-laravel from local source"
-composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} repositories.0 '{"type": "path", "url": "../../"}'
+# `versions` pins the plugin's version: Psalm requires `psalm/plugin-laravel: ^4.17.4`, and a path
+# checkout without a tag can be guessed as a version that fails it, which silently resolves an older Psalm.
+composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} repositories.0 \
+    '{"type": "path", "url": "../../", "options": {"versions": {"psalm/plugin-laravel": "4.x-dev"}}}'
 composer config ${COMPOSER_QUIET[@]+"${COMPOSER_QUIET[@]}"} minimum-stability 'dev'
 export COMPOSER_MEMORY_LIMIT=-1
 quiet_run "composer require psalm/plugin-laravel" \

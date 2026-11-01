@@ -98,7 +98,7 @@ fast_copy() {
 
 # Psalm every app installs, on both sides. Fixed rather than read from the
 # plugin composer.json so base and head analyze with the same Psalm.
-PSALM_PIN="^7.0.0-rc21@rc"
+PSALM_PIN="^7.0"
 
 # md5 of the plugin's dependency-affecting composer.json sections. Only `require`
 # and `autoload` change what gets installed into the app's vendor; if they match
@@ -158,7 +158,9 @@ configure_plugin_repo() {
         // and stale entries pointing at deleted temp dirs break `composer update`.
         $repos = array_values(array_filter($repos, fn($r) => ($r["name"] ?? null) !== "psalm/plugin-laravel"
             && !str_contains(json_encode($r, JSON_UNESCAPED_SLASHES), "psalm-plugin-laravel")));
-        array_unshift($repos, ["name" => "psalm/plugin-laravel", "type" => "path", "url" => $argv[2], "options" => ["symlink" => true]]);
+        // `versions` pins the plugin: Psalm requires `psalm/plugin-laravel: ^4.17.4`, and an untagged
+        // checkout can be guessed as a version that fails it, which silently resolves an older Psalm.
+        array_unshift($repos, ["name" => "psalm/plugin-laravel", "type" => "path", "url" => $argv[2], "options" => ["symlink" => true, "versions" => ["psalm/plugin-laravel" => "4.x-dev"]]]);
         $d["repositories"] = $repos;
         if ($argv[3] === "1") {
             $d["minimum-stability"] = "dev";
@@ -171,7 +173,7 @@ configure_plugin_repo() {
             // transiently broken (e.g. a bad merge dropping a typed property,
             // producing a dynamic-property deprecation that the Psalm error
             // handler escalates into an uncaught crash). Pin vimeo/psalm to
-            // a tagged RC, so this one package still resolves to a tagged
+            // a tagged release, so this one package still resolves to a tagged
             // release regardless of the relaxed root stability.
             $d["require-dev"]["vimeo/psalm"] = $argv[4];
             // Relax a pinned PHP constraint (e.g. "8.3.*" -> "^8.3") so install
