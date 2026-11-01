@@ -417,6 +417,8 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Accepted limitation:** `@use HasFactory<XFactory>` returns the declared `TFactory` regardless of arguments, so `User::factory(3)` is typed by the factory class (the union for an unbound `@extends Factory<User>`).
 
+**`resolveFactoryName()`:** the stub no longer re-declares it, so Laravel's `class-string<Factory<TClass>>` takes the `TCount` default and `(new $class())->create()` widens from `TClass` to `TClass|Collection<int, TClass>`. Intended: a class-string cannot rule out `new $class(3)`, the same rule as an unbound `@extends Factory<X>`. Pinned by `FactoryResolveFactoryNameTest`.
+
 ## Variance
 
 ### Paginators are covariant in `TValue`; `Support\Collection` stays invariant

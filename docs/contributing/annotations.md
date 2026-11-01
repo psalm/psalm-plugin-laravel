@@ -58,7 +58,7 @@ No `@template-contravariant` exists.
 
 `@template T of int|null = int|null` (Psalm 7.0) lets a class reference leave its trailing templates out.
 
-- **Where a default applies.** A class type read from a docblock with fewer arguments than templates (`@extends Factory<User>`, `@param BelongsToMany<Part, Shop>`, `@use Trait<A>`, `@implements Iface<A>`) takes the defaults for the missing trailing arguments. Omitting a template without a default is `MissingTemplateParam`, reported as `expecting at least N`.
+- **Where a default applies.** A class type read from a docblock with fewer arguments than templates (`@extends Factory<User>`, `@param BelongsToMany<Part, Shop>`, `@use Trait<A>`, `@implements Iface<A>`) takes the defaults for the missing trailing arguments. Omitting a template without a default is `MissingTemplateParam`: the message says `expecting at least N` when some template of the class has a default, and plain `expecting N` when none has (`N` is the count of templates without one in the first case, the total in the second).
 - **The default must sit inside the bound**, else `InvalidDocblock`. It may name an earlier template (`B = list<A>`). Defaults are trailing: write them after the templates without one.
 - **A bare class name reads the bounds, not the defaults.** `@param Factory $f` is `Factory<Model, int|null>`, while `@param Factory<User> $f` fills `TCount` from its default. A conditional return keyed on that template therefore resolves both branches for the bare form.
 - **Plugin-built types are not filled.** A `TGenericObject` created in a handler or provider keeps exactly the arguments it was given: emit every slot (see `ModelRelationReturnTypeHandler`, which emits all four `BelongsToMany` slots).
