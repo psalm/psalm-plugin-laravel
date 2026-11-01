@@ -98,7 +98,11 @@ fast_copy() {
 
 # Psalm every app installs, on both sides. Fixed rather than read from the
 # plugin composer.json so base and head analyze with the same Psalm.
-PSALM_PIN="^7.0"
+# `@stable` limits the package to tagged releases: under the apps' `minimum-stability: dev`, a bare `^7.0`
+# also admits the RCs, which an older base SHA would resolve (no `conflict` there) and which the head
+# plugin's `conflict` then rejects on its plugin-only `composer update`. Without a stable 7.x tag the
+# install fails loudly instead.
+PSALM_PIN="^7.0@stable"
 
 # md5 of the plugin's dependency-affecting composer.json sections. Only `require`
 # and `autoload` change what gets installed into the app's vendor; if they match
