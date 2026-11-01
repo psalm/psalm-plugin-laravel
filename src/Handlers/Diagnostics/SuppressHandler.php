@@ -6,17 +6,42 @@ namespace Psalm\LaravelPlugin\Handlers\Diagnostics;
 
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
+use Psalm\Issue\MissingTemplateParam;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
+use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
+use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
 use Psalm\Storage\PropertyStorage;
 
-final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodebasePopulatedInterface
+final class SuppressHandler implements
+    AfterClassLikeVisitInterface,
+    AfterCodebasePopulatedInterface,
+    BeforeAddIssueInterface
 {
+    /**
+     * `Factory<X>` in a docblock type omits the stub-only `TCount` (default `null`), and
+     * Psalm ignores template defaults when counting params. The class-level suppression in
+     * {@see suppressFactoryMissingTCount()} covers `@extends` only, not property, param and
+     * return types, so drop exactly the one-argument form here.
+     *
+     * @psalm-mutation-free
+     */
+    #[\Override]
+    public static function beforeAddIssue(BeforeAddIssueEvent $event): ?bool
+    {
+        $issue = $event->getIssue();
+
+        return $issue instanceof MissingTemplateParam
+            && $issue->message === 'Illuminate\Database\Eloquent\Factories\Factory has missing template params, expecting 2'
+            ? false
+            : null;
+    }
+
     /** @var array<string, list<string>> */
     private const CLASS_LEVEL_BY_PARENT_CLASS = [
         'PropertyNotSetInConstructor' => [
