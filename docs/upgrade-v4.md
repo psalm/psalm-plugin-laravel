@@ -134,16 +134,14 @@ composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0" --with-all-d
 #        MorphOne<T>      → MorphOne<T, self>
 #        MorphMany<T>     → MorphMany<T, self>
 #        MorphTo<T>       → MorphTo<T, self>
-#        BelongsToMany<T>        → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-#        BelongsToMany<T, self>   → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-#        BelongsToMany<T, $this>  → BelongsToMany<T, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-#        MorphToMany<T>           → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
-#        MorphToMany<T, self>     → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
-#        MorphToMany<T, $this>    → MorphToMany<T, $this, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+#        BelongsToMany<T> → BelongsToMany<T, self>
+#        MorphToMany<T>   → MorphToMany<T, self>
 #        HasManyThrough<T> → HasManyThrough<T, IntermediateModel, self>  (read the method body to find IntermediateModel)
 #        HasOneThrough<T>  → HasOneThrough<T, IntermediateModel, self>   (read the method body to find IntermediateModel)
 #
-#      Do not touch annotations that already have the correct number of type params.
+#      Do not touch annotations that already have the correct number of type params:
+#      BelongsToMany<T, self> and MorphToMany<T, self> are complete (the pivot and accessor
+#      templates have defaults), as are explicit four-param forms naming a custom pivot.
 #      Do not touch @param or @var annotations.
 
 # 4. Run Psalm and update your baseline
