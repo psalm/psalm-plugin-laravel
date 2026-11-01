@@ -19,7 +19,7 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.0.0-rc12` or later. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 is currently a release candidate: the root `vimeo/psalm:^7.0@RC` requirement allows that one package to be pre-release without lowering your project's `minimum-stability`.
+v4 requires `vimeo/psalm ^7.0` (stable). v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 pre-releases are rejected by a `conflict` entry in the plugin's `composer.json`, because the stubs rely on template defaults that only the stable release supports.
 
 Psalm 7 introduces new issue types that may surface in your codebase:
 
@@ -54,15 +54,21 @@ All Eloquent relation stubs gained additional template parameters. If your codeb
 | `BelongsTo`      | `BelongsTo<TRelated>`      | `BelongsTo<TRelatedModel, TDeclaringModel>`                                         |
 | `HasOne`         | `HasOne<TRelated>`         | `HasOne<TRelatedModel, TDeclaringModel>`                                            |
 | `HasMany`        | `HasMany<TRelated>`        | `HasMany<TRelatedModel, TDeclaringModel>`                                           |
-| `BelongsToMany`  | `BelongsToMany<TRelated>` or `BelongsToMany<TRelated, TDeclaringModel>` | `BelongsToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7) |
+| `BelongsToMany`  | `BelongsToMany<TRelated>` or `BelongsToMany<TRelated, TDeclaringModel>` | `BelongsToMany<TRelatedModel, TDeclaringModel>`, plus `TPivotModel, TAccessor` to name a custom pivot |
 | `MorphOne`       | `MorphOne<TRelated>`       | `MorphOne<TRelatedModel, TDeclaringModel>`                                          |
 | `MorphMany`      | `MorphMany<TRelated>`      | `MorphMany<TRelatedModel, TDeclaringModel>`                                         |
 | `MorphTo`        | `MorphTo<TRelated>`        | `MorphTo<TRelatedModel, TDeclaringModel>`                                           |
-| `MorphToMany`    | `MorphToMany<TRelated>` or `MorphToMany<TRelated, TDeclaringModel>` | `MorphToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7)   |
+| `MorphToMany`    | `MorphToMany<TRelated>` or `MorphToMany<TRelated, TDeclaringModel>` | `MorphToMany<TRelatedModel, TDeclaringModel>`, plus `TPivotModel, TAccessor` to name a custom pivot |
 | `HasOneThrough`  | `HasOneThrough<TRelated>`  | `HasOneThrough<TRelatedModel, TIntermediateModel, TDeclaringModel>`                 |
 | `HasManyThrough` | `HasManyThrough<TRelated>` | `HasManyThrough<TRelatedModel, TIntermediateModel, TDeclaringModel>`                |
 
+`TPivotModel` and `TAccessor` have template defaults (`Pivot` or `MorphPivot`, and `'pivot'`), so the two-argument form is complete and `->pivot` is typed. `BelongsToMany<T>` without the declaring model still reports `MissingTemplateParam`.
+
 `Collection`, `EloquentCollection`, and `Builder` are **unchanged**.
+
+### `extends Factory` without a model reports `MissingTemplateParam`
+
+Psalm 7 reads template defaults, so the plugin no longer hides `MissingTemplateParam` on factories. `class UserFactory extends Factory` with no `@extends Factory<User>`, no `$model`, and no `Database\Factories\UserFactory` to `App\Models\User` naming match leaves `TModel` unbound, and Psalm now says so. Add `@extends Factory<User>` to fix it. `@extends Factory<User>` itself is complete: `TCount` defaults to `int|null`.
 
 ### Taint analysis runs automatically
 
@@ -107,7 +113,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 # 1. Update PHP to 8.2+ and Laravel to 12+ if needed
 
 # 2. Upgrade Psalm to v7 and the plugin to v4 together
-composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-all-dependencies
+composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0" --with-all-dependencies
 
 # 3. Update relation generic annotations (add declaring model parameter)
 #

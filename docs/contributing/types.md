@@ -173,7 +173,7 @@ Foo&Bar         // intersection: object types only (or keyed arrays)
 
 ## Templates and aliases
 
-A declared `@template T` is a `TTemplateParam` wherever it appears as a type. Type aliases are declared with `@psalm-type Name = ...` and pulled in with `@psalm-import-type Name from Foo [as Local]` (`TTypeAlias`). Declaration tags live on the [annotations page](annotations.md#generics-and-templates).
+A declared `@template T` is a `TTemplateParam` wherever it appears as a type. A class template may carry a default (`@template T of Bound = Default`): a generic type with fewer arguments than templates is read with the defaults filled in, a bare class name reads the bounds instead, and a type built by a plugin handler is never filled (see [template defaults](annotations.md#template-defaults)). Type aliases are declared with `@psalm-type Name = ...` and pulled in with `@psalm-import-type Name from Foo [as Local]` (`TTypeAlias`). Declaration tags live on the [annotations page](annotations.md#generics-and-templates).
 
 ## Accepted but misleading
 
