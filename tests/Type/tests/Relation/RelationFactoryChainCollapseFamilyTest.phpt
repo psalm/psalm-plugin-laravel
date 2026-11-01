@@ -22,8 +22,8 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * Companion to BelongsToChainSelfTemplateCollapseTest, widening regression coverage from
  * belongsTo() to the WHOLE relation-factory family. The #913 fix in PR #1055 (`$this` -> `static`
  * in the HasRelationships factory returns + covariant TDeclaringModel) stops a chained factory
- * call from collapsing to `mixed`; the #1088 fix fills the pivot factories' returns to the full
- * 4-param shape, so belongsToMany()/morphToMany() no longer trip MissingTemplateParam either.
+ * call from collapsing to `mixed`; the #1088 fix gives the pivot factories a full 4-param shape
+ * (the pivot slots fill from template defaults), so belongsToMany()/morphToMany() no longer trip MissingTemplateParam either.
  * Every factory below now resolves cleanly (zero output).
  */
 class Tag extends Model

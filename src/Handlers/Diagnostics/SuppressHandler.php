@@ -41,21 +41,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
     ];
 
     /**
-     * Suppress class-level issues by implemented interface.
-     *
-     * MissingTemplateParam is suppressed for Scope implementors because our stub
-     * promotes @template from method-level to class-level (see issue #207).
-     * Users who don't add @implements Scope<Model> shouldn't be penalised.
-     *
-     * @var array<string, list<string>>
-     */
-    private const CLASS_LEVEL_BY_INTERFACE = [
-        'MissingTemplateParam' => [
-            'Illuminate\Database\Eloquent\Scope',
-        ],
-    ];
-
-    /**
      * Suppress class-level issues by FQCN.
      * Less flexible — use parent class or trait based checks when possible.
      *
@@ -288,7 +273,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 
             self::suppressByParentClass($classStorage, $provider);
             self::suppressByUsedTraits($classStorage);
-            self::suppressByInterface($classStorage);
         }
 
         self::markFrameworkInitializedProperties($provider);
@@ -629,22 +613,6 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
             $methodStorage = $classStorage->methods[\strtolower($methodName)] ?? null;
             if ($methodStorage instanceof MethodStorage) {
                 self::suppressFrameworkHookMethod('PossiblyUnusedMethod', $methodStorage);
-            }
-        }
-    }
-
-    private static function suppressByInterface(ClassLikeStorage $classStorage): void
-    {
-        if ($classStorage->class_implements === []) {
-            return;
-        }
-
-        foreach (self::CLASS_LEVEL_BY_INTERFACE as $issue => $interfaces) {
-            foreach ($interfaces as $interface) {
-                if (isset($classStorage->class_implements[\strtolower($interface)])) {
-                    self::suppress($issue, $classStorage);
-                    break;
-                }
             }
         }
     }
