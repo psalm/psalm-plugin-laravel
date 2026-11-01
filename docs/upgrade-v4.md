@@ -70,7 +70,7 @@ All Eloquent relation stubs gained additional template parameters. If your codeb
 
 Psalm 7 reads template defaults, so the plugin no longer hides `MissingTemplateParam` on factories. `class UserFactory extends Factory` with no `@extends Factory<User>`, no `$model`, and no `Database\Factories\UserFactory` to `App\Models\User` naming match leaves `TModel` unbound, and Psalm now says so. Add `@extends Factory<User>` to fix it. `@extends Factory<User>` itself is complete: `TCount` defaults to `int|null`.
 
-The same applies to a factory leaf extending your own generic abstract base factory without a template argument, and to subclasses of Laravel's generic scopes (`class MySoftDeletes extends SoftDeletingScope {}` reports `expecting 1`): add the `@extends` argument.
+The same applies to a factory leaf extending your own generic abstract base factory without a template argument, and, on Laravel 13.9 or later, to subclasses of Laravel's generic scopes (`class MySoftDeletes extends SoftDeletingScope {}` reports `expecting 1`): add the `@extends` argument.
 
 ### Taint analysis runs automatically
 
