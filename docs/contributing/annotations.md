@@ -62,7 +62,7 @@ No `@template-contravariant` exists.
 - **The default must sit inside the bound**, else `InvalidDocblock`. It may name an earlier template (`B = list<A>`). Defaults are trailing: write them after the templates without one.
 - **A bare class name reads the bounds, not the defaults.** `@param Factory $f` is `Factory<Model, int|null>`, while `@param Factory<User> $f` fills `TCount` from its default. A conditional return keyed on that template therefore resolves both branches for the bare form.
 - **Plugin-built types are not filled.** A `TGenericObject` created in a handler or provider keeps exactly the arguments it was given: emit every slot (see `ModelRelationReturnTypeHandler`, which emits all four `BelongsToMany` slots).
-- **A default on a method template is inert.** An unresolved method template drops out of the return union with or without one (`TReturnDefault = never`, `TMinResult = mixed`), so those defaults only mirror Laravel's declaration.
+- **A method template default binds a template nothing infers.** `@template T = string` with `@return T` and no argument to infer `T` gives `string` (without the default: `never`). In a union the default shows up (`int|TDef` with `TDef = mixed` gives `mixed`), so `= never` contributes nothing and Laravel's `TReturnDefault = never` is unobservable. Laravel's `TMinResult = mixed` is unchanged because the template sits in a conditional branch that the callback argument already infers, or that is not selected.
 - **A default value on a parameter wins over the template default** when the argument is omitted: `new Holder()` binds `T` from `$x = null`, not from `= int`.
 
 ## Assertions and narrowing
