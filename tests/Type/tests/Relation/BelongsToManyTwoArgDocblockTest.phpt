@@ -36,6 +36,16 @@ final class TwoArgPivotOwner extends Model
     {
         return $this->morphToMany(WorkOrder::class, 'workable');
     }
+
+    /** The stub's 2-arg `morphToMany()` / `morphedByMany()` returns fill `MorphPivot`, not `Pivot`. */
+    public function morphPivotsFromTheStubDefaults(): void
+    {
+        $_toMany = $this->morphToMany(WorkOrder::class, 'workable')->first()?->pivot;
+        /** @psalm-check-type-exact $_toMany = \Illuminate\Database\Eloquent\Relations\MorphPivot|null */
+
+        $_byMany = $this->morphedByMany(WorkOrder::class, 'workable')->first()?->pivot;
+        /** @psalm-check-type-exact $_byMany = \Illuminate\Database\Eloquent\Relations\MorphPivot|null */
+    }
 }
 
 function two_arg_docblock_call_site(TwoArgPivotOwner $owner): void
