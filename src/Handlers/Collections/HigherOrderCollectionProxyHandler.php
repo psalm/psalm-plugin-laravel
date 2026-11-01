@@ -8,14 +8,30 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\HigherOrderCollectionProxy;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Empty_;
+use PhpParser\Node\Expr\Isset_;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\NullsafePropertyFetch;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Stmt\Unset_;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\Internal\Analyzer\Statements\Expression\ExpressionIdentifier;
+use Psalm\Internal\Analyzer\Statements\Expression\NullsafeChainState;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\Node\Expr\VirtualMethodCall;
+use Psalm\Node\VirtualNode;
+use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
+use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
+use Psalm\Plugin\EventHandler\BeforeStatementAnalysisInterface;
+use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
+use Psalm\Plugin\EventHandler\Event\BeforeExpressionAnalysisEvent;
+use Psalm\Plugin\EventHandler\Event\BeforeStatementAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -23,6 +39,7 @@ use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Type;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TKeyedArray;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TTemplateParam;
@@ -69,8 +86,10 @@ use Psalm\Type\Union;
  * A receiver that is a union of several collection types ({@see resolveProxyReturnTypeForUnion()})
  * is resolved per branch and the branch results are combined.
  *
- * Property access on the proxy ($collection->map->name) is NOT yet supported —
- * Psalm's PropertyTypeProviderEvent doesn't expose template type parameters.
+ * Property access on the proxy (`$collection->map->name`) is typed by {@see afterExpressionAnalysis()}: Psalm
+ * analyses the fetch through the item (`@mixin TValue`, or the proxy's `__get` when no item declares the
+ * property), and the handler wraps that item-level result with the same proxy mapping. Only a fetch Psalm
+ * analyses afresh is retyped; a re-read from scope already carries the wrapped type.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/511
  * @internal
@@ -78,14 +97,47 @@ use Psalm\Type\Union;
 final class HigherOrderCollectionProxyHandler implements
     AfterMethodCallAnalysisInterface,
     MethodReturnTypeProviderInterface,
-    MethodParamsProviderInterface
+    MethodParamsProviderInterface,
+    BeforeExpressionAnalysisInterface,
+    BeforeStatementAnalysisInterface,
+    AfterExpressionAnalysisInterface
 {
     // Pre-lowercased constant avoids repeated strtolower() in the inner loop,
     // which runs for every method call in the analyzed codebase.
     private const PROXY_CLASS_LOWER = 'illuminate\support\higherordercollectionproxy';
 
     /**
+     * Node attribute on a `$x->{proxy}->{prop}` fetch, written before Psalm analyses it: the fetch's scope key
+     * (`''` without one) when Psalm will analyse it afresh, false when it will read it from scope.
+     */
+    private const FRESH_FETCH_ATTRIBUTE = 'psalmLaravelHigherOrderFreshFetch';
+
+    /**
+     * Node attribute on a `$x->{proxy}` fetch holding a proxy: its type when its own analysis finished. Read
+     * instead of the node type, which Psalm's `__get` stand-in for the enclosing `$x->{proxy}->{prop}` overwrites
+     * with a single non-null atomic (it sets the type on a shallow copy of the node data).
+     */
+    private const PROXY_TYPE_ATTRIBUTE = 'psalmLaravelHigherOrderProxyType';
+
+    /**
+     * Node attribute on a `$x->{proxy}->{prop}` fetch that is the direct operand of isset()/empty()/unset(). PHP
+     * checks the property there without `__get`, and the proxy has no `__isset()`/`__unset()`: isset() is false and
+     * empty() true at runtime. Everywhere else (the left side of `??`, a fetch behind an array dim, a property or a
+     * method call) PHP reads it through `__get`.
+     */
+    private const PRESENCE_TARGET_ATTRIBUTE = 'psalmLaravelHigherOrderPresenceTarget';
+
+    /**
+     * Node attribute on a retyped `$x->{proxy}->{prop}` fetch: `[item-level type, retyped type]`. Psalm analyses
+     * some nodes twice in the same node data (the `getIterator()` stand-in of a `foreach`, ArrayAccess
+     * `offsetGet()`) and combines the new item-level type with the node's current one; resetting a node that
+     * still holds the retyped type keeps that combination item-level, so it is wrapped once.
+     */
+    private const RETYPE_ATTRIBUTE = 'psalmLaravelHigherOrderRetype';
+
+    /**
      * Every proxy name the handler models, mapped to the shape of its result ({@see resolveProxyReturnType()}).
+     * The property-fetch hooks gate on the same keys.
      *
      * - passthrough: the original collection; the called method's return value is ignored (side effects, filters).
      * - boolean, average, percentage, sum: fixed result types, independent of the called method.
@@ -162,6 +214,17 @@ final class HigherOrderCollectionProxyHandler implements
             $typeParams = $atomic->type_params;
             if (\count($typeParams) < 2) {
                 continue;
+            }
+
+            // Psalm's stand-in call for a property fetch that no item declares (`$c->map->name` becomes
+            // `$proxy->__get('name')`): answer the item-level value only. afterExpressionAnalysis() wraps it.
+            if ($expr instanceof VirtualMethodCall && self::extractCalledMethodName($expr) === '__get') {
+                $itemType = self::arrayItemGet($typeParams[1], $expr);
+                if ($itemType instanceof Union) {
+                    $event->setReturnTypeCandidate($itemType);
+                }
+
+                return;
             }
 
             // Extract the proxy method name (e.g. "each" from $collection->each->delete())
@@ -248,6 +311,11 @@ final class HigherOrderCollectionProxyHandler implements
             return null;
         }
 
+        // The stand-in `__get` of a property fetch: the item-level value, see afterMethodCallAnalysis().
+        if ($stmt instanceof VirtualMethodCall && $event->getMethodNameLowercase() === '__get') {
+            return null;
+        }
+
         $proxyExpr = $stmt->var;
         if (!$proxyExpr instanceof PropertyFetch) {
             return null;
@@ -314,6 +382,350 @@ final class HigherOrderCollectionProxyHandler implements
     }
 
     // -------------------------------------------------------------------------
+    // Before/AfterExpressionAnalysisInterface — property fetch through the proxy
+    // -------------------------------------------------------------------------
+
+    /**
+     * Records, before Psalm analyses `$x->{proxy}->{prop}`, whether it will read the fetch from scope. Only now is
+     * that knowable: afterwards a fresh fetch and a scoped re-read leave the same scope entry behind. Also marks
+     * the direct operands of isset()/empty() ({@see PRESENCE_TARGET_ATTRIBUTE}), and puts back the item-level type
+     * of a node Psalm analyses again ({@see RETYPE_ATTRIBUTE}).
+     */
+    #[\Override]
+    public static function beforeExpressionAnalysis(BeforeExpressionAnalysisEvent $event): ?bool
+    {
+        $expr = $event->getExpr();
+        if ($expr instanceof Isset_ && !$expr instanceof VirtualNode) {
+            foreach ($expr->vars as $var) {
+                self::markPresenceTarget($var);
+            }
+
+            return null;
+        }
+
+        if ($expr instanceof Empty_ && !$expr instanceof VirtualNode) {
+            self::markPresenceTarget($expr->expr);
+
+            return null;
+        }
+
+        if (!$expr instanceof PropertyFetch || !self::isProxiedFetch($expr)) {
+            return null;
+        }
+
+        $source = $event->getStatementsSource();
+        /** @var array{Union, Union}|null $retype */
+        $retype = $expr->getAttribute(self::RETYPE_ATTRIBUTE);
+        if ($retype !== null && $source->getNodeTypeProvider()->getType($expr) === $retype[1]) {
+            $source->getNodeTypeProvider()->setType($expr, $retype[0]);
+        }
+
+        $varId = ExpressionIdentifier::getExtendedVarId($expr, $source->getFQCLN(), $source);
+        $expr->setAttribute(
+            self::FRESH_FETCH_ATTRIBUTE,
+            $varId !== null && isset($event->getContext()->vars_in_scope[$varId]) ? false : ($varId ?? ''),
+        );
+
+        return null;
+    }
+
+    /** Marks the direct operands of unset(), see {@see PRESENCE_TARGET_ATTRIBUTE}. */
+    #[\Override]
+    public static function beforeStatementAnalysis(BeforeStatementAnalysisEvent $event): ?bool
+    {
+        $stmt = $event->getStmt();
+        if ($stmt instanceof Unset_) {
+            foreach ($stmt->vars as $var) {
+                self::markPresenceTarget($var);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Wraps the item-level type Psalm gave a fresh `$x->{proxy}->{prop}` fetch with the proxy's mapping, keeping
+     * its taint `parent_nodes`, and stores the result in scope so re-reads and narrowings see the wrapped type.
+     * Records the type of every `$x->{proxy}` fetch holding a proxy, see {@see PROXY_TYPE_ATTRIBUTE}.
+     */
+    #[\Override]
+    public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
+    {
+        $fetch = $event->getExpr();
+        if (!$fetch instanceof PropertyFetch && !$fetch instanceof NullsafePropertyFetch) {
+            return null;
+        }
+
+        if ($fetch instanceof PropertyFetch) {
+            self::retypeProxiedFetch($fetch, $event);
+        }
+
+        if (self::modelledProxyName($fetch) !== null) {
+            $type = $event->getStatementsSource()->getNodeTypeProvider()->getType($fetch);
+            if ($type instanceof Union && self::holdsProxy($type)) {
+                $fetch->setAttribute(self::PROXY_TYPE_ATTRIBUTE, $type);
+            } elseif ($fetch->hasAttribute(self::PROXY_TYPE_ATTRIBUTE)) {
+                $fetch->setAttribute(self::PROXY_TYPE_ATTRIBUTE, null);
+            }
+        }
+
+        return null;
+    }
+
+    private static function retypeProxiedFetch(PropertyFetch $fetch, AfterExpressionAnalysisEvent $event): void
+    {
+        $proxyFetch = $fetch->var;
+        $proxyMethod = self::modelledProxyName($proxyFetch);
+        $freshKey = $fetch->getAttribute(self::FRESH_FETCH_ATTRIBUTE);
+        if ($proxyMethod === null || !\is_string($freshKey)
+            || (!$proxyFetch instanceof PropertyFetch && !$proxyFetch instanceof NullsafePropertyFetch)
+            || $fetch->getAttribute(self::PRESENCE_TARGET_ATTRIBUTE) === true
+        ) {
+            return;
+        }
+
+        $context = $event->getContext();
+
+        $source = $event->getStatementsSource();
+        $types = $source->getNodeTypeProvider();
+        $proxyType = $proxyFetch->getAttribute(self::PROXY_TYPE_ATTRIBUTE);
+        $psalmType = $types->getType($fetch);
+        if (!$proxyType instanceof Union || !$psalmType instanceof Union) {
+            return;
+        }
+
+        // A scope key that changed during the analysis (an array dim typed meanwhile) leaves fresh vs scoped open.
+        $varId = ExpressionIdentifier::getExtendedVarId($fetch, $source->getFQCLN(), $source);
+        if (($varId ?? '') !== $freshKey) {
+            return;
+        }
+
+        // A `?->` short-circuit null is the receiver's, not the item's: Psalm's chain state tells them apart.
+        $receiverState = NullsafeChainState::of($proxyFetch);
+        $shortCircuit = $receiverState !== NullsafeChainState::None && $proxyType->isNullable();
+        $itemType = $psalmType;
+        if ($shortCircuit && NullsafeChainState::of($fetch) === NullsafeChainState::ShortCircuit) {
+            $item = $psalmType->getBuilder();
+            $item->removeType('null');
+            if ($item->getAtomicTypes() === []) {
+                return;
+            }
+
+            $itemType = $item->freeze();
+        }
+
+        $result = self::resolveThroughProxy(
+            $proxyMethod,
+            $proxyType,
+            $types->getType($proxyFetch->var),
+            $itemType,
+            $source->getCodebase(),
+        );
+        if (!$result instanceof Union) {
+            return;
+        }
+
+        // Mirrors InstancePropertyFetchAnalyzer: a nullable receiver adds null. Inside isset()/`??` Psalm adds it
+        // only for a `?->` short-circuit, but seeds the fetch with null instead when the receiver's null is not
+        // ignored; that null sits in the item now, so it is added outside too, keeping the `??` default reachable.
+        $builder = $result->getBuilder();
+        if ($proxyType->isNullable()
+            && ($shortCircuit || !$context->inside_isset || !$proxyType->ignore_nullable_issues)
+        ) {
+            $builder->addType(new TNull());
+            $builder->ignore_nullable_issues = $proxyType->ignore_nullable_issues;
+        }
+
+        $builder->parent_nodes = $psalmType->parent_nodes;
+        $retyped = $builder->freeze();
+
+        if ($shortCircuit) {
+            $receiverState->afterLink($result->isNullable())->markOn($fetch);
+        }
+
+        $types->setType($fetch, $retyped);
+        // The item type without the short-circuit null: restored as-is, a second analysis would read that null as
+        // the link's own and keep it in the items.
+        $fetch->setAttribute(self::RETYPE_ATTRIBUTE, [$itemType, $retyped]);
+        if ($varId !== null && isset($context->vars_in_scope[$varId])) {
+            $context->vars_in_scope[$varId] = $retyped;
+        }
+    }
+
+    /**
+     * The proxy mapping for a property fetch, given the item-level value Psalm computed. Receivers are resolved as
+     * for a method call: one readable collection, or a union of collections branch by branch. Any other receiver
+     * whose proxy type is still provable (a template, a non-generic or slot-reordering subclass) gets the same
+     * mapping over `Enumerable`, keyed and valued from each proxy branch's own params and combined: a supertype of
+     * every collection. Declines when the fetched object is not only the proxy (another class's own `$map`).
+     *
+     * @param lowercase-string $proxyMethod
+     */
+    private static function resolveThroughProxy(
+        string $proxyMethod,
+        Union $proxyType,
+        ?Union $receiverType,
+        Union $itemType,
+        Codebase $codebase,
+    ): ?Union {
+        /** @var list<array{Union, ?Union}> $proxies each proxy branch's TValue and TCollection */
+        $proxies = [];
+        foreach ($proxyType->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if (!$atomic instanceof TGenericObject || \strtolower($atomic->value) !== self::PROXY_CLASS_LOWER) {
+                return null;
+            }
+
+            $tValue = $atomic->type_params[1] ?? null;
+            if ($tValue === null) {
+                return null;
+            }
+
+            $proxies[] = [$tValue, $atomic->type_params[2] ?? null];
+        }
+
+        if ($proxies === []) {
+            return null;
+        }
+
+        if ($receiverType instanceof Union && \count(self::collectionAtomics($receiverType, $codebase)) > 1) {
+            return self::resolveProxyReturnTypeForUnion($receiverType, $proxyMethod, $itemType, $codebase);
+        }
+
+        $receiver = $receiverType instanceof Union ? self::readableCollection($receiverType, $codebase) : null;
+        if ($receiver instanceof TGenericObject) {
+            return self::resolveProxyReturnType(
+                $proxyMethod,
+                $receiver->type_params[0],
+                $receiver->type_params[1],
+                $receiver->value,
+                $codebase,
+                $itemType,
+            );
+        }
+
+        $combined = null;
+        foreach ($proxies as [$tValue, $tCollection]) {
+            $branch = self::resolveProxyReturnType(
+                $proxyMethod,
+                self::enumerableKey($tCollection, $codebase),
+                $tValue,
+                Enumerable::class,
+                $codebase,
+                $itemType,
+            );
+            if (!$branch instanceof Union) {
+                return null;
+            }
+
+            $combined = $combined instanceof Union ? Type::combineUnionTypes($combined, $branch) : $branch;
+        }
+
+        return $combined;
+    }
+
+    /**
+     * The receiver's only non-null atomic when it is a plain two-slot generic collection, else null.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function readableCollection(Union $receiverType, Codebase $codebase): ?TGenericObject
+    {
+        $found = null;
+        foreach ($receiverType->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if ($found instanceof TGenericObject
+                || !$atomic instanceof TGenericObject
+                || !ClassLineage::isA($codebase, $atomic->value, Enumerable::class)
+                || !self::bindsKeyAndValuePositionally($atomic, $codebase)
+            ) {
+                return null;
+            }
+
+            $found = $atomic;
+        }
+
+        return $found;
+    }
+
+    /**
+     * The value `__get()` reads from array items (`$value[$key]`), for Psalm's stand-in `__get` call of a property
+     * fetch through the proxy. Only array shapes that all declare the key resolve; anything else stays `mixed`.
+     */
+    private static function arrayItemGet(Union $tValue, MethodCall $call): ?Union
+    {
+        $args = $call->getArgs();
+        $key = isset($args[0]) && $args[0]->value instanceof String_ ? $args[0]->value->value : null;
+        if ($key === null) {
+            return null;
+        }
+
+        $result = null;
+        foreach ($tValue->getAtomicTypes() as $atomic) {
+            $value = $atomic instanceof TKeyedArray ? $atomic->properties[$key] ?? null : null;
+            if (!$value instanceof Union || $value->possibly_undefined) {
+                return null;
+            }
+
+            $result = $result instanceof Union ? Type::combineUnionTypes($result, $value) : $value;
+        }
+
+        return $result;
+    }
+
+    /**
+     * The lowercase proxy name of a `$x->{proxy}` / `$x?->{proxy}` fetch the resolver models, else null.
+     *
+     * @return lowercase-string|null
+     * @psalm-mutation-free
+     */
+    private static function modelledProxyName(Expr $node): ?string
+    {
+        if ((!$node instanceof PropertyFetch && !$node instanceof NullsafePropertyFetch) || !$node->name instanceof Identifier) {
+            return null;
+        }
+
+        $name = \strtolower($node->name->name);
+
+        return isset(self::PROXY_KINDS[$name]) ? $name : null;
+    }
+
+    /**
+     * Whether the node is a `$x->{proxy}->{prop}` / `$x?->{proxy}->{prop}` fetch with a modelled proxy name.
+     *
+     * @psalm-mutation-free
+     */
+    private static function isProxiedFetch(Expr $node): bool
+    {
+        return $node instanceof PropertyFetch && $node->name instanceof Identifier && self::modelledProxyName($node->var) !== null;
+    }
+
+    private static function markPresenceTarget(Expr $operand): void
+    {
+        if (self::isProxiedFetch($operand)) {
+            $operand->setAttribute(self::PRESENCE_TARGET_ATTRIBUTE, true);
+        }
+    }
+
+    /** @psalm-pure */
+    private static function holdsProxy(Union $type): bool
+    {
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TGenericObject && \strtolower($atomic->value) === self::PROXY_CLASS_LOWER) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // -------------------------------------------------------------------------
     // Shared logic
     // -------------------------------------------------------------------------
 
@@ -321,7 +733,8 @@ final class HigherOrderCollectionProxyHandler implements
      * Resolve the return type based on which proxy property was accessed.
      *
      * @param lowercase-string $proxyMethod  The proxy property name (e.g. "each", "map")
-     * @param lowercase-string $calledMethod The method called through the proxy (e.g. "delete")
+     * @param lowercase-string|Union $proxied The method called through the proxy (e.g. "delete"), or the
+     *                                        item-level value of a property fetched through it
      * @param string $collectionClass        The concrete collection class
      */
     private static function resolveProxyReturnType(
@@ -330,7 +743,7 @@ final class HigherOrderCollectionProxyHandler implements
         Union $tValue,
         string $collectionClass,
         Codebase $codebase,
-        string $calledMethod,
+        string|Union $proxied,
     ): ?Union {
         $kind = self::PROXY_KINDS[$proxyMethod] ?? null;
         if ($kind === null) {
@@ -352,10 +765,10 @@ final class HigherOrderCollectionProxyHandler implements
             // sole — the single matching item (throws when none or several match), never null
             'sole' => $tValue,
             // max/min — reduce() with null as the initial value, so null is always a possible result for empty
-            // collections (common with empty query results). The method return type is included to preserve
+            // collections (common with empty query results). The item-level result is included to preserve
             // precision (e.g. getPrice(): int → int|null instead of mixed|null).
             'max-min' => Type::combineUnionTypes(
-                self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed(),
+                self::proxiedResult($tValue, $proxied, $codebase) ?? Type::getMixed(),
                 Type::getNull(),
             ),
             // map — LazyCollection::map() and Support\Collection::map() return the same class. EloquentCollection::map()
@@ -364,7 +777,7 @@ final class HigherOrderCollectionProxyHandler implements
             'map' => new Union([
                 new TGenericObject(self::toBaseClass($collectionClass, $codebase), [
                     $tKey,
-                    self::resolveMethodReturnTypeOnValue($tValue, $calledMethod, $codebase) ?? Type::getMixed(),
+                    self::proxiedResult($tValue, $proxied, $codebase) ?? Type::getMixed(),
                 ]),
             ]),
             // flatMap — inner structure is unpacked; static return type preserves LazyCollection.
@@ -393,6 +806,17 @@ final class HigherOrderCollectionProxyHandler implements
     }
 
     /**
+     * What a proxied call or fetch gives per item: Psalm's item-level value of a property fetch, or the declared
+     * return type of the method called on TValue.
+     *
+     * @param lowercase-string|Union $proxied
+     */
+    private static function proxiedResult(Union $tValue, string|Union $proxied, Codebase $codebase): ?Union
+    {
+        return $proxied instanceof Union ? $proxied : self::resolveMethodReturnTypeOnValue($tValue, $proxied, $codebase);
+    }
+
+    /**
      * Support\Collection for an Eloquent collection, whose map-like methods return `toBase()` results.
      *
      * @psalm-capabilities read-props
@@ -415,12 +839,12 @@ final class HigherOrderCollectionProxyHandler implements
      *
      * @param Union $receiverType a union with at least two Enumerable atomics
      * @param lowercase-string $proxyMethod
-     * @param lowercase-string $calledMethod
+     * @param lowercase-string|Union $proxied see resolveProxyReturnType()
      */
     private static function resolveProxyReturnTypeForUnion(
         Union $receiverType,
         string $proxyMethod,
-        string $calledMethod,
+        string|Union $proxied,
         Codebase $codebase,
     ): ?Union {
         $branches = self::collectionAtomics($receiverType, $codebase);
@@ -445,7 +869,7 @@ final class HigherOrderCollectionProxyHandler implements
                 $readable ? $branch->type_params[1] : Type::getMixed(),
                 $branch->value,
                 $codebase,
-                $calledMethod,
+                $proxied,
             );
 
             if (!$branchType instanceof Union) {
