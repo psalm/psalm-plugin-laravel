@@ -176,7 +176,8 @@ const TABLE_LEGEND = "<details><summary>How to read this table</summary>\n\n"
     . "order-dependent types excluded. A rise is not necessarily a regression.\n"
     . "- **Coverage**: inferred type coverage. A badge appears only for a move of at least 0.005 points, "
     . "smaller moves are parallel-analysis jitter.\n"
-    . "- **Total**: sum over the apps compared on both sides (coverage is not summed).\n"
+    . "- **Total**: sum over the apps compared on both sides (coverage is not summed). Badge thresholds and the heading words "
+    . "apply per app, not to the total, so the Total row can be colored differently from the heading.\n"
     . '- **Colors**: $\color{red}{\textsf{red}}$ worse or more issues, '
     . '$\color{green}{\textsf{green}}$ better or fewer issues, '
     . '$\color{gray}{\textsf{gray}}$ noise.' . "\n"
@@ -302,8 +303,10 @@ $tally = static function (array $issues) use ($issueKey): array {
         $keys[$key] = ($keys[$key] ?? 0) + 1;
         $types[$type] = ($types[$type] ?? 0) + 1;
         // Psalm error level at which the type surfaces; stable per type.
-        if (isset($i['error_level']) && is_numeric($i['error_level'])) {
-            $levels[$type] = (int) $i['error_level'];
+        // The JSON is untrusted: only Psalm's real levels (-2, -1, 1..8) count, anything else has no level and weight 0.
+        $level = isset($i['error_level']) && is_numeric($i['error_level']) ? $i['error_level'] + 0 : null;
+        if (in_array($level, [-2, -1, 1, 2, 3, 4, 5, 6, 7, 8], true)) {
+            $levels[$type] = $level;
         }
     }
 
@@ -445,6 +448,7 @@ foreach ($apps as $app) {
 
     $movements = [];
     foreach (array_keys($baseTypes + $headTypes) as $type) {
+        $type = (string) $type; // a numeric issue type became an int array key
         $a = $addedByType[$type] ?? 0;
         $r = $removedByType[$type] ?? 0;
         $c = $changedByType[$type] ?? 0;
@@ -580,7 +584,13 @@ function fmtSigned(int $n): string
 /** Single-line text safe in a table cell or <summary>. */
 function tableCell(string $text): string
 {
-    return str_replace(['|', "\n"], ['\\|', ' '], $text);
+    return str_replace(['|', "\r", "\n"], ['\\|', ' ', ' '], $text);
+}
+
+/** Issue types come from fork-controlled JSON: only a Psalm type name is rendered. */
+function issueType(string $type): string
+{
+    return preg_match('/^[A-Za-z][A-Za-z0-9_]*$/D', $type) === 1 ? $type : '(invalid type)';
 }
 
 /** Markdown inline-code span of a message: one line, clipped. */
@@ -869,7 +879,7 @@ function detailsBody(array $p, bool $details, bool $entries): string
             foreach ($r['movements'] as $m) {
                 $table[] = sprintf(
                     '| %s | %s | %s → %s | %d | %d | %d |',
-                    tableCell($m['type']),
+                    tableCell(issueType($m['type'])),
                     $m['level'] === null ? '–' : levelBucket($m['level']),
                     fmtInt($m['base']),
                     fmtInt($m['head']),
@@ -883,9 +893,9 @@ function detailsBody(array $p, bool $details, bool $entries): string
         }
 
         $lists = [
-            'Added' => [$r['added'], array_map(static fn(array $e): string => inlineCode("{$e['loc']} {$e['type']}: {$e['message']}"), $r['addedList'])],
-            'Removed' => [$r['removed'], array_map(static fn(array $e): string => inlineCode("{$e['loc']} {$e['type']}: {$e['message']}"), $r['removedList'])],
-            'Changed' => [count($r['changed']), array_map(static fn(array $c): string => inlineCode("{$c['loc']} {$c['type']}: {$c['old']}") . ' → ' . inlineCode($c['new']), $r['changed'])],
+            'Added' => [$r['added'], array_map(static fn(array $e): string => inlineCode("{$e['loc']} " . issueType($e['type']) . ": {$e['message']}"), $r['addedList'])],
+            'Removed' => [$r['removed'], array_map(static fn(array $e): string => inlineCode("{$e['loc']} " . issueType($e['type']) . ": {$e['message']}"), $r['removedList'])],
+            'Changed' => [count($r['changed']), array_map(static fn(array $c): string => inlineCode("{$c['loc']} " . issueType($c['type']) . ": {$c['old']}") . ' → ' . inlineCode($c['new']), $r['changed'])],
         ];
         foreach ($lists as $label => [$total, $items]) {
             if ($total === 0 || !$details) {

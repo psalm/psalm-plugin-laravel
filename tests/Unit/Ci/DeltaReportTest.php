@@ -137,17 +137,39 @@ final class DeltaReportTest extends TestCase
         $this->assertStringStartsWith('300', $cells[2]);
     }
 
+    #[Test]
+    public function malformed_issue_types_and_levels_do_not_abort_or_inject_markup(): void
+    {
+        $issue = static fn(string $type, mixed $level): array => [
+            'file_name' => 'a.php', 'line_from' => 1, 'line_to' => 1, 'column_from' => 1, 'column_to' => 2,
+            'type' => $type, 'message' => 'm', 'error_level' => $level,
+        ];
+        $this->side('app', 'base', issues: true, perf: [10.0, 80.0, 100.0]);
+        $this->side('app', 'head', issues: [
+            $issue('123', \PHP_INT_MAX),
+            $issue("Evil|\r# Injected <b>x</b>", 3),
+            $issue('RealType', 3),
+        ], perf: [10.0, 80.0, 100.0]);
+
+        $report = $this->render(['app']);
+
+        $this->assertStringContainsString('(invalid type)', $report);
+        $this->assertStringContainsString('| RealType |', $report);
+        $this->assertStringNotContainsString('Injected', $report);
+        $this->assertStringNotContainsString("\r", $report);
+    }
+
     /**
      * @param array{float, float, float|null}|null $perf wall, coverage, peak RSS
      */
-    private function side(string $app, string $side, bool $issues = false, ?array $perf = null, bool $crash = false): void
+    private function side(string $app, string $side, bool|array $issues = false, ?array $perf = null, bool $crash = false): void
     {
         $label = $side === 'base' ? 'base-aaaa' : 'pr-bbbb';
         @\mkdir($this->dir . '/' . $app);
         $prefix = "{$this->dir}/{$app}/{$app}-{$label}--";
 
-        if ($issues) {
-            \file_put_contents($prefix . 'issues.json', '[]');
+        if ($issues !== false) {
+            \file_put_contents($prefix . 'issues.json', \json_encode($issues === true ? [] : $issues, \JSON_THROW_ON_ERROR));
         }
 
         if ($perf !== null) {
