@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793565721670,
+  "lastUpdate": 1793638865256,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17460,6 +17460,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1288,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ada080c681bb9d337ee0b6b3ef006eb453c1957",
+          "message": "Infer the factory count from `factory()`, `new` and `count()` on the concrete factory class (#2192)\n\n* feat(factory): infer the count from factory(), new and count() on the concrete factory\n\nBind the TCount template of the concrete factory class so that\nModel::factory(), new Factory() and ->count(n) resolve make() and create()\nto a single model or a Collection. Every definite answer is gated on the\ncount path being untouched by user overrides, magic or macro dispatch,\nstate methods and subclasses, otherwise the type stays widened.\n\nRefs #2188\n\n* docs(factory): record the concrete-class TCount design and its probed dead ends\n\nRefs #2188\n\n* fix(factory): count forEachSequence() and Model::factory(n) on factories with an explicit count contract\n\nforEachSequence() on a factory without a synthesized TCount left the inherited\nstatic at TCount = null, and Model::factory(3) through an explicit @use\nHasFactory<XFactory> (or a discovered @extends Factory<M, null>) declined to the\ndeclared class, so make() was typed as a single model where Laravel returns a\nCollection. Both now answer the base Factory<TModel, count> like count() does,\nand stay the unknown count when the hierarchy gate fails.\n\nRefs #2188\n\n* refactor(factory): move the shared count contract into Support\\FactoryCount\n\nThe count handlers called each other's static methods and kept the gate, the\ndescendant index, the synthesis marker and the count classification in\nwhichever handler came first. Move all of it into one internal service,\nHandlers\\Eloquent\\Support\\FactoryCount, which the four handlers depend on and\nnever on each other: the hierarchy gate, descendant index, synthesis marker,\nbody rule, count classification, the single, plural and unknown unions,\nwithCount() and the base Factory answer.\n\nFactoryUserMethodCountProvider now registers itself on the marked classes in\nits own AfterCodebasePopulated hook, registered after FactoryModelBindingHandler,\ninstead of being wired in by the binding handler. FactoryCount::reset() replaces\nthe moved resets in Plugin::resetInvocationState(). Behavior is unchanged.\n\nRefs #2188\n\n* build(deps): require psalm ^7.0.0-rc28 without dev-master\n\nPackagist now carries 7.0.0-rc28, the plugin's floor, so the dev-master\nalternative is redundant. It let CI run on the moving branch (surfaced\nwhile working on #2192) and will admit 7.0.0 stable once tagged.\n\n* test: follow Psalm rc28 no longer reporting InvalidCast for an argument's data-flow cast\n\nPsalm 7.0.0-rc28 (vimeo/psalm#13036, c19cc1779) stops reporting\nInvalidCast/PossiblyInvalidCast from the cast that only builds an argument's\ndata-flow path; the argument issue itself is still reported. Drop the\nduplicate InvalidCast expectations and the now-unused PossiblyInvalidCast\nsuppressions in the inline-validate taint tests. Each of those still asserts\nTaintedHeader, so none passes vacuously.\n\nSurfaced by CI running on moving Psalm dev-master while working on #2192.\n\n* refactor(blade): drop the InvalidCast branch of the @aware argument gate\n\nPsalm 7.0.0-rc28 (the plugin's floor) no longer emits an InvalidCast next to\nan argument issue (vimeo/psalm#13036), so the relocator never sees one on the\ngenerated getConsumableComponentData($__value) call. Remove the dead branch,\nits unit case, the end-to-end assertion that failed on rc28, and the doc\nmention. Surfaced by CI on dev-master while working on #2192.",
+          "timestamp": "2026-11-02T17:57:19+01:00",
+          "tree_id": "0cfe024c8bcaa26f47e274ddfef8bbb202718537",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2ada080c681bb9d337ee0b6b3ef006eb453c1957"
+        },
+        "date": 1793638863187,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.91,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
             "unit": "MB"
           }
         ]
