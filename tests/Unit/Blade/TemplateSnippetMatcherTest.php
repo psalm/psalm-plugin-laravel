@@ -173,6 +173,28 @@ final class TemplateSnippetMatcherTest extends TestCase
     }
 
     #[Test]
+    public function block_comments_between_a_raw_echo_and_its_operand_are_stepped_over(): void
+    {
+        foreach (["echo /* why */ old('k');" => "echo /* why */ old('k')", "echo/* a */ /* b */old('k');" => "echo/* a */ /* b */old('k')", "echo /**/ old('k');" => "echo /**/ old('k')"] as $line => $expected) {
+            $start = (int) \strpos($line, "old('k')");
+
+            $this->assertSame($expected, TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), 'echo'), $line);
+        }
+    }
+
+    #[Test]
+    public function a_comment_that_hides_the_callee_or_has_no_opener_declines(): void
+    {
+        // The comment is skipped for `echo` only; an `e()` call keeps its parenthesis rule. A closer
+        // with no opener in the snippet is text, so the callee is not found behind it.
+        foreach ([["e(/* why */ old('k'));", 'e'], ["echo why */ old('k');", 'echo'], ["print /* why */ old('k');", 'echo']] as [$line, $callee]) {
+            $start = (int) \strpos($line, "old('k')");
+
+            $this->assertNull(TemplateSnippetMatcher::enclosingCallAt($line, $start, $start + \strlen("old('k')"), $callee), $line);
+        }
+    }
+
+    #[Test]
     public function a_qualified_or_member_callee_of_the_same_name_declines(): void
     {
         // Without an identifier-boundary check all three read backwards as the identifier `e`, and

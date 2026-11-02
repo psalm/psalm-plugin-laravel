@@ -219,7 +219,9 @@ final class TemplateSnippetMatcher
 
         // `echo` is a language construct: it precedes its argument directly, with no parenthesis in
         // between. Every other callee reported this way is an ordinary function call.
-        if (\strcasecmp($callee, 'echo') !== 0) {
+        $isEcho = \strcasecmp($callee, 'echo') === 0;
+
+        if (!$isEcho) {
             $index = self::skipSpaceBack($snippet, $index);
 
             if ($index < 0 || $snippet[$index] !== '(') {
@@ -228,6 +230,9 @@ final class TemplateSnippetMatcher
 
             $index--;
         }
+
+        // `echo /* why */ $x;` compiles from `{!! /* why */ $x !!}`: the callee sits behind the comment.
+        $index = $isEcho ? self::skipCommentsBack($snippet, $index) : $index;
 
         $end = self::skipSpaceBack($snippet, $index);
         $index = $end;
@@ -269,6 +274,31 @@ final class TemplateSnippetMatcher
         }
 
         return \str_ends_with(\substr($snippet, 0, $offset), $text);
+    }
+
+    /**
+     * The index of the last character at or before $index that is neither whitespace nor part of a
+     * block comment, or -1. A comment whose opener is not in $text counts as text.
+     *
+     * @psalm-pure
+     */
+    private static function skipCommentsBack(string $text, int $index): int
+    {
+        while (true) {
+            $index = self::skipSpaceBack($text, $index);
+
+            if ($index < 3 || $text[$index] !== '/' || $text[$index - 1] !== '*') {
+                return $index;
+            }
+
+            $opener = \strrpos(\substr($text, 0, $index - 1), '/*');
+
+            if ($opener === false) {
+                return $index;
+            }
+
+            $index = $opener - 1;
+        }
     }
 
     /**
