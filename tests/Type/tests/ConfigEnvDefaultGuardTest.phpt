@@ -83,6 +83,11 @@ function env_default_that_may_be_a_genuine_null_stays_reported(bool $useFallback
     return strlen(env('APP_URL', $default));
 }
 
+function env_default_from_a_nullsafe_call_stays_reported(?Repository $repository): int
+{
+    return strlen(env('APP_URL', $repository?->get('app.url')));
+}
+
 function guard_on_a_value_without_env_is_still_redundant(): string
 {
     $timezone = config('app.timezone');
@@ -91,6 +96,7 @@ function guard_on_a_value_without_env_is_still_redundant(): string
 }
 ?>
 --EXPECTF--
+PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 RedundantCondition on line %d: Type string for $timezone is always string

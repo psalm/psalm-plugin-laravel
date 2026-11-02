@@ -36,9 +36,9 @@ use Psalm\Type\Atomic\TString;
  * - Psalm ORs the flag when it merges unions, so a genuine null joined with such a value
  *   (`$c ? config('app.url') : null`, the values of a config array that also holds a default-less
  *   env read) is no longer reported downstream. For that reason env() in code trusts the flag of a
- *   default only when the default is a call (`env('A', env('B', 'x'))`, `env('A', config('k'))`);
- *   any other default (`$c ? env('B', 'x') : null`, even a variable holding `env('B', 'x')`) is
- *   treated as a possibly genuine null and reported.
+ *   default only when the default is a non-nullsafe call (`env('A', env('B', 'x'))`,
+ *   `env('A', config('k'))`); any other default (`$c ? env('B', 'x') : null`, `$r?->get('k')`, even
+ *   a variable holding `env('B', 'x')`) is treated as a possibly genuine null and reported.
  * - Not every Psalm check honours the flag: concatenating an int-default value reports
  *   PossiblyInvalidOperand (https://github.com/vimeo/psalm/issues/13031); a return type conditional
  *   on a null argument takes the null arm too (`redirect(config('app.url'))`, `url()`, `cookie()`,
@@ -71,7 +71,8 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
 
         // Psalm ORs ignore_nullable_issues when it merges unions, so a flagged default built by an
         // expression (`$c ? env('B', 'x') : null`, a variable holding it) may carry a genuine null.
-        // Only a call answers with its own type, as env() and config() do.
+        // Only a call answers with its own type, as env() and config() do; a nullsafe call adds the
+        // null of its receiver.
         if ($default instanceof Type\Union && $default->ignore_nullable_issues && !self::isPositionalCall($args[1] ?? null)) {
             $default = $default->setProperties(['ignore_nullable_issues' => false]);
         }
@@ -83,8 +84,7 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
     private static function isPositionalCall(?Node\Arg $arg): bool
     {
         return $arg instanceof Node\Arg && !$arg->name instanceof Node\Identifier && !$arg->unpack
-            && ($arg->value instanceof Expr\FuncCall || $arg->value instanceof Expr\StaticCall
-                || $arg->value instanceof Expr\MethodCall || $arg->value instanceof Expr\NullsafeMethodCall);
+            && ($arg->value instanceof Expr\FuncCall || $arg->value instanceof Expr\StaticCall || $arg->value instanceof Expr\MethodCall);
     }
 
     /**
