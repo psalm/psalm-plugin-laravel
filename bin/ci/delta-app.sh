@@ -101,9 +101,9 @@ fast_copy() {
 
 # Psalm every app installs, on both sides. Fixed rather than read from the
 # plugin composer.json so base and head analyze with the same Psalm.
-# `@rc` keeps the package on tagged releases under the apps' `minimum-stability: dev`, where a bare
-# constraint would admit dev-master. rc28 is the plugin's floor: the first Psalm with template defaults.
-PSALM_PIN="^7.0.0-rc28@rc"
+# Exact version: a range would drift to newer Psalm releases between base and head runs (or across
+# cached vendors), and an exact tag also keeps dev-master out under the apps' `minimum-stability: dev`.
+PSALM_PIN="7.0.0"
 
 # md5 of the plugin's dependency-affecting composer.json sections. Only `require`
 # and `autoload` change what gets installed into the app's vendor; if they match

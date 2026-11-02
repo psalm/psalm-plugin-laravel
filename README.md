@@ -30,7 +30,7 @@ Real output on a fresh Laravel app, tracing the two lines above from source to s
 ## Install
 
 ```bash
-composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0@RC"
+composer require --dev psalm/plugin-laravel
 ./vendor/bin/psalm-laravel init
 ./vendor/bin/psalm-laravel analyze
 ```
@@ -38,13 +38,15 @@ composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0@RC"
 Requires PHP 8.2+ and Laravel 12.x or 13.x.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
-* Requires [Psalm 7](https://github.com/vimeo/psalm/releases) `7.0.0-rc28` or later, the first release with template defaults, which the stubs rely on. Psalm 7 is still a release candidate: the `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
-* For stable Psalm 6 or Laravel 11 support, use `composer require --dev psalm/plugin-laravel:^3`; the 3.x line provides the same security checks.
+* Requires [Psalm 7](https://github.com/vimeo/psalm/releases).
+* For Laravel 11 support, use `composer require --dev psalm/plugin-laravel:^3`; the 3.x line provides the same security checks.
 * `init` writes a `psalm.xml` at the project root with the plugin enabled, `errorLevel="4"` by default (`--level 1` is strictest, `--level 8` the most lenient), Laravel-friendly issue handler defaults, and `runTaintAnalysis="true"`. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 * `analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can invoke `./vendor/bin/psalm` directly instead.
 * `analyze --plugin-option=KEY=VALUE` (repeatable) overrides a bool or enum plugin setting for one run. See [per-run overrides](docs/config.md#per-run-overrides).
 
-On the 3.x line (Psalm 6) security scanning is a separate mode rather than an extra check: enabling it makes Psalm report `Tainted...` issues and suppress every type issue. Keep `runTaintAnalysis` out of your `psalm.xml` there, which is why `init` on 3.x omits it, and pass the flag only for the security pass. Putting it in the config turns every run taint-only, including the `--set-baseline` run below.
+On the 3.x line (Psalm 6) security scanning is a separate mode rather than an extra check: enabling it makes Psalm report `Tainted...` issues and suppress every type issue.
+Keep `runTaintAnalysis` out of your `psalm.xml` there, which is why `init` on 3.x omits it, and pass the flag only for the security pass.
+Putting it in the config turns every run taint-only, including the `--set-baseline` run below.
 
 ```bash
 ./vendor/bin/psalm                  # types only
@@ -125,7 +127,7 @@ Maintained versions:
 
 | Laravel Psalm Plugin                 | PHP  |      Laravel |   Psalm | Plugin Status |
 |--------------------------------------|------|-------------:|--------:|---------------|
-| **4.x** (recommended)                | 8.2+ |       12, 13 |  7 (RC) | Stable        |
+| **4.x** (recommended)                | 8.2+ |       12, 13 |       7 | Stable        |
 | 3.x ([upgrade](UPGRADING.md#3x--4x)) | 8.2+ |   11, 12, 13 |       6 | Stable        |
 | 2.x ([upgrade](UPGRADING.md#2x--3x)) | 8.0+ | 8, 9, 10, 11 | 4, 5, 6 | Unmaintained  |
 | 1.x ([upgrade](UPGRADING.md#1x--2x)) | 7.1+ |   5, 6, 7, 8 |    3, 4 | Unmaintained  |

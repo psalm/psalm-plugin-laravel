@@ -41,7 +41,7 @@ use Psalm\Storage\ClassLikeStorage;
  *    `IssueBuffer::addIssues()` merges worker issues without resetting the parent buffer. The trade-off
  *    versus an analysis-time hook (shared with the sibling visibility handler): under a re-enabled
  *    `--diff`, a warm run that skips the model's file would not re-emit, because populate-time emissions
- *    are not replayed from the per-file issue cache. The pinned Psalm 7 beta hardcodes `is_diff = false`.
+ *    are not replayed from the per-file issue cache. Psalm 7.0 hardcodes `is_diff = false`.
  *
  * Abstract bases are skipped: their `$appends` is validated through every concrete descendant, which
  * carries the complete accessor set (including accessors a child supplies for a base's appended
