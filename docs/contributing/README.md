@@ -37,7 +37,7 @@ flowchart TD
     I["Psalm scans all project files"] -.->|afterCodebasePopulated| J["ModelRegistrationHandler"]
     I -.->|afterCodebasePopulated| K["Eloquent Builder subclass fix-ups:\nBuilderSubclassQueryMixinHandler (restores dropped Query Builder @mixin)\nBuilderNativeStaticReturnTypeHandler (native ': static' return becomes docblock 'static')"]
     I -.->|afterCodebasePopulated| RCP["RelationCallbackParamsHandler (registers a params provider per Eloquent Builder subclass, #1676)"]
-    I -.->|afterCodebasePopulated| FMB["FactoryModelBindingHandler (injects @extends Factory&lt;TModel&gt; on bare factory subclasses, #780)"]
+    I -.->|afterCodebasePopulated| FMB["FactoryModelBindingHandler (injects @extends Factory&lt;TModel&gt; on bare factory subclasses, #780, then synthesizes a TCount template on every user factory subclass that keeps Laravel count semantics, so the count rides the concrete class, and registers FactoryUserMethodCountProvider on it, #2188)"]
     I -.->|afterCodebasePopulated| FSP["FacadeStubPrecedenceHandler (drops conflicting facade @method pseudos when the plugin ships a real stubbed static method)"]
     I -.->|afterCodebasePopulated| FTF["FacadeTaintForwardingHandler (copies taint sinks from a facade's forwarding target onto its @method pseudo-methods)"]
     I -.->|afterCodebasePopulated| RCS["RedeclaredClassSealHandler (restores the sealAllMethods default on stub-re-declared classes with a throwing __call)"]
