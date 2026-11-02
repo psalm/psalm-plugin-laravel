@@ -217,7 +217,7 @@ Reading a single element back out of an array-typed source is covered. Both the 
 
 ## Other detection limits
 
-**Named arguments captured by a variadic.** Two Psalm bugs ([vimeo/psalm#12251](https://github.com/vimeo/psalm/issues/12251), [#12252](https://github.com/vimeo/psalm/issues/12252)) misattribute a named argument bound to a variadic parameter. The plugin drops the taint of such an argument when the callee resolves exactly to a concrete method or function, so a genuine sink in the variadic's body or behind a re-spread (`handle(...$args)`) is not reported. Every other named-argument call keeps full detection.
+**Named arguments captured by a variadic.** Two Psalm bugs ([vimeo/psalm#12251](https://github.com/vimeo/psalm/issues/12251), [#12252](https://github.com/vimeo/psalm/issues/12252)) misattribute a named argument bound to a variadic parameter. The plugin drops the taint of such an argument when the callee resolves exactly to a concrete method or function, so a genuine sink in the variadic's body or behind a re-spread (`handle(...$args)`) is not reported. Every other named-argument call keeps Psalm's detection, with one gap in Psalm itself since 7.0.0-rc28 ([vimeo/psalm#12760](https://github.com/vimeo/psalm/pull/12760)): when a parent's variadic captures the argument (`Base::go(string ...$rest)` called as `$base->go(sink: $x)`), a sink on an override's parameter of that name (`Child::go(string $sink)`) is not reported.
 
 ## How it compares
 
