@@ -299,12 +299,10 @@ if ($projectKind === 'package') {
     runStep('composer create-project', $createProjectCommand, $launchDir, [], $verbose, $appDir);
 }
 
-// --- Step 2: configure Composer exactly as the README's Step 1 instructs ---
+// --- Step 2: point Composer at the current checkout instead of a published tag ---
 //
-// README: "Since Psalm 7.x is currently in beta, allow dev (or beta) packages
-// first: `composer config minimum-stability dev && composer config
-// prefer-stable true`". The path repository points `require` at the current
-// checkout instead of a published tag.
+// The README install needs no Composer config. `minimum-stability dev` admits the untagged path
+// checkout (`4.x-dev`); `prefer-stable` keeps every other package, Psalm included, on tagged releases.
 
 // `versions` pins the plugin's version: Psalm requires `psalm/plugin-laravel: ^4.17.4`, and a path checkout
 // without a tag can be guessed as a version that fails it, which silently resolves an older Psalm.

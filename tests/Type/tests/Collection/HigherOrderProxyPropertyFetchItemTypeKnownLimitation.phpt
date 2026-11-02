@@ -1,7 +1,3 @@
---SKIPIF--
-<?php
-require getcwd() . '/vendor/autoload.php';
-\Tests\Psalm\LaravelPlugin\Type\PsalmVersion::skipOnRange('7.0.0-rc16', '7.0.0-rc26');
 --FILE--
 <?php declare(strict_types=1);
 

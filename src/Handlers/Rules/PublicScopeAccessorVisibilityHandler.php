@@ -38,7 +38,7 @@ use Psalm\Storage\MethodStorage;
  *    introduced for the suppressors), and is reported at the trait's own declaration.
  *  - A single pass over the codebase lets us dedupe a trait scope shared by several models to one
  *    report (a trait method yields the same MethodStorage instance once per composing model).
- *  - The hook fires on every full-scan run, which is the only mode in the pinned Psalm 7 beta (it
+ *  - The hook fires on every full-scan run, which is the only mode in Psalm 7.0 (it
  *    hardcodes `is_diff = false`). Emissions survive worker forking: the parent emits before
  *    `analyzeFiles()` forks, and `IssueBuffer::addIssues()` merges worker issues on top without
  *    resetting the parent buffer (verified under `--threads`). The trade-off versus an analysis-time

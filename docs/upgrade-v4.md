@@ -19,22 +19,21 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.0.0-rc28` or later, the first release with template defaults, which the stubs rely on. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 is currently a release candidate: the root `vimeo/psalm:^7.0@RC` requirement allows that one package to be pre-release without lowering your project's `minimum-stability`.
+v4 requires `vimeo/psalm ^7.0`. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps).
 
-Psalm 7 introduces new issue types that may surface in your codebase:
+Psalm 7 can suggest purity annotations through new issue types. They are off by default and appear only with `suggestPurityAnnotations="true"` in `psalm.xml`:
 
 - `MissingPureAnnotation` -- a method has no side effects but lacks a purity annotation (`@psalm-pure` or a `@psalm-capabilities` set).
 - `MissingAbstractPureAnnotation` -- an abstract method should be declared `@psalm-pure` so all implementations are guaranteed pure.
 - `MissingInterfaceImmutableAnnotation` -- an interface should be `@psalm-immutable` so all implementations are guaranteed immutable.
-
-Additionally, `MissingImmutableAnnotation` (introduced in Psalm v3) fires when a class has no mutable state but lacks `@psalm-immutable`.
+- `MissingImmutableAnnotation` (introduced in Psalm v3) -- a class has no mutable state but lacks `@psalm-immutable`.
 
 **Why these annotations matter beyond documentation:**
 
 - `@psalm-pure` enables *taint specialization* — Psalm tracks whether a pure function's return value is tainted based on whether its arguments are tainted. Without it, taint can be lost or incorrectly propagated through the function.
 - `@psalm-immutable` enables *per-instance property taint tracking* — without it, a tainted property on one instance can pollute type inference across all instances of the class.
 
-If you use taint analysis (security scanning), fixing these is recommended. Otherwise, suppress them during the upgrade and address later:
+With the suggestions enabled, fixing them is recommended if you use taint analysis (security scanning). Otherwise, suppress them and address them later:
 
 ```xml
 <issueHandlers>
@@ -115,7 +114,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 # 1. Update PHP to 8.2+ and Laravel to 12+ if needed
 
 # 2. Upgrade Psalm to v7 and the plugin to v4 together
-composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-all-dependencies
+composer require --dev psalm/plugin-laravel:^4.0 vimeo/psalm:^7.0 --with-all-dependencies
 
 # 3. Update relation generic annotations (add declaring model parameter)
 #
