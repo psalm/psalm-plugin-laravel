@@ -47,7 +47,7 @@ use Psalm\Type\Union;
  * A factory that overrides how the count is set, kept or built (see
  * {@see FactoryUserMethodCountProvider::runsLaravelCountPath()}) has no synthesized `TCount`, and `times()`
  * on it answers an unknown count. A class without a synthesized `TCount` (explicit `@extends Factory<M, X>`,
- * a user's own `@template TCount`) keeps the pre-#2188 `Factory<TModel, count>` answer from `count()` / `times()`.
+ * a user's own `@template TCount`) keeps the pre-#2188 `Factory<TModel, count>` answer from `count()` / `times()` / `forEachSequence()`.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/693
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/696
@@ -118,11 +118,8 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
             return $concrete;
         }
 
-        // Only the base `Factory` and classes without a synthesized TCount reach here.
-        if ($methodName === 'foreachsequence' && \strtolower($calledClass) !== \strtolower(Factory::class)) {
-            return null;
-        }
-
+        // Only the base `Factory` and classes without a synthesized TCount reach here: `forEachSequence()` counts
+        // the factory like `count()` does (`state(...)->count(count($sequence))`), so it takes the same fallback.
         $modelType = self::resolveModelType($event, $codebase);
         if (!$modelType instanceof Union) {
             return null;
@@ -325,7 +322,7 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
      *
      * @psalm-mutation-free
      */
-    private static function resolveModelFromClass(string $factoryClass, Codebase $codebase): ?Union
+    public static function resolveModelFromClass(string $factoryClass, Codebase $codebase): ?Union
     {
         try {
             $storage = $codebase->classlike_storage_provider->get($factoryClass);

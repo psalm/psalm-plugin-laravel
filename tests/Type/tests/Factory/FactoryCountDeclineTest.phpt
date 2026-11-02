@@ -155,6 +155,161 @@ $_manyNew = ManyFactory::new()->make();
 $_manySequence = ManyFactory::new()->forEachSequence(['a' => 1])->make();
 /** @psalm-check-type-exact $_manySequence = Collection<int, User> */;
 
+// ----- forEachSequence() counts the factory even where the plugin does not own the count -----
+$_singleSequence = SingleFactory::new()->forEachSequence(['a' => 1])->make();
+/** @psalm-check-type-exact $_singleSequence = Collection<int, User> */;
+
+/** @extends Factory<User, null> */
+final class GatedSingleFactory extends Factory
+{
+    /** @return array<string, mixed> */
+    #[\Override]
+    public function definition(): array
+    {
+        return [];
+    }
+
+    /**
+     * @param mixed $state
+     * @return static
+     */
+    #[\Override]
+    public function state($state)
+    {
+        return new static(2);
+    }
+}
+
+/** @extends Factory<User, null> */
+final class CountOverridingSingleFactory extends Factory
+{
+    /** @return array<string, mixed> */
+    #[\Override]
+    public function definition(): array
+    {
+        return [];
+    }
+
+    /** @return static */
+    #[\Override]
+    public function count(?int $count)
+    {
+        return $this;
+    }
+}
+
+// A factory that overrides how the count is kept keeps the unknown count, never the plural one.
+$_gatedSequence = GatedSingleFactory::new()->forEachSequence(['a' => 1])->make();
+/** @psalm-check-type-exact $_gatedSequence = User|Collection<int, User> */;
+
+$_gatedCount = GatedSingleFactory::new()->count(3)->make();
+/** @psalm-check-type-exact $_gatedCount = User|Collection<int, User> */;
+
+$_countOverrideSequence = CountOverridingSingleFactory::new()->forEachSequence(['a' => 1])->make();
+/** @psalm-check-type-exact $_countOverrideSequence = User|Collection<int, User> */;
+
+// ----- Model::factory() where the bound or discovered factory has an explicit count contract -----
+final class Order extends Model
+{
+    /** @use HasFactory<OrderFactory> */
+    use HasFactory;
+}
+
+/** @extends Factory<Order, null> */
+final class OrderFactory extends Factory
+{
+    /** @return array<string, mixed> */
+    #[\Override]
+    public function definition(): array
+    {
+        return [];
+    }
+}
+
+final class Solo extends Model
+{
+    use HasFactory;
+
+    /** @var class-string<SoloFactory> */
+    protected static $factory = SoloFactory::class;
+}
+
+/** @extends Factory<Solo, null> */
+final class SoloFactory extends Factory
+{
+    /** @return array<string, mixed> */
+    #[\Override]
+    public function definition(): array
+    {
+        return [];
+    }
+}
+
+$_boundMany = Order::factory(3)->make();
+/** @psalm-check-type-exact $_boundMany = Collection<int, Order> */;
+
+$_boundSolo = Order::factory()->make();
+/** @psalm-check-type-exact $_boundSolo = Order */;
+
+$_boundState = Order::factory(['a' => 1])->make();
+/** @psalm-check-type-exact $_boundState = Order */;
+
+$_boundStateClosure = Order::factory(static fn (array $attributes): array => $attributes)->make();
+/** @psalm-check-type-exact $_boundStateClosure = Order */;
+
+/** @var int|null $maybeCount */
+$maybeCount = random_int(0, 1) === 0 ? null : 3;
+$_boundUnknown = Order::factory($maybeCount)->make();
+/** @psalm-check-type-exact $_boundUnknown = Order|Collection<int, Order> */;
+
+$_discoveredMany = Solo::factory(3)->make();
+/** @psalm-check-type-exact $_discoveredMany = Collection<int, Solo> */;
+
+$_discoveredSolo = Solo::factory()->make();
+/** @psalm-check-type-exact $_discoveredSolo = Solo */;
+
+$_discoveredUnknown = Solo::factory($maybeCount)->make();
+/** @psalm-check-type-exact $_discoveredUnknown = Solo|Collection<int, Solo> */;
+
+// A factory that declares a Laravel method has the default count and stays the concrete class, custom methods included.
+final class Gated extends Model
+{
+    use HasFactory;
+
+    /** @var class-string<GatedFactory> */
+    protected static $factory = GatedFactory::class;
+}
+
+/** @extends Factory<Gated> */
+final class GatedFactory extends Factory
+{
+    /** @return array<string, mixed> */
+    #[\Override]
+    public function definition(): array
+    {
+        return [];
+    }
+
+    /**
+     * @param mixed $state
+     * @return static
+     */
+    #[\Override]
+    public function state($state)
+    {
+        return new static(2);
+    }
+
+    /** @return static */
+    public function paid()
+    {
+        return $this;
+    }
+}
+
+$_gatedModel = Gated::factory(3)->paid()->make();
+/** @psalm-check-type-exact $_gatedModel = Gated|Collection<int, Gated> */;
+
 // ----- Late static binding: a subclass may preset a count, so a non-final class answers the union -----
 /** @var class-string<UserFactory> $factoryClass */
 $factoryClass = UserFactory::class;

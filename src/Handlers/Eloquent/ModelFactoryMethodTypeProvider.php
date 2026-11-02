@@ -135,13 +135,22 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
         // class), which this handler re-types with the count. Anything but a plain class stays as declared.
         if (self::hasUserBoundTFactory($storage, $codebase)) {
             $boundFactory = self::boundTFactoryClass($storage);
+            if ($boundFactory === null) {
+                return null;
+            }
 
-            return $boundFactory === null ? null : FactoryCountTypeProvider::withCount($codebase, $boundFactory, self::gate($codebase, $boundFactory, $count));
+            $gated = self::gate($codebase, $boundFactory, $count);
+
+            return FactoryCountTypeProvider::withCount($codebase, $boundFactory, $gated)
+                ?? self::unownedCount($codebase, $boundFactory, $gated, $modelFqcn);
         }
 
         $factoryClass = self::discoverFactoryClass($modelFqcn, $storage, $codebase);
         if ($factoryClass !== null && self::isUsableFactoryClass($factoryClass, $codebase)) {
-            return FactoryCountTypeProvider::withCount($codebase, $factoryClass, self::gate($codebase, $factoryClass, $count))
+            $gated = self::gate($codebase, $factoryClass, $count);
+
+            return FactoryCountTypeProvider::withCount($codebase, $factoryClass, $gated)
+                ?? self::unownedCount($codebase, $factoryClass, $gated, $modelFqcn)
                 ?? new Union([new TNamedObject($factoryClass)]);
         }
 
@@ -166,6 +175,42 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
         return $provider->has($factoryClass) && !FactoryUserMethodCountProvider::runsLaravelCountPath($provider->get($factoryClass))
             ? FactoryCountTypeProvider::unknownCountUnion()
             : $count;
+    }
+
+    /**
+     * A factory that owns no synthesized `TCount` (explicit `@extends Factory<M, null>` / `<M, int>`, a user's own
+     * `TCount`) still counts through `Model::factory(3)` at runtime, so declining to its declared class would type
+     * `make()` as a single model where Laravel returns a Collection. When the first argument may be a count the
+     * answer is the base `Factory<TModel, count>`, as `count()` gives; unknown classification is the unknown count.
+     *
+     * Declines (null) for a definitely-null count (`factory()`, a state array or closure), a class that is not a
+     * scanned `Factory`, and a class whose effective `TCount` already is the default `int|null` (a class that declares
+     * a Laravel method, kept as the concrete class so its custom methods stay callable: the default already
+     * reads the sound union).
+     */
+    private static function unownedCount(Codebase $codebase, string $factoryClass, Union $count, string $modelFqcn): ?Union
+    {
+        $provider = $codebase->classlike_storage_provider;
+        if ($count->isNull() || !$provider->has($factoryClass)) {
+            return null;
+        }
+
+        $storage = $provider->get($factoryClass);
+        if (!isset($storage->parent_classes[\strtolower(Factory::class)])) {
+            return null;
+        }
+
+        $declared = $storage->template_extended_params[Factory::class]['TCount'] ?? null;
+        if ($declared instanceof Union && $declared->getId() === 'int|null') {
+            return null;
+        }
+
+        return new Union([
+            new TGenericObject(Factory::class, [
+                FactoryCountTypeProvider::resolveModelFromClass($factoryClass, $codebase) ?? new Union([new TNamedObject($modelFqcn)]),
+                $count,
+            ]),
+        ]);
     }
 
     /**
