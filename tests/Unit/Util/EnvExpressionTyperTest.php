@@ -36,26 +36,26 @@ final class EnvExpressionTyperTest extends TestCase
         yield 'env with null default' => ["env('K', null)", 'null|string'];
         yield 'Env::get without default' => ["\\Illuminate\\Support\\Env::get('K')", 'null|string'];
         yield 'Env::getOrFail' => ["\\Illuminate\\Support\\Env::getOrFail('K')", 'null|string'];
-        yield 'string default' => ["env('K', 'lit')", 'string'];
-        yield 'int default' => ["env('K', 8080)", 'int|string'];
-        yield 'negative int default' => ["env('K', -1)", 'int|string'];
-        yield 'float default' => ["env('K', 1.5)", 'float|string'];
-        yield 'bool default' => ["env('K', false)", 'bool|string'];
-        yield 'class-string default' => ["env('K', \\stdClass::class)", 'string'];
-        yield 'nested env default' => ["env('A', env('B', 8080))", 'int|string'];
+        yield 'string default' => ["env('K', 'lit')", 'null|string'];
+        yield 'int default' => ["env('K', 8080)", 'int|null|string'];
+        yield 'negative int default' => ["env('K', -1)", 'int|null|string'];
+        yield 'float default' => ["env('K', 1.5)", 'float|null|string'];
+        yield 'bool default' => ["env('K', false)", 'bool|null|string'];
+        yield 'class-string default' => ["env('K', \\stdClass::class)", 'null|string'];
+        yield 'nested env default' => ["env('A', env('B', 8080))", 'int|null|string'];
         yield 'nullable nested env default' => ["env('A', env('B'))", 'null|string'];
-        yield 'arrow fn default' => ["env('K', fn () => 8080)", 'int|string'];
-        yield 'arrow fn default returning a closure' => ["env('K', fn () => fn (): int => 42)", 'Closure|string'];
-        yield 'empty array default' => ["env('K', [])", 'array<never, never>|string'];
-        yield 'array default' => ["env('K', ['a', 'b'])", 'list{string, string}|string'];
-        yield 'constant default' => ["env('K', LOG_USER)", 'int|string'];
-        yield 'int arithmetic default' => ["env('K', 60 * 60)", 'int|string'];
-        yield 'float arithmetic default' => ["env('K', 0.5 * 60)", 'float|string'];
-        yield 'numeric string arithmetic default' => ["env('K', '60' * 60)", 'int|string'];
-        yield 'overflowing arithmetic default' => ["env('K', PHP_INT_MAX * 2)", 'float|string'];
-        yield 'arithmetic default that may overflow' => ["env('K', (int) env('A') * 60)", 'float|int|string'];
-        yield 'path helper default' => ["env('K', database_path('db.sqlite'))", 'string'];
-        yield 'realpath default' => ["env('K', realpath(storage_path('views')))", 'false|string'];
+        yield 'arrow fn default' => ["env('K', fn () => 8080)", 'int|null|string'];
+        yield 'arrow fn default returning a closure' => ["env('K', fn () => fn (): int => 42)", 'Closure|null|string'];
+        yield 'empty array default' => ["env('K', [])", 'array<never, never>|null|string'];
+        yield 'array default' => ["env('K', ['a', 'b'])", 'list{string, string}|null|string'];
+        yield 'constant default' => ["env('K', LOG_USER)", 'int|null|string'];
+        yield 'int arithmetic default' => ["env('K', 60 * 60)", 'int|null|string'];
+        yield 'float arithmetic default' => ["env('K', 0.5 * 60)", 'float|null|string'];
+        yield 'numeric string arithmetic default' => ["env('K', '60' * 60)", 'int|null|string'];
+        yield 'overflowing arithmetic default' => ["env('K', PHP_INT_MAX * 2)", 'float|null|string'];
+        yield 'arithmetic default that may overflow' => ["env('K', (int) env('A') * 60)", 'float|int|null|string'];
+        yield 'path helper default' => ["env('K', database_path('db.sqlite'))", 'null|string'];
+        yield 'realpath default' => ["env('K', realpath(storage_path('views')))", 'false|null|string'];
         yield 'bool cast' => ["(bool) env('K')", 'bool'];
         yield 'int cast' => ["(int) env('K', 30)", 'int'];
         yield 'float cast' => ["(float) env('K')", 'float'];
@@ -74,6 +74,30 @@ final class EnvExpressionTyperTest extends TestCase
         yield 'ternary unites both branches' => ["env('K') ? 1 : 'x'", 'int|string'];
         yield 'explode' => ["explode(',', env('K', 'a'))", 'list<string>'];
         yield 'getenv' => ["getenv('K')", 'false|string'];
+    }
+
+    #[Test]
+    #[DataProvider('nullableExpressions')]
+    public function ignores_only_the_null_a_set_variable_reads(string $expression, bool $expected): void
+    {
+        $type = EnvExpressionTyper::type($this->parse($expression));
+
+        $this->assertTrue($type->isNullable());
+        $this->assertSame($expected, $type->ignore_nullable_issues);
+    }
+
+    /** @return iterable<string, array{string, bool}> */
+    public static function nullableExpressions(): iterable
+    {
+        yield 'non-null default' => ["env('K', 'lit')", true];
+        yield 'bool default' => ["env('K', false)", true];
+        yield 'nested env default' => ["env('A', env('B', 8080))", true];
+        yield 'no default' => ["env('K')", false];
+        yield 'null default' => ["env('K', null)", false];
+        yield 'nullable nested env default' => ["env('A', env('B'))", false];
+        yield 'branch with a genuine null' => ["env('A') ? env('K', 'x') : null", false];
+        yield 'branch with an unset variable' => ["env('A') ? env('K', 'x') : env('B')", false];
+        yield 'branches with set variables' => ["env('A') ? env('K', 'x') : env('B', 1)", true];
     }
 
     #[Test]

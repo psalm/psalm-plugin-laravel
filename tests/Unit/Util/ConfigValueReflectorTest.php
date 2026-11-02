@@ -53,9 +53,9 @@ final class ConfigValueReflectorTest extends TestCase
         // bool|float|int|null|string combines to null|scalar.
         $source = $this->source("env('TTL', env('FAST') ? 60 : 0.5)");
 
-        $this->assertSame('float|int|string', ConfigValueReflector::reflect(null, $source)->getId());
-        $this->assertSame('float|int|string', ConfigValueReflector::reflect('abc', $source)->getId());
-        $this->assertSame('float|int|string', ConfigValueReflector::reflect(true, $source)->getId());
+        $this->assertSame('float|int|null|string', ConfigValueReflector::reflect(null, $source)->getId());
+        $this->assertSame('float|int|null|string', ConfigValueReflector::reflect('abc', $source)->getId());
+        $this->assertSame('float|int|null|string', ConfigValueReflector::reflect(true, $source)->getId());
     }
 
     #[Test]

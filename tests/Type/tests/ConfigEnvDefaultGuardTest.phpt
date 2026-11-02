@@ -1,0 +1,69 @@
+--FILE--
+<?php declare(strict_types=1);
+
+use Illuminate\Config\Repository;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
+
+/**
+ * A variable set to "null" reads as null (Env::getOption()), so a guard on an env-backed value with a
+ * non-null default is not redundant, while unguarded string use stays clean (see the EnvHandler docblock).
+ * Keys come from the Testbench skeleton config: 'url' => env('APP_URL', 'http://localhost'),
+ * 'timezone' => 'UTC'.
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/2172
+ */
+function issue_snippet(Request $request): string
+{
+    $appUrl = config('app.url');
+
+    return is_string($appUrl) && $appUrl !== '' ? mb_rtrim($appUrl, '/') : mb_rtrim($request->root(), '/');
+}
+
+function null_guards(): string
+{
+    $url = config('app.url');
+    if ($url === null) {
+        return 'x';
+    }
+
+    return (string) config('app.url') . (config('app.url') ?? 'x') . $url;
+}
+
+function guard_on_every_entry_point(Repository $repository): int
+{
+    $helperGet = config()->get('app.url');
+    $facade = Config::get('app.url');
+    $repo = $repository->get('app.url');
+    $env = env('APP_URL', 'http://localhost');
+
+    return (is_string($helperGet) ? 1 : 0) + (is_string($facade) ? 1 : 0) + (is_string($repo) ? 1 : 0) + (is_string($env) ? 1 : 0);
+}
+
+function takes_string(string $value): string
+{
+    return $value;
+}
+
+function unguarded_use(Repository $repository): int
+{
+    $url = config('app.url');
+    $len = strlen($url) + strlen(config()->get('app.url')) + strlen(Config::get('app.url')) + strlen($repository->get('app.url'));
+
+    return $len + strlen('scheme: ' . $url) + strlen(takes_string(env('APP_URL', 'http://localhost')));
+}
+
+function unguarded_return(): string
+{
+    return config('app.url');
+}
+
+function guard_on_a_value_without_env_is_still_redundant(): string
+{
+    $timezone = config('app.timezone');
+
+    return is_string($timezone) ? $timezone : 'UTC';
+}
+?>
+--EXPECTF--
+RedundantCondition on line %d: Type string for $timezone is always string
+TypeDoesNotContainType on line %d: Type string for $timezone is always !string

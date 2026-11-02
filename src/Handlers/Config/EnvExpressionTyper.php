@@ -299,10 +299,29 @@ final class EnvExpressionTyper
         return $class instanceof Name && $class->toLowerString() === 'illuminate\support\env';
     }
 
-    /** @psalm-external-mutation-free */
+    /**
+     * Psalm ORs ignore_nullable_issues on a merge; a branch with a genuine null
+     * (`$c ? env('K', 'x') : null`) keeps the result's null reported.
+     *
+     * @psalm-external-mutation-free
+     */
     private static function union(?Union $a, ?Union $b): ?Union
     {
-        return $a instanceof Union && $b instanceof Union ? Type::combineUnionTypes($a, $b) : null;
+        if (!$a instanceof Union || !$b instanceof Union) {
+            return null;
+        }
+
+        $union = Type::combineUnionTypes($a, $b);
+
+        return $union->ignore_nullable_issues && (self::hasReportedNull($a) || self::hasReportedNull($b))
+            ? $union->setProperties(['ignore_nullable_issues' => false])
+            : $union;
+    }
+
+    /** @psalm-pure */
+    private static function hasReportedNull(Union $type): bool
+    {
+        return $type->isNullable() && !$type->ignore_nullable_issues;
     }
 
     /**

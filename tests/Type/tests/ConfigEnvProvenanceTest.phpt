@@ -26,25 +26,25 @@ function env_without_default(): void
 function env_with_default(): void
 {
     $_name = config('app.name');
-    /** @psalm-check-type-exact $_name = string */
+    /** @psalm-check-type-exact $_name = null|string */
 
     $_port = config('mail.mailers.smtp.port');
-    /** @psalm-check-type-exact $_port = int|string */
+    /** @psalm-check-type-exact $_port = int|null|string */
 
     $_pathStyle = config('filesystems.disks.s3.use_path_style_endpoint');
-    /** @psalm-check-type-exact $_pathStyle = bool|string */
+    /** @psalm-check-type-exact $_pathStyle = bool|null|string */
 
     // env('CACHE_PREFIX', Str::slug(...) . '-cache-')
     $_prefix = config('cache.prefix');
-    /** @psalm-check-type-exact $_prefix = string */
+    /** @psalm-check-type-exact $_prefix = null|string */
 
     // env('LOG_SYSLOG_FACILITY', LOG_USER)
     $_facility = config('logging.channels.syslog.facility');
-    /** @psalm-check-type-exact $_facility = int|string */
+    /** @psalm-check-type-exact $_facility = int|null|string */
 
     // env('DB_DATABASE', database_path('database.sqlite'))
     $_sqlite = config('database.connections.sqlite.database');
-    /** @psalm-check-type-exact $_sqlite = string */
+    /** @psalm-check-type-exact $_sqlite = null|string */
 }
 
 function env_wrapped_in_typed_expression(): void

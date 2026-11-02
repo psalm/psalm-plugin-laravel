@@ -741,11 +741,17 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 ### Env-backed config values are typed from their config file, not the booted app (#1683)
 
-**Decision:** `ConfigKeyResolver` keeps runtime reflection for key presence and shape, but a value whose config-file expression reads the environment is typed from that expression (`ConfigSourceIndex` finds it, `EnvExpressionTyper` types it). `env()` follows the `EnvHandler` model in config files and in code alike (`EnvHandler::returnTypeForDefault()`): `null|string`, or `string` plus the generalised default when that default cannot be null. A runtime `null` without a literal `null` behind it is `mixed`.
+**Decision:** `ConfigKeyResolver` keeps runtime reflection for key presence and shape, but a value whose config-file expression reads the environment is typed from that expression (`ConfigSourceIndex` finds it, `EnvExpressionTyper` types it). `env()` follows the `EnvHandler` model in config files and in code alike (`EnvHandler::returnTypeForDefault()`): `null|string`, or `string|null` plus the generalised default, with that `null` ignorable, when the default cannot be null. A runtime `null` without a literal `null` behind it is `mixed`.
 
 **Why:** the booted value is one observation of the analysing machine's env (`.env`, CI secrets, or whoever ran `config:cache`). Typing it made the same code report `NoValue`/`TypeDoesNotContainType` with a variable unset and `RedundantCast`/`RedundantCondition` with it set. The expression is the same everywhere.
 
-**The env model stays at #707:** a set variable is `string`, though `Env::getOption()` maps `true`, `false`, `null` and `empty`. Known cost: `is_string()` on a value with a non-null default (`config('app.url')`) reports `RedundantCondition`, and `=== true` looks impossible. The override guard below still treats those bools and nulls as values the file can produce, otherwise a machine with `FEATURE=true` would fall back to its runtime value.
+**A set variable is `string` plus an ignorable `null` (#2172):** `Env::getOption()` maps `true`, `false`, `null` and `empty` to `true`, `false`, `null` and `''`. With a non-null default the type is `string|typeof(default)|null`, and the union carries `ignore_nullable_issues`, the mechanism behind `@psalm-ignore-nullable-return` that Psalm also uses for `crypt()` and `$argv`. A guard (`is_string()`, `=== null`, `??`, `(string)`) removes that `null`, so it is never redundant; argument, operand, return, property and offset checks skip it, so unguarded string use reports nothing. A read without a default, or with a nullable or `mixed` one, keeps its reported `null`, the expected unset state. `true` and `false` stay out unless the default contributes them: Psalm has no ignore flag for `bool`. Known costs, pinned by `tests/Type/tests/ConfigEnvDefault*KnownLimitation.phpt`:
+- `is_bool()`, `=== true` and `=== false` on a string-default value look impossible.
+- `Type::combineUnionTypes()` ORs the flag, so a genuine `null` joined with such a value (`$c ? config('app.url') : null`) is not reported downstream. `EnvExpressionTyper` clears the flag for its own merges when one side has a reported `null` (`env('A') ? env('K', 'x') : null` in a config file).
+- Template inference drops the flag: `collect([config('app.url')])->map(fn (string $s) => $s)` reports `InvalidArgument`.
+- Truthiness checks (`if ($url)`, `$url ?: 'x'`, `empty($url)`) report `RiskyTruthyFalsyComparison`, as for any `null|string`.
+
+The override guard below still treats those bools and nulls as values the file can produce, otherwise a machine with `FEATURE=true` would fall back to its runtime value.
 
 **Provenance must be certain:**
 - The index mirrors the loader that booted the app: `LoadConfiguration` (app dir, nested directories as dotted keys, framework base merged at the top level and one level under `mergeableOptions()`) or Testbench's loader (its `basePath('config')`, with the plugin's later `configPath()` retarget ignored). Testbench's framework merge is not modelled: dropping a source is safe, attributing a value to the wrong expression is not.
@@ -762,7 +768,12 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 - **Generalising the default only** (the #752 plan). Fixes absent keys only; a present env-backed key still follows the machine.
 - **Re-evaluating config files with sentinel env values.** Runs user code again and cannot enumerate what `env()` may return.
 - **Psalm's `ExpressionAnalyzer` on config-file nodes.** Internal API, and it emits issues and taint against the caller's file.
-- **`bool|null|string` for a set variable** (what `Env::getOption()` returns). Analysing 21 real apps with it added about 1000 level 3/4 issues, all from `bool` in the union: `InvalidScalarArgument` +363, `PossiblyInvalidOperand` +321, `PossiblyInvalidArgument` +292.
+- **`bool|null|string` for a set variable** (what `Env::getOption()` returns). Analysing 21 real apps with it added about 1000 level 3/4 issues, most from `bool` in the union: `InvalidScalarArgument` +363, `PossiblyInvalidOperand` +321, `PossiblyInvalidArgument` +292. Psalm has no flag that makes `bool` lenient.
+- **Unflagged `null|string` plus the default.** The `null` share of the same runs: `PossiblyNullOperand` +221, `NullableReturnStatement` +30. The flag is what keeps unguarded use clean.
+- **`from_docblock` on the env type**, so redundancy issues become their docblock variants. `RedundantConditionGivenDocblockType` and `DocblockTypeContradiction` are still errors at level 2, Psalm's default (probed), and the rename breaks baselines and suppressions.
+- **Also `false` with `ignore_falsable_issues`.** Fixes `is_bool()` and `=== false`, not `=== true`: half a `bool`, chosen by which flags Psalm happens to have, and a URL would read `false|null|string`.
+- **A `BeforeAddIssue` filter keyed on env provenance.** Keeps the types, drops the redundancy issues. Keys on issue messages and dupe keys that are not plugin API, needs heuristic provenance (reassignments, closures, properties), and leaves the guard's else branch typed `never`.
+- **An upstream Psalm Union flag "runtime value unverified"** (like `from_calculation`: narrowing happens, redundancy is not reported). The best outcome (no type change, `bool` guards fixed too), but not available in Psalm 7; the plugin can switch to it once Psalm has it.
 
 ## Per-Run Overrides
 
