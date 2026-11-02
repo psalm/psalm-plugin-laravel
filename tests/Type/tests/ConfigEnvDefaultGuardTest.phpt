@@ -57,6 +57,12 @@ function unguarded_return(): string
     return config('app.url');
 }
 
+/** 'port' => env('MAIL_PORT', 2525); clean since Psalm 7.0.0 (vimeo/psalm#13031). */
+function concat_with_an_int_default(): string
+{
+    return 'port:' . config('mail.mailers.smtp.port') . ' port:' . env('APP_PORT', 8070);
+}
+
 function unguarded_use_of_an_env_backed_default_for_an_absent_key(Repository $repository): int
 {
     return strlen(config('services.missing.url', config('app.url')))

@@ -109,7 +109,6 @@ Limitations:
 - A guard for `true` or `false` on an env-backed value with a string default (`is_bool(config('app.url'))`, `=== true`, `=== false`) is reported as `TypeDoesNotContainType`, because the type leaves the bools out.
 - The ignored `null` sticks to a union: in `$enabled ? config('app.url') : null`, or when iterating a config array that mixes defaulted and default-less env reads (`foreach (config('cache.stores.database') as $value)`), the genuine `null` is no longer reported downstream.
 - Some Psalm checks do not honour the ignored `null`:
-    - Concatenating a value with an int default (`'port:' . config('mail.mailers.smtp.port')`) reports `PossiblyInvalidOperand` ([vimeo/psalm#13031](https://github.com/vimeo/psalm/issues/13031)).
     - A helper whose return type depends on a `null` argument picks the wrong or both types: `redirect(config('app.url'))` is `RedirectResponse|Redirector`, `url(config('app.url'))` is `UrlGenerator|string`, `cookie(config('app.name'))` is `CookieJar`, `__(config('app.name'))` may be `null`, and `Carbon::tz()` may return a string.
     - A typed callback on a collection of such values (`collect([config('app.url')])->map(fn (string $url) => ...)`) reports `InvalidArgument`, and iterating `config()->collection('key')` reports a possibly null value.
 - A truthiness check (`if (config('app.url'))`, `config('app.url') ?: 'fallback'`) reports `RiskyTruthyFalsyComparison`, as for any nullable string.

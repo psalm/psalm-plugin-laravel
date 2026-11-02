@@ -41,11 +41,10 @@ use Psalm\Type\Atomic\TString;
  *   returning one; any other default (`$c ? env('B', 'x') : null`, `$r?->get('k')`, even a variable
  *   holding `env('B', 'x')`) is treated as a possibly genuine null and reported
  *   ({@see self::defaultWithProvenNull()}).
- * - Not every Psalm check honours the flag: concatenating an int-default value reports
- *   PossiblyInvalidOperand (https://github.com/vimeo/psalm/issues/13031); a return type conditional
- *   on a null argument takes the null arm too (`redirect(config('app.url'))`, `url()`, `cookie()`,
- *   `__()`, `Carbon::tz()`); template inference drops it (`collect([config('app.url')])->map(fn (string $s)
- *   => $s)`, iterating `config()->collection()`).
+ * - Not every Psalm check honours the flag: a return type conditional on a null argument takes the
+ *   null arm too (`redirect(config('app.url'))`, `url()`, `cookie()`, `__()`, `Carbon::tz()`);
+ *   template inference drops it (`collect([config('app.url')])->map(fn (string $s) => $s)`,
+ *   iterating `config()->collection()`).
  * - A truthiness check (`if ($url)`, `empty($url)`, `$url ?: 'x'`) reports
  *   RiskyTruthyFalsyComparison, as for any nullable string.
  *
