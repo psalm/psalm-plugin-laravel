@@ -14,9 +14,8 @@ use Illuminate\Database\Eloquent\Builder;
  * and then declined, leaving the call with no resolved params/return and surfacing a false
  * `UndefinedMagicMethod`. The classifier keys on PHP dispatch (the bare name is not a real
  * method) instead, so the stripped signature applies and the misplaced Builder argument is
- * reported precisely against the scope's declared parameter. (A Builder passed to a `string`
- * param draws both InvalidArgument and InvalidCast, since Builder has no __toString, where the
- * old heuristic emitted a single false UndefinedMagicMethod.)
+ * reported precisely against the scope's declared parameter. (The old heuristic emitted a single
+ * false UndefinedMagicMethod instead.)
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1034
  */
@@ -56,8 +55,5 @@ function test_legacy_static_valid_arg(): void
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of App\Models\Customer::ofname expects string, but Illuminate\Database\Eloquent\Builder<App\Models\Customer> provided
-InvalidCast on line %d: Illuminate\Database\Eloquent\Builder<App\Models\Customer> cannot be cast to string
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::ofname expects string, but Illuminate\Database\Eloquent\Builder<App\Models\Customer> provided
-InvalidCast on line %d: Illuminate\Database\Eloquent\Builder<App\Models\Customer> cannot be cast to string
 InvalidArgument on line %d: Argument 1 of App\Models\Customer::ofstatus expects string, but Illuminate\Database\Eloquent\Builder<App\Models\Customer> provided
-InvalidCast on line %d: Illuminate\Database\Eloquent\Builder<App\Models\Customer> cannot be cast to string

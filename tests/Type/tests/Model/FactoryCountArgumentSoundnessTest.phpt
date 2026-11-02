@@ -28,17 +28,17 @@ final class GadgetFactory extends Factory
     }
 }
 
-// A count reaches a factory without count(): it must be accepted, and the result is never claimed
-// to be a single model. The union is the honest answer while TCount is only known to be int|null.
+// A count reaches a factory without count(): it must be accepted and typed, never claimed to be a single model.
 
 // ----- Constructor argument, positional and named -----------------------------
 $_ctorPositional = (new GadgetFactory(3))->create();
-/** @psalm-check-type-exact $_ctorPositional = \App\Sandbox\CountArgument\Gadget|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\CountArgument\Gadget> */;
+/** @psalm-check-type-exact $_ctorPositional = \Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\CountArgument\Gadget> */;
 
 $_ctorNamed = (new GadgetFactory(count: 3))->make();
-/** @psalm-check-type-exact $_ctorNamed = \App\Sandbox\CountArgument\Gadget|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\CountArgument\Gadget> */;
+/** @psalm-check-type-exact $_ctorNamed = \Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\CountArgument\Gadget> */;
 
-// ----- HasFactory::factory($count): a non-null number counts the factory, 0 included
+// ----- HasFactory::factory($count): a non-null number counts the factory, 0 included. The model's factory is not
+// discoverable here (no `Database\Factories` naming), so the actual class and its count semantics are unproven: unknown.
 $_factoryThree = Gadget::factory(3)->make();
 /** @psalm-check-type-exact $_factoryThree = \App\Sandbox\CountArgument\Gadget|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\CountArgument\Gadget> */;
 

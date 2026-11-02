@@ -1047,7 +1047,6 @@ final class BladeIssueRemapTest extends TestCase
 
         $template = 'components/aware-scalar-default.blade.php';
         $this->assertSame([7, 8], $this->linesFor($issues, 'InvalidArgument', $template), $json);
-        $this->assertSame([8], $this->linesFor($issues, 'InvalidCast', $template), $json);
         $this->assertSame([], $this->linesFor($issues, 'PossiblyFalseArgument', $template), $json);
     }
 

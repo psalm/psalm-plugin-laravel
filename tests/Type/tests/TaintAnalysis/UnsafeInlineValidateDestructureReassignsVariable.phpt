@@ -29,7 +29,6 @@ use Illuminate\Http\Request;
  * @psalm-suppress MixedAssignment
  * @psalm-suppress UnusedVariable
  * @psalm-suppress PossiblyInvalidArgument
- * @psalm-suppress PossiblyInvalidCast
  */
 function destructureReassignProbe(Request $request): RedirectResponse {
     $request->validate(['k' => 'email']);

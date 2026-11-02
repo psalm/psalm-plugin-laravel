@@ -25,7 +25,7 @@ final class WidgetFactory extends Factory
 
 /**
  * `Factory<Widget>` is `Factory<Widget, int|null>` (the `TCount` default). The providers build narrower
- * counts (`Factory<Widget, null>` for `Widget::factory()`, `Factory<Widget, 2>` after `count(2)`), so
+ * counts (`WidgetFactory<null>` for `Widget::factory()`, `WidgetFactory<int<2, max>>` after `count(2)`), so
  * `TCount` must be covariant for those to be accepted.
  *
  * @param Factory<Widget> $factory
@@ -50,8 +50,14 @@ acceptsAnyCount(new WidgetFactory());
 acceptsAnyCount(WidgetFactory::new());
 acceptsAnyCount(WidgetFactory::times(2));
 
-// Negative control: covariance widens only towards the bound, never the other way.
+// `new WidgetFactory()` and `WidgetFactory::new()` carry `null`, which a `Factory<Widget, null>` accepts.
 acceptsNoCountOnly(new WidgetFactory());
+acceptsNoCountOnly(WidgetFactory::new());
+
+// Negative control: covariance widens only towards the bound, never the other way.
+acceptsNoCountOnly(new WidgetFactory(3));
+acceptsNoCountOnly(Widget::factory(3));
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 of App\Sandbox\CountCovariance\acceptsNoCountOnly expects Illuminate\Database\Eloquent\Factories\Factory<App\Sandbox\CountCovariance\Widget, null>, but App\Sandbox\CountCovariance\WidgetFactory provided
+InvalidArgument on line %d: Argument 1 of App\Sandbox\CountCovariance\acceptsNoCountOnly expects Illuminate\Database\Eloquent\Factories\Factory<App\Sandbox\CountCovariance\Widget, null>, but App\Sandbox\CountCovariance\WidgetFactory<3> provided
+InvalidArgument on line %d: Argument 1 of App\Sandbox\CountCovariance\acceptsNoCountOnly expects Illuminate\Database\Eloquent\Factories\Factory<App\Sandbox\CountCovariance\Widget, null>, but Illuminate\Database\Eloquent\Factories\Factory<App\Sandbox\CountCovariance\Widget, int<2, max>|null> provided
