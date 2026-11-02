@@ -24,10 +24,11 @@ final class CustomerFactory extends Factory
 
 
 // ----- Default factory call (no count) ---------------------------------------
-// `@extends Factory<Customer>` takes the `TCount` default (its `int|null` bound), so `create()`
-// yields both conditional branches. See FactoryBoundCountDefaultTest.phpt.
+// `new CustomerFactory()` infers `TCount = null` from the omitted constructor argument, so `create()`
+// is the single-model branch. A factory that only arrives as a parameter keeps the `int|null`
+// default and both branches: see FactoryBoundCountDefaultTest.phpt.
 $_default = (new CustomerFactory())->create();
-/** @psalm-check-type-exact $_default = \App\Models\Customer|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Customer> */;
+/** @psalm-check-type-exact $_default = \App\Models\Customer */;
 
 // ----- count(N>1) ------------------------------------------------------------
 $_count3 = (new CustomerFactory())->count(3)->create();

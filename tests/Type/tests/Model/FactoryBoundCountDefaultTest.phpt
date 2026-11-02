@@ -29,25 +29,30 @@ final class SprocketFactory extends Factory
 }
 
 /**
- * `TCount` defaults to its `int|null` bound, so a factory declared `@extends Factory<Sprocket>` answers
- * `Sprocket|Collection<int, Sprocket>` for `create()` / `make()` / `createQuietly()` and `lazy()`, although
- * Laravel returns a single model when no count was set. The default cannot be `null`: a count also reaches
- * a factory through `new SprocketFactory(3)`, `Sprocket::factory(3)` and `SprocketFactory::times(3)`,
- * which the type system cannot see, so a `null` default would type those as a single model (unsound).
- * Writing the second template argument (`@extends Factory<Sprocket, null>`) opts into the single model.
- * Precision for the unbound case is tracked in #2188; see "Factories" in docs/contributing/decisions.md.
+ * `@extends Factory<Sprocket>` leaves `TCount` at its `int|null` default, but every way a count reaches
+ * the factory is typed: `new SprocketFactory()` and `SprocketFactory::new()` are `SprocketFactory<null>`,
+ * so these answer the single model Laravel returns. Only a factory whose count is not visible keeps the
+ * default `int|null` and the union, which is the sound answer (see the parameter below). #2188;
+ * "Factories" in docs/contributing/decisions.md.
  */
 $_new = (new SprocketFactory())->create();
-/** @psalm-check-type-exact $_new = \App\Sandbox\UnboundCount\Sprocket|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\UnboundCount\Sprocket> */;
+/** @psalm-check-type-exact $_new = \App\Sandbox\UnboundCount\Sprocket */;
 
 $_make = SprocketFactory::new()->make();
-/** @psalm-check-type-exact $_make = \App\Sandbox\UnboundCount\Sprocket|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\UnboundCount\Sprocket> */;
+/** @psalm-check-type-exact $_make = \App\Sandbox\UnboundCount\Sprocket */;
 
 $_quiet = SprocketFactory::new()->state(['a' => 1])->createQuietly();
-/** @psalm-check-type-exact $_quiet = \App\Sandbox\UnboundCount\Sprocket|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\UnboundCount\Sprocket> */;
+/** @psalm-check-type-exact $_quiet = \App\Sandbox\UnboundCount\Sprocket */;
 
 $factory = new SprocketFactory();
 $_held = $factory->create();
-/** @psalm-check-type-exact $_held = \App\Sandbox\UnboundCount\Sprocket|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\UnboundCount\Sprocket> */;
+/** @psalm-check-type-exact $_held = \App\Sandbox\UnboundCount\Sprocket */;
+
+// A factory received through a parameter may have been counted by the caller: the default stays the union.
+function receivedFactory(SprocketFactory $factory): void
+{
+    $_received = $factory->create();
+    /** @psalm-check-type-exact $_received = \App\Sandbox\UnboundCount\Sprocket|\Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\UnboundCount\Sprocket> */;
+}
 ?>
 --EXPECTF--

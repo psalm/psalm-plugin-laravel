@@ -41,12 +41,12 @@ class ExplicitArticle extends Model
     use HasFactory;
 }
 
-// Explicit binding wins over ModelFactoryMethodTypeProvider's default — the
-// handler returns null when @use HasFactory<X> is set, so the stub's @return
-// TFactory resolves to the user's Factory subclass (more precise than the
-// plugin's Factory<Model>). Guards the documented escape hatch from #960.
+// Explicit binding wins over ModelFactoryMethodTypeProvider's discovery: the
+// user's Factory subclass named by @use HasFactory<X> is returned (more precise
+// than the plugin's Factory<Model>), re-typed with the count `factory()` sets
+// (`<null>` here). Guards the documented escape hatch from #960.
 $_explicitFactory = ExplicitArticle::factory();
-/** @psalm-check-type-exact $_explicitFactory = ExplicitArticleFactory */;
+/** @psalm-check-type-exact $_explicitFactory = ExplicitArticleFactory<null> */;
 
 class BareFactoryArticle extends Model
 {
@@ -82,7 +82,7 @@ class WrappedExplicitArticle extends Model
 }
 
 $_wrappedExplicitFactory = WrappedExplicitArticle::factory();
-/** @psalm-check-type-exact $_wrappedExplicitFactory = ExplicitArticleFactory */;
+/** @psalm-check-type-exact $_wrappedExplicitFactory = ExplicitArticleFactory<null> */;
 
 trait NestedApplicationHasFactory
 {
@@ -95,6 +95,6 @@ class NestedWrappedExplicitArticle extends Model
 }
 
 $_nestedWrappedExplicitFactory = NestedWrappedExplicitArticle::factory();
-/** @psalm-check-type-exact $_nestedWrappedExplicitFactory = ExplicitArticleFactory */;
+/** @psalm-check-type-exact $_nestedWrappedExplicitFactory = ExplicitArticleFactory<null> */;
 ?>
 --EXPECTF--

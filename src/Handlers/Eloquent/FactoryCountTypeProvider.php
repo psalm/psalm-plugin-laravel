@@ -6,60 +6,64 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Name;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Type\Atomic\TArray;
+use Psalm\Type\Atomic\TBool;
+use Psalm\Type\Atomic\TCallable;
+use Psalm\Type\Atomic\TClosure;
+use Psalm\Type\Atomic\TFloat;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
-use Psalm\Type\Atomic\TLiteralInt;
+use Psalm\Type\Atomic\TIntRange;
+use Psalm\Type\Atomic\TKeyedArray;
+use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TNumeric;
+use Psalm\Type\Atomic\TNumericString;
 use Psalm\Type\Union;
 
 /**
- * Tracks Factory plurality across `count()` / `times()` calls so that
- * `create()` / `make()` / `createQuietly()` resolve to either a single model
- * or a collection.
+ * Gives `create()` / `make()` / `createQuietly()` / `lazy()` their single-or-collection answer by
+ * returning the CONCRETE factory class, with its count, from every call that sets the count:
+ * `count()`, `times()`, `forEachSequence()` and `new()` (here), and `Model::factory()` plus
+ * `new UserFactory(3)` (see {@see ModelFactoryMethodTypeProvider} and the stub constructor).
  *
- * The Factory stub declares a second template `TCount` (default `int|null`, its
- * bound) and uses a conditional return on `create`/`make`/`createQuietly`:
+ * The Factory stub declares `TCount` (default `int|null`) and the conditional return
+ * `TCount is null ? TModel : Collection<int, TModel>`. FactoryModelBindingHandler synthesizes the same
+ * template on every user subclass, so `count(3)` on a `UserFactory` is `UserFactory<int<2, max>>`
+ * and custom methods like `admin()` stay callable. "Some non-null count" is the plural sentinel
+ * `int<2, max>`: Laravel returns a `Collection` for every non-null count (0 and 1 included), and a
+ * literal sentinel trips a Psalm template rewrite bug (see decisions.md "Factories").
  *
- *     (TCount is null|0|1 ? TModel : Collection<int, TModel>)
- *
- * The handler maps literal arguments `0` and `1` to a plural sentinel because
- * Laravel's runtime returns a `Collection` for any non-null `count`, including
- * 0 and 1. A user subclass extending `Factory<X>` with one template arg takes the
- * `int|null` default, which resolves the conditional to both branches (see
- * FactoryBoundCountDefaultTest.phpt).
- *
- * For the conditional to fire, the receiver type needs both template params
- * populated. User-defined factory subclasses (`class UserFactory extends
- * Factory<User>`) only specify one template arg, so a `static<TModel,
- * TNewCount>` return from `count()` collapses the second arg back to the
- * subclass default and the plurality is lost.
- *
- * To work around that, this handler returns the BASE `Factory<TModel,
- * TCountLiteral>` (not the user subclass) for `count()` / `times()` calls.
- * `state()`, `for*()`, `has*()`, etc., still preserve `TCount` automatically
- * because they declare `@return static`, which the receiver type carries
- * forward.
- *
- * Trade-off: subclass-specific methods are not callable AFTER `count()` /
- * `times()`. Calling them BEFORE the count works fine. This matches Larastan's
- * behaviour and is the common Laravel pattern.
- *
- * Reserved space for #696 (`for*()` / `has*()` magic methods): those will be
- * declared via a separate `MethodExistenceProvider` returning `static`, so
- * plurality propagates through the magic chain unchanged.
+ * Declines (null, so the stub's declared return stands) when the called method is not Laravel's own:
+ * a user override of `count()` / `times()` / `new()` / `forEachSequence()` owns its return type.
+ * A factory that overrides how the count is set, kept or built (see
+ * {@see FactoryUserMethodCountProvider::runsLaravelCountPath()}) has no synthesized `TCount`, and `times()`
+ * on it answers an unknown count. A class without a synthesized `TCount` (explicit `@extends Factory<M, X>`,
+ * a user's own `@template TCount`) keeps the pre-#2188 `Factory<TModel, count>` answer from `count()` / `times()`.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/693
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/696
+ * @see https://github.com/psalm/psalm-plugin-laravel/issues/2188
  * @internal
  */
 final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterface
 {
+    /**
+     * The `Factory` methods that set the count and answer here; every other method is answered by
+     * {@see FactoryUserMethodCountProvider}.
+     *
+     * @var list<lowercase-string>
+     */
+    public const PRODUCERS = ['count', 'times', 'foreachsequence', 'new'];
+
     /**
      * Cached single-instance Unions for the three TCount shapes the handler
      * produces. The handler fires on every Factory::count()/times() call in
@@ -85,21 +89,170 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
         $methodName = $event->getMethodNameLowercase();
-        if ($methodName !== 'count' && $methodName !== 'times') {
+        if (!\in_array($methodName, self::PRODUCERS, true)) {
             return null;
         }
 
         $source = $event->getSource();
-        $modelType = self::resolveModelType($event, $source->getCodebase());
+        $codebase = $source->getCodebase();
+        $calledClass = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+
+        $declaring = $codebase->classlike_storage_provider->get($calledClass)->declaring_method_ids[$methodName] ?? null;
+        if ($declaring === null || \strtolower($declaring->fq_class_name) !== \strtolower(Factory::class)) {
+            return null;
+        }
+
+        // A factory that overrides how the count is set, kept or built owns its count: unknown, never narrowed.
+        // That includes a descendant the receiver may hold, unless a literal `Class::times()` / `final` names the exact class.
+        $lateBound = self::isLateBound($event, $codebase, $calledClass);
+        $countType = !FactoryUserMethodCountProvider::runsLaravelCountPath($codebase->classlike_storage_provider->get($calledClass), !$lateBound)
+            ? self::unknownCountUnion()
+            : match ($methodName) {
+                'new' => $lateBound ? self::unknownCountUnion() : self::singleCountUnion(),
+                'foreachsequence' => self::pluralCountUnion(),
+                default => self::resolveCountArgument($event->getCallArgs(), $source->getNodeTypeProvider()),
+            };
+
+        $concrete = self::withCount($codebase, $calledClass, $countType, $event);
+        if ($concrete instanceof Union || $methodName === 'new') {
+            return $concrete;
+        }
+
+        // Only the base `Factory` and classes without a synthesized TCount reach here.
+        if ($methodName === 'foreachsequence' && \strtolower($calledClass) !== \strtolower(Factory::class)) {
+            return null;
+        }
+
+        $modelType = self::resolveModelType($event, $codebase);
         if (!$modelType instanceof Union) {
             return null;
         }
 
-        $countType = self::resolveCountArgument($event->getCallArgs(), $source->getNodeTypeProvider());
-
         return new Union([
             new TGenericObject(Factory::class, [$modelType, $countType]),
         ]);
+    }
+
+    /**
+     * The factory class carrying `$count`, or null when the class does not own a plugin-synthesized `TCount`
+     * (explicit `@extends Factory<M, X>`, a user's own `@template TCount`, an overridden count method) or has
+     * other template slots the receiver cannot supply. Every other slot is taken from the receiver's own
+     * template arguments by position in the CLASS's template list, with TCount located by name, never by position.
+     * Only the factory atomic's count is widened: the receiver's late-static marker (`&static`) and every other
+     * intersection member (`F<null>&Marker`) are carried over.
+     */
+    public static function withCount(Codebase $codebase, string $factoryClass, Union $count, ?MethodReturnTypeProviderEvent $event = null): ?Union
+    {
+        if (!$codebase->classlike_storage_provider->has($factoryClass)) {
+            return null;
+        }
+
+        $storage = $codebase->classlike_storage_provider->get($factoryClass);
+        if (!FactoryModelBindingHandler::hasSynthesizedCount($storage)) {
+            return null;
+        }
+
+        $receiver = $event instanceof MethodReturnTypeProviderEvent ? self::receiver($event, $storage->name) : null;
+        $receiverParams = $receiver instanceof TGenericObject ? $receiver->type_params : $event?->getTemplateTypeParameters();
+        $slots = \array_keys($storage->template_types ?? []);
+
+        /** @var non-empty-list<Union> $params */
+        $params = [];
+        foreach ($slots as $position => $slot) {
+            $param = $slot === 'TCount' ? $count : (\count($receiverParams ?? []) === \count($slots) ? $receiverParams[$position] ?? null : null);
+            if (!$param instanceof Union) {
+                return null;
+            }
+
+            $params[] = $param;
+        }
+
+        return new Union([new TGenericObject($storage->name, $params, false, $receiver?->is_static ?? false, $receiver?->extra_types ?? [])]);
+    }
+
+    /**
+     * The receiver of the call when it is a single object of `$class` (`$this->count(3)` in a `static`-returning
+     * method has `&static`, or the declared `static` return is reported as more specific than what was inferred),
+     * or the `static` keyword of `static::times(3)`. Null for a union, a template or a class-string receiver.
+     */
+    public static function receiver(MethodReturnTypeProviderEvent $event, string $class): ?TNamedObject
+    {
+        $stmt = $event->getStmt();
+        if ($stmt instanceof StaticCall) {
+            return $stmt->class instanceof Name && \strtolower($stmt->class->name) === 'static' ? new TNamedObject($class, true) : null;
+        }
+
+        $type = $event->getSource()->getNodeTypeProvider()->getType($stmt->var);
+        $atomic = $type instanceof Union && $type->isSingle() ? $type->getSingleAtomic() : null;
+
+        return $atomic instanceof TNamedObject && \strtolower($atomic->value) === \strtolower($class) ? $atomic : null;
+    }
+
+    /**
+     * Laravel's `HasFactory::factory($count, $state)` counts the factory with `is_numeric($count) ? $count : null`:
+     * int/float/numeric-string (0 and 1 included) is plural, null/array/callable/bool is a state or no count.
+     * The count is the first positional or the `count:` argument; any unpack, or a name other than
+     * `count:` / `state:`, leaves it unknown.
+     *
+     * @param list<\PhpParser\Node\Arg> $callArgs
+     */
+    public static function resolveFactoryCountArgument(array $callArgs, NodeTypeProvider $nodeTypeProvider): Union
+    {
+        $countArg = null;
+        foreach ($callArgs as $index => $arg) {
+            $name = $arg->name?->name;
+            if ($arg->unpack || (!in_array($name, [null, 'count', 'state'], true))) {
+                return self::unknownCountUnion();
+            }
+
+            if ($name === 'count' || ($name === null && $index === 0)) {
+                $countArg = $arg;
+            }
+        }
+
+        if ($countArg === null) {
+            return self::singleCountUnion();
+        }
+
+        $argType = $nodeTypeProvider->getType($countArg->value);
+        if (!$argType instanceof Union) {
+            return self::unknownCountUnion();
+        }
+
+        $isPlural = null;
+        foreach ($argType->getAtomicTypes() as $atomic) {
+            $atomicPlural = match (true) {
+                $atomic instanceof TInt, $atomic instanceof TFloat, $atomic instanceof TNumericString, $atomic instanceof TNumeric => true,
+                $atomic instanceof TLiteralString => \is_numeric($atomic->value),
+                $atomic instanceof TNull, $atomic instanceof TArray, $atomic instanceof TKeyedArray, $atomic instanceof TBool,
+                $atomic instanceof TCallable, $atomic instanceof TClosure => false,
+                default => null,
+            };
+
+            if ($atomicPlural === null || ($isPlural !== null && $isPlural !== $atomicPlural)) {
+                return self::unknownCountUnion();
+            }
+
+            $isPlural = $atomicPlural;
+        }
+
+        return $isPlural ? self::pluralCountUnion() : self::singleCountUnion();
+    }
+
+    /**
+     * `static::new()`, `$class::new()` or an instance receiver may name a subclass that overrides the
+     * method and presets a count, which `final` rules out. Callers then answer "count unknown".
+     *
+     * @psalm-mutation-free
+     */
+    public static function isLateBound(MethodReturnTypeProviderEvent $event, Codebase $codebase, string $class): bool
+    {
+        $stmt = $event->getStmt();
+        $literalClass = $stmt instanceof StaticCall
+            && $stmt->class instanceof Name
+            && !\in_array(\strtolower($stmt->class->name), ['static', 'self', 'parent'], true);
+
+        return !$literalClass && !$codebase->classlike_storage_provider->get($class)->final;
     }
 
     /**
@@ -191,17 +344,15 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
     }
 
     /**
-     * Map the count argument to the TCount template type:
+     * Map the count argument of `count()` / `times()` to the TCount template type:
      *  - missing or `null` literal → `null` (single-mode branch)
      *  - any non-null int (literal `0`/`1`/`N`, plain `int`, `int<a, b>`,
-     *    `positive-int`, etc.) → literal `2` (collection branch — Laravel's
+     *    `positive-int`, etc.) → `int<2, max>` (collection branch, Laravel's
      *    `Factory::make()` returns a collection for every non-null count)
-     *  - mixed `int|null` or any non-int/non-null atomic → `null|2` (forces
-     *    the conditional to a union of both branches)
+     *  - `int|null`, an unpack, or any other atomic → `null|int<2, max>` (forces the
+     *    conditional to a union of both branches)
      *
-     * Literal `2` is just a representative value: the conditional only
-     * distinguishes `null|0|1` from "anything else", and `2` falls into the
-     * "anything else" side regardless of the exact runtime count.
+     * `int<2, max>` is just a representative non-null value, standing for "a count".
      *
      * @param list<\PhpParser\Node\Arg> $callArgs
      */
@@ -212,7 +363,7 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
             return self::singleCountUnion();
         }
 
-        $argType = $nodeTypeProvider->getType($arg->value);
+        $argType = $arg->unpack ? null : $nodeTypeProvider->getType($arg->value);
         if (!$argType instanceof Union) {
             return self::unknownCountUnion();
         }
@@ -252,11 +403,11 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
 
     private static function pluralCountUnion(): Union
     {
-        return self::$pluralCountUnion ??= new Union([new TLiteralInt(2)]);
+        return self::$pluralCountUnion ??= new Union([new TIntRange(2, null)]);
     }
 
-    private static function unknownCountUnion(): Union
+    public static function unknownCountUnion(): Union
     {
-        return self::$unknownCountUnion ??= new Union([new TNull(), new TLiteralInt(2)]);
+        return self::$unknownCountUnion ??= new Union([new TNull(), new TIntRange(2, null)]);
     }
 }

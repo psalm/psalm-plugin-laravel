@@ -70,22 +70,22 @@ namespace App\Sandbox\PlainAbstractBase {
     use Database\Factories\OrphanFactory;
 
     $_alphaMake = (new AlphaFactory())->make();
-    /** @psalm-check-type-exact $_alphaMake = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
+    /** @psalm-check-type-exact $_alphaMake = \Illuminate\Database\Eloquent\Model */;
 
     $_alphaCreate = (new AlphaFactory())->create();
-    /** @psalm-check-type-exact $_alphaCreate = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
+    /** @psalm-check-type-exact $_alphaCreate = \Illuminate\Database\Eloquent\Model */;
 
     $_gammaMake = (new GammaFactory())->make();
-    /** @psalm-check-type-exact $_gammaMake = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
+    /** @psalm-check-type-exact $_gammaMake = \Illuminate\Database\Eloquent\Model */;
 
     $_gammaCreate = (new GammaFactory())->create();
-    /** @psalm-check-type-exact $_gammaCreate = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
+    /** @psalm-check-type-exact $_gammaCreate = \Illuminate\Database\Eloquent\Model */;
 
     $_orphanMake = (new OrphanFactory())->make();
-    /** @psalm-check-type-exact $_orphanMake = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
+    /** @psalm-check-type-exact $_orphanMake = \Illuminate\Database\Eloquent\Model */;
 
     $_orphanCreate = (new OrphanFactory())->create();
-    /** @psalm-check-type-exact $_orphanCreate = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
+    /** @psalm-check-type-exact $_orphanCreate = \Illuminate\Database\Eloquent\Model */;
 }
 ?>
 --EXPECTF--

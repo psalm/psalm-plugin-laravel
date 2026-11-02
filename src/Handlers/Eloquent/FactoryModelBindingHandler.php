@@ -11,8 +11,11 @@ use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TLiteralClassString;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -42,6 +45,12 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
 
     private static bool $appNamespaceResolved = false;
 
+    /**
+     * Marker on the storage that received a plugin-synthesized `TCount`, set at synthesis time. A user's own
+     * `@template TCount` never carries it, however it maps into `Factory`, so no provider rewrites it.
+     */
+    private const SYNTHESIZED_MARKER = 'laravel_factory_synthesized_count';
+
     public static function reset(): void
     {
         self::$appNamespaceCache = null;
@@ -53,6 +62,12 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
         if (\class_exists(Factory::class)) {
             Factory::flushState();
         }
+    }
+
+    /** @psalm-mutation-free */
+    public static function hasSynthesizedCount(ClassLikeStorage $storage): bool
+    {
+        return isset($storage->custom_metadata[self::SYNTHESIZED_MARKER]);
     }
 
     #[\Override]
@@ -68,6 +83,10 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
 
         $factoryFqcnLc = \strtolower(Factory::class);
 
+        // Classes this pass bound. injectBinding() raises their extends count to 2, which the
+        // synthesis below must not mistake for an explicit `@extends Factory<M, X>`.
+        $injected = [];
+
         foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
             try {
                 if (!self::isDirectFactorySubclass($storage, $factoryFqcnLc)) {
@@ -77,6 +96,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
                 $modelFqcn = self::resolveModelFqcn($storage, $codebase);
                 if ($modelFqcn !== null) {
                     self::injectBinding($storage, $modelFqcn);
+                    $injected[\strtolower($storage->name)] = true;
                 }
             } catch (\Throwable $throwable) {
                 // Per-iteration guard: one corrupted storage entry must not
@@ -88,6 +108,98 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
                 );
             }
         }
+
+        // Strictly after the binding loop: a synthesized template makes `template_types` non-empty,
+        // and isDirectFactorySubclass() reads that as a user `@template` and would skip every bare factory.
+        self::synthesizeCountTemplate($codebase, $factoryFqcnLc, $injected);
+    }
+
+    /**
+     * Gives every user `Factory` subclass its own covariant `TCount` template (default `int|null`) so
+     * the providers can return the CONCRETE class carrying the count (`UserFactory<int<2, max>>`)
+     * instead of the base `Factory<M, N>`, which loses custom methods like `admin()`.
+     *
+     * Hand-off between the two template views: `TCount` is remapped in `template_extended_params` to
+     * the subclass's own parameter (and through every synthesized ancestor), so `make()` / `create()`,
+     * declared on `Factory`, read the subclass's count.
+     *
+     * Left untouched: a class that already declares `TCount`, writes `@extends Factory<M, X>` with an
+     * explicit second argument, or declares a `Factory` method ({@see FactoryUserMethodCountProvider::runsLaravelCountPath()}),
+     * and every descendant of those. Their count is a user contract, so it stays the default `int|null`.
+     *
+     * @param array<lowercase-string, true> $injected classes whose extends count this handler raised
+     */
+    private static function synthesizeCountTemplate(Codebase $codebase, string $factoryFqcnLc, array $injected): void
+    {
+        $factories = \array_values(\array_filter(
+            $codebase->classlike_storage_provider::getAll(),
+            static fn(ClassLikeStorage $storage): bool => isset($storage->parent_classes[$factoryFqcnLc]),
+        ));
+
+        FactoryUserMethodCountProvider::indexDescendants($codebase, $factories);
+
+        // Ancestors first, so a parent is synthesized before the classes extending it.
+        \usort($factories, static fn(ClassLikeStorage $a, ClassLikeStorage $b): int => \count($a->parent_classes) <=> \count($b->parent_classes));
+
+        $bound = new Union([new TInt(), new TNull()]);
+        /** @var array<lowercase-string, string> $synthesized lowercase name => canonical name */
+        $synthesized = [];
+
+        foreach ($factories as $storage) {
+            $lcName = \strtolower($storage->name);
+            $lcParent = \strtolower($storage->parent_class ?? '');
+
+            // A template already on the storage is either the user's own, or a prior run's synthesis (a repeated
+            // run over the same storage): only the marker set at synthesis time tells them apart.
+            if (isset($storage->template_types['TCount'])) {
+                if (self::hasSynthesizedCount($storage)) {
+                    self::markSynthesized($codebase, $storage);
+                    $synthesized[$lcName] = $storage->name;
+                }
+
+                continue;
+            }
+
+            $explicitCount = $lcParent === $factoryFqcnLc
+                ? ($storage->template_type_extends_count[Factory::class] ?? 0) >= 2 && !isset($injected[$lcName])
+                : !isset($synthesized[$lcParent]);
+
+            // An override of count semantics also ends the chain: descendants fail the `$synthesized` parent test.
+            if ($explicitCount || !FactoryUserMethodCountProvider::runsLaravelCountPath($storage, true)) {
+                continue;
+            }
+
+            $templates = $storage->template_types ?? [];
+            $templates['TCount'] = [$storage->name => $bound];
+            $storage->template_types = $templates;
+            $storage->template_covariants = ($storage->template_covariants ?? []) + [\count($templates) - 1 => true];
+            $storage->template_defaults['TCount'] = $bound;
+
+            $ownCount = new Union([new TTemplateParam('TCount', $bound, $storage->name)]);
+            $extended = $storage->template_extended_params ?? [];
+            $extended[Factory::class]['TCount'] = $ownCount;
+            foreach ($storage->parent_classes as $lcAncestor => $_) {
+                if (isset($synthesized[$lcAncestor])) {
+                    $extended[$synthesized[$lcAncestor]]['TCount'] = $ownCount;
+                }
+            }
+
+            // `Factory` first: Psalm's `new` resolves a template handed up through an intermediate
+            // class by the FIRST entry naming it, and only the `Factory` entry reaches the constructor's bound.
+            $storage->template_extended_params = [Factory::class => $extended[Factory::class]] + $extended;
+            $synthesized[$lcName] = $storage->name;
+            self::markSynthesized($codebase, $storage);
+        }
+    }
+
+    /**
+     * Records ownership of the synthesized `TCount` and answers user methods declared `static` on the class
+     * (see {@see FactoryUserMethodCountProvider}).
+     */
+    private static function markSynthesized(Codebase $codebase, ClassLikeStorage $storage): void
+    {
+        $storage->custom_metadata[self::SYNTHESIZED_MARKER] = true;
+        $codebase->methods->return_type_provider->registerClosure($storage->name, FactoryUserMethodCountProvider::getMethodReturnType(...));
     }
 
     /**
@@ -306,7 +418,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
 
     /**
      * Merge TModel into `template_extended_params[Factory::class]`, preserving
-     * the populator-supplied TCount default (which gates the `(TCount is null|0|1 ?
+     * the populator-supplied TCount default (which gates the `(TCount is null ?
      * TModel : Collection<int, TModel>)` conditional return on create()/make()),
      * and set the extends-count to 2 so both params read as bound (TModel has no
      * default, so an omitted `@extends` argument is otherwise a MissingTemplateParam).

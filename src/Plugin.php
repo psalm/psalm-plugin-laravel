@@ -219,6 +219,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
         Handlers\Eloquent\CustomCollectionHandler::reset();
         Handlers\Eloquent\FactoryModelBindingHandler::reset();
+        Handlers\Eloquent\FactoryUserMethodCountProvider::reset();
         Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::reset();
         Handlers\Eloquent\ModelAggregateLoadHandler::reset();
         Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
@@ -411,6 +412,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryUserMethodCountProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryModelBindingHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
