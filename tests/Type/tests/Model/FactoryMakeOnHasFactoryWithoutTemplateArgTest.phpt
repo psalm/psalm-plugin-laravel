@@ -42,7 +42,7 @@ final class BookshelfFactory extends Factory
 
 // ----- Option A: factory() returns Factory<Bookshelf> even without `@use HasFactory<...>` -----
 $_factory = Bookshelf::factory();
-/** @psalm-check-type-exact $_factory = \Illuminate\Database\Eloquent\Factories\Factory<\App\Sandbox\Bookshelf> */;
+/** @psalm-check-type-exact $_factory = \Illuminate\Database\Eloquent\Factories\Factory<\App\Sandbox\Bookshelf, null> */;
 
 // ----- Option A: count(N)->make() chains through to Collection<int, Bookshelf> -----
 $_shelves = Bookshelf::factory()->count(10)->make();
@@ -72,7 +72,7 @@ class Page extends Entity
 }
 
 $_pageFactory = Page::factory();
-/** @psalm-check-type-exact $_pageFactory = \Illuminate\Database\Eloquent\Factories\Factory<\App\Sandbox\Page> */;
+/** @psalm-check-type-exact $_pageFactory = \Illuminate\Database\Eloquent\Factories\Factory<\App\Sandbox\Page, null> */;
 
 $_pages = Page::factory()->count(3)->make();
 /** @psalm-check-type-exact $_pages = \Illuminate\Database\Eloquent\Collection<int, \App\Sandbox\Page> */;
@@ -102,7 +102,7 @@ final class CustomMethodModel extends Model
 }
 
 $_customMethodFactory = CustomMethodModel::factory();
-/** @psalm-check-type-exact $_customMethodFactory = \App\Sandbox\CustomMethodFactory */;
+/** @psalm-check-type-exact $_customMethodFactory = \App\Sandbox\CustomMethodFactory<null> */;
 
 final class DocblockCustomMethodModel extends Model
 {
@@ -116,7 +116,7 @@ final class DocblockCustomMethodModel extends Model
 }
 
 $_docblockCustomMethodFactory = DocblockCustomMethodModel::factory();
-/** @psalm-check-type-exact $_docblockCustomMethodFactory = \App\Sandbox\CustomMethodFactory */;
+/** @psalm-check-type-exact $_docblockCustomMethodFactory = \App\Sandbox\CustomMethodFactory<null> */;
 
 final class NullCustomMethodModel extends Model
 {
@@ -129,7 +129,7 @@ final class NullCustomMethodModel extends Model
 }
 
 $_nullCustomMethodFactory = NullCustomMethodModel::factory();
-/** @psalm-check-type-exact $_nullCustomMethodFactory = Factory<\App\Sandbox\NullCustomMethodModel> */;
+/** @psalm-check-type-exact $_nullCustomMethodFactory = Factory<\App\Sandbox\NullCustomMethodModel, null> */;
 
 final class NonFactoryCustomMethodModel extends Model
 {
@@ -142,7 +142,7 @@ final class NonFactoryCustomMethodModel extends Model
 }
 
 $_nonFactoryCustomMethodFactory = NonFactoryCustomMethodModel::factory();
-/** @psalm-check-type-exact $_nonFactoryCustomMethodFactory = Factory<\App\Sandbox\NonFactoryCustomMethodModel> */;
+/** @psalm-check-type-exact $_nonFactoryCustomMethodFactory = Factory<\App\Sandbox\NonFactoryCustomMethodModel, null> */;
 
 final class UnscannedCustomMethodModel extends Model
 {
@@ -159,7 +159,7 @@ final class UnscannedCustomMethodModel extends Model
 }
 
 $_unscannedCustomMethodFactory = UnscannedCustomMethodModel::factory();
-/** @psalm-check-type-exact $_unscannedCustomMethodFactory = Factory<\App\Sandbox\UnscannedCustomMethodModel> */;
+/** @psalm-check-type-exact $_unscannedCustomMethodFactory = Factory<\App\Sandbox\UnscannedCustomMethodModel, null> */;
 
 /**
  * @extends Factory<StaticPropertyModel>
@@ -183,7 +183,7 @@ final class StaticPropertyModel extends Model
 }
 
 $_staticPropertyFactory = StaticPropertyModel::factory();
-/** @psalm-check-type-exact $_staticPropertyFactory = \App\Sandbox\StaticPropertyFactory */;
+/** @psalm-check-type-exact $_staticPropertyFactory = \App\Sandbox\StaticPropertyFactory<null> */;
 
 /**
  * @extends Factory<AttributedModel>
@@ -206,7 +206,7 @@ final class AttributedModel extends Model
 }
 
 $_attributedFactory = AttributedModel::factory();
-/** @psalm-check-type-exact $_attributedFactory = \App\Sandbox\AttributedFactory */;
+/** @psalm-check-type-exact $_attributedFactory = \App\Sandbox\AttributedFactory<null> */;
 
 final class AmbiguousCustomMethodModel extends Model
 {
@@ -222,7 +222,7 @@ final class AmbiguousCustomMethodModel extends Model
 }
 
 $_ambiguousCustomMethodFactory = AmbiguousCustomMethodModel::factory();
-/** @psalm-check-type-exact $_ambiguousCustomMethodFactory = Factory<\App\Sandbox\AmbiguousCustomMethodModel> */;
+/** @psalm-check-type-exact $_ambiguousCustomMethodFactory = Factory<\App\Sandbox\AmbiguousCustomMethodModel, null> */;
 
 final class NonFactoryPropertyModel extends Model
 {
@@ -233,7 +233,7 @@ final class NonFactoryPropertyModel extends Model
 }
 
 $_nonFactoryProperty = NonFactoryPropertyModel::factory();
-/** @psalm-check-type-exact $_nonFactoryProperty = Factory<\App\Sandbox\NonFactoryPropertyModel> */;
+/** @psalm-check-type-exact $_nonFactoryProperty = Factory<\App\Sandbox\NonFactoryPropertyModel, null> */;
 
 final class UnboundFactory extends Factory
 {
@@ -254,7 +254,7 @@ final class UnboundFactoryModel extends Model
 }
 
 $_unboundFactory = UnboundFactoryModel::factory();
-/** @psalm-check-type-exact $_unboundFactory = Factory<\App\Sandbox\UnboundFactoryModel> */;
+/** @psalm-check-type-exact $_unboundFactory = Factory<\App\Sandbox\UnboundFactoryModel, null> */;
 
 /**
  * @extends Factory<InheritedStaticPropertyModel>
@@ -282,7 +282,7 @@ final class InheritedStaticPropertyModel extends InheritedStaticPropertyBase
 }
 
 $_inheritedStaticPropertyFactory = InheritedStaticPropertyModel::factory();
-/** @psalm-check-type-exact $_inheritedStaticPropertyFactory = \App\Sandbox\InheritedStaticPropertyFactory */;
+/** @psalm-check-type-exact $_inheritedStaticPropertyFactory = \App\Sandbox\InheritedStaticPropertyFactory<null> */;
 
 /**
  * @extends Factory<LiteralStaticPropertyModel>
@@ -306,7 +306,7 @@ final class LiteralStaticPropertyModel extends Model
 }
 
 $_literalStaticPropertyFactory = LiteralStaticPropertyModel::factory();
-/** @psalm-check-type-exact $_literalStaticPropertyFactory = \App\Sandbox\LiteralStaticPropertyFactory */;
+/** @psalm-check-type-exact $_literalStaticPropertyFactory = \App\Sandbox\LiteralStaticPropertyFactory<null> */;
 
 /**
  * @extends Factory<SignatureReturnModel>
@@ -336,7 +336,7 @@ final class SignatureReturnModel extends Model
 }
 
 $_signatureReturnFactory = SignatureReturnModel::factory();
-/** @psalm-check-type-exact $_signatureReturnFactory = \App\Sandbox\SignatureReturnFactory */;
+/** @psalm-check-type-exact $_signatureReturnFactory = \App\Sandbox\SignatureReturnFactory<null> */;
 
 namespace App\Models;
 
@@ -369,6 +369,7 @@ final class ConventionModelFactory extends LaravelFactory
 namespace App\Models;
 
 $_conventionFactory = ConventionModel::factory();
-/** @psalm-check-type-exact $_conventionFactory = \Database\Factories\ConventionModelFactory */;
+/** @psalm-check-type-exact $_conventionFactory = \Database\Factories\ConventionModelFactory<null> */;
 ?>
 --EXPECTF--
+MissingTemplateParam on line %d: App\Sandbox\UnboundFactory has missing template params when extending Illuminate\Database\Eloquent\Factories\Factory, expecting at least 1

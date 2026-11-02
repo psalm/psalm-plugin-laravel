@@ -58,16 +58,17 @@ final class InvokableComponentVariableUser
 }
 
 /**
- * Property reads resolve through `__get(): mixed`; the templated `@mixin` is not consulted for them, so a
- * declared `string` property of the wrapped class is not seen either.
+ * Property reads resolve through the templated `@mixin TValue` like method calls do, so a declared
+ * property of the wrapped class is typed. A property only `__get` provides (an Eloquent attribute) stays
+ * `mixed`, as it does on the model itself.
  *
  * @param InvokableComponentVariable<InvokableComponentVariableUser> $user
  * @param InvokableComponentVariable<\Illuminate\Database\Eloquent\Model> $model
  */
-function invokable_component_variable_property_reads_resolve_through_get(InvokableComponentVariable $user, InvokableComponentVariable $model): void
+function invokable_component_variable_property_reads_resolve_through_the_mixin(InvokableComponentVariable $user, InvokableComponentVariable $model): void
 {
     $_name = $user->name;
-    /** @psalm-check-type-exact $_name = mixed */
+    /** @psalm-check-type-exact $_name = string */
 
     $_attribute = $model->title;
     /** @psalm-check-type-exact $_attribute = mixed */

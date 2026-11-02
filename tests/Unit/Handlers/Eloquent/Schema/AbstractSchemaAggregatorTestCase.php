@@ -53,8 +53,7 @@ abstract class AbstractSchemaAggregatorTestCase extends TestCase
 
     final protected function addMigrationStatements(SchemaAggregator $schemaAggregator, string $code): void
     {
-        $hasErrors = false;
-        $statements = StatementsProvider::parseStatements($code, \PHP_VERSION_ID, $hasErrors);
+        $statements = StatementsProvider::parseStatements($code, \PHP_VERSION_ID);
         $schemaAggregator->addStatements($statements);
     }
 

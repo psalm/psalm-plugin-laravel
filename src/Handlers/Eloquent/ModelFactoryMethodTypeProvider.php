@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Psalm\Codebase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\FactoryCount;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -16,23 +18,21 @@ use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\PropertyStorage;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TGenericObject;
-use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TLiteralClassString;
 use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 
 /**
- * Resolves `Model::factory()` when HasFactory's template argument is omitted.
- * Discovery follows Laravel's effective `newFactory()` override, static
- * `$factory`, `#[UseFactory]`, naming convention, then generic fallback order.
- * Concrete factories are returned only with a usable TModel binding; otherwise
- * `Factory<ModelFqcn, null>` preserves model typing through count/make chains.
+ * Resolves `Model::factory()`. Discovery follows Laravel's effective `newFactory()` override, static
+ * `$factory`, `#[UseFactory]`, naming convention, then generic fallback order. Concrete factories are
+ * returned only with a usable TModel binding, carrying the count the first argument sets
+ * (`UserFactory<int<2, max>>` for `factory(3)`, see FactoryCount::resolveFactoryCountArgument());
+ * otherwise `Factory<ModelFqcn, count>` preserves model typing through count/make chains.
  *
- * Explicit @use bindings are left to HasFactory's declared TFactory return.
+ * An explicit `@use HasFactory<XFactory>` binding is re-typed with the count too. A model that overrides
+ * `factory()` itself is left to its own declaration.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/960
- * @see FactoryCountTypeProvider
  * @internal
  */
 final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInterface, MethodReturnTypeProviderInterface
@@ -41,8 +41,8 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
     private const MODEL_FQCN_LOWERCASE = 'illuminate\\database\\eloquent\\model';
 
     /**
-     * Cached Factory<ModelFqcn, null> Unions keyed by the model FQCN.
-     * Bounded by the number of HasFactory models in the project.
+     * Cached Factory<ModelFqcn, count> Unions keyed by the model FQCN and count.
+     * Bounded by the number of HasFactory models in the project (times the few count shapes).
      *
      * @var array<string, Union>
      */
@@ -119,31 +119,116 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
             return null;
         }
 
-        // Defer to the stub when the user wrote an explicit
-        // `@use HasFactory<XFactory>` binding. The stub returns TFactory which
-        // resolves to the user-chosen Factory subclass — strictly more precise
-        // than anything this handler can produce.
-        if (self::hasUserBoundTFactory($storage, $codebase)) {
+        // A model-level `factory()` override owns its return type and count semantics.
+        $declaringId = $storage->declaring_method_ids['factory'] ?? null;
+        if ($declaringId === null || \strtolower($declaringId->fq_class_name) !== \strtolower(HasFactory::class)) {
             return null;
+        }
+
+        // `static::factory()` / `$class::factory()` on a non-final model may run a subclass's own
+        // `factory()`, so the argument no longer decides the count.
+        $count = FactoryCount::isLateBound($event, $codebase, $modelFqcn)
+            ? FactoryCount::unknownCountUnion()
+            : FactoryCount::resolveFactoryCountArgument($event->getCallArgs(), $event->getSource()->getNodeTypeProvider());
+
+        // An explicit `@use HasFactory<XFactory>` binding: the stub returns TFactory (the user-chosen
+        // class), which this handler re-types with the count. Anything but a plain class stays as declared.
+        if (self::hasUserBoundTFactory($storage, $codebase)) {
+            $boundFactory = self::boundTFactoryClass($storage);
+            if ($boundFactory === null) {
+                return null;
+            }
+
+            $gated = self::gate($codebase, $boundFactory, $count);
+
+            return FactoryCount::withCount($codebase, $boundFactory, $gated)
+                ?? self::unownedCount($codebase, $boundFactory, $gated, $modelFqcn);
         }
 
         $factoryClass = self::discoverFactoryClass($modelFqcn, $storage, $codebase);
         if ($factoryClass !== null && self::isUsableFactoryClass($factoryClass, $codebase)) {
-            return new Union([new TNamedObject($factoryClass)]);
+            $gated = self::gate($codebase, $factoryClass, $count);
+
+            return FactoryCount::withCount($codebase, $factoryClass, $gated)
+                ?? self::unownedCount($codebase, $factoryClass, $gated, $modelFqcn)
+                ?? new Union([new TNamedObject($factoryClass)]);
         }
 
-        // `factory(3)` / `factory(0)` count the factory (an array or callable is a state), so an
-        // argument means the count is unknown: claiming `null` would type `make()` as a single model
-        // where Laravel returns a Collection.
-        $hasArgs = $event->getCallArgs() !== [];
+        // The factory class is unproven here, so its count semantics are too: `factory(3)` counts the factory (an
+        // array or callable is a state) and any argument leaves the count unknown. Claiming `null` would type
+        // `make()` as a single model where Laravel returns a Collection.
+        $fallbackCount = $event->getCallArgs() === [] ? $count : FactoryCount::unknownCountUnion();
 
-        // Generic fallback keeps TModel and TCount bound.
-        return self::$factoryUnionCache[$modelFqcn . ($hasArgs ? ':args' : '')] ??= new Union([
-            new TGenericObject(Factory::class, [
-                new Union([new TNamedObject($modelFqcn)]),
-                new Union($hasArgs ? [new TInt(), new TNull()] : [new TNull()]),
-            ]),
+        return self::$factoryUnionCache[$modelFqcn . ':' . $fallbackCount->getId()] ??= new Union([
+            new TGenericObject(Factory::class, [new Union([new TNamedObject($modelFqcn)]), $fallbackCount]),
         ]);
+    }
+
+    /**
+     * The factory `factory()` returns may be any subclass of its declared class, so the count answers only when the
+     * class and every descendant run Laravel's own count path ({@see FactoryCount::runsLaravelCountPath()}).
+     */
+    private static function gate(Codebase $codebase, string $factoryClass, Union $count): Union
+    {
+        $provider = $codebase->classlike_storage_provider;
+
+        return $provider->has($factoryClass) && !FactoryCount::runsLaravelCountPath($provider->get($factoryClass))
+            ? FactoryCount::unknownCountUnion()
+            : $count;
+    }
+
+    /**
+     * A factory that owns no synthesized `TCount` (explicit `@extends Factory<M, null>` / `<M, int>`, a user's own
+     * `TCount`) still counts through `Model::factory(3)` at runtime, so declining to its declared class would type
+     * `make()` as a single model where Laravel returns a Collection. When the first argument may be a count the
+     * answer is the base `Factory<TModel, count>`, as `count()` gives; unknown classification is the unknown count.
+     *
+     * Declines (null) for a definitely-null count (`factory()`, a state array or closure), a class that is not a
+     * scanned `Factory`, and a class whose effective `TCount` already is the default `int|null` (a class that declares
+     * a Laravel method, kept as the concrete class so its custom methods stay callable: the default already
+     * reads the sound union).
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function unownedCount(Codebase $codebase, string $factoryClass, Union $count, string $modelFqcn): ?Union
+    {
+        $provider = $codebase->classlike_storage_provider;
+        if ($count->isNull() || !$provider->has($factoryClass)) {
+            return null;
+        }
+
+        $storage = $provider->get($factoryClass);
+        if (!isset($storage->parent_classes[\strtolower(Factory::class)])) {
+            return null;
+        }
+
+        $declared = $storage->template_extended_params[Factory::class]['TCount'] ?? null;
+        if ($declared instanceof Union && $declared->getId() === 'int|null') {
+            return null;
+        }
+
+        return FactoryCount::baseFactory(
+            FactoryCount::modelBoundBy($factoryClass, $codebase) ?? new Union([new TNamedObject($modelFqcn)]),
+            $count,
+        );
+    }
+
+    /**
+     * The plain factory class an explicit `@use HasFactory<XFactory>` names. A generic argument
+     * (`HasFactory<Factory<User, null>>`) is the user's own count contract and is not re-typed.
+     *
+     * @psalm-mutation-free
+     */
+    private static function boundTFactoryClass(ClassLikeStorage $storage): ?string
+    {
+        $bound = $storage->template_extended_params[HasFactory::class]['TFactory'] ?? null;
+        if (!$bound instanceof Union || !$bound->isSingle()) {
+            return null;
+        }
+
+        $atomic = $bound->getSingleAtomic();
+
+        return $atomic instanceof TNamedObject && !$atomic instanceof TGenericObject ? $atomic->value : null;
     }
 
     /**

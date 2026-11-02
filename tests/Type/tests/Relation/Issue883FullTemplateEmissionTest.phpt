@@ -15,18 +15,19 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * BelongsToMany / MorphToMany relation method bodies that don't include
  * `->using(...)` / `->as(...)` chain mutations must still produce a fully-
  * applied 4-template type. The handler-emitted Union overrides any user-
- * declared docblock at the call site, and Psalm rejects partial 2-of-4 forms
- * (consumers trip MissingTemplateParam) even when the stub declares a default
- * for the missing slots. The pivot default is per-relation: BelongsToMany =>
- * Pivot, MorphToMany => MorphPivot. The accessor default is 'pivot'.
+ * declared docblock at the call site, and Psalm fills template defaults only
+ * for types it reads from docblocks, so a 2-of-4 type built by the handler
+ * would stay partial (consumers trip MissingTemplateParam). The pivot default
+ * is per-relation: BelongsToMany => Pivot, MorphToMany => MorphPivot. The
+ * accessor default is 'pivot'.
  *
  * The chain-consumer tests below are the regression oracle: empty `--EXPECTF--`
  * asserts that `wherePivot()->count()` (the user's reported shape) does not
  * trip MissingTemplateParam. The typed-return tests pin the expected emission
  * shape; they don't catch a 2-of-4 regression on their own (Psalm normalises
- * 2-template against 4-template via the stub default declared by
- * `@template T of … = Default`), but reading them clarifies which slots the
- * handler should fill.
+ * the 2-template docblock assertion against 4 templates via the stub default
+ * declared by `@template T of … = Default`), but reading them clarifies which
+ * slots the handler should fill.
  */
 
 // Typed-return assertions pin the expected emission. `Shop::parts()` and

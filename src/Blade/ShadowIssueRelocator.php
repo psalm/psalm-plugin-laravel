@@ -11,7 +11,6 @@ use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
-use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidScope;
 use Psalm\Issue\MissingClosureParamType;
@@ -422,9 +421,9 @@ final class ShadowIssueRelocator
         // compileAware()). Psalm does not correlate that ternary with the key it narrowed, so any
         // keyed non-string default (`null`, `false`, `0`, `[]`, an enum) reaches the list-form arm,
         // which only runs for an int key (#1695). Every argument issue on that selection is the
-        // same artifact, plus the string casts Psalm reports alongside it. The mirror image: an
-        // all-int-key list (`@aware(['color'])`) narrows `$__key` to `never` in the keyed arm, and
-        // Psalm reports `NoValue` on it.
+        // same artifact (Psalm 7.0.0-rc28 no longer adds an InvalidCast next to an argument issue,
+        // vimeo/psalm#13036). The mirror image: an all-int-key list (`@aware(['color'])`) narrows
+        // `$__key` to `never` in the keyed arm, and Psalm reports `NoValue` on it.
         if (self::isGeneratedAwareArgument($issue, $target)) {
             return false;
         }
@@ -695,7 +694,7 @@ final class ShadowIssueRelocator
 
     /**
      * Whether an issue points at an argument of a call `@aware`'s compiled loop makes: an argument
-     * or string-cast issue on `$__value` in the list-form call, or `NoValue` on `$__key` in the
+     * or `ImplicitToStringCast` on `$__value` in the list-form call, or `NoValue` on `$__key` in the
      * keyed call. The call text cut out of the shadow must be absent from the template, the same
      * discriminator {@see self::isGeneratedEchoArgument()} uses, so an author's own call with the
      * same arguments inside `@php` keeps reporting.
@@ -728,7 +727,7 @@ final class ShadowIssueRelocator
             }
 
             $argument = '$__value';
-        } elseif ($issue instanceof InvalidCast || $issue instanceof ImplicitToStringCast) {
+        } elseif ($issue instanceof ImplicitToStringCast) {
             $argument = '$__value';
         } else {
             return false;

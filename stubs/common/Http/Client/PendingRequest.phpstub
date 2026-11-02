@@ -8,12 +8,9 @@ class PendingRequest
      * Toggle asynchronicity in requests.
      *
      * Returns AsyncPendingRequest when enabled, so HTTP methods return the
-     * appropriate promise type. Parameter-based conditional avoids the
-     * template-default issue where Psalm uses the bound (bool) instead of
-     * the default (false), which would produce unwanted union return types.
-     *
-     * @see https://github.com/vimeo/psalm/issues/6046 — remove AsyncPendingRequest subclass
-     *      and revert to @template TAsync approach once Psalm supports template defaults
+     * appropriate promise type. The parameter-based conditional avoids the
+     * bare-class `TAsync` bound (`bool`) that would produce union return types;
+     * see AsyncPendingRequest below.
      *
      * @param  bool  $async
      * @return ($async is true ? AsyncPendingRequest : self)
@@ -122,10 +119,11 @@ class PendingRequest
 /**
  * Stub-only subclass representing a PendingRequest in async mode.
  *
- * Workaround for https://github.com/vimeo/psalm/issues/6046 (template defaults).
- * When async() is called, Psalm narrows the type to this class. HTTP methods
- * return GuzzleHttp\Promise\PromiseInterface (overridden to LazyPromise in
- * the 12.42.0+ version-specific stub).
+ * Stands in for Laravel's `TAsync of bool = false` template: a bare `PendingRequest`
+ * reference reads the template bound (`bool`), not the default, so a template would
+ * type every HTTP method as the sync|async union. When async() is called, Psalm narrows
+ * the type to this class. HTTP methods return GuzzleHttp\Promise\PromiseInterface
+ * (overridden to LazyPromise in the 12.42.0+ version-specific stub).
  *
  * Extends PendingRequest so fluent methods (withToken, timeout, etc.) keep
  * returning $this (AsyncPendingRequest), preserving async semantics through chains.

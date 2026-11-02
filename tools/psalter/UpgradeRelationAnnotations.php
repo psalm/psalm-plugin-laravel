@@ -38,16 +38,12 @@ use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
  *   @return MorphMany<Tag>       → @return MorphMany<Tag, self>
  *   @return MorphTo<Model>       → @return MorphTo<Model, self>
  *
- *   BelongsToMany and MorphToMany require all 4 template params because Psalm
- *   does not honour template-param defaults. The plugin appends the default
- *   pivot class and accessor when they are missing:
+ *   @return BelongsToMany<Tag>        → @return BelongsToMany<Tag, self>
+ *   @return MorphToMany<Tag>          → @return MorphToMany<Tag, self>
  *
- *   @return BelongsToMany<Tag>        → @return BelongsToMany<Tag, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
- *   @return BelongsToMany<Tag, self>   → @return BelongsToMany<Tag, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
- *   @return BelongsToMany<Tag, $this> → @return BelongsToMany<Tag, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
- *   @return MorphToMany<Tag>          → @return MorphToMany<Tag, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
- *   @return MorphToMany<Tag, self>    → @return MorphToMany<Tag, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
- *   @return MorphToMany<Tag, $this>   → @return MorphToMany<Tag, $this, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+ *   BelongsToMany and MorphToMany need no pivot params: their `TPivotModel` and
+ *   `TAccessor` templates have defaults, so 2-param forms are complete and are
+ *   left unchanged.
  *
  *   HasManyThrough and HasOneThrough require an intermediate model that cannot
  *   be inferred from the docblock alone. The plugin reads the method body to
@@ -77,17 +73,8 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
         'MorphMany',
         'MorphOne',
         'MorphTo',
-    ];
-
-    /**
-     * Relations that require all 4 type parameters because Psalm does not honour
-     * template-param defaults. Maps relation name → fully-qualified default pivot class.
-     *
-     * @var array<string, string>
-     */
-    private const FOUR_PARAM_RELATIONS = [
-        'BelongsToMany' => '\Illuminate\Database\Eloquent\Relations\Pivot',
-        'MorphToMany'   => '\Illuminate\Database\Eloquent\Relations\MorphPivot',
+        'BelongsToMany',
+        'MorphToMany',
     ];
 
     /**
@@ -154,7 +141,6 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
      *
      * These transforms require only the docblock text (no AST access):
      * - AUTO_RELATIONS: add TDeclaringModel = self as the second param
-     * - FOUR_PARAM_RELATIONS: add TDeclaringModel + pivot defaults
      *
      * HasManyThrough / HasOneThrough are NOT handled here — they need the method
      * body to determine the intermediate model. See upgradeThroughRelations().
@@ -181,26 +167,6 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
                 $line = (string) \preg_replace(
                     '/\b' . $relation . '<([^<,>]+)>/',
                     $relation . '<$1, self>',
-                    $line,
-                );
-            }
-
-            foreach (self::FOUR_PARAM_RELATIONS as $relation => $pivotClass) {
-                // Case 1: v3 single-param — BelongsToMany<T> → BelongsToMany<T, self, Pivot, 'pivot'>
-                $line = (string) \preg_replace(
-                    '/\b' . $relation . '<([^<,>]+)>/',
-                    $relation . '<$1, self, ' . $pivotClass . ", 'pivot'>",
-                    $line,
-                );
-
-                // Case 2: incomplete two-param — BelongsToMany<T, self> or BelongsToMany<T, $this>
-                //   → BelongsToMany<T, self, Pivot, 'pivot'>  (preserving the original declaring model token)
-                // Psalm does not support template-param defaults, so two params is not enough.
-                // Matching 'self' and '$this' explicitly avoids touching annotations with a
-                // custom declaring model class (e.g. BelongsToMany<T, ParentModel>).
-                $line = (string) \preg_replace(
-                    '/\b' . $relation . '<([^<,>]+), (self|\$this)>/',
-                    $relation . '<$1, $2, ' . $pivotClass . ", 'pivot'>",
                     $line,
                 );
             }

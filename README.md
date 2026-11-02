@@ -38,7 +38,7 @@ composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0@RC"
 Requires PHP 8.2+ and Laravel 12.x or 13.x.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
-* [Psalm 7.x](https://github.com/vimeo/psalm/releases) is currently a release candidate. The `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
+* Requires [Psalm 7](https://github.com/vimeo/psalm/releases) `7.0.0-rc28` or later, the first release with template defaults, which the stubs rely on. Psalm 7 is still a release candidate: the `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
 * For stable Psalm 6 or Laravel 11 support, use `composer require --dev psalm/plugin-laravel:^3`; the 3.x line provides the same security checks.
 * `init` writes a `psalm.xml` at the project root with the plugin enabled, `errorLevel="4"` by default (`--level 1` is strictest, `--level 8` the most lenient), Laravel-friendly issue handler defaults, and `runTaintAnalysis="true"`. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 * `analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can invoke `./vendor/bin/psalm` directly instead.

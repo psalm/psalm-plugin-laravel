@@ -21,7 +21,8 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * already a complete 4-param type. That is an inferred in-body expression, so the user
  * cannot fix it by annotating the method.
  *
- * Fix (stubs only): the factory returns fill all 4 params (Pivot/MorphPivot + 'pivot'),
+ * Fix (stubs only): the factory returns name `<TRelated, static>` and the `BelongsToMany` /
+ * `MorphToMany` template defaults fill the pivot slots (Pivot/MorphPivot + 'pivot'),
  * and `->using()` / `->as()` re-narrow TPivotModel / TAccessor via `@return static<...>`
  * so custom-pivot/accessor methods stay sound (no InvalidReturnStatement). The empty
  * `--EXPECTF--` block is the oracle: every relation method below must analyse clean.
