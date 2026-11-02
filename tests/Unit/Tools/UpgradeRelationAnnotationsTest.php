@@ -41,7 +41,7 @@ final class UpgradeRelationAnnotationsTest extends TestCase
     public static function autoRelationProvider(): iterable
     {
         // Relations that go 1-param → 2-param (TDeclaringModel = self).
-        $twoParamRelations = ['BelongsTo', 'MorphTo'];
+        $twoParamRelations = ['BelongsTo', 'MorphTo', 'BelongsToMany', 'MorphToMany'];
 
         foreach ($twoParamRelations as $relation) {
             yield "@return {$relation}" => [
@@ -52,59 +52,6 @@ final class UpgradeRelationAnnotationsTest extends TestCase
             yield "@psalm-return {$relation}" => [
                 "/**\n * @psalm-return {$relation}<User>\n */",
                 "/**\n * @psalm-return {$relation}<User, self>\n */",
-            ];
-        }
-
-        // Pivot relations go 1-param → 4-param directly (FOUR_PARAM_RELATIONS handles both cases).
-        // BelongsToMany defaults to Pivot; MorphToMany defaults to MorphPivot.
-        $pivotRelations = [
-            'BelongsToMany' => '\Illuminate\Database\Eloquent\Relations\Pivot',
-            'MorphToMany'   => '\Illuminate\Database\Eloquent\Relations\MorphPivot',
-        ];
-
-        foreach ($pivotRelations as $relation => $pivot) {
-            yield "@return {$relation}" => [
-                "/**\n * @return {$relation}<User>\n */",
-                "/**\n * @return {$relation}<User, self, {$pivot}, 'pivot'>\n */",
-            ];
-
-            yield "@psalm-return {$relation}" => [
-                "/**\n * @psalm-return {$relation}<User>\n */",
-                "/**\n * @psalm-return {$relation}<User, self, {$pivot}, 'pivot'>\n */",
-            ];
-        }
-    }
-
-    // --- Pivot relations: 2-param → 4-param ---
-
-    /**
-     * @param non-empty-string $input
-     * @param non-empty-string $expected
-     */
-    #[Test]
-    #[DataProvider('pivotRelationProvider')]
-    public function it_adds_pivot_params_to_already_declaring_model_annotations(string $input, string $expected): void
-    {
-        $this->assertSame($expected, \UpgradeRelationAnnotations::upgradeDocblock($input));
-    }
-
-    /** @return iterable<string, array{non-empty-string, non-empty-string}> */
-    public static function pivotRelationProvider(): iterable
-    {
-        $pivotRelations = [
-            'BelongsToMany' => '\Illuminate\Database\Eloquent\Relations\Pivot',
-            'MorphToMany'   => '\Illuminate\Database\Eloquent\Relations\MorphPivot',
-        ];
-
-        foreach ($pivotRelations as $relation => $pivot) {
-            yield "{$relation} 2-param with self" => [
-                "/**\n * @return {$relation}<Tag, self>\n */",
-                "/**\n * @return {$relation}<Tag, self, {$pivot}, 'pivot'>\n */",
-            ];
-
-            yield "{$relation} 2-param with \$this" => [
-                "/**\n * @return {$relation}<Tag, \$this>\n */",
-                "/**\n * @return {$relation}<Tag, \$this, {$pivot}, 'pivot'>\n */",
             ];
         }
     }
@@ -129,8 +76,13 @@ final class UpgradeRelationAnnotationsTest extends TestCase
         // Already has two params — skip (non-pivot relations).
         yield 'BelongsTo already migrated' => ["/**\n * @return BelongsTo<User, self>\n */"];
 
-        // Already at four params — pivot relations fully migrated.
-        yield 'BelongsToMany already 4-param' => ["/**\n * @return BelongsToMany<Tag, self, {$pivot}, 'pivot'>\n */"];
+        // Pivot relations: the 2-param form is complete (the pivot templates have defaults), and an
+        // explicit 4-param form names a custom pivot or accessor.
+        foreach (['BelongsToMany', 'MorphToMany'] as $relation) {
+            yield "{$relation} already 2-param with self" => ["/**\n * @return {$relation}<Tag, self>\n */"];
+            yield "{$relation} already 2-param with \$this" => ["/**\n * @return {$relation}<Tag, \$this>\n */"];
+            yield "{$relation} already 4-param" => ["/**\n * @return {$relation}<Tag, self, {$pivot}, 'pivot'>\n */"];
+        }
 
         // Through relations — upgradeDocblock() leaves these unchanged; the
         // AST-based upgradeThroughRelations() handles them at runtime.

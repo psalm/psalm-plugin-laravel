@@ -66,11 +66,9 @@ trait HasRelationships
      * The related model type cannot be determined statically for polymorphic relations,
      * so TRelatedModel defaults to Model.
      *
-     * @todo #913: narrow TRelatedModel to the registered morph-map union
-     *       (Relation::$morphMap / Relation::requireMorphMap) so an app
-     *       `@return MorphTo<Concrete|..., self>` stops raising MoreSpecificReturnType.
-     *       Out of scope of the pivot-template-defaults work; the inherent-limitation
-     *       assertions stay pinned in tests/Type/tests/Relation/RelationStubKnownLimitationsTest.phpt.
+     * Narrowing TRelatedModel to the registered morph-map union is not attempted, so an app
+     * `@return MorphTo<Concrete|..., self>` raises MoreSpecificReturnType; the inherent-limitation
+     * assertions are pinned in tests/Type/tests/Relation/RelationStubKnownLimitationsTest.phpt.
      *
      * @return \Illuminate\Database\Eloquent\Relations\MorphTo<\Illuminate\Database\Eloquent\Model, static>
      */
@@ -128,10 +126,11 @@ trait HasRelationships
      * @param  string  $relatedKey
      * @param  string  $relation
      *
-     * All 4 params filled: Psalm 7 ignores @template defaults (vimeo/psalm#5407), so a
-     * 2-of-4 return trips MissingTemplateParam on in-body chains (#1088). `->using()` /
-     * `->as()` re-narrow the pivot/accessor slots; `static` avoids the #913 collapse.
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<TRelatedModel, static, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+     * The trailing pivot/accessor slots fill from the `BelongsToMany` template defaults (Pivot, 'pivot'),
+     * so the 2-arg return carries `->pivot` on in-body chains (#1088). `->using()` / `->as()` re-narrow
+     * them; `static` avoids the #913 collapse. Psalm fills defaults only for docblock types: the
+     * handler-built 4-slot type (ModelRelationReturnTypeHandler) is spelled out in full.
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<TRelatedModel, static>
      */
     public function belongsToMany($related, $table = null, $foreignPivotKey = null, $relatedPivotKey = null,
                                   $parentKey = null, $relatedKey = null, $relation = null) {}
@@ -150,9 +149,8 @@ trait HasRelationships
      * @param  string  $relation
      * @param  bool  $inverse
      *
-     * 4 params filled like belongsToMany() (Psalm ignores @template defaults, #1088);
-     * MorphToMany's pivot default is MorphPivot.
-     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+     * Trailing pivot/accessor slots fill from the `MorphToMany` defaults (MorphPivot, 'pivot'); see belongsToMany().
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static>
      */
     public function morphToMany($related, $name, $table = null, $foreignPivotKey = null,
                                 $relatedPivotKey = null, $parentKey = null,
@@ -171,8 +169,8 @@ trait HasRelationships
      * @param  string  $relatedKey
      * @param  string  $relation
      *
-     * 4 params filled like belongsToMany() (#1088); MorphToMany pivot default is MorphPivot.
-     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+     * Trailing pivot/accessor slots fill from the `MorphToMany` defaults (MorphPivot, 'pivot'); see belongsToMany().
+     * @return \Illuminate\Database\Eloquent\Relations\MorphToMany<TRelatedModel, static>
      */
     public function morphedByMany($related, $name, $table = null, $foreignPivotKey = null,
                                   $relatedPivotKey = null, $parentKey = null,

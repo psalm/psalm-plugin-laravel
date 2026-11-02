@@ -23,7 +23,7 @@ use Psalm\Type\Union;
  *
  * Effect: `TModel` resolves to the concrete model, so `(new TaskFactory())
  * ->create()`/`->make()` return `Task` instead of collapsing to base `Model`,
- * and `MissingTemplateParam` (the symptom #780 reports on Psalm 6) is silenced.
+ * and the `MissingTemplateParam` Psalm reports for the omitted `TModel` (#780) is silenced.
  *
  * Inverse of #517 (Model -> Factory) and the missing complement of
  * {@see ModelFactoryMethodTypeProvider}, whose Tier-2 gate
@@ -306,9 +306,10 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
 
     /**
      * Merge TModel into `template_extended_params[Factory::class]`, preserving
-     * the populator-supplied TCount (which gates the `(TCount is null|0|1 ?
+     * the populator-supplied TCount default (which gates the `(TCount is null|0|1 ?
      * TModel : Collection<int, TModel>)` conditional return on create()/make()),
-     * and set the extends-count to 2 so both params read as bound.
+     * and set the extends-count to 2 so both params read as bound (TModel has no
+     * default, so an omitted `@extends` argument is otherwise a MissingTemplateParam).
      */
     private static function injectBinding(ClassLikeStorage $storage, string $modelFqcn): void
     {

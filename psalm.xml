@@ -18,7 +18,7 @@
     </projectFiles>
 
     <plugins>
-        <!-- Psalm >=7.0.0-rc21 enables this on its own (loadLibraryPlugins); listed so earlier rc builds analyse with the same stubs. -->
+        <!-- Psalm 7 enables the plugin on its own because composer.json requires laravel/framework (loadLibraryPlugins); the entry is deduplicated and keeps self-analysis on the plugin if that setting is turned off. -->
         <pluginClass class="Psalm\LaravelPlugin\Plugin" />
     </plugins>
     <issueHandlers>

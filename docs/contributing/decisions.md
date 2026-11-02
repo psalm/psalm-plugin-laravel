@@ -398,17 +398,26 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 ## Factories
 
-### An unbound `TCount` keeps `create()`/`make()` at `Model|Collection<int, Model>` (probed dead ends, Psalm 7.0.0-rc6)
+### `TCount` defaults to its `int|null` bound, so an omitted count keeps `Model|Collection<int, Model>` (probed dead ends, Psalm 7.0)
 
-**Decision:** a factory declared `@extends Factory<User>` (no second template argument) answers `User|Collection<int, User>` for `create()`, `make()`, `createQuietly()` and `lazy()`. Writing `@extends Factory<User, null>` gives the single model. Pinned by `FactoryUnboundCountKnownLimitation`.
+**Decision:** the Factory stub declares `@template-covariant TCount of int|null = int|null`. A factory declared `@extends Factory<User>` (no second template argument) takes the default and answers `User|Collection<int, User>` for `create()`, `make()`, `createQuietly()` and `lazy()`, as it did before Psalm read template defaults. Writing `@extends Factory<User, null>` gives the single model. `count()`, `times()` and an argument-less `Model::factory()` stay precise, because the providers build the exact count. Pinned by `FactoryBoundCountDefaultTest`. Precision for the unbound case is tracked in #2188.
 
-**Why:** Psalm ignores `@template TCount of int|null = null` on a non-purity template, so an omitted argument leaves `TCount` at its `int|null` bound. Psalm 7.0.0-rc5 and earlier picked the single branch of the stub's conditional return for that bound; rc6 evaluates both. The missing piece is template-default support upstream, so the plugin does not paper over it.
+**Why:** a count reaches a factory through paths the type system cannot see (`new UserFactory(3)`, `User::factory(3)`, `UserFactory::times(3)`), so the honest answer for a factory with no count in its type is the union.
 
-**Rejected:**
-- **Binding an omitted `TCount` to `null` class-wide.** Unsound: a count reaches a factory without `count()` (`new UserFactory(3)`, `User::factory(3)`, `UserFactory::times(3)`), and every one of them would type `make()` as a single model where Laravel returns a `Collection`.
-- **Proving "no count" at the call site.** A handler that answers the single model only when the receiver expression is a chain of `new X()` / `X::new()` / `Model::factory()` followed by calls other than `count`/`times`/`foreachSequence`/`when`/`unless` is sound, but is ~100 lines of workaround for a missing template default, and a factory held in a variable or property still gets the union.
+**Covariance:** the providers build `Factory<User, null>` and `Factory<User, 2>`, while a declared `Factory<User>` now means `Factory<User, int|null>`. With an invariant `TCount`, `Model::factory()` and `count(null)` were rejected against `Factory<User>` (`InvalidArgument`). `@template-covariant` removes that with no new issue in the type suite; `TCount` appears only in return positions, so it is sound. `FactoryCountCovarianceTest` pins both directions (a narrower count is accepted, `Factory<User, null>` rejects a factory typed `int|null`).
 
-**Revisit:** when Psalm honours template defaults on class templates, restore the single-model answer with `@template TCount of int|null = null` alone. Upstream: https://github.com/vimeo/psalm/issues/12446 (template default ignored for an omitted `@extends` argument).
+**Omitted `@extends` argument:** `TModel` has no default, so a factory the plugin cannot bind (`class PhantomFactory extends Factory`, no `$model`, no convention match) reports `MissingTemplateParam`, as Psalm does for any template without a default. The former `SuppressHandler` entry hid it, and is gone. `FactoryModelBindingHandler` still silences it when it resolves the model.
+
+**Rejected (probed on Psalm dev-master, 7.0 line):**
+- **`= null` class-wide.** Unsound: `Ledgerx::factory(3)->make()`, `(new LedgerxFactory(3))->make()` and `new LedgerxFactory(count: 3)` all type as a single model where Laravel returns a `Collection`. An invariant `TCount` would also reject `count(3)` chains against `Factory<Ledgerx>`.
+- **`= null` plus a count-aware `Model::factory(<arg>)` provider (option A).** Needs the first positional or `count:` argument classified (an array or callable is a state, a numeric string a count) and returns the base `Factory`, so custom state methods become `UndefinedMagicMethod` after a count-bearing call: a regression for `User::factory(3)->admin()->create()`. Leaves `@use HasFactory<XFactory>` (declared `TFactory`, arguments ignored) and `new XFactory(3)` unsound.
+- **`= null` plus an `AfterExpressionAnalysis` hook on `new XFactory(<non-null>)` (option B).** Feasible (~60 to 80 lines, `Factory<TModel, int|null>` replaces the node type), same loss of subclass methods, and spread arguments need handling.
+- **Returning `UserFactory&Factory<User, int|null>` for count-bearing calls.** `make()` still resolves through the named class and stays `User`, so the intersection does not help.
+- **Proving "no count" at the call site.** A handler that answers the single model only for a chain of `new X()` / `X::new()` / `Model::factory()` followed by calls other than `count`/`times`/`foreachSequence`/`when`/`unless` is sound, but a factory held in a variable or property still gets the union.
+
+**Accepted limitation:** `@use HasFactory<XFactory>` returns the declared `TFactory` regardless of arguments, so `User::factory(3)` is typed by the factory class (the union for an unbound `@extends Factory<User>`).
+
+**`resolveFactoryName()`:** the stub no longer re-declares it, so Laravel's `class-string<Factory<TClass>>` takes the `TCount` default and `(new $class())->create()` widens from `TClass` to `TClass|Collection<int, TClass>`. Intended: a class-string cannot rule out `new $class(3)`, the same rule as an unbound `@extends Factory<X>`. Pinned by `FactoryResolveFactoryNameTest`.
 
 ## Variance
 

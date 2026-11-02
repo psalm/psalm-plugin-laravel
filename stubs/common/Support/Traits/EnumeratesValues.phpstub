@@ -56,7 +56,7 @@ trait EnumeratesValues
      * a conditional makes Psalm return `mixed`. A string column stays `mixed` here; the Eloquent
      * collection handler narrows it when the column is a known model attribute.
      *
-     * @template TMaxResult
+     * @template TMaxResult = mixed
      *
      * @param  (callable(TValue): TMaxResult)|string|null  $callback
      * @return ($callback is null ? TValue|null : ($callback is string ? mixed : TMaxResult|null))
@@ -64,7 +64,7 @@ trait EnumeratesValues
     public function max($callback = null) {}
 
     /**
-     * @template TMinResult
+     * @template TMinResult = mixed
      *
      * @param  (callable(TValue): TMinResult)|string|null  $callback
      * @return ($callback is null ? TValue|null : ($callback is string ? mixed : TMinResult|null))

@@ -103,7 +103,7 @@ jobs:
           # on every cache hit and must be rewritten before any other composer command runs.
           COMPOSER_MEMORY_LIMIT=-1 composer update laravel-lang/http-statuses --no-interaction --no-progress
           composer config repositories.plugin \
-            '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true}}'
+            '{"type": "path", "url": "'"$GITHUB_WORKSPACE"'", "options": {"symlink": true, "versions": {"psalm/plugin-laravel": "4.x-dev"}}}'
           composer config minimum-stability dev
           composer require --dev "psalm/plugin-laravel:*" --no-interaction --no-update
           # laravel/framework is named explicitly: the plugin only conflicts with old

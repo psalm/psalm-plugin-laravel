@@ -56,9 +56,9 @@ use Psalm\Type\Union;
  * `first()` returning `TRelatedModel&object{pivot: TPivotModel}`) resolve to the
  * user-declared pivot model rather than the default `Pivot`. When neither mutator is
  * captured the handler still emits all 4 slots, filling slot 3 with the per-relation
- * pivot default (`Pivot` / `MorphPivot`) and slot 4 with `'pivot'` — emitting only 2
- * triggers `MissingTemplateParam` on consumers because Psalm rejects a partial form
- * even when the stub declares a default via `@template T of … = Default` (see #883).
+ * pivot default (`Pivot` / `MorphPivot`) and slot 4 with `'pivot'`: Psalm fills template
+ * defaults only for docblock types, so a 2-slot type built here stays partial and
+ * triggers `MissingTemplateParam` on consumers (see #883).
  * Captured `->withPivot()` / `->withTimestamps()` columns refine that default to `Pivot&object{...}` (#1944).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/760
@@ -320,9 +320,9 @@ final class ModelRelationReturnTypeHandler
      *   `<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>`. When the parser captured
      *   `->using(CustomPivot::class)` / `->as('alias')` chain mutations they fill slots 3 and 4;
      *   otherwise the per-relation pivot default (`Pivot` / `MorphPivot`) and `'pivot'` fill
-     *   them. Emitting all 4 slots is required so downstream pivot intersections (e.g.
-     *   `first()` returning `TRelatedModel&object{pivot: TPivotModel}`) resolve, and so
-     *   consumers don't trip `MissingTemplateParam` on a partial 2-of-4 emission (#883).
+     *   them. A type built here is not default-filled by Psalm, so all 4 slots are required for
+     *   downstream pivot intersections (e.g. `first()` returning `TRelatedModel&object{pivot:
+     *   TPivotModel}`) to resolve and for consumers not to trip `MissingTemplateParam` (#883).
      * - Through relations: `<TRelatedModel, TIntermediateModel, TDeclaringModel>` — e.g.
      *   `HasManyThrough<Post, Membership, Country>`. Note the Relation parent's 3rd template
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
@@ -370,9 +370,10 @@ final class ModelRelationReturnTypeHandler
 
         // Always emit TPivotModel / TAccessor (slots 3 and 4) for pivot-aware relations,
         // filling declared defaults when the parser didn't capture a chain mutation.
-        // A partial 2-of-4 emission triggers MissingTemplateParam on consumers (see #883)
-        // because once any template is supplied the partial form is rejected even when
-        // the stub declares a `@template T of … = Default` expression. The pivot default
+        // Psalm fills trailing template defaults only for types it reads from docblocks, never for
+        // a type built here, so a 2-of-4 emission stays 2 args: it trips MissingTemplateParam on
+        // consumers (see #883), loses the `->pivot` property typing and makes
+        // BelongsToManyWithPivotHandler decline (needs all 4). The pivot default
         // is per-relation (BelongsToMany => Pivot, MorphToMany => MorphPivot) to match
         // the corresponding stub default.
         $pivotDefault = self::PIVOT_AWARE_RELATIONS[$relationClass] ?? null;

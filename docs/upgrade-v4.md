@@ -19,7 +19,7 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.0.0-rc12` or later. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 is currently a release candidate: the root `vimeo/psalm:^7.0@RC` requirement allows that one package to be pre-release without lowering your project's `minimum-stability`.
+v4 requires `vimeo/psalm ^7.0` (stable). v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 pre-releases are rejected by a `conflict` entry in the plugin's `composer.json`, because the stubs rely on template defaults that only the stable release supports.
 
 Psalm 7 introduces new issue types that may surface in your codebase:
 
@@ -54,15 +54,23 @@ All Eloquent relation stubs gained additional template parameters. If your codeb
 | `BelongsTo`      | `BelongsTo<TRelated>`      | `BelongsTo<TRelatedModel, TDeclaringModel>`                                         |
 | `HasOne`         | `HasOne<TRelated>`         | `HasOne<TRelatedModel, TDeclaringModel>`                                            |
 | `HasMany`        | `HasMany<TRelated>`        | `HasMany<TRelatedModel, TDeclaringModel>`                                           |
-| `BelongsToMany`  | `BelongsToMany<TRelated>` or `BelongsToMany<TRelated, TDeclaringModel>` | `BelongsToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7) |
+| `BelongsToMany`  | `BelongsToMany<TRelated>` or `BelongsToMany<TRelated, TDeclaringModel>` | `BelongsToMany<TRelatedModel, TDeclaringModel>`, plus `TPivotModel, TAccessor` to name a custom pivot |
 | `MorphOne`       | `MorphOne<TRelated>`       | `MorphOne<TRelatedModel, TDeclaringModel>`                                          |
 | `MorphMany`      | `MorphMany<TRelated>`      | `MorphMany<TRelatedModel, TDeclaringModel>`                                         |
 | `MorphTo`        | `MorphTo<TRelated>`        | `MorphTo<TRelatedModel, TDeclaringModel>`                                           |
-| `MorphToMany`    | `MorphToMany<TRelated>` or `MorphToMany<TRelated, TDeclaringModel>` | `MorphToMany<TRelatedModel, TDeclaringModel, TPivotModel, TAccessor>` (upd. v4.7)   |
+| `MorphToMany`    | `MorphToMany<TRelated>` or `MorphToMany<TRelated, TDeclaringModel>` | `MorphToMany<TRelatedModel, TDeclaringModel>`, plus `TPivotModel, TAccessor` to name a custom pivot |
 | `HasOneThrough`  | `HasOneThrough<TRelated>`  | `HasOneThrough<TRelatedModel, TIntermediateModel, TDeclaringModel>`                 |
 | `HasManyThrough` | `HasManyThrough<TRelated>` | `HasManyThrough<TRelatedModel, TIntermediateModel, TDeclaringModel>`                |
 
+`TPivotModel` and `TAccessor` have template defaults (`Pivot` or `MorphPivot`, and `'pivot'`), so the two-argument form is complete and `->pivot` is typed. `BelongsToMany<T>` without the declaring model still reports `MissingTemplateParam`.
+
 `Collection`, `EloquentCollection`, and `Builder` are **unchanged**.
+
+### `extends Factory` without a model reports `MissingTemplateParam`
+
+Psalm 7 reads template defaults, so the plugin no longer hides `MissingTemplateParam` on factories. `class UserFactory extends Factory` with no `@extends Factory<User>`, no `$model`, and no `Database\Factories\UserFactory` to `App\Models\User` naming match leaves `TModel` unbound, and Psalm now says so. Add `@extends Factory<User>` to fix it. `@extends Factory<User>` itself is complete: `TCount` defaults to `int|null`.
+
+The same applies to a factory leaf extending your own generic abstract base factory without a template argument, and, on Laravel 13.9 or later, to subclasses of Laravel's generic scopes (`class MySoftDeletes extends SoftDeletingScope {}` reports `expecting 1`): add the `@extends` argument.
 
 ### Taint analysis runs automatically
 
@@ -107,7 +115,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 # 1. Update PHP to 8.2+ and Laravel to 12+ if needed
 
 # 2. Upgrade Psalm to v7 and the plugin to v4 together
-composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-all-dependencies
+composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0" --with-all-dependencies
 
 # 3. Update relation generic annotations (add declaring model parameter)
 #
@@ -128,16 +136,14 @@ composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-al
 #        MorphOne<T>      → MorphOne<T, self>
 #        MorphMany<T>     → MorphMany<T, self>
 #        MorphTo<T>       → MorphTo<T, self>
-#        BelongsToMany<T>        → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-#        BelongsToMany<T, self>   → BelongsToMany<T, self, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-#        BelongsToMany<T, $this>  → BelongsToMany<T, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-#        MorphToMany<T>           → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
-#        MorphToMany<T, self>     → MorphToMany<T, self, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
-#        MorphToMany<T, $this>    → MorphToMany<T, $this, \Illuminate\Database\Eloquent\Relations\MorphPivot, 'pivot'>
+#        BelongsToMany<T> → BelongsToMany<T, self>
+#        MorphToMany<T>   → MorphToMany<T, self>
 #        HasManyThrough<T> → HasManyThrough<T, IntermediateModel, self>  (read the method body to find IntermediateModel)
 #        HasOneThrough<T>  → HasOneThrough<T, IntermediateModel, self>   (read the method body to find IntermediateModel)
 #
-#      Do not touch annotations that already have the correct number of type params.
+#      Do not touch annotations that already have the correct number of type params:
+#      BelongsToMany<T, self> and MorphToMany<T, self> are complete (the pivot and accessor
+#      templates have defaults), as are explicit four-param forms naming a custom pivot.
 #      Do not touch @param or @var annotations.
 
 # 4. Run Psalm and update your baseline
