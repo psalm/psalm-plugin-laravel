@@ -61,12 +61,14 @@ IFS=',' read -ra RUN_APPS <<< "$(yq -p=json '.apps_csv' <<< "$SELECTION")"
 
 # --- Resolve base / head refs ------------------------------------------------
 
+EXPLICIT_BASE=()
 if [[ $# -eq 1 ]]; then
     HEAD_REF="$1"
     BASE_REF=$(git merge-base 4.x "$HEAD_REF") \
         || { echo "ERROR: cannot compute merge-base(4.x, $HEAD_REF)" >&2; exit 1; }
 elif [[ $# -eq 3 && "$2" == "vs" ]]; then
     BASE_REF="$1"; HEAD_REF="$3"
+    EXPLICIT_BASE=(--explicit-base)
 else
     echo "Usage: $0 <head-ref> | <base-ref> vs <head-ref>" >&2
     exit 1
@@ -155,7 +157,8 @@ APPS_CSV=$(IFS=,; echo "${RUN_APPS[*]}")
 php -d memory_limit=-1 "${PLUGIN_DIR}/bin/ci/delta-report.php" "$OUT" "$BASE_LABEL" "$HEAD_LABEL" \
     --apps="$APPS_CSV" --base-ref="$BASE_REF" --head-ref="$HEAD_REF" \
     --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
-    --selection="$SELECTION_LABEL" --flags="$RUN_FLAGS"
+    --selection="$SELECTION_LABEL" --flags="$RUN_FLAGS" \
+    ${EXPLICIT_BASE[@]+"${EXPLICIT_BASE[@]}"}
 
 echo "" >&2
 echo "Raw data: $OUT (reused on rerun for this SHA pair; rm -rf to force clean)" >&2
