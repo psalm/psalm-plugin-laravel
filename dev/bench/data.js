@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793638865256,
+  "lastUpdate": 1793648080776,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17495,6 +17495,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b4cecb89be05fabd73c3e3fbb6dc4f48748086c8",
+          "message": "Type env-backed `config()` values from their config file, not the analysing machine's environment (#2171)\n\n* fix(config): type env-backed config values from their config file\n\nconfig() reflected the booted app's runtime values, so a leaf backed by\nenv() took the type of whatever the analysing machine's env held: null\n(NoValue, TypeDoesNotContainType) with the variable unset, string\n(RedundantCast, RedundantCondition) with it set or cached.\n\nConfigSourceIndex now maps each key to its config-file expression,\nmirroring the loader that booted the app (app dir with nested keys, the\nframework base merged at the top level and under mergeableOptions(), or\nTestbench's skeleton dir). A framework config set after the app files\nreplaces nested app files below its name, and a dotted literal key is one\nitem, never a nested file. A Foo::class key is the resolved class name.\nEnvExpressionTyper types an expression that reads the environment from\nits syntax, with the env() model of EnvHandler: null|string, or string\nplus a default that cannot be null. That rule moves into\nEnvHandler::returnTypeForDefault() unchanged, so env() calls in code keep\ntheir types. A config default the typer cannot type (most function calls,\na closure with statements, an app constant) gives mixed, since\nnull|string would leave out the default's own type. Literals, PHP and\nextension constants, Laravel's *_path() helpers, realpath(), and\narithmetic and literal arrays of those are typed: php-parser's\nConstExprEvaluator computes what it can (PHP_INT_MAX * 2 is a float), and\ninteger arithmetic it cannot compute may overflow, so it is float|int. An\nunqualified env() in a namespaced file may run a namespaced function any\nearlier file declared, so that value has no source. A variable may hold\nan env read only when the file may assign one to it: a statement outside\nthe return, an included file, or an assignment inside the return reads\nthe environment. A call through a variable may be env() and is mixed.\n\nRuntime keys still drive the walk. A runtime value the expression cannot\nproduce is a provider override and keeps its runtime type; what it can\nproduce includes the bools and null Env::get() maps \"true\", \"false\" and\n\"null\" to, so FEATURE=true does not send one machine back to its runtime\nvalue, also where Psalm folds those types into scalar. Other values keep\ntheir reflection, and a runtime null without a literal null behind it\nbecomes mixed.\n\ngeneralizeDefault() unwrapped a closure returned by a closure default\ntoo, but value() calls the default once, so config('k', fn () => fn () =>\n1) returns the inner closure. It now resolves one level.\n\nRefs #1683\n\n* docs(config): document env-backed config typing\n\nRefs #1683\n\n* Stop reporting `is_string()` guards on env-backed `config()` values with a default as redundant (#2191)\n\n* fix(config): keep a set env variable's null as ignorable #2172\n\nEnv::getOption() maps a variable set to \"null\" to null, so an\nis_string() or === null guard on an env value with a non-null default\nis not redundant. The null carries ignore_nullable_issues, so unguarded\nstring use stays clean; bool stays out (no ignore flag for it).\n\n* refactor(auth): drop the widening @var on the default guard #2172\n\n* fix(config): keep an env default's ignorable null for absent keys #2172\n\ngeneralizeDefault() rebuilt the union without ignore_nullable_issues, so\nconfig('missing', env('K', 'x')) reported PossiblyNullArgument.\n\n* fix(config): keep a merged shape's genuine null reported #2172\n\ncombineUnionTypes() ORs ignore_nullable_issues into shape properties,\nso $c ? ['url' => env('K', 'x')] : ['url' => null] hid the null.\n\n* docs(config): pin and document ignored-null env leaks #2172\n\n* refactor(config): decline env shape merges that hide a nested null #2172\n\nReplaces per-position flag tracking with a decline: a reported null\ninside an array value merged with an ignorable one leaves the\nexpression untyped. The shape has no hits in the delta apps.\n\n* fix(config): decline only array-with-array env merges #2172\n\nAn array merged with null, a scalar or [] keeps each value's flag;\nonly two array branches can OR a reported null into an ignorable one.\n\n* docs(config): state the exact env array-merge decline condition #2172\n\n* fix(config): trust an env() default's ignorable null only from a call #2172\n\nPsalm ORs ignore_nullable_issues on merges, so a default such as\n$c ? env('B', 'x') : null hid its genuine null.\n\n* fix(config): report a nullsafe env() default's null #2172\n\n$r?->get('k') adds the receiver's null, which Psalm merges with the\nflagged return and ORs the flag.\n\n* fix(config): apply the env() default provenance rule to config() defaults #2172\n\nAn absent key's default such as $c ? env('B', 'x') : null kept its\nORed ignore flag through generalizeDefault(). Both paths now share\nEnvHandler::defaultWithProvenNull().\n\n* refactor(config): move the env default model into EnvDefaultType #2172\n\nConfig resolution no longer imports the registered env() handler for\nshared type policy; EnvHandler delegates to the plain utility.\n\n* test(config): pin int-default concat as clean on Psalm 7.0.0 #2172\n\nvimeo/psalm#13031 (isConcatSafe() ignoring the null flag) is fixed in\n7.0.0, so the known limitation becomes a regression row.",
+          "timestamp": "2026-11-02T20:30:50+01:00",
+          "tree_id": "c69d22403a75d9e6b12929008ceeb9b4c94fff43",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b4cecb89be05fabd73c3e3fbb6dc4f48748086c8"
+        },
+        "date": 1793648079229,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.17,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1277,
             "unit": "MB"
           }
         ]
