@@ -71,6 +71,18 @@ function default_without_env_default_stays_reported(): int
     return strlen(config('missing.key', env('MISSING_KEY')));
 }
 
+function unguarded_use_of_env_with_an_env_backed_default(): int
+{
+    return strlen(env('APP_URL', env('FALLBACK_URL', 'http://localhost'))) + strlen(env('APP_URL', config('app.url')));
+}
+
+function env_default_that_may_be_a_genuine_null_stays_reported(bool $useFallback): int
+{
+    $default = $useFallback ? env('FALLBACK_URL', 'http://localhost') : null;
+
+    return strlen(env('APP_URL', $default));
+}
+
 function guard_on_a_value_without_env_is_still_redundant(): string
 {
     $timezone = config('app.timezone');
@@ -79,6 +91,7 @@ function guard_on_a_value_without_env_is_still_redundant(): string
 }
 ?>
 --EXPECTF--
+PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 RedundantCondition on line %d: Type string for $timezone is always string
 TypeDoesNotContainType on line %d: Type string for $timezone is always !string

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Helpers;
 
+use PhpParser\Node;
+use PhpParser\Node\Expr;
 use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
@@ -33,7 +35,10 @@ use Psalm\Type\Atomic\TString;
  *   value therefore still calls `is_bool()`, `=== true` and `=== false` impossible.
  * - Psalm ORs the flag when it merges unions, so a genuine null joined with such a value
  *   (`$c ? config('app.url') : null`, the values of a config array that also holds a default-less
- *   env read) is no longer reported downstream.
+ *   env read) is no longer reported downstream. For that reason env() in code trusts the flag of a
+ *   default only when the default is a call (`env('A', env('B', 'x'))`, `env('A', config('k'))`);
+ *   any other default (`$c ? env('B', 'x') : null`, even a variable holding `env('B', 'x')`) is
+ *   treated as a possibly genuine null and reported.
  * - Not every Psalm check honours the flag: concatenating an int-default value reports
  *   PossiblyInvalidOperand (https://github.com/vimeo/psalm/issues/13031); a return type conditional
  *   on a null argument takes the null arm too (`redirect(config('app.url'))`, `url()`, `cookie()`,
@@ -61,7 +66,25 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
-        return self::returnTypeForDefault(Arg::typeAt($event->getCallArgs(), $event->getStatementsSource(), 1));
+        $args = $event->getCallArgs();
+        $default = Arg::typeAt($args, $event->getStatementsSource(), 1);
+
+        // Psalm ORs ignore_nullable_issues when it merges unions, so a flagged default built by an
+        // expression (`$c ? env('B', 'x') : null`, a variable holding it) may carry a genuine null.
+        // Only a call answers with its own type, as env() and config() do.
+        if ($default instanceof Type\Union && $default->ignore_nullable_issues && !self::isPositionalCall($args[1] ?? null)) {
+            $default = $default->setProperties(['ignore_nullable_issues' => false]);
+        }
+
+        return self::returnTypeForDefault($default);
+    }
+
+    /** @psalm-mutation-free */
+    private static function isPositionalCall(?Node\Arg $arg): bool
+    {
+        return $arg instanceof Node\Arg && !$arg->name instanceof Node\Identifier && !$arg->unpack
+            && ($arg->value instanceof Expr\FuncCall || $arg->value instanceof Expr\StaticCall
+                || $arg->value instanceof Expr\MethodCall || $arg->value instanceof Expr\NullsafeMethodCall);
     }
 
     /**

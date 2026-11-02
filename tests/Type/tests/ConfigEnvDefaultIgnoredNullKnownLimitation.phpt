@@ -8,7 +8,8 @@
  * ternary in user code, or the values of a config array that mixes defaulted and default-less env
  * reads. Template inference drops the flag, so a typed Collection callback rejects the value and a
  * collection() iteration reports it as possibly null. A truthiness check sees the null like on any
- * nullable string.
+ * nullable string. An env() default that is not a call (a variable holding `env('B', 'x')`) may
+ * carry a merged genuine null, so its null is reported.
  * 'url' => env('APP_URL', 'http://localhost'), 'maintenance' => ['driver' => env('APP_MAINTENANCE_DRIVER', 'file'), ...],
  * cache 'database' store => ['connection' => env('DB_CACHE_CONNECTION'), 'table' => env('DB_CACHE_TABLE', 'cache'), ...]
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/2172
@@ -50,8 +51,16 @@ function truthiness_check(): string
 {
     return config('app.url') ?: 'http://localhost';
 }
+
+function env_default_held_in_a_variable(): int
+{
+    $fallback = env('FALLBACK_URL', 'http://localhost');
+
+    return strlen(env('APP_URL', $fallback));
+}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::map expects callable[impure](null|string, 0):string, but Closure[pure](string):string provided
 PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 RiskyTruthyFalsyComparison on line %d: Operand of type null|string contains type string, which can be falsy and truthy. This can cause possibly unexpected behavior. Use strict comparison instead.
+PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
