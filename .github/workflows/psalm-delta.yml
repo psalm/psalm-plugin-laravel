@@ -2,8 +2,9 @@ name: Psalm delta
 
 # Comment-triggered, opt-in PR check: runs the plugin on curated real-world
 # Laravel apps (bin/ci/test-apps.yml) for PR base AND head, then posts one sticky
-# comment with per-app issue deltas. Informational only, never fails the PR (a
-# delta is often intended: fixing FPs REMOVES issues, new narrowing ADDS some).
+# comment in the vimeo/psalm perf-report layout: per-app wall time, peak memory,
+# issue deltas, weighted issues and type coverage. Informational only, never fails
+# the PR (a delta is often intended: fixing FPs REMOVES issues, new narrowing ADDS some).
 #
 # `/psalm-delta [group|app|--flag ...]` (grammar: bin/ci/delta-select-apps.php,
 # groups + allowed flags: bin/ci/test-apps.yml); `help`/unknown tokens get a
@@ -385,6 +386,7 @@ jobs:
             php bin/ci/delta-report.php out "$BASE_LABEL" "$HEAD_LABEL" \
               --apps="$APPS" --base-sha="$BASE_SHA" --head-sha="$HEAD_SHA" \
               --details --selection="$SELECTION" --flags="$FLAGS" \
+              --run-url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
               || echo "Delta failed to produce a report. Check the workflow logs."
           } > comment.md
           # Quoted heredoc: literal backticks for the inline code span, no expansion.

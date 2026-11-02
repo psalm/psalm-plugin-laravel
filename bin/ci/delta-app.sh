@@ -21,7 +21,10 @@
 #
 # Output (per side, <label> in {base-label, head-label}):
 #   <out>/<app>/<app>-<label>--issues.json   (Psalm --report JSON)
-#   <out>/<app>/<app>-<label>--perf.json      (wall, coverage, count)
+#   <out>/<app>/<app>-<label>--perf.json      (wall_seconds, type_coverage_pct, total_issues,
+#                                              exit_code, peak_rss_mb: largest process in the
+#                                              Psalm process tree incl. workers, null if
+#                                              unmeasured; see delta-measure.php)
 #
 # Exit 0 even on a per-app Psalm failure: a crash log is written and the side's
 # JSON is omitted so delta-report.php renders the app as (missing) instead of
@@ -301,6 +304,9 @@ else
     write_psalm_xml
 fi
 
+# Harness-side launcher (not the plugin checkout under test) that measures peak RSS.
+MEASURE_PHP="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/delta-measure.php"
+
 # --- 3. Run one side: relink plugin, run Psalm, emit JSON --------------------
 
 run_side() {
@@ -356,8 +362,8 @@ run_side() {
             ;;
     esac
 
-    local out_txt err_txt side_tmp t0 exit_code wall coverage count
-    out_txt=$(mktemp); err_txt=$(mktemp); side_tmp=$(mktemp -d)
+    local out_txt err_txt rss_txt side_tmp t0 exit_code wall coverage count peak_rss
+    out_txt=$(mktemp); err_txt=$(mktemp); rss_txt=$(mktemp); side_tmp=$(mktemp -d)
     # Sub-second wall time via PHP microtime — portable (macOS `date` lacks %N)
     # and finer than whole-second `date +%s`. Still threshold-filtered downstream
     # because CI runner jitter dominates small deltas.
@@ -370,9 +376,11 @@ run_side() {
     # Through the side's own `psalm-laravel analyze`, not vendor/bin/psalm: it
     # consumes --blade/--no-blade, --experimental and --plugin-option, which Psalm rejects, and forwards
     # everything else to Psalm verbatim, with Psalm's exit code and streams.
+    # delta-measure.php runs the command with this shell's stdio, env and cwd,
+    # passes its exit code through and writes the peak RSS (MB) to $rss_txt.
     (
         cd "$app_dir"
-        TMPDIR="$side_tmp" php \
+        TMPDIR="$side_tmp" php "$MEASURE_PHP" "$rss_txt" php \
             vendor/bin/psalm-laravel analyze -c psalm.xml \
             --no-cache --no-diff --no-progress --no-suggestions --monochrome \
             ${FLAGS_EXTRA[@]+"${FLAGS_EXTRA[@]}"} \
@@ -381,6 +389,7 @@ run_side() {
     ) || exit_code=$?
     wall=$(php -r 'printf("%.3f", microtime(true) - (float) $argv[1]);' "$t0")
     rm -rf "$side_tmp"
+    peak_rss=$(cat "$rss_txt")
 
     # Psalm exits non-zero whenever issues are found, so a non-empty report is
     # the real success signal; treat a missing/empty report as a crash.
@@ -388,7 +397,7 @@ run_side() {
         echo "[$APP/$label] no report (exit $exit_code) — recording (missing)" >&2
         { echo "=== $APP/$label exit $exit_code after ${wall}s ==="; echo "--- stderr ---"; cat "$err_txt"; echo "--- stdout ---"; cat "$out_txt"; } > "$crash_log"
         rm -f "$issues_file"
-        rm -rf "$app_dir" "$out_txt" "$err_txt"
+        rm -rf "$app_dir" "$out_txt" "$err_txt" "$rss_txt"
         return 0
     fi
 
@@ -402,12 +411,13 @@ run_side() {
             "wall_seconds" => (float) $argv[4],
             "type_coverage_pct" => $cov === "" ? null : (float) $cov,
             "total_issues" => (int) $argv[6], "exit_code" => (int) $argv[7],
+            "peak_rss_mb" => $argv[8] === "" ? null : (float) $argv[8],
         ], JSON_PRETTY_PRINT));
-    ' "$perf_file" "$APP" "$label" "$wall" "${coverage:-}" "${count:-0}" "$exit_code"
+    ' "$perf_file" "$APP" "$label" "$wall" "${coverage:-}" "${count:-0}" "$exit_code" "$peak_rss"
 
     rm -f "$crash_log"
-    echo "[$APP/$label] $count issues, ${coverage:-?}% coverage, ${wall}s" >&2
-    rm -rf "$app_dir" "$out_txt" "$err_txt"
+    echo "[$APP/$label] $count issues, ${coverage:-?}% coverage, ${wall}s, ${peak_rss:-?} MB peak RSS" >&2
+    rm -rf "$app_dir" "$out_txt" "$err_txt" "$rss_txt"
 }
 
 # Head re-points a symlink when the plugin's dependency shape matches base's
