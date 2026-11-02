@@ -105,7 +105,7 @@ final class EnvExpressionTyperTest extends TestCase
     /** @param non-empty-list<array-key> $path */
     #[Test]
     #[DataProvider('nullableShapeExpressions')]
-    public function ignores_only_the_null_a_set_variable_reads_in_a_shape(string $expression, array $path, bool $expected): void
+    public function keeps_the_null_flags_of_a_shape_merge(string $expression, array $path, bool $expected): void
     {
         $type = EnvExpressionTyper::type($this->parse($expression));
 
@@ -123,15 +123,29 @@ final class EnvExpressionTyperTest extends TestCase
     /** @return iterable<string, array{string, non-empty-list<array-key>, bool}> */
     public static function nullableShapeExpressions(): iterable
     {
-        yield 'keyed, genuine null' => ["env('A') ? ['url' => env('K', 'x')] : ['url' => null]", ['url'], false];
-        yield 'keyed, unset variable' => ["env('A') ? ['url' => env('K', 'x')] : ['url' => env('B')]", ['url'], false];
         yield 'keyed, set variables' => ["env('A') ? ['url' => env('K', 'x')] : ['url' => env('B', 'y')]", ['url'], true];
-        yield 'keyed, reported sibling key' => ["env('A') ? ['url' => env('K', 'x'), 'key' => env('B')] : ['url' => env('C', 'y'), 'key' => null]", ['url'], true];
-        yield 'list, genuine null' => ["env('A') ? [env('K', 'x')] : [null]", [0], false];
-        yield 'list, unset variable' => ["env('A') ? [env('K', 'x')] : [env('B')]", [0], false];
         yield 'list, set variables' => ["env('A') ? [env('K', 'x')] : [env('B', 'y')]", [0], true];
-        yield 'nested shape, genuine null' => ["env('A') ? ['db' => ['url' => env('K', 'x')]] : ['db' => ['url' => null]]", ['db', 'url'], false];
-        yield 'shape as an env default' => ["env('X', env('A') ? ['url' => env('K', 'x')] : ['url' => null])", ['url'], false];
+        yield 'nested shape, set variables' => ["env('A') ? ['db' => ['url' => env('K', 'x')]] : ['db' => ['url' => env('B', 'y')]]", ['db', 'url'], true];
+        yield 'keyed, reported nulls only' => ["env('A') ? ['url' => env('K')] : ['url' => null]", ['url'], false];
+    }
+
+    #[Test]
+    #[DataProvider('hiddenNullShapeExpressions')]
+    public function declines_a_shape_merge_that_would_hide_a_nested_reported_null(string $expression): void
+    {
+        $this->assertSame('mixed', EnvExpressionTyper::type($this->parse($expression))->getId());
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function hiddenNullShapeExpressions(): iterable
+    {
+        yield 'keyed, genuine null' => ["env('A') ? ['url' => env('K', 'x')] : ['url' => null]"];
+        yield 'keyed, unset variable' => ["env('A') ? ['url' => env('K', 'x')] : ['url' => env('B')]"];
+        yield 'keyed, reported sibling key' => ["env('A') ? ['url' => env('K', 'x'), 'key' => env('B')] : ['url' => env('C', 'y'), 'key' => null]"];
+        yield 'list, genuine null' => ["env('A') ? [env('K', 'x')] : [null]"];
+        yield 'list, unset variable' => ["env('A') ? [env('K', 'x')] : [env('B')]"];
+        yield 'nested shape, genuine null' => ["env('A') ? ['db' => ['url' => env('K', 'x')]] : ['db' => ['url' => null]]"];
+        yield 'shape as an env default' => ["env('X', env('A') ? ['url' => env('K', 'x')] : ['url' => null])"];
     }
 
     #[Test]

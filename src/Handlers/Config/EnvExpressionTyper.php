@@ -12,7 +12,6 @@ use PhpParser\Node\Name;
 use PhpParser\NodeFinder;
 use Psalm\LaravelPlugin\Handlers\Helpers\EnvHandler;
 use Psalm\Type;
-use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TFalse;
@@ -302,9 +301,10 @@ final class EnvExpressionTyper
     }
 
     /**
-     * Psalm ORs ignore_nullable_issues on a merge, shape properties included. Where a side reports its
-     * null (`$c ? env('K', 'x') : null`, `$c ? ['url' => env('K', 'x')] : ['url' => null]`), the merged
-     * null at that position stays reported.
+     * Psalm ORs ignore_nullable_issues on a merge, shape values included. A side whose own null is
+     * reported (`$c ? env('K', 'x') : null`) keeps the merged null reported; a reported null inside an
+     * array value joined with an ignorable one (`$c ? ['url' => env('K', 'x')] : ['url' => null]`) is
+     * not typed.
      *
      * @psalm-external-mutation-free
      */
@@ -314,123 +314,43 @@ final class EnvExpressionTyper
             return null;
         }
 
-        $reported = [...self::reportedNullPaths($a), ...self::reportedNullPaths($b)];
         $union = Type::combineUnionTypes($a, $b);
 
-        return $reported === [] ? $union : self::reportNullAt($union, $reported, []);
+        if ((self::hasNestedNull($a, false) || self::hasNestedNull($b, false)) && self::hasNestedNull($union, true)) {
+            return null;
+        }
+
+        return $union->ignore_nullable_issues && (self::hasNull($a, false) || self::hasNull($b, false))
+            ? $union->setProperties(['ignore_nullable_issues' => false])
+            : $union;
+    }
+
+    /** @psalm-pure */
+    private static function hasNull(Union $type, bool $ignored): bool
+    {
+        return $type->isNullable() && $type->ignore_nullable_issues === $ignored;
     }
 
     /**
-     * Positions of a reported null: shape keys, `null` for any key of a generic array.
+     * Whether an array value (shape property, list item, generic value) at any depth holds a null
+     * whose ignore_nullable_issues is $ignored.
      *
-     * @param list<array-key|null> $path
-     * @return list<list<array-key|null>>
      * @psalm-pure
      */
-    private static function reportedNullPaths(Union $type, array $path = []): array
+    private static function hasNestedNull(Union $type, bool $ignored): bool
     {
-        $paths = $type->isNullable() && !$type->ignore_nullable_issues ? [$path] : [];
-
         foreach ($type->getAtomicTypes() as $atomic) {
-            foreach (self::valueTypes($atomic) as [$key, $value]) {
-                $paths = [...$paths, ...self::reportedNullPaths($value, [...$path, $key])];
-            }
-        }
+            $values = match (true) {
+                $atomic instanceof TArray => [$atomic->type_params[1]],
+                $atomic instanceof TKeyedArray => [...\array_values($atomic->properties), ...($atomic->fallback_params === null ? [] : [$atomic->fallback_params[1]])],
+                default => [],
+            };
 
-        return $paths;
-    }
-
-    /**
-     * @param list<list<array-key|null>> $reported
-     * @param list<array-key|null> $path
-     * @psalm-pure
-     */
-    private static function reportNullAt(Union $type, array $reported, array $path): Union
-    {
-        if ($type->ignore_nullable_issues && self::matchesAny($path, $reported)) {
-            $type = $type->setProperties(['ignore_nullable_issues' => false]);
-        }
-
-        return $type->setTypes(array_map(
-            static fn(Atomic $atomic): Atomic => self::reportNullInValues($atomic, $reported, $path),
-            $type->getAtomicTypes(),
-        ));
-    }
-
-    /**
-     * @param list<list<array-key|null>> $reported
-     * @param list<array-key|null> $path
-     * @psalm-pure
-     */
-    private static function reportNullInValues(Atomic $atomic, array $reported, array $path): Atomic
-    {
-        if ($atomic instanceof TArray) {
-            return $atomic->setTypeParams([$atomic->type_params[0], self::reportNullAt($atomic->type_params[1], $reported, [...$path, null])]);
-        }
-
-        if (!$atomic instanceof TKeyedArray) {
-            return $atomic;
-        }
-
-        $properties = $atomic->properties;
-        foreach ($properties as $key => $property) {
-            $properties[$key] = self::reportNullAt($property, $reported, [...$path, $key]);
-        }
-
-        $fallback = $atomic->fallback_params === null
-            ? null
-            : [$atomic->fallback_params[0], self::reportNullAt($atomic->fallback_params[1], $reported, [...$path, null])];
-
-        return TKeyedArray::make($properties, $atomic->class_strings, $fallback, $atomic->is_list, $atomic->from_docblock);
-    }
-
-    /**
-     * @return list<array{array-key|null, Union}>
-     * @psalm-pure
-     */
-    private static function valueTypes(Atomic $atomic): array
-    {
-        if ($atomic instanceof TArray) {
-            return [[null, $atomic->type_params[1]]];
-        }
-
-        if (!$atomic instanceof TKeyedArray) {
-            return [];
-        }
-
-        $values = [];
-        foreach ($atomic->properties as $key => $property) {
-            $values[] = [$key, $property];
-        }
-
-        if ($atomic->fallback_params !== null) {
-            $values[] = [null, $atomic->fallback_params[1]];
-        }
-
-        return $values;
-    }
-
-    /**
-     * A `null` segment matches any key.
-     *
-     * @param list<array-key|null> $path
-     * @param list<list<array-key|null>> $candidates
-     * @psalm-pure
-     */
-    private static function matchesAny(array $path, array $candidates): bool
-    {
-        foreach ($candidates as $candidate) {
-            if (\count($candidate) !== \count($path)) {
-                continue;
-            }
-
-            foreach ($path as $i => $segment) {
-                if ($segment !== null && $candidate[$i] !== null && $segment !== $candidate[$i]) {
-                    continue 2;
+            foreach ($values as $value) {
+                if (self::hasNull($value, $ignored) || self::hasNestedNull($value, $ignored)) {
+                    return true;
                 }
             }
-
-            return true;
         }
 
         return false;
