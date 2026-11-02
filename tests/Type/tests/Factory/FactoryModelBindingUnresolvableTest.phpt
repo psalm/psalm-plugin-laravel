@@ -8,8 +8,7 @@ namespace Database\Factories {
      * No-match: no `$model`, and the shortname (`Phantom`) maps to no scanned
      * Model. The handler resolves nothing and injects nothing — it never
      * guesses a wrong binding. The chain falls back to base `Model` without
-     * crashing (`MissingTemplateParam` is already suppressed for bare factory
-     * subclasses by SuppressHandler, so no error surfaces either).
+     * crashing, and Psalm reports the omitted `TModel` (it has no default).
      */
     final class PhantomFactory extends Factory
     {
@@ -26,7 +25,8 @@ namespace App\Sandbox\Unresolvable {
     use Database\Factories\PhantomFactory;
 
     $_one = (new PhantomFactory())->create();
-    /** @psalm-check-type-exact $_one = \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> */;
+    /** @psalm-check-type-exact $_one = \Illuminate\Database\Eloquent\Model */;
 }
 ?>
 --EXPECTF--
+MissingTemplateParam on line %d: Database\Factories\PhantomFactory has missing template params when extending Illuminate\Database\Eloquent\Factories\Factory, expecting at least 1

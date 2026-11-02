@@ -27,7 +27,6 @@ use Illuminate\Http\Request;
  * @psalm-suppress UnusedVariable
  * @psalm-suppress PossiblyUndefinedStringArrayOffset
  * @psalm-suppress PossiblyInvalidArgument
- * @psalm-suppress PossiblyInvalidCast
  */
 function assignRefReassignProbe(Request $request): RedirectResponse {
     $request->validate(['k' => 'email']);

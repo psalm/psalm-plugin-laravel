@@ -6,8 +6,9 @@ namespace Illuminate\Database\Eloquent;
  * Moving the @template from method-level to class-level allows implementations
  * to bind the model type via @implements Scope<ConcreteModel>, which prevents
  * MoreSpecificImplementedParamType errors when narrowing $builder and $model.
+ * The default keeps a bare `implements Scope` free of MissingTemplateParam.
  *
- * @template TModel of \Illuminate\Database\Eloquent\Model
+ * @template TModel of \Illuminate\Database\Eloquent\Model = \Illuminate\Database\Eloquent\Model
  *
  * @link https://github.com/psalm/psalm-plugin-laravel/issues/207
  */

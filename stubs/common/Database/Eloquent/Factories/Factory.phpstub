@@ -12,33 +12,36 @@ use Illuminate\Support\Traits\Macroable;
  * across the chain. The receiver's `TCount` decides whether `create()`,
  * `make()`, and `createQuietly()` resolve to a single model or a collection.
  *
- * Plurality split mirrors Laravel runtime in `Factory::make()`:
- * `count === null` → single `TModel`; any other value → `Collection<int, TModel>`,
- * including `count(0)` (empty collection) and `count(1)` (one-item collection).
+ * Plurality mirrors Laravel's runtime in `Factory::make()`: `count === null` is a single
+ * `TModel`, any other value (`count(0)` and `count(1)` included) is `Collection<int, TModel>`.
+ * So the conditional is `TCount is null`, and the providers encode "some non-null count" as the
+ * plural sentinel `int<2, max>` (a literal sentinel trips a Psalm template rewrite bug).
  *
- * The conditional set `null|0|1` is the set of counts that select the single
- * branch as far as the stub can express it. The `FactoryCountTypeProvider`
- * handler reroutes literal `0` and `1` to a plural sentinel so the runtime
- * semantics still hold for explicit `count(0)` / `count(1)` calls.
+ * `TCount` defaults to its bound, so a factory the plugin cannot narrow keeps
+ * `User|Collection<int, User>`. The plugin synthesizes a `TCount` template on every user
+ * `Factory` subclass written as `@extends Factory<User>` (FactoryModelBindingHandler), so
+ * `factory()`, `new UserFactory(3)`, `count()`, `times()`, `forEachSequence()` and `new()`
+ * return the CONCRETE factory class with its count (`UserFactory<int<2, max>>`) and custom
+ * methods stay callable after the count is set. `@extends Factory<User, null>` or
+ * `<User, int>` is an explicit contract and opts out of the synthesis, and so does a factory
+ * that declares ANY method this class (or its traits) declares, other than `definition()` and a
+ * `configure()` that only returns a count-keeping chain (its count is unknown, the default
+ * `int|null`); a descendant that does so makes every definite answer for its ancestors the
+ * union. See "Factories" in docs/contributing/decisions.md and #2188.
  *
- * KNOWN LIMITATION: Psalm ignores `= null` on non-purity templates, so a user
- * factory written as `class UserFactory extends Factory<User>` (one template
- * arg) keeps `TCount` at its `int|null` bound. Since Psalm 7.0.0-rc6 the
- * conditional then evaluates both branches (`User|Collection<int, User>`);
- * `@extends Factory<User, null>` restores the single model. The default cannot
- * be bound to `null` plugin-side because a count also arrives through
- * `new UserFactory(3)` and `User::factory(3)`. See
- * `FactoryUnboundCountKnownLimitation.phpt` and "Factories" in
- * docs/contributing/decisions.md.
+ * `TCount` is covariant so a provider-built `Factory<User, null>` is accepted where
+ * `Factory<User>` (= `Factory<User, int|null>`) is declared; `TCount` appears only in
+ * return positions, so covariance is sound.
  *
  * Methods that return `static` (state, for, has, etc.) propagate `TCount`
  * automatically because Psalm preserves template parameters across `static`
- * returns. This keeps follow-up #696 (`for*()` / `has*()` magic methods) free
- * to add their own provider without touching plurality logic — those methods
+ * returns. A USER method declared `static` / `self` / `Factory` keeps it only when its body
+ * is nothing but `return` of a count-keeping chain (FactoryUserMethodCountProvider). This keeps follow-up #696 (`for*()` / `has*()` magic methods) free
+ * to add their own provider without touching plurality logic, those methods
  * just need to return `static`.
  *
  * @template TModel of Model
- * @template TCount of int|null = null
+ * @template-covariant TCount of int|null = int|null
  *
  * @method $this trashed()
  */
@@ -49,11 +52,11 @@ abstract class Factory
     }
 
     /**
-     * Typed `int|null` rather than `TCount`: a subclass written as
-     * `@extends Factory<User>` leaves `TCount` unbound, and Psalm then rejects
-     * every `new UserFactory(3)` against the unresolved template.
+     * `|int|null` beside `TCount`: `TCount` may be bound to `null` (`@extends Factory<User, null>`),
+     * which alone would reject `new UserFactory(3)`. A literal argument infers the count (`new UserFactory(3)`
+     * is `UserFactory<3>`, `new UserFactory()` is `UserFactory<null>`).
      *
-     * @param  int|null  $count
+     * @param  TCount|int|null  $count
      */
     public function __construct(
         $count = null,
@@ -76,10 +79,9 @@ abstract class Factory
     /**
      * Specify how many models should be generated.
      *
-     * Return type is overridden by FactoryCountTypeProvider — the handler
-     * returns the BASE Factory class with the literal TCount as the second
-     * template arg, which is required for the conditional return on
-     * create()/make() to resolve correctly through user-defined subclasses.
+     * Return type is overridden by FactoryCountTypeProvider: it returns the CALLED concrete class
+     * with the new count, so custom methods stay callable (`UserFactory<int<2, max>>`). A factory
+     * without a synthesized `TCount` gets the base `Factory<TModel, count>`.
      *
      * @return Factory<TModel, int|null>
      */
@@ -88,7 +90,7 @@ abstract class Factory
     /**
      * Get a new factory instance for the given number of models.
      *
-     * Return type is overridden by FactoryCountTypeProvider — see count().
+     * Return type is overridden by FactoryCountTypeProvider, see count().
      *
      * @return Factory<TModel, int>
      */
@@ -133,7 +135,7 @@ abstract class Factory
      *
      * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
      * @param  Model|null  $parent
-     * @return (TCount is null|0|1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
+     * @return (TCount is null ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
      */
     public function create($attributes = [], ?Model $parent = null) {}
 
@@ -142,7 +144,7 @@ abstract class Factory
      *
      * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
      * @param  Model|null  $parent
-     * @return (TCount is null|0|1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
+     * @return (TCount is null ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
      */
     public function createQuietly($attributes = [], ?Model $parent = null) {}
 
@@ -152,7 +154,7 @@ abstract class Factory
      *
      * @param  array<string, mixed>  $attributes
      * @param  Model|null  $parent
-     * @return \Closure(): (TCount is null|0|1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
+     * @return \Closure(): (TCount is null ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
      */
     public function lazy(array $attributes = [], ?Model $parent = null) {}
 
@@ -170,7 +172,7 @@ abstract class Factory
      *
      * @param  (callable(array<string, mixed>): array<string, mixed>)|array<string, mixed>  $attributes
      * @param  Model|null  $parent
-     * @return (TCount is null|0|1 ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
+     * @return (TCount is null ? TModel : \Illuminate\Database\Eloquent\Collection<int, TModel>)
      */
     public function make($attributes = [], ?Model $parent = null) {}
 
@@ -256,15 +258,4 @@ abstract class Factory
      * @return static
      */
     public function for($factory, ?string $relationship = null) {}
-
-    /**
-     * Restates Laravel's `Factory<TClass>` with the defaulted TCount spelled out:
-     * MissingTemplateParam ignores `@template` defaults and rejects the 1-arg form.
-     *
-     * @template TClass of Model
-     *
-     * @param  class-string<TClass>  $modelName
-     * @return class-string<Factory<TClass, null>>
-     */
-    public static function resolveFactoryName(string $modelName) {}
 }

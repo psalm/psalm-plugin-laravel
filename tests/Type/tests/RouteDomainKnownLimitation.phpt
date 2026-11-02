@@ -36,14 +36,19 @@ function domain_subclass_native_return(ChildRoute $child): void
 }
 
 /**
- * KNOWN LIMITATION: a first-class callable leaves `TDomain` unresolved, so calling it with a string is
- * reported as InvalidArgument. Laravel 13.18+'s native type reports it too (as `TGeneratedFromParam0`).
+ * KNOWN LIMITATION: a first-class callable binds `TDomain` to its bound, so every call through it returns
+ * the whole union instead of the getter or setter branch. Psalm reported the setter call as
+ * InvalidArgument until vimeo/psalm#13008.
  */
 function domain_first_class_callable(Route $route): void
 {
     $fn = $route->domain(...);
-    $fn('api.example.com');
+
+    $_set = $fn('api.example.com');
+    /** @psalm-check-type-exact $_set = Illuminate\Routing\Route&static|null|string */
+
+    $_get = $fn();
+    /** @psalm-check-type-exact $_get = Illuminate\Routing\Route&static|null|string */
 }
 ?>
 --EXPECTF--
-InvalidArgument on line %d: Argument 1 expects TDomain:fn-illuminate\routing\route::domain as BackedEnum|null|string, but 'api.example.com' provided

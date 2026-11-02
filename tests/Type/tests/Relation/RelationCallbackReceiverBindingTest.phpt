@@ -234,7 +234,6 @@ function takes_string(string $_value): void {}
 --EXPECTF--
 MissingParamType on line %d: Parameter $relation has no provided type
 InvalidArgument on line %d: Argument 3 of TransparentBuilder::whereHas expects string, but array<never, never> provided
-InvalidCast on line %d: array<never, never> cannot be cast to string
 InvalidArgument on line %d: Argument 4 of TransparentBuilder::whereHas expects Illuminate\Contracts\Database\Query\Expression|int, but 'wrong' provided
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method where

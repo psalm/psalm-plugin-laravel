@@ -18,7 +18,6 @@ use Psalm\Issue\CodeIssue;
 use Psalm\Issue\DocblockTypeContradiction;
 use Psalm\Issue\ImplicitToStringCast;
 use Psalm\Issue\InvalidArrayOffset;
-use Psalm\Issue\InvalidCast;
 use Psalm\Issue\InvalidDocblock;
 use Psalm\Issue\InvalidMethodCall;
 use Psalm\Issue\InvalidNullableReturnType;
@@ -537,7 +536,6 @@ final class ShadowIssueRelocatorTest extends TestCase
     {
         yield 'NoValue on the keyed call' => [new NoValue(self::AWARE_NO_VALUE, self::selectionLocation(self::AWARE_KEYED_CALL, 6))];
         yield 'NullArgument on the list-form call' => [new NullArgument(self::AWARE_NULL_ARGUMENT, self::selectionLocation(self::AWARE_LIST_CALL, 8), self::AWARE_CALLEE)];
-        yield 'InvalidCast on the list-form call' => [new InvalidCast('array<never, never> cannot be cast to string', self::selectionLocation(self::AWARE_LIST_CALL, 8))];
         yield 'ImplicitToStringCast on the list-form call' => [new ImplicitToStringCast('Argument 1 of Illuminate\View\Factory::getConsumableComponentData expects string, Foo provided with a __toString method', self::selectionLocation(self::AWARE_LIST_CALL, 8))];
     }
 

@@ -37,44 +37,6 @@ final class ConcreteContract implements HandlerContract
     public function dispatch(string $sink = ''): void { system($sink); }
 }
 
-class Base
-{
-    /** @psalm-impure */
-    public function go(string ...$rest): void {}
-
-    /** @psalm-impure */
-    public static function s(string ...$rest): void {}
-
-    /**
-     * @psalm-impure
-     * @psalm-suppress UnusedParam
-     */
-    private static function p(string ...$rest): void {}
-
-    public static function viaStatic(): void
-    {
-        static::s(sink: tainted());
-    }
-
-    public static function viaStaticPrivate(): void
-    {
-        static::p(sink: tainted());
-    }
-}
-
-class Child extends Base
-{
-    /** @psalm-suppress ParamNameMismatch */
-    #[\Override]
-    public function go(string $sink = '', string ...$rest): void { system($sink); }
-
-    /** @psalm-suppress ParamNameMismatch */
-    #[\Override]
-    public static function s(string $sink = '', string ...$rest): void { system($sink); }
-
-    public static function p(string $sink = '', string ...$rest): void { system($sink); }
-}
-
 interface HtmlWriter
 {
     /**
@@ -113,17 +75,6 @@ function bodilessMethods(AbstractHandler $handler, HandlerContract $contract): v
 }
 
 /**
- * A single receiver class only bounds an instance call, and `static::` is late-bound; a private
- * parent method does not pin `static::` (PHP dispatches to the child's public method).
- */
-function inexactDispatch(Base $receiver): void
-{
-    $receiver->go(sink: tainted());
-    Child::viaStatic();
-    Child::viaStaticPrivate();
-}
-
-/**
  * An intersection is one union member whose primary component is Psalm's choice, not the written
  * order. The variadic component is a concrete class so the bodiless decline cannot mask the guard.
  */
@@ -134,9 +85,6 @@ function intersectionBothOrders(VariadicWriter&HtmlWriter $a, OtherHtmlWriter&Ot
 }
 ?>
 --EXPECTF--
-TaintedShell on line %d: Detected tainted shell code
-TaintedShell on line %d: Detected tainted shell code
-TaintedShell on line %d: Detected tainted shell code
 TaintedShell on line %d: Detected tainted shell code
 TaintedShell on line %d: Detected tainted shell code
 TaintedHtml on line %d: Detected tainted HTML

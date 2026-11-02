@@ -44,8 +44,8 @@ Ground truth:
 
 | Tag | Spellings | Target | Notes |
 |---|---|---|---|
-| `@template T [of\|as Bound]` | bare, `psalm-`, `phpstan-` | function-like, class | Invariant. `super Bound` sets a lower bound |
-| `@template-covariant T` | bare, `psalm-`, `phpstan-` | class | |
+| `@template T [of\|as Bound] [= Default]` | bare, `psalm-`, `phpstan-` | function-like, class | Invariant. `super Bound` sets a lower bound. See [defaults](#template-defaults) |
+| `@template-covariant T [of Bound] [= Default]` | bare, `psalm-`, `phpstan-` | class | |
 | `@extends Parent<A>` | bare, `psalm-`, `phpstan-`, `@template-extends`, `@inherits` | class, interface | |
 | `@implements Iface<A>` | bare, `psalm-`, `phpstan-`, `@template-implements` | class | |
 | `@use Trait<A>` | bare, `psalm-`, `phpstan-`, `@template-use` | docblock above `use Trait;` | |
@@ -53,6 +53,17 @@ Ground truth:
 | `@psalm-purity-template P` | | function-like, class | Template over capability sets ([purity](purity.md#purity-templates)) |
 
 No `@template-contravariant` exists.
+
+### Template defaults
+
+`@template T of int|null = int|null` (Psalm 7.0) lets a class reference leave its trailing templates out.
+
+- **Where a default applies.** A class type read from a docblock with fewer arguments than templates (`@extends Factory<User>`, `@param BelongsToMany<Part, Shop>`, `@use Trait<A>`, `@implements Iface<A>`) takes the defaults for the missing trailing arguments. Omitting a template without a default is `MissingTemplateParam`: the message says `expecting at least N` when some template of the class has a default, and plain `expecting N` when none has (`N` is the count of templates without one in the first case, the total in the second).
+- **The default must sit inside the bound**, else `InvalidDocblock`. It may name an earlier template (`B = list<A>`). Defaults are trailing: write them after the templates without one.
+- **A bare class name reads the bounds, not the defaults.** `@param Factory $f` is `Factory<Model, int|null>`, while `@param Factory<User> $f` fills `TCount` from its default. A conditional return keyed on that template therefore resolves both branches for the bare form.
+- **Plugin-built types are not filled.** A `TGenericObject` created in a handler or provider keeps exactly the arguments it was given: emit every slot (see `ModelRelationReturnTypeHandler`, which emits all four `BelongsToMany` slots).
+- **A method template default binds a template nothing infers.** `@template T = string` with `@return T` and no argument to infer `T` gives `string` (without the default: `never`). In a union the default shows up (`int|TDef` with `TDef = mixed` gives `mixed`), so `= never` contributes nothing and Laravel's `TReturnDefault = never` is unobservable. Laravel's `TMinResult = mixed` is unchanged because the template sits in a conditional branch that the callback argument already infers, or that is not selected.
+- **A default value on a parameter wins over the template default** when the argument is omitted: `new Holder()` binds `T` from `$x = null`, not from `= int`.
 
 ## Assertions and narrowing
 
