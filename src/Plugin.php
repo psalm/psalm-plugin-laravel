@@ -179,6 +179,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/References/IndirectMethodReferenceHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/RelationMethodParser.php';
         require_once __DIR__ . '/Handlers/Eloquent/Schema/SchemaStateProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/Support/FactoryCount.php';
         require_once __DIR__ . '/Handlers/Eloquent/Support/RelationResolver.php';
         require_once __DIR__ . '/Handlers/Facades/AppFacadeRegistrationHandler.php';
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
@@ -219,7 +220,6 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
         Handlers\Eloquent\CustomCollectionHandler::reset();
         Handlers\Eloquent\FactoryModelBindingHandler::reset();
-        Handlers\Eloquent\FactoryUserMethodCountProvider::reset();
         Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder::reset();
         Handlers\Eloquent\ModelAggregateLoadHandler::reset();
         Handlers\Eloquent\ModelAggregatePropertyHandler::reset();
@@ -232,6 +232,7 @@ final class Plugin implements PluginEntryPointInterface
         Handlers\Eloquent\ModelRegistrationHandler::reset();
         Handlers\References\IndirectMethodReferenceHandler::reset();
         Handlers\Eloquent\RelationMethodParser::reset();
+        Handlers\Eloquent\Support\FactoryCount::reset();
         Handlers\Eloquent\Support\RelationResolver::reset();
         SchemaStateProvider::reset();
         Handlers\Facades\AppFacadeRegistrationHandler::reset();
@@ -465,6 +466,9 @@ final class Plugin implements PluginEntryPointInterface
         // naming convention but omit the docblock — binds TModel so create()/make() resolve the
         // concrete model (and silences the `MissingTemplateParam` for the omitted TModel). See #780.
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryModelBindingHandler::class);
+        // Registers the user-method count provider on every class the binding handler synthesized a `TCount` for,
+        // so it MUST be registered after it: AfterCodebasePopulated handlers run in registration order.
+        $registration->registerHooksFromClass(Handlers\Eloquent\FactoryUserMethodCountProvider::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and

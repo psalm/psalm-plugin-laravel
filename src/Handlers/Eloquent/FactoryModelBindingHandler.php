@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\FactoryCount;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -29,7 +30,7 @@ use Psalm\Type\Union;
  * and the `MissingTemplateParam` Psalm reports for the omitted `TModel` (#780) is silenced.
  *
  * Inverse of #517 (Model -> Factory) and the missing complement of
- * {@see ModelFactoryMethodTypeProvider}, whose Tier-2 gate
+ * `ModelFactoryMethodTypeProvider`, whose Tier-2 gate
  * `hasModelTemplateBinding()` reads exactly the slot this handler fills.
  *
  * Runs on `AfterCodebasePopulated` (not `AfterClassLikeVisit`) because model
@@ -45,12 +46,6 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
 
     private static bool $appNamespaceResolved = false;
 
-    /**
-     * Marker on the storage that received a plugin-synthesized `TCount`, set at synthesis time. A user's own
-     * `@template TCount` never carries it, however it maps into `Factory`, so no provider rewrites it.
-     */
-    private const SYNTHESIZED_MARKER = 'laravel_factory_synthesized_count';
-
     public static function reset(): void
     {
         self::$appNamespaceCache = null;
@@ -62,12 +57,6 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
         if (\class_exists(Factory::class)) {
             Factory::flushState();
         }
-    }
-
-    /** @psalm-mutation-free */
-    public static function hasSynthesizedCount(ClassLikeStorage $storage): bool
-    {
-        return isset($storage->custom_metadata[self::SYNTHESIZED_MARKER]);
     }
 
     #[\Override]
@@ -124,7 +113,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
      * declared on `Factory`, read the subclass's count.
      *
      * Left untouched: a class that already declares `TCount`, writes `@extends Factory<M, X>` with an
-     * explicit second argument, or declares a `Factory` method ({@see FactoryUserMethodCountProvider::runsLaravelCountPath()}),
+     * explicit second argument, or declares a `Factory` method ({@see FactoryCount::runsLaravelCountPath()}),
      * and every descendant of those. Their count is a user contract, so it stays the default `int|null`.
      *
      * @param array<lowercase-string, true> $injected classes whose extends count this handler raised
@@ -136,7 +125,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
             static fn(ClassLikeStorage $storage): bool => isset($storage->parent_classes[$factoryFqcnLc]),
         ));
 
-        FactoryUserMethodCountProvider::indexDescendants($codebase, $factories);
+        FactoryCount::indexDescendants($codebase, $factories);
 
         // Ancestors first, so a parent is synthesized before the classes extending it.
         \usort($factories, static fn(ClassLikeStorage $a, ClassLikeStorage $b): int => \count($a->parent_classes) <=> \count($b->parent_classes));
@@ -152,8 +141,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
             // A template already on the storage is either the user's own, or a prior run's synthesis (a repeated
             // run over the same storage): only the marker set at synthesis time tells them apart.
             if (isset($storage->template_types['TCount'])) {
-                if (self::hasSynthesizedCount($storage)) {
-                    self::markSynthesized($codebase, $storage);
+                if (FactoryCount::hasSynthesizedCount($storage)) {
                     $synthesized[$lcName] = $storage->name;
                 }
 
@@ -165,7 +153,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
                 : !isset($synthesized[$lcParent]);
 
             // An override of count semantics also ends the chain: descendants fail the `$synthesized` parent test.
-            if ($explicitCount || !FactoryUserMethodCountProvider::runsLaravelCountPath($storage, true)) {
+            if ($explicitCount || !FactoryCount::runsLaravelCountPath($storage, true)) {
                 continue;
             }
 
@@ -188,18 +176,8 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
             // class by the FIRST entry naming it, and only the `Factory` entry reaches the constructor's bound.
             $storage->template_extended_params = [Factory::class => $extended[Factory::class]] + $extended;
             $synthesized[$lcName] = $storage->name;
-            self::markSynthesized($codebase, $storage);
+            FactoryCount::markSynthesized($storage);
         }
-    }
-
-    /**
-     * Records ownership of the synthesized `TCount` and answers user methods declared `static` on the class
-     * (see {@see FactoryUserMethodCountProvider}).
-     */
-    private static function markSynthesized(Codebase $codebase, ClassLikeStorage $storage): void
-    {
-        $storage->custom_metadata[self::SYNTHESIZED_MARKER] = true;
-        $codebase->methods->return_type_provider->registerClosure($storage->name, FactoryUserMethodCountProvider::getMethodReturnType(...));
     }
 
     /**
