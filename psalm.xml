@@ -6,6 +6,7 @@
     errorLevel="1"
     findUnusedBaselineEntry="false"
     findUnusedCode="true"
+    suggestPurityAnnotations="true"
 >
     <projectFiles>
         <directory name="src" />
