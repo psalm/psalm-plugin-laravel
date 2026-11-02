@@ -15,6 +15,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Config\EnvExpressionTyper;
+use Psalm\Type\Atomic;
+use Psalm\Type\Atomic\TKeyedArray;
 use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
 
 #[CoversClass(EnvExpressionTyper::class)]
@@ -98,6 +100,38 @@ final class EnvExpressionTyperTest extends TestCase
         yield 'branch with a genuine null' => ["env('A') ? env('K', 'x') : null", false];
         yield 'branch with an unset variable' => ["env('A') ? env('K', 'x') : env('B')", false];
         yield 'branches with set variables' => ["env('A') ? env('K', 'x') : env('B', 1)", true];
+    }
+
+    /** @param non-empty-list<array-key> $path */
+    #[Test]
+    #[DataProvider('nullableShapeExpressions')]
+    public function ignores_only_the_null_a_set_variable_reads_in_a_shape(string $expression, array $path, bool $expected): void
+    {
+        $type = EnvExpressionTyper::type($this->parse($expression));
+
+        foreach ($path as $key) {
+            $shapes = \array_values(\array_filter($type->getAtomicTypes(), static fn(Atomic $atomic): bool => $atomic instanceof TKeyedArray));
+            $this->assertCount(1, $shapes);
+            $this->assertInstanceOf(TKeyedArray::class, $shapes[0]);
+            $type = $shapes[0]->properties[$key];
+        }
+
+        $this->assertTrue($type->isNullable());
+        $this->assertSame($expected, $type->ignore_nullable_issues);
+    }
+
+    /** @return iterable<string, array{string, non-empty-list<array-key>, bool}> */
+    public static function nullableShapeExpressions(): iterable
+    {
+        yield 'keyed, genuine null' => ["env('A') ? ['url' => env('K', 'x')] : ['url' => null]", ['url'], false];
+        yield 'keyed, unset variable' => ["env('A') ? ['url' => env('K', 'x')] : ['url' => env('B')]", ['url'], false];
+        yield 'keyed, set variables' => ["env('A') ? ['url' => env('K', 'x')] : ['url' => env('B', 'y')]", ['url'], true];
+        yield 'keyed, reported sibling key' => ["env('A') ? ['url' => env('K', 'x'), 'key' => env('B')] : ['url' => env('C', 'y'), 'key' => null]", ['url'], true];
+        yield 'list, genuine null' => ["env('A') ? [env('K', 'x')] : [null]", [0], false];
+        yield 'list, unset variable' => ["env('A') ? [env('K', 'x')] : [env('B')]", [0], false];
+        yield 'list, set variables' => ["env('A') ? [env('K', 'x')] : [env('B', 'y')]", [0], true];
+        yield 'nested shape, genuine null' => ["env('A') ? ['db' => ['url' => env('K', 'x')]] : ['db' => ['url' => null]]", ['db', 'url'], false];
+        yield 'shape as an env default' => ["env('X', env('A') ? ['url' => env('K', 'x')] : ['url' => null])", ['url'], false];
     }
 
     #[Test]
