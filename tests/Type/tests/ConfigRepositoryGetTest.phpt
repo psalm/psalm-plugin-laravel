@@ -13,7 +13,7 @@ use Illuminate\Contracts\Config\Repository as ConfigContract;
 function repo_get_string_key(Repository $config): void
 {
     $_result = $config->get('app.name');
-    /** @psalm-check-type-exact $_result = string */
+    /** @psalm-check-type-exact $_result = null|string */
 }
 
 function repo_get_bool_key(Repository $config): void
@@ -49,7 +49,7 @@ function repo_get_dynamic_key_remains_mixed(Repository $config, string $key): vo
 function repo_get_via_contract(ConfigContract $config): void
 {
     $_result = $config->get('app.name');
-    /** @psalm-check-type-exact $_result = string */
+    /** @psalm-check-type-exact $_result = null|string */
 }
 
 function repo_get_array_first_arg_defers_to_stub(Repository $config): void

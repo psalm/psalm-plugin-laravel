@@ -362,9 +362,6 @@ final class ApplicationProvider
         $config = $app['config'];
 
         // The encrypter only treats non-empty strings as a real key, so any non-string is "empty".
-        // The plugin types config values from the booted app, whose app.key this method backfills,
-        // so it sees `string`; at this point the key can still be null.
-        /** @psalm-suppress RedundantCast */
         $current = (string) $config->get('app.key', '');
 
         if ($current !== '') {
