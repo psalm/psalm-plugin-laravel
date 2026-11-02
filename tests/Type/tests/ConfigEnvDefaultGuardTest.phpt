@@ -57,6 +57,20 @@ function unguarded_return(): string
     return config('app.url');
 }
 
+function unguarded_use_of_an_env_backed_default_for_an_absent_key(Repository $repository): int
+{
+    return strlen(config('services.missing.url', config('app.url')))
+        + strlen(config('missing.key', env('MISSING_KEY', 'fallback')))
+        + strlen(config()->get('missing.key', env('MISSING_KEY', 'fallback')))
+        + strlen($repository->get('missing.key', env('MISSING_KEY', 'fallback')))
+        + strlen(config('missing.key', static fn () => env('MISSING_KEY', 'fallback')));
+}
+
+function default_without_env_default_stays_reported(): int
+{
+    return strlen(config('missing.key', env('MISSING_KEY')));
+}
+
 function guard_on_a_value_without_env_is_still_redundant(): string
 {
     $timezone = config('app.timezone');
@@ -65,5 +79,6 @@ function guard_on_a_value_without_env_is_still_redundant(): string
 }
 ?>
 --EXPECTF--
+PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 RedundantCondition on line %d: Type string for $timezone is always string
 TypeDoesNotContainType on line %d: Type string for $timezone is always !string
