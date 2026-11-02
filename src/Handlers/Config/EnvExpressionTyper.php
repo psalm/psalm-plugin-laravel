@@ -10,8 +10,8 @@ use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Name;
 use PhpParser\NodeFinder;
-use Psalm\LaravelPlugin\Handlers\Helpers\EnvHandler;
 use Psalm\Type;
+use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TFalse;
 use Psalm\Type\Atomic\TFloat;
@@ -64,7 +64,7 @@ final class EnvExpressionTyper
         return self::isEnvRead($node) || self::isAmbiguous($node);
     }
 
-    /** `mixed` for any shape the rules do not model. A set variable reads as {@see EnvHandler} types it. */
+    /** `mixed` for any shape the rules do not model. A set variable reads as {@see EnvDefaultType} types it. */
     public static function type(Expr $expr): Union
     {
         return self::typeOf($expr, false) ?? Type::getMixed();
@@ -148,7 +148,7 @@ final class EnvExpressionTyper
 
         // Env::getOrFail() has no default: it throws instead.
         if (!isset($args[1])) {
-            return $producible ? self::setVariable() : EnvHandler::returnTypeForDefault(null);
+            return $producible ? self::setVariable() : EnvDefaultType::returnTypeForDefault(null);
         }
 
         // Env::get() runs the default through value(), which calls a closure once: an arrow fn
@@ -161,7 +161,7 @@ final class EnvExpressionTyper
             return null;
         }
 
-        return $producible ? Type::combineUnionTypes(self::setVariable(), $defaultType) : EnvHandler::returnTypeForDefault($defaultType);
+        return $producible ? Type::combineUnionTypes(self::setVariable(), $defaultType) : EnvDefaultType::returnTypeForDefault($defaultType);
     }
 
     /**
@@ -299,10 +299,76 @@ final class EnvExpressionTyper
         return $class instanceof Name && $class->toLowerString() === 'illuminate\support\env';
     }
 
-    /** @psalm-external-mutation-free */
+    /**
+     * Psalm ORs ignore_nullable_issues on a merge, shape values included. A side whose own null is
+     * reported (`$c ? env('K', 'x') : null`) keeps the merged null reported. Two array branches whose
+     * values would join a reported null with an ignorable one (`$c ? ['url' => env('K', 'x')] :
+     * ['url' => null]`) are not typed; an array merged with a non-array or `[]` keeps its values.
+     *
+     * @psalm-external-mutation-free
+     */
     private static function union(?Union $a, ?Union $b): ?Union
     {
-        return $a instanceof Union && $b instanceof Union ? Type::combineUnionTypes($a, $b) : null;
+        if (!$a instanceof Union || !$b instanceof Union) {
+            return null;
+        }
+
+        $union = Type::combineUnionTypes($a, $b);
+
+        if (
+            self::hasNonEmptyArray($a) && self::hasNonEmptyArray($b)
+            && (self::hasNestedNull($a, false) || self::hasNestedNull($b, false))
+            && self::hasNestedNull($union, true)
+        ) {
+            return null;
+        }
+
+        return $union->ignore_nullable_issues && (self::hasNull($a, false) || self::hasNull($b, false))
+            ? $union->setProperties(['ignore_nullable_issues' => false])
+            : $union;
+    }
+
+    /** @psalm-pure */
+    private static function hasNull(Union $type, bool $ignored): bool
+    {
+        return $type->isNullable() && $type->ignore_nullable_issues === $ignored;
+    }
+
+    /** @psalm-pure */
+    private static function hasNonEmptyArray(Union $type): bool
+    {
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TKeyedArray || ($atomic instanceof TArray && !$atomic->isEmptyArray())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether an array value (shape property, list item, generic value) at any depth holds a null
+     * whose ignore_nullable_issues is $ignored.
+     *
+     * @psalm-pure
+     */
+    private static function hasNestedNull(Union $type, bool $ignored): bool
+    {
+        foreach ($type->getAtomicTypes() as $atomic) {
+            $values = match (true) {
+                $atomic instanceof TArray => [$atomic->type_params[1]],
+                $atomic instanceof TKeyedArray => [...\array_values($atomic->properties), ...($atomic->fallback_params === null ? [] : [$atomic->fallback_params[1]])],
+                default => [],
+            };
+
+            foreach ($values as $value) {
+                if (self::hasNull($value, $ignored) || self::hasNestedNull($value, $ignored)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

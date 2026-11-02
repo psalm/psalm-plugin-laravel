@@ -20,6 +20,7 @@ use Psalm\Type\Atomic\TLiteralFloat;
 use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TMixed;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TString;
 use Psalm\Type\Atomic\TTrue;
 use Psalm\Type\Union;
@@ -258,7 +259,9 @@ final class ConfigKeyResolver
             return $literal;
         }
 
-        return $nodeTypeProvider->getType($expr) ?? Type::getMixed();
+        $type = $nodeTypeProvider->getType($expr);
+
+        return $type instanceof Union ? EnvDefaultType::defaultWithProvenNull($call_args[$index], $type) : Type::getMixed();
     }
 
     /** Literal forms Psalm's NodeTypeProvider can't resolve in `__callStatic`. */
@@ -297,21 +300,33 @@ final class ConfigKeyResolver
      * `GeneralizePrecision::lessSpecific()`. A closure resolves to its generalized
      * return type, once: `value()` calls the default but not a closure it returns.
      * Untyped closures contribute `mixed` without dropping union siblings
-     * (`string | Closure(): void` → `string | mixed`).
+     * (`string | Closure(): void` → `string | mixed`). The ignorable null of an
+     * env read with a default (`env('K', 'x')`) stays ignorable unless another
+     * part of the default may be a reported null.
      *
      * @psalm-pure
      */
     public static function generalizeDefault(Union $defaultType): Union
     {
         $atomics = [];
+        $ignorableNull = false;
+        $reportedNull = false;
 
         foreach ($defaultType->getAtomicTypes() as $defaultAtomic) {
             // Must match before TNamedObject's default arm — TClosure extends it.
-            $resolved = $defaultAtomic instanceof TClosure
-                ? $defaultAtomic->return_type?->getAtomicTypes() ?? [new TMixed()]
-                : [$defaultAtomic];
+            [$owner, $resolved] = $defaultAtomic instanceof TClosure
+                ? [$defaultAtomic->return_type, $defaultAtomic->return_type?->getAtomicTypes() ?? [new TMixed()]]
+                : [$defaultType, [$defaultAtomic]];
 
             foreach ($resolved as $atomic) {
+                if ($atomic instanceof TNull) {
+                    if ($owner?->ignore_nullable_issues === true) {
+                        $ignorableNull = true;
+                    } else {
+                        $reportedNull = true;
+                    }
+                }
+
                 $atomics[] = match (true) {
                     $atomic instanceof TLiteralString => new TString(),
                     $atomic instanceof TLiteralInt => new TInt(),
@@ -322,7 +337,7 @@ final class ConfigKeyResolver
             }
         }
 
-        return new Union($atomics);
+        return new Union($atomics, ['ignore_nullable_issues' => $ignorableNull && !$reportedNull]);
     }
 
     /**

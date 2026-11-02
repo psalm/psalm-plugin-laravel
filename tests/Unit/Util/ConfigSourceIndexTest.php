@@ -300,7 +300,7 @@ final class ConfigSourceIndexTest extends TestCase
 
         $type = ConfigValueReflector::reflect(['watchers' => ['Laravel\Telescope\Watchers\CacheWatcher' => 'false', 'x' => 1]], $index->find('telescope'));
 
-        $this->assertSame("array{watchers: array{'Laravel\\\\Telescope\\\\Watchers\\\\CacheWatcher': bool|string, x: int}}", $type->getId());
+        $this->assertSame("array{watchers: array{'Laravel\\\\Telescope\\\\Watchers\\\\CacheWatcher': bool|null|string, x: int}}", $type->getId());
     }
 
     #[Test]
