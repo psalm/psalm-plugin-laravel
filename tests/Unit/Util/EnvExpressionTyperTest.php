@@ -127,6 +127,12 @@ final class EnvExpressionTyperTest extends TestCase
         yield 'list, set variables' => ["env('A') ? [env('K', 'x')] : [env('B', 'y')]", [0], true];
         yield 'nested shape, set variables' => ["env('A') ? ['db' => ['url' => env('K', 'x')]] : ['db' => ['url' => env('B', 'y')]]", ['db', 'url'], true];
         yield 'keyed, reported nulls only' => ["env('A') ? ['url' => env('K')] : ['url' => null]", ['url'], false];
+        yield 'shape or null, ignorable key' => ["env('A') ? ['host' => env('H', 'x'), 'pass' => env('P')] : null", ['host'], true];
+        yield 'shape or null, reported key' => ["env('A') ? ['host' => env('H', 'x'), 'pass' => env('P')] : null", ['pass'], false];
+        yield 'coalesce with null, ignorable key' => ["['host' => env('H', 'x'), 'pass' => env('P')] ?? null", ['host'], true];
+        yield 'coalesce with null, reported key' => ["['host' => env('H', 'x'), 'pass' => env('P')] ?? null", ['pass'], false];
+        yield 'shape or empty array, ignorable key' => ["env('A') ? ['host' => env('H', 'x'), 'pass' => env('P')] : []", ['host'], true];
+        yield 'shape or empty array, reported key' => ["env('A') ? ['host' => env('H', 'x'), 'pass' => env('P')] : []", ['pass'], false];
     }
 
     #[Test]

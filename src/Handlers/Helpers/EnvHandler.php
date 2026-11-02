@@ -36,8 +36,8 @@ use Psalm\Type\Atomic\TString;
  *   env read) is no longer reported downstream.
  * - Not every Psalm check honours the flag: concatenating an int-default value reports
  *   PossiblyInvalidOperand (https://github.com/vimeo/psalm/issues/13031); a return type conditional
- *   on a null argument resolves both arms (`redirect(config('app.url'))`, `url()`, `__()`,
- *   `Carbon::tz()`); template inference drops it (`collect([config('app.url')])->map(fn (string $s)
+ *   on a null argument takes the null arm too (`redirect(config('app.url'))`, `url()`, `cookie()`,
+ *   `__()`, `Carbon::tz()`); template inference drops it (`collect([config('app.url')])->map(fn (string $s)
  *   => $s)`, iterating `config()->collection()`).
  * - A truthiness check (`if ($url)`, `empty($url)`, `$url ?: 'x'`) reports
  *   RiskyTruthyFalsyComparison, as for any nullable string.

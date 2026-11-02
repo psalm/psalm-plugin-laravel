@@ -86,7 +86,7 @@ The booted app holds one observation of each value, read with the environment of
 | `(bool)`, `(int)`, `(float)`, `(string)`, `(array)` cast | the cast type |
 | concatenation, interpolation | `string` |
 | comparison, `!`, `&&`, `\|\|`, `isset()`, `empty()`, `instanceof` | `bool` |
-| `$a ?? $b`, `$a ?: $b`, `$c ? $a : $b` | both sides, minus the `null` (for `?:` also `false`) the left side cannot return |
+| `$a ?? $b`, `$a ?: $b`, `$c ? $a : $b` | both sides, minus the `null` (for `?:` also `false`) the left side cannot return; `mixed` when both sides are arrays, one holds a genuine `null` value (`null`, or `env()` without a default), and either holds an `env()` value with a default |
 | `explode()`, `getenv('KEY')`, `realpath()` | `list<string>`, `false\|string`, `false\|string` |
 | integer arithmetic PHP cannot compute ahead (`(int) env('MINUTES') * 60`) | `float\|int`, as it may overflow |
 | any other expression that reads the environment (`filter_var(env(...))`, `$_ENV[...]`, a call through a variable such as `$read('KEY')`, a variable the file may have assigned from the environment) | `mixed` |
@@ -110,7 +110,7 @@ Limitations:
 - The ignored `null` sticks to a union: in `$enabled ? config('app.url') : null`, or when iterating a config array that mixes defaulted and default-less env reads (`foreach (config('cache.stores.database') as $value)`), the genuine `null` is no longer reported downstream.
 - Some Psalm checks do not honour the ignored `null`:
     - Concatenating a value with an int default (`'port:' . config('mail.mailers.smtp.port')`) reports `PossiblyInvalidOperand` ([vimeo/psalm#13031](https://github.com/vimeo/psalm/issues/13031)).
-    - A helper whose return type depends on a `null` argument returns both types: `redirect(config('app.url'))` is `RedirectResponse|Redirector`, `url(config('app.url'))` is `UrlGenerator|string`, `__(config('app.name'))` may be `null`, and `Carbon::tz()` may return a string.
+    - A helper whose return type depends on a `null` argument picks the wrong or both types: `redirect(config('app.url'))` is `RedirectResponse|Redirector`, `url(config('app.url'))` is `UrlGenerator|string`, `cookie(config('app.name'))` is `CookieJar`, `__(config('app.name'))` may be `null`, and `Carbon::tz()` may return a string.
     - A typed callback on a collection of such values (`collect([config('app.url')])->map(fn (string $url) => ...)`) reports `InvalidArgument`, and iterating `config()->collection('key')` reports a possibly null value.
 - A truthiness check (`if (config('app.url'))`, `config('app.url') ?: 'fallback'`) reports `RiskyTruthyFalsyComparison`, as for any nullable string.
 - A `MissingReturnType` fix written by `psalter --alter` declares `?string` for a function returning such a value, and a declared `?string` carries no ignored `null`, so its callers see a plain nullable string.

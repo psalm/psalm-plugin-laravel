@@ -302,9 +302,9 @@ final class EnvExpressionTyper
 
     /**
      * Psalm ORs ignore_nullable_issues on a merge, shape values included. A side whose own null is
-     * reported (`$c ? env('K', 'x') : null`) keeps the merged null reported; a reported null inside an
-     * array value joined with an ignorable one (`$c ? ['url' => env('K', 'x')] : ['url' => null]`) is
-     * not typed.
+     * reported (`$c ? env('K', 'x') : null`) keeps the merged null reported. Two array branches whose
+     * values would join a reported null with an ignorable one (`$c ? ['url' => env('K', 'x')] :
+     * ['url' => null]`) are not typed; an array merged with a non-array or `[]` keeps its values.
      *
      * @psalm-external-mutation-free
      */
@@ -316,7 +316,11 @@ final class EnvExpressionTyper
 
         $union = Type::combineUnionTypes($a, $b);
 
-        if ((self::hasNestedNull($a, false) || self::hasNestedNull($b, false)) && self::hasNestedNull($union, true)) {
+        if (
+            self::hasNonEmptyArray($a) && self::hasNonEmptyArray($b)
+            && (self::hasNestedNull($a, false) || self::hasNestedNull($b, false))
+            && self::hasNestedNull($union, true)
+        ) {
             return null;
         }
 
@@ -329,6 +333,18 @@ final class EnvExpressionTyper
     private static function hasNull(Union $type, bool $ignored): bool
     {
         return $type->isNullable() && $type->ignore_nullable_issues === $ignored;
+    }
+
+    /** @psalm-pure */
+    private static function hasNonEmptyArray(Union $type): bool
+    {
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TKeyedArray || ($atomic instanceof TArray && !$atomic->isEmptyArray())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
