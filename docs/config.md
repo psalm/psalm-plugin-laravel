@@ -86,7 +86,7 @@ The booted app holds one observation of each value, read with the environment of
 | `(bool)`, `(int)`, `(float)`, `(string)`, `(array)` cast | the cast type |
 | concatenation, interpolation | `string` |
 | comparison, `!`, `&&`, `\|\|`, `isset()`, `empty()`, `instanceof` | `bool` |
-| `$a ?? $b`, `$a ?: $b`, `$c ? $a : $b` | both sides, minus the `null` (for `?:` also `false`) the left side cannot return; `mixed` when both sides are arrays, one holds a genuine `null` value (`null`, or `env()` without a default), and either holds an `env()` value with a default |
+| `$a ?? $b`, `$a ?: $b`, `$c ? $a : $b` | both sides, minus the `null` (for `?:` also `false`) the left side cannot return; `mixed` only when both sides are non-empty arrays, one holds a genuine `null` value at any depth (`null`, or `env()` without a default or with a nullable one), and either holds an `env()` value with a non-null default. A side that is `[]`, `null` or a scalar keeps each value's own `null` handling (`['url' => env('K', 'x')] ?? []`) |
 | `explode()`, `getenv('KEY')`, `realpath()` | `list<string>`, `false\|string`, `false\|string` |
 | integer arithmetic PHP cannot compute ahead (`(int) env('MINUTES') * 60`) | `float\|int`, as it may overflow |
 | any other expression that reads the environment (`filter_var(env(...))`, `$_ENV[...]`, a call through a variable such as `$read('KEY')`, a variable the file may have assigned from the environment) | `mixed` |
