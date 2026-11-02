@@ -24,16 +24,21 @@ use Psalm\Type\Atomic\TString;
  * - Non-null default: string|typeof(default)|null, string subtypes of the default collapsed into
  *   string. The null (a set "null") carries ignore_nullable_issues, Psalm's own
  *   `@psalm-ignore-nullable-return` mechanism: a guard against it (`is_string()`, `=== null`, `??`,
- *   `(string)`) is never redundant, while unguarded string use is not reported as possibly null.
+ *   `(string)`) before the first unguarded use is not redundant, while unguarded use of a
+ *   string-default value is not reported as possibly null.
  *
- * Caveats (pinned by tests/Type/tests/ConfigEnv*KnownLimitation.phpt):
+ * Caveats (pinned by tests/Type/tests/ConfigEnvDefault*KnownLimitation.phpt):
  * - true/false stay out of the type: Psalm has no ignore flag for bool, and `string|bool` turned
  *   every unguarded use into InvalidScalarArgument/PossiblyInvalidOperand (#1683). A string-default
  *   value therefore still calls `is_bool()`, `=== true` and `=== false` impossible.
  * - Psalm ORs the flag when it merges unions, so a genuine null joined with such a value
- *   (`$c ? config('app.url') : null`) is no longer reported downstream.
- * - Template inference drops the flag: `collect([config('app.url')])->map(fn (string $s) => $s)`
- *   reports InvalidArgument for the closure.
+ *   (`$c ? config('app.url') : null`, the values of a config array that also holds a default-less
+ *   env read) is no longer reported downstream.
+ * - Not every Psalm check honours the flag: concatenating an int-default value reports
+ *   PossiblyInvalidOperand (https://github.com/vimeo/psalm/issues/13031); a return type conditional
+ *   on a null argument resolves both arms (`redirect(config('app.url'))`, `url()`, `__()`,
+ *   `Carbon::tz()`); template inference drops it (`collect([config('app.url')])->map(fn (string $s)
+ *   => $s)`, iterating `config()->collection()`).
  * - A truthiness check (`if ($url)`, `empty($url)`, `$url ?: 'x'`) reports
  *   RiskyTruthyFalsyComparison, as for any nullable string.
  *
