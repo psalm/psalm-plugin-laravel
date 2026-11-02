@@ -3,7 +3,7 @@
 
 /**
  * KNOWN LIMITATION: the null a set variable reads on an env-backed value with a non-null default is
- * not reported (ignore_nullable_issues, see the EnvHandler docblock). Psalm ORs that flag when it
+ * not reported (ignore_nullable_issues, see the EnvDefaultType docblock). Psalm ORs that flag when it
  * merges unions, so a genuine null joined with such a value is no longer reported downstream: a
  * ternary in user code, or the values of a config array that mixes defaulted and default-less env
  * reads. Template inference drops the flag, so a typed Collection callback rejects the value and a

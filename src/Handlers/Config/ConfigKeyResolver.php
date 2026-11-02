@@ -7,7 +7,6 @@ namespace Psalm\LaravelPlugin\Handlers\Config;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
-use Psalm\LaravelPlugin\Handlers\Helpers\EnvHandler;
 use Psalm\Type;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
@@ -262,7 +261,7 @@ final class ConfigKeyResolver
 
         $type = $nodeTypeProvider->getType($expr);
 
-        return $type instanceof Union ? EnvHandler::defaultWithProvenNull($call_args[$index], $type) : Type::getMixed();
+        return $type instanceof Union ? EnvDefaultType::defaultWithProvenNull($call_args[$index], $type) : Type::getMixed();
     }
 
     /** Literal forms Psalm's NodeTypeProvider can't resolve in `__callStatic`. */

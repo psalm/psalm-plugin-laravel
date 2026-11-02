@@ -4,7 +4,7 @@
 /**
  * KNOWN LIMITATION: Env::getOption() maps a variable set to "true" or "false" to a bool, but the env
  * model leaves true/false out unless the default contributes them (Psalm has no ignore flag for bool,
- * see the EnvHandler docblock). A bool guard on a string-default value therefore looks impossible.
+ * see the EnvDefaultType docblock). A bool guard on a string-default value therefore looks impossible.
  * 'url' => env('APP_URL', 'http://localhost')
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/2172
  */

@@ -10,7 +10,6 @@ use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Name;
 use PhpParser\NodeFinder;
-use Psalm\LaravelPlugin\Handlers\Helpers\EnvHandler;
 use Psalm\Type;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
@@ -65,7 +64,7 @@ final class EnvExpressionTyper
         return self::isEnvRead($node) || self::isAmbiguous($node);
     }
 
-    /** `mixed` for any shape the rules do not model. A set variable reads as {@see EnvHandler} types it. */
+    /** `mixed` for any shape the rules do not model. A set variable reads as {@see EnvDefaultType} types it. */
     public static function type(Expr $expr): Union
     {
         return self::typeOf($expr, false) ?? Type::getMixed();
@@ -149,7 +148,7 @@ final class EnvExpressionTyper
 
         // Env::getOrFail() has no default: it throws instead.
         if (!isset($args[1])) {
-            return $producible ? self::setVariable() : EnvHandler::returnTypeForDefault(null);
+            return $producible ? self::setVariable() : EnvDefaultType::returnTypeForDefault(null);
         }
 
         // Env::get() runs the default through value(), which calls a closure once: an arrow fn
@@ -162,7 +161,7 @@ final class EnvExpressionTyper
             return null;
         }
 
-        return $producible ? Type::combineUnionTypes(self::setVariable(), $defaultType) : EnvHandler::returnTypeForDefault($defaultType);
+        return $producible ? Type::combineUnionTypes(self::setVariable(), $defaultType) : EnvDefaultType::returnTypeForDefault($defaultType);
     }
 
     /**

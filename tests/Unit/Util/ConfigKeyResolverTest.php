@@ -10,7 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Handlers\Config\ConfigKeyResolver;
 use Psalm\LaravelPlugin\Handlers\Config\ConfigSourceIndex;
-use Psalm\LaravelPlugin\Handlers\Helpers\EnvHandler;
+use Psalm\LaravelPlugin\Handlers\Config\EnvDefaultType;
 use Psalm\Type;
 use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
 use Tests\Psalm\LaravelPlugin\Unit\Util\Ast\Concerns\InitializesPsalmConfigSingleton;
@@ -220,7 +220,7 @@ final class ConfigKeyResolverTest extends TestCase
     #[Test]
     public function generalizeDefault_keeps_the_ignorable_null_of_an_env_default(): void
     {
-        $envDefault = EnvHandler::returnTypeForDefault(Type::getString());
+        $envDefault = EnvDefaultType::returnTypeForDefault(Type::getString());
         $closure = new \Psalm\Type\Atomic\TClosure(params: [], return_type: $envDefault);
 
         $this->assertTrue(ConfigKeyResolver::generalizeDefault($envDefault)->ignore_nullable_issues);
@@ -230,11 +230,11 @@ final class ConfigKeyResolverTest extends TestCase
     #[Test]
     public function generalizeDefault_keeps_a_reported_null_reported(): void
     {
-        $envDefault = EnvHandler::returnTypeForDefault(Type::getString());
+        $envDefault = EnvDefaultType::returnTypeForDefault(Type::getString());
         $nullableClosure = new \Psalm\Type\Atomic\TClosure(params: [], return_type: Type::getString()->getBuilder()->addType(new \Psalm\Type\Atomic\TNull())->freeze());
         $flaggedWithClosure = new \Psalm\Type\Union([...$envDefault->getAtomicTypes(), $nullableClosure], ['ignore_nullable_issues' => true]);
 
-        $this->assertFalse(ConfigKeyResolver::generalizeDefault(EnvHandler::returnTypeForDefault(null))->ignore_nullable_issues);
+        $this->assertFalse(ConfigKeyResolver::generalizeDefault(EnvDefaultType::returnTypeForDefault(null))->ignore_nullable_issues);
         $this->assertFalse(ConfigKeyResolver::generalizeDefault($flaggedWithClosure)->ignore_nullable_issues);
     }
 

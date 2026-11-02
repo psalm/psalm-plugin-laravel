@@ -3,7 +3,7 @@
 
 /**
  * env() return type narrowing based on the default value argument. With a non-null default, the
- * null of a variable set to "null" is in the type but not reported (see the EnvHandler docblock).
+ * null of a variable set to "null" is in the type but not reported (see the EnvDefaultType docblock).
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/707
  */
 

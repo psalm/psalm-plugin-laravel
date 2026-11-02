@@ -3,7 +3,7 @@
 
 /**
  * KNOWN LIMITATION: Psalm's concat check ignores ignore_nullable_issues once the operand also has a
- * non-string atomic, so an env value with an int default (`int|null|string`, see the EnvHandler
+ * non-string atomic, so an env value with an int default (`int|null|string`, see the EnvDefaultType
  * docblock) reports PossiblyInvalidOperand when concatenated.
  * 'port' => env('MAIL_PORT', 2525)
  * @see https://github.com/vimeo/psalm/issues/13031

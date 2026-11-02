@@ -7,7 +7,7 @@ use Illuminate\Http\RedirectResponse;
 /**
  * KNOWN LIMITATION: a helper whose return type is conditional on a null argument resolves both arms
  * for an env value with a non-null default, because Psalm's conditional return ignores
- * ignore_nullable_issues on the `null` that value carries (see the EnvHandler docblock).
+ * ignore_nullable_issues on the `null` that value carries (see the EnvDefaultType docblock).
  * Config::string('key') avoids it.
  * 'url' => env('APP_URL', 'http://localhost'), 'name' => env('APP_NAME', 'Laravel')
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/2172

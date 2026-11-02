@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Config;
 
 /**
  * A variable set to "null" reads as null (Env::getOption()), so a guard on an env-backed value with a
- * non-null default is not redundant, while unguarded string use stays clean (see the EnvHandler docblock).
+ * non-null default is not redundant, while unguarded string use stays clean (see the EnvDefaultType docblock).
  * Keys come from the Testbench skeleton config: 'url' => env('APP_URL', 'http://localhost'),
  * 'timezone' => 'UTC'.
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/2172
