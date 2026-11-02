@@ -51,7 +51,7 @@ Two knobs are worth turning for your project: raise `PSALM_THREADS` and `PSALM_S
 
 Two things not to add, both of which look like speedups and are not:
 
-* **An OPcache or JIT `ini-values` block.** The one that circulates (originally from the `ghcr.io/danog/psalm` image) does nothing: Psalm restarts PHP through `PsalmRestarter`, which re-injects its own value for every `opcache.*` setting that block passes, and JIT stays off unless you pass `--force-jit`. Forcing it on measured slower.
+* **An OPcache or JIT `ini-values` block.** The one that circulates (originally from the `ghcr.io/psalm/psalm` image) does nothing: Psalm restarts PHP through `PsalmRestarter`, which re-injects its own value for every `opcache.*` setting that block passes, and JIT stays off unless you pass `--force-jit`. Forcing it on measured slower.
 * **`git-restore-mtime-action`.** Earlier versions of this page suggested pairing it with the cache, on the grounds that `git checkout` resets mtimes. Psalm validates its caches against a content hash of each file, so your project's source mtimes never enter into it. The one component that did key on `filemtime()` of project files was this plugin's migration schema cache, fixed in [#1346](https://github.com/psalm/psalm-plugin-laravel/pull/1346). A full-history checkout plus an mtime restore costs roughly 70s on a repository with real history and buys nothing.
 
 ## Troubleshooting
