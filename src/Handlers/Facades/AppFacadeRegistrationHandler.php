@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Traits\Macroable;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\ClassImportClashDetector;
 use Psalm\Plugin\EventHandler\AfterClassLikeVisitInterface;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterClassLikeVisitEvent;
@@ -89,7 +90,8 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
             return;
         }
 
-        if (self::isSkippedFacade($storage->name)) {
+        // A clashing class is warned about once, in afterCodebasePopulated().
+        if (self::isSkippedFacade($storage->name) || ClassImportClashDetector::clashes($storage)) {
             return;
         }
 
@@ -151,6 +153,13 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
                 $storage->stmt_location !== null
                 && AnonymousClassNameDetector::isSynthetic($storage->name, $storage->stmt_location->file_path)
             ) {
+                continue;
+            }
+
+            if (ClassImportClashDetector::clashes($storage)) {
+                $progress->warning(
+                    "Laravel plugin: skipping facade '{$storage->name}': class name clashes with a use import, loading it would be a fatal error",
+                );
                 continue;
             }
 

@@ -16,6 +16,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistryBuilder;
 use Psalm\LaravelPlugin\Internal\AnonymousClassNameDetector;
+use Psalm\LaravelPlugin\Internal\ClassImportClashDetector;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
@@ -90,6 +91,13 @@ final class ModelRegistrationHandler implements AfterCodebasePopulatedInterface
                 $storage->stmt_location !== null
                 && AnonymousClassNameDetector::isSynthetic($storage->name, $storage->stmt_location->file_path)
             ) {
+                continue;
+            }
+
+            if (ClassImportClashDetector::clashes($storage)) {
+                $codebase->progress->warning(
+                    "Laravel plugin: skipping model '{$storage->name}': class name clashes with a use import, loading it would be a fatal error",
+                );
                 continue;
             }
 
