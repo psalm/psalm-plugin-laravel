@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793648080776,
+  "lastUpdate": 1793659348282,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17530,6 +17530,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1277,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "374a5f2875683403afef74fbb316991705075573",
+          "message": "Revert \"Type env-backed `config()` values from their config file, not the analysing machine's environment (#2171)\" (#2197)\n\nThis reverts commit b4cecb89b (#2171, which also carries #2191) so the next release ships without the config typing change. It returns in a follow-up PR that reverts this revert.",
+          "timestamp": "2026-11-02T23:38:32+01:00",
+          "tree_id": "0b08b95b053bf84d0e76a1849cb7faed1f7bcc6c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/374a5f2875683403afef74fbb316991705075573"
+        },
+        "date": 1793659346550,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.64,
+            "range": "± 0.37",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
             "unit": "MB"
           }
         ]
