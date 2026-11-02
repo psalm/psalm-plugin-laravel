@@ -30,7 +30,7 @@ Real output on a fresh Laravel app, tracing the two lines above from source to s
 ## Install
 
 ```bash
-composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0"
+composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0@RC"
 ./vendor/bin/psalm-laravel init
 ./vendor/bin/psalm-laravel analyze
 ```
@@ -38,7 +38,7 @@ composer require --dev psalm/plugin-laravel "vimeo/psalm:^7.0"
 Requires PHP 8.2+ and Laravel 12.x or 13.x.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
-* Requires [Psalm 7](https://github.com/vimeo/psalm/releases) stable (`^7.0`). Psalm 7 pre-releases are rejected by a `conflict` entry: the stubs rely on template defaults that only the stable release supports.
+* Requires [Psalm 7](https://github.com/vimeo/psalm/releases) `7.0.0-rc28` or later, the first release with template defaults, which the stubs rely on. Psalm 7 is still a release candidate: the `@RC` flag allows that one package to be pre-release, so your project's `minimum-stability` stays untouched. Composer honours stability flags only on root requirements, which is why `vimeo/psalm` is listed explicitly.
 * For stable Psalm 6 or Laravel 11 support, use `composer require --dev psalm/plugin-laravel:^3`; the 3.x line provides the same security checks.
 * `init` writes a `psalm.xml` at the project root with the plugin enabled, `errorLevel="4"` by default (`--level 1` is strictest, `--level 8` the most lenient), Laravel-friendly issue handler defaults, and `runTaintAnalysis="true"`. Pass `--force` to overwrite an existing `psalm.xml` without prompting.
 * `analyze` delegates to `vendor/bin/psalm` and passes the exit code through, so you can invoke `./vendor/bin/psalm` directly instead.
@@ -125,7 +125,7 @@ Maintained versions:
 
 | Laravel Psalm Plugin                 | PHP  |      Laravel |   Psalm | Plugin Status |
 |--------------------------------------|------|-------------:|--------:|---------------|
-| **4.x** (recommended)                | 8.2+ |       12, 13 |       7 | Stable        |
+| **4.x** (recommended)                | 8.2+ |       12, 13 |  7 (RC) | Stable        |
 | 3.x ([upgrade](UPGRADING.md#3x--4x)) | 8.2+ |   11, 12, 13 |       6 | Stable        |
 | 2.x ([upgrade](UPGRADING.md#2x--3x)) | 8.0+ | 8, 9, 10, 11 | 4, 5, 6 | Unmaintained  |
 | 1.x ([upgrade](UPGRADING.md#1x--2x)) | 7.1+ |   5, 6, 7, 8 |    3, 4 | Unmaintained  |

@@ -19,7 +19,7 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.0` (stable). v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 pre-releases are rejected by a `conflict` entry in the plugin's `composer.json`, because the stubs rely on template defaults that only the stable release supports.
+v4 requires `vimeo/psalm ^7.0.0-rc28` or later, the first release with template defaults, which the stubs rely on. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps). Psalm 7 is currently a release candidate: the root `vimeo/psalm:^7.0@RC` requirement allows that one package to be pre-release without lowering your project's `minimum-stability`.
 
 Psalm 7 introduces new issue types that may surface in your codebase:
 
@@ -115,7 +115,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 # 1. Update PHP to 8.2+ and Laravel to 12+ if needed
 
 # 2. Upgrade Psalm to v7 and the plugin to v4 together
-composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0" --with-all-dependencies
+composer require --dev psalm/plugin-laravel:^4.0 "vimeo/psalm:^7.0@RC" --with-all-dependencies
 
 # 3. Update relation generic annotations (add declaring model parameter)
 #
