@@ -71,6 +71,17 @@ function default_without_env_default_stays_reported(): int
     return strlen(config('missing.key', env('MISSING_KEY')));
 }
 
+function config_default_that_may_be_a_genuine_null_stays_reported(bool $useFallback, Repository $repository): int
+{
+    $fallback = $useFallback ? env('FALLBACK_URL', 'http://localhost') : null;
+
+    $length = strlen(config('missing.key', $fallback));
+    $length += strlen(config()->get('missing.key', $fallback));
+    $length += strlen($repository->get('missing.key', $fallback));
+
+    return $length + strlen(config('missing.key', static fn () => $useFallback ? env('FALLBACK_URL', 'http://localhost') : null));
+}
+
 function unguarded_use_of_env_with_an_env_backed_default(): int
 {
     return strlen(env('APP_URL', env('FALLBACK_URL', 'http://localhost'))) + strlen(env('APP_URL', config('app.url')));
@@ -96,6 +107,10 @@ function guard_on_a_value_without_env_is_still_redundant(): string
 }
 ?>
 --EXPECTF--
+PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
+PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
+PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
+PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
 PossiblyNullArgument on line %d: Argument 1 of strlen cannot be null, possibly null value provided
