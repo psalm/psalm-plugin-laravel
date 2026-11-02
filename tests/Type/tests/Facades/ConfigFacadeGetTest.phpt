@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Config;
 function facade_get_string_key(): void
 {
     $_result = Config::get('app.name');
-    /** @psalm-check-type-exact $_result = null|string */
+    /** @psalm-check-type-exact $_result = string */
 }
 
 function facade_get_bool_key(): void

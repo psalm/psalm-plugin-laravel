@@ -75,50 +75,18 @@ Disable if dynamic where resolution conflicts with your codebase.
 
 **default**: `true`
 
-When enabled, the plugin narrows `config('some.key')`, `Config::get('some.key')`, `Repository::get('some.key')` (both the concrete `\Illuminate\Config\Repository` and the contract) and `collection('some.key')` from `mixed` to the type of the value in the booted Laravel app.
+When enabled, the plugin narrows `config('some.key')`, `Config::get('some.key')`, and `Repository::get('some.key')` (both the concrete `\Illuminate\Config\Repository` and the contract) from `mixed` to the runtime type reflected from the booted Laravel app.
 
-The booted app holds one observation of each value, read with the environment of the machine running Psalm. A value whose config file expression reads the environment is therefore typed from that expression instead, so the result is the same with the variable set, unset, or baked into `config:cache`:
+Scalar values are intentionally generalised (`config('app.debug')` stays `bool`, not the boot-time literal `false`) so env-driven overrides keep working at the call site without triggering spurious `TypeDoesNotContainType` warnings.
+Arrays preserve shape up to depth 5 with a 64-key per-level cap and a 512-property cross-level budget; beyond any cap, the value degrades to `array<array-key, mixed>`.
 
-| Expression in the config file | Type |
-|---|---|
-| `env('KEY')`, `env('KEY', null)`, `Env::get('KEY')`, `Env::getOrFail('KEY')` | `null\|string` |
-| `env('KEY', $default)` | `null\|string` plus the generalised default (`env('APP_URL', 'http://localhost')` is `null\|string`, `env('PORT', 8080)` and `env('FACILITY', LOG_USER)` are `int\|null\|string`, `env('TTL', 60 * 60)` is `int\|null\|string` as PHP computes it, `env('DB_DATABASE', database_path('database.sqlite'))` is `null\|string`), with that `null` ignored by Psalm's nullable checks (see below), or `mixed` when the plugin cannot type the default (a function call other than Laravel's `*_path()` helpers and `realpath()`, a closure with statements, a constant your app defines) |
-| `(bool)`, `(int)`, `(float)`, `(string)`, `(array)` cast | the cast type |
-| concatenation, interpolation | `string` |
-| comparison, `!`, `&&`, `\|\|`, `isset()`, `empty()`, `instanceof` | `bool` |
-| `$a ?? $b`, `$a ?: $b`, `$c ? $a : $b` | both sides, minus the `null` (for `?:` also `false`) the left side cannot return; `mixed` only when both sides are non-empty arrays, one holds a genuine `null` value at any depth (`null`, or `env()` without a default or with a nullable one), and either holds an `env()` value with a non-null default. A side that is `[]`, `null` or a scalar keeps each value's own `null` handling (`['url' => env('K', 'x')] ?? []`) |
-| `explode()`, `getenv('KEY')`, `realpath()` | `list<string>`, `false\|string`, `false\|string` |
-| integer arithmetic PHP cannot compute ahead (`(int) env('MINUTES') * 60`) | `float\|int`, as it may overflow |
-| any other expression that reads the environment (`filter_var(env(...))`, `$_ENV[...]`, a call through a variable such as `$read('KEY')`, a variable the file may have assigned from the environment) | `mixed` |
-
-A set variable is a `string`, the same model as the `env()` helper in your own code. Laravel also turns the values `true`, `false`, `null` and `empty` into `true`, `false`, `null` and `''`. With a non-null default, the type keeps that `null` but marks it the way `@psalm-ignore-nullable-return` does: a guard such as `is_string(config('app.url'))`, `=== null` or `?? 'fallback'` is not reported as redundant, and with a string default, passing the value to a `string` parameter, concatenating or returning it reports no possibly null issue. Without a default the `null` is the unset state and is reported. The type leaves `true` and `false` out unless the default contributes them, but a runtime `true` under `env('FEATURE')` still counts as coming from the config file.
-
-Every other value keeps its runtime type. Scalars are generalised (`config('app.timezone')` is `string`, not `'UTC'`). Arrays preserve shape up to depth 5 with a 64-key per-level cap and a 512-property cross-level budget; beyond any cap, the value degrades to `array<array-key, mixed>`. A runtime `null` stays `null` only when the config file says `null`. Without a source (a value a service provider sets, an unpublished package config, a computed config file) it is `mixed`, because it usually means "not configured on this machine".
-
-The sources are the files in the config directory the app loaded (`config/foo/bar.php` defines `foo.bar`) and the framework defaults Laravel merges under them. A framework default that has no app file of the same name is set last, so it replaces nested files below its name (`config/services/postmark.php` without a `config/services.php` is typed from the framework's `services.php`). A value the plugin cannot attribute to one expression has no source: a list position the merge renumbers, the values below a file without exactly one unconditional top-level `return [...]`, the values below an array with a spread or a computed key, and a value calling an unqualified `env()` in a namespaced config file (a namespaced `env()` function, if any file declared one, runs instead of Laravel's). A runtime value the expression cannot produce (a string under `(int) env('PORT')`) was set by a service provider and keeps its runtime type.
-
-Two call-site rules mirror `Arr::get` runtime behavior:
+Three call-site rules mirror `Arr::get` runtime behavior:
 
 - key absent → generalised default
-- key present → the value's type (default ignored, even when supplied)
+- key present, value not null → reflected value (default ignored)
+- key present, value is null → stored null (default ignored, even when supplied)
 
 Closure values stored in config reflect to `\Closure`. Closure defaults resolve to their declared return type (typed closures); untyped closures contribute `mixed` without dropping other union members.
-
-Limitations:
-
-- A guard for `true` or `false` on an env-backed value with a string default (`is_bool(config('app.url'))`, `=== true`, `=== false`) is reported as `TypeDoesNotContainType`, because the type leaves the bools out.
-- The ignored `null` sticks to a union: in `$enabled ? config('app.url') : null`, or when iterating a config array that mixes defaulted and default-less env reads (`foreach (config('cache.stores.database') as $value)`), the genuine `null` is no longer reported downstream.
-- Some Psalm checks do not honour the ignored `null`:
-    - A helper whose return type depends on a `null` argument picks the wrong or both types: `redirect(config('app.url'))` is `RedirectResponse|Redirector`, `url(config('app.url'))` is `UrlGenerator|string`, `cookie(config('app.name'))` is `CookieJar`, `__(config('app.name'))` may be `null`, and `Carbon::tz()` may return a string.
-    - A typed callback on a collection of such values (`collect([config('app.url')])->map(fn (string $url) => ...)`) reports `InvalidArgument`, and iterating `config()->collection('key')` reports a possibly null value.
-- A truthiness check (`if (config('app.url'))`, `config('app.url') ?: 'fallback'`) reports `RiskyTruthyFalsyComparison`, as for any nullable string.
-- A `MissingReturnType` fix written by `psalter --alter` declares `?string` for a function returning such a value, and a declared `?string` carries no ignored `null`, so its callers see a plain nullable string.
-- `Config::string('key')` returns a plain `string` and avoids the ignored `null` items above.
-- A service provider that overrides an env-backed key with a value of the same kind (a string where the file reads `env()`, any array under `explode()`) keeps the config file's type.
-- Package config is typed from its file only once published to the config directory.
-- Psalm's result cache does not track config files. After editing one, run Psalm with `--no-cache`.
-
-Upgrading: an env-backed value passed straight to a `string` parameter can now report `PossiblyNullArgument` or `PossiblyInvalidArgument`. Read it with `Config::string('key')` or guard it.
 
 ### When to disable
 

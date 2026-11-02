@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Config;
 
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
-use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
 use Psalm\Type;
 use Psalm\Type\Atomic\TArray;
@@ -20,20 +19,18 @@ use Psalm\Type\Atomic\TLiteralFloat;
 use Psalm\Type\Atomic\TLiteralInt;
 use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TMixed;
-use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TString;
 use Psalm\Type\Atomic\TTrue;
 use Psalm\Type\Union;
 
 /**
  * Resolves dot-notation config keys against the booted Laravel app to a Psalm
- * Union describing the runtime value, with env-backed leaves typed from their
- * config-file expression (see {@see ConfigValueReflector}).
+ * Union describing the runtime value (generalized — see {@see ConfigValueReflector}).
  *
  * Cache trichotomy via `array_key_exists`:
  *   - missing entry  → not yet computed
  *   - `null` value   → key absent from config (Repository::has() === false)
- *   - `Union` value  → key present
+ *   - `Union` value  → key present (may be `Union<TNull>` if value is literally null)
  *
  * Singleton mirrors {@see \Psalm\LaravelPlugin\Handlers\Auth\AuthConfigAnalyzer}:
  * production goes through {@see instance()}, unit tests construct directly
@@ -53,7 +50,6 @@ final class ConfigKeyResolver
     /** @psalm-mutation-free */
     public function __construct(
         private readonly ConfigRepository $config,
-        private readonly ?ConfigSourceIndex $sources = null,
     ) {}
 
     /**
@@ -69,19 +65,10 @@ final class ConfigKeyResolver
         }
 
         try {
-            $config = ConfigRepositoryProvider::get();
+            return self::$instance = new self(ConfigRepositoryProvider::get());
         } catch (\Throwable) {
             return self::$instance = new self(new ThrowingConfigRepository());
         }
-
-        // Without sources every value keeps its runtime reflection.
-        try {
-            $sources = ConfigSourceIndex::fromApp(ApplicationProvider::getApp());
-        } catch (\Throwable) {
-            $sources = null;
-        }
-
-        return self::$instance = new self($config, $sources);
     }
 
     /**
@@ -259,9 +246,7 @@ final class ConfigKeyResolver
             return $literal;
         }
 
-        $type = $nodeTypeProvider->getType($expr);
-
-        return $type instanceof Union ? EnvDefaultType::defaultWithProvenNull($call_args[$index], $type) : Type::getMixed();
+        return $nodeTypeProvider->getType($expr) ?? Type::getMixed();
     }
 
     /** Literal forms Psalm's NodeTypeProvider can't resolve in `__callStatic`. */
@@ -297,47 +282,48 @@ final class ConfigKeyResolver
 
     /**
      * Downgrade literal scalar atomics to their general form. Mirrors Larastan's
-     * `GeneralizePrecision::lessSpecific()`. A closure resolves to its generalized
-     * return type, once: `value()` calls the default but not a closure it returns.
-     * Untyped closures contribute `mixed` without dropping union siblings
-     * (`string | Closure(): void` → `string | mixed`). The ignorable null of an
-     * env read with a default (`env('K', 'x')`) stays ignorable unless another
-     * part of the default may be a reported null.
+     * `GeneralizePrecision::lessSpecific()`. Closures resolve to their
+     * generalized return type; untyped closures contribute `mixed` without
+     * dropping union siblings (`string | Closure(): void` → `string | mixed`).
      *
      * @psalm-pure
      */
     public static function generalizeDefault(Union $defaultType): Union
     {
         $atomics = [];
-        $ignorableNull = false;
-        $reportedNull = false;
+        $closureReturnTypes = [];
 
-        foreach ($defaultType->getAtomicTypes() as $defaultAtomic) {
+        foreach ($defaultType->getAtomicTypes() as $atomic) {
             // Must match before TNamedObject's default arm — TClosure extends it.
-            [$owner, $resolved] = $defaultAtomic instanceof TClosure
-                ? [$defaultAtomic->return_type, $defaultAtomic->return_type?->getAtomicTypes() ?? [new TMixed()]]
-                : [$defaultType, [$defaultAtomic]];
+            if ($atomic instanceof TClosure) {
+                $closureReturnTypes[] = $atomic->return_type;
+                continue;
+            }
 
-            foreach ($resolved as $atomic) {
-                if ($atomic instanceof TNull) {
-                    if ($owner?->ignore_nullable_issues === true) {
-                        $ignorableNull = true;
-                    } else {
-                        $reportedNull = true;
-                    }
-                }
+            $atomics[] = match (true) {
+                $atomic instanceof TLiteralString => new TString(),
+                $atomic instanceof TLiteralInt => new TInt(),
+                $atomic instanceof TLiteralFloat => new TFloat(),
+                $atomic instanceof TTrue, $atomic instanceof TFalse => new TBool(),
+                default => $atomic,
+            };
+        }
 
-                $atomics[] = match (true) {
-                    $atomic instanceof TLiteralString => new TString(),
-                    $atomic instanceof TLiteralInt => new TInt(),
-                    $atomic instanceof TLiteralFloat => new TFloat(),
-                    $atomic instanceof TTrue, $atomic instanceof TFalse => new TBool(),
-                    default => $atomic,
-                };
+        foreach ($closureReturnTypes as $returnType) {
+            if (!$returnType instanceof \Psalm\Type\Union) {
+                // Untyped closure body — contribute mixed without discarding
+                // siblings already collected.
+                $atomics[] = new TMixed();
+                continue;
+            }
+
+            foreach (self::generalizeDefault($returnType)->getAtomicTypes() as $returnAtomic) {
+                $atomics[] = $returnAtomic;
             }
         }
 
-        return new Union($atomics, ['ignore_nullable_issues' => $ignorableNull && !$reportedNull]);
+        // Every Union needs at least one atomic; empty input is defensive only.
+        return $atomics === [] ? Type::getMixed() : new Union($atomics);
     }
 
     /**
@@ -345,9 +331,9 @@ final class ConfigKeyResolver
      * result as Larastan's `getIterableKeyType()`/`getIterableValueType()` wrap
      * (PHPStan APIs); here we dispatch over `TKeyedArray`/`TArray` explicitly.
      *
-     * The value type comes from {@see ConfigValueReflector} (generalized, env-backed
-     * leaves typed from their config file); the structural key type is preserved,
-     * since config keys are static across env unlike values.
+     * The value type is already generalized by {@see ConfigValueReflector}
+     * (env-driven values collapse to a single observation); the structural key
+     * type is preserved, since config keys are static across env unlike values.
      *
      * Returns null (caller defers to the stub) for non-array reflections and for
      * any array whose key or value reflects to `never` — in practice the empty
@@ -390,18 +376,17 @@ final class ConfigKeyResolver
         }
 
         // has() / get() can blow up on partial bootstrap or exploding service
-        // providers — degrade to mixed so analysis continues. The reflector and
-        // the source index do not throw (parse failures leave a key without a
-        // source), so wrapping them under the same catch costs nothing in practice
-        // while keeping the get() result off a local mixed variable (preserves
-        // 100% type coverage).
+        // providers — degrade to mixed so analysis continues. Reflector is pure
+        // (input-typed `mixed`, no internal throws), so wrapping it under the
+        // same catch costs nothing in practice while keeping the get() result
+        // off a local mixed variable (preserves 100% type coverage).
         try {
             if (!$this->config->has($key)) {
                 $this->cache[$key] = null;
                 return;
             }
 
-            $this->cache[$key] = ConfigValueReflector::reflect($this->config->get($key), $this->sources?->find($key));
+            $this->cache[$key] = ConfigValueReflector::reflect($this->config->get($key));
         } catch (\Throwable) {
             $this->cache[$key] = Type::getMixed();
         }

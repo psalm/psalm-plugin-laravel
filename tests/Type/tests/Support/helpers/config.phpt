@@ -10,7 +10,7 @@
 function config_string_key(): void
 {
     $_result = config('app.name');
-    /** @psalm-check-type-exact $_result = null|string */
+    /** @psalm-check-type-exact $_result = string */
 }
 
 function config_bool_key(): void

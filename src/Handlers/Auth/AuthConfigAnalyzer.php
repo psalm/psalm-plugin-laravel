@@ -78,6 +78,7 @@ final class AuthConfigAnalyzer
             return $this->defaultGuardCache;
         }
 
+        /** @var string|null $guard */
         $guard = $this->config->get('auth.defaults.guard');
         $this->defaultGuardCache = \is_string($guard) ? $guard : null;
         $this->defaultGuardResolved = true;
