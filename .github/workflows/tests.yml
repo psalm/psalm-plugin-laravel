@@ -338,3 +338,43 @@ jobs:
 
       - name: Verify the PromptInjection phpt suite actually ran
         run: php bin/ci/assert-tests-ran.php /tmp/type-tests-laravel-ai-1.x-dev-junit.xml PromptInjection
+
+  # Psalm 7 requires this plugin, so the plugin's dependency floors are Psalm's: a project on Symfony Console 6.4
+  # (Symfony 6.4 LTS apps) must still be able to install Psalm, and the CLI must run there.
+  symfony_console_6:
+    name: Install with Symfony Console 6.4
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install Psalm and the plugin into a Symfony Console 6.4 project
+        run: |
+          mkdir "$RUNNER_TEMP/console-6" && cd "$RUNNER_TEMP/console-6"
+          composer init --no-interaction --name=acme/console-6 --stability=stable
+          composer config repositories.plugin "{\"type\": \"path\", \"url\": \"$GITHUB_WORKSPACE\", \"options\": {\"versions\": {\"psalm/plugin-laravel\": \"4.x-dev\"}}}"
+          composer require --no-interaction --no-progress 'symfony/console:6.4.*' 'vimeo/psalm:^7.0@stable' 'psalm/plugin-laravel:4.x-dev@dev'
+
+      - name: Run the help of every psalm-laravel command
+        working-directory: ${{ runner.temp }}/console-6
+        # bash (not the default `bash -e`) adds pipefail, so a failing `list` fails the step
+        shell: bash
+        run: |
+          commands=$(vendor/bin/psalm-laravel list --format=json | jq -r '.commands[].name')
+          for command in $commands; do
+            vendor/bin/psalm-laravel "$command" --help --no-ansi > /dev/null
+          done
