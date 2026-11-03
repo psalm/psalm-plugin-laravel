@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793659348282,
+  "lastUpdate": 1793700310725,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17560,6 +17560,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 40.64,
             "range": "± 0.37",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5c29c222182cde574bdca7b300ab3d91d9db9206",
+          "message": "fix(deps): allow symfony/console 6.4 (#2199)\n\nPsalm 7 requires this plugin, so its symfony/console floor kept Psalm 7.0.0 out of Symfony 6.4 projects. The CLI uses only Console APIs available in 6.4; a new CI job installs the plugin with Console 6.4 and runs every command's help.",
+          "timestamp": "2026-11-03T11:01:51+01:00",
+          "tree_id": "e32ec32c54b8f83a552aa3098290fd18645c4b99",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5c29c222182cde574bdca7b300ab3d91d9db9206"
+        },
+        "date": 1793700309038,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.64,
+            "range": "± 0.08",
             "unit": "s"
           },
           {
