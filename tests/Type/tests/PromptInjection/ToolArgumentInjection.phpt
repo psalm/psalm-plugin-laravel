@@ -9,7 +9,7 @@ require getcwd() . '/vendor/autoload.php';
 
 function runToolSqlLookup(\Laravel\Ai\Tools\Request $request): void {
     // The model picked the value of `q`; treat it like Request::input(): attacker-controllable.
-    // `string()` on the stub is annotated `@psalm-taint-source input`, so the
+    // `string()` (from the InteractsWithData stub) is annotated `@psalm-taint-source input`, so the
     // Stringable it returns carries taint into the SQL sink below.
     $needle = (string) $request->string('q');
 
