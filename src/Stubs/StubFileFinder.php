@@ -55,13 +55,10 @@ final class StubFileFinder
                     continue;
                 }
 
+                // getRealPath() is false for every phar:// (or other stream wrapper) path, e.g. when
+                // the plugin runs inside psalm.phar; keep such paths as-is instead of dropping the stub.
                 $realPath = $file->getRealPath();
-
-                if (!\is_string($realPath)) {
-                    continue;
-                }
-
-                $stubs[] = $realPath;
+                $stubs[] = \is_string($realPath) ? $realPath : $file->getPathname();
             }
         } catch (\UnexpectedValueException $unexpectedValueException) {
             // RecursiveIteratorIterator can throw during iteration on unreadable subdirectories.
