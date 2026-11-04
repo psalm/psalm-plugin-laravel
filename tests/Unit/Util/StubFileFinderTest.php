@@ -9,10 +9,40 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Stubs\StubFileFinder;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\CollectingProgress;
+use Tests\Psalm\LaravelPlugin\Unit\Fixtures\InMemoryStubStreamWrapper;
 
 #[CoversClass(StubFileFinder::class)]
 final class StubFileFinderTest extends TestCase
 {
+    /** Inside psalm.phar the stubs live under phar://, where realpath() is false for every file. */
+    #[Test]
+    public function it_finds_stubs_in_a_directory_without_real_paths(): void
+    {
+        InMemoryStubStreamWrapper::register([
+            'root/common/A.phpstub' => '<?php class A {}',
+            'root/common/nested/B.phpstub' => '<?php class B {}',
+            'root/common/readme.md' => 'not a stub',
+        ]);
+
+        try {
+            $output = new CollectingProgress();
+            $directory = InMemoryStubStreamWrapper::SCHEME . '://root/common';
+
+            $this->assertFalse(\realpath($directory . '/A.phpstub'));
+            $this->assertSame(
+                [
+                    InMemoryStubStreamWrapper::SCHEME . '://root/common/A.phpstub',
+                    InMemoryStubStreamWrapper::SCHEME . '://root/common/nested/B.phpstub',
+                ],
+                StubFileFinder::findIn($directory, $output),
+            );
+            $this->assertSame([], $output->warnings);
+        } finally {
+            InMemoryStubStreamWrapper::unregister();
+        }
+    }
+
     /**
      * @param list<string> $candidates
      * @param list<string> $expected
