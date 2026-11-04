@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793700310725,
+  "lastUpdate": 1793786423262,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17595,6 +17595,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.64,
             "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6b672893f16b4d6eae0bcccf4def7fe3873531c7",
+          "message": "Accept the Laravel 13.40 `$strict` flag on InteractsWithData casts (#2200)\n\n* fix(stubs): accept the Laravel 13.40 `$strict` flag on InteractsWithData casts\n\nLaravel 13.40 added a third `$strict` parameter to str(), string(),\nboolean(), integer() and float() (laravel/framework#62254). The stubs\nstill declared two parameters, so passing the flag was TooManyArguments\nand an override documented by `{@inheritDoc}` reported MissingParamType\nfor `$strict`.\n\nThe new signatures live in a 13.40.0 version dir so older Laravel keeps\nrejecting the third argument. The overrides restate the str()/string()\ntaint source.\n\n* fix(stubs): let laravel/ai Tools\\Request inherit the InteractsWithData casts\n\nTools\\Request restated str(), string(), integer(), float() and boolean()\nfrom InteractsWithData. Their signature follows the framework version\n(Laravel 13.40 added `$strict`), but the integration stubs are gated on\nthe laravel/ai version only, so the parity checker failed on 13.40.\n\nDropping the copies lets the trait stub supply them, version-gated and\nwith the same taint annotations.",
+          "timestamp": "2026-11-04T10:56:34+01:00",
+          "tree_id": "3c9e9c26328db790d6ef0d9c1c8b19ac8fb63921",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6b672893f16b4d6eae0bcccf4def7fe3873531c7"
+        },
+        "date": 1793786421498,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 41.02,
+            "range": "± 0.43",
             "unit": "s"
           },
           {
