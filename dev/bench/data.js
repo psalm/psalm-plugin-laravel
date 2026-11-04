@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793786423262,
+  "lastUpdate": 1793827051886,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17630,6 +17630,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 41.02,
             "range": "± 0.43",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "60227263b35357a42661e00a1a9bbcd142982e37",
+          "message": "fix: register stubs when the plugin runs inside psalm.phar (#2202)\n\nSplFileInfo::getRealPath() is false for phar:// paths, so StubFileFinder dropped every stub there.",
+          "timestamp": "2026-11-04T22:14:13+01:00",
+          "tree_id": "3e5974bb5b6fa079ac16e4d91afd0d5a4b7c45f9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/60227263b35357a42661e00a1a9bbcd142982e37"
+        },
+        "date": 1793827049827,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.71,
+            "range": "± 0.05",
             "unit": "s"
           },
           {
