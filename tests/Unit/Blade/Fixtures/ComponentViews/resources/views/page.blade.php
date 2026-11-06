@@ -24,3 +24,5 @@
 @include('components/linked', ['title' => 42])
 <x-suffixed/>
 <x-frame/>
+<x-shared-card/>
+@include('livewire.partial')

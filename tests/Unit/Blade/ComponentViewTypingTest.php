@@ -15,8 +15,9 @@ use Symfony\Component\Process\Process;
 
 /**
  * #1804 slice 1: a class component's own view gets the variables `Component::data()` hands it on
- * the `<x-…>` render path. Every template traces the names it reads; `mixed` is the prelude's
- * fallback, i.e. the registry declined.
+ * the `<x-…>` render path; #1935: a Livewire component's view gets `$this` and its public
+ * properties. Every template traces the names it reads; `mixed` is the prelude's fallback, i.e. the
+ * registry declined.
  */
 #[CoversClass(ComponentViewRegistry::class)]
 #[CoversClass(ComponentViewSeedHandler::class)]
@@ -110,6 +111,17 @@ final class ComponentViewTypingTest extends TestCase
         // `ViewName::normalize()` makes `components/linked` the view `components.linked`.
         yield 'also rendered by @include, spelled with a slash' => ['linked.blade.php', ['$title: mixed']];
         yield 'a returned string with three :: segments is inline Blade' => ['suffixed.blade.php', ['$title: mixed']];
+        // #1935: a Livewire view runs bound to its component, which hands it every public property.
+        // An object one with no default may still be uninitialized, which Livewire passes as null.
+        yield 'Livewire: $this, properties, self:: and protected members' => ['livewire/show-post.blade.php', [
+            '$helped: string',
+            '$limit: 10',
+            '$post: App\Models\Post|null',
+            '$this: App\Livewire\ShowPost',
+        ]];
+        yield 'Livewire: two components' => ['livewire/twin.blade.php', ['$this: mixed', '$tone: mixed']];
+        yield 'Livewire: also a class component' => ['livewire/shared.blade.php', ['$this: mixed', '$title: mixed']];
+        yield 'Livewire: also rendered by @include' => ['livewire/partial.blade.php', ['$this: mixed', '$title: mixed']];
     }
 
     /**
@@ -128,31 +140,41 @@ final class ComponentViewTypingTest extends TestCase
      * `$attributes` seeded non-null, those guards are the compiler's, not the author's, and must stay
      * silent. A `@param-out self` must likewise reach toolbar.blade.php resolved: a literal `self`
      * out-type would make the by-ref variable a `self` no other signature accepts.
+     *
+     * @param list<string> $expected
      */
     #[DataProvider('seededViews')]
     #[Test]
-    public function a_seeded_view_reports_nothing_beyond_its_traces(string $template): void
+    public function a_seeded_view_reports_only_genuine_issues(string $template, array $expected): void
     {
         $issues = $this->warmCacheReports()['first'];
         $reported = [];
 
         foreach ($issues as $issue) {
-            if ($issue['type'] !== 'Trace' && \str_ends_with((string) $issue['file_name'], 'components/' . $template)) {
+            if ($issue['type'] !== 'Trace' && \str_ends_with((string) $issue['file_name'], '/' . $template)) {
                 $reported[] = $issue['type'] . ': ' . $issue['message'];
             }
         }
 
         $this->assertNotSame([], $this->tracesIn($issues, $template), 'the view was not typed, so the silence proves nothing.');
-        $this->assertSame([], $reported);
+        $this->assertSame($expected, $reported);
     }
 
     /**
-     * @return iterable<string, array{string}>
+     * @return iterable<string, array{string, list<string>}>
      */
     public static function seededViews(): iterable
     {
-        yield 'a nested tag in an unmarked view' => ['card.blade.php'];
-        yield 'a method closure with @param-out self' => ['toolbar.blade.php'];
+        yield 'a nested tag in an unmarked view' => ['card.blade.php', []];
+        yield 'a method closure with @param-out self' => ['toolbar.blade.php', []];
+        // #1935: `$this->save()` and the boot-time macro `flash()` resolve, the `__get()` read
+        // `$this->total` (a `#[Computed]` property) and a guard on the possibly uninitialized `$post`
+        // stay silent; what the classes lack reports, `$this` in a template-declared class included.
+        yield 'Livewire: a member typo on a property and on $this' => ['livewire/show-post.blade.php', [
+            'UndefinedMethod: Method App\Models\Post::typo does not exist',
+            'UndefinedMagicMethod: Magic method App\Livewire\ShowPost::sav does not exist',
+            'UndefinedThisPropertyFetch: Instance property LocalProbe::$missing is not defined',
+        ]];
     }
 
     /**
@@ -216,7 +238,7 @@ final class ComponentViewTypingTest extends TestCase
         $traces = [];
 
         foreach ($issues as $issue) {
-            if ($issue['type'] === 'Trace' && \str_ends_with((string) $issue['file_name'], 'components/' . $template)) {
+            if ($issue['type'] === 'Trace' && \str_ends_with((string) $issue['file_name'], '/' . $template)) {
                 $traces[] = (string) $issue['message'];
             }
         }

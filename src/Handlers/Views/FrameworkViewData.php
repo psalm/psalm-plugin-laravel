@@ -13,6 +13,7 @@ use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\PropertyStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 
 /**
@@ -193,22 +194,42 @@ final class FrameworkViewData
             return null;
         }
 
+        $keys = self::livewireProperties($codebase, $storage);
+
+        // Same for an abstract component: a concrete subclass can declare more public properties.
+        return $keys === null ? [[], false] : [$keys, !$storage->abstract];
+    }
+
+    /**
+     * The properties `HandleComponents::getView()` hands a Livewire component's view, typed. Also
+     * the seed of that view ({@see \Psalm\LaravelPlugin\Blade\ComponentViewRegistry}).
+     *
+     * @param bool $seed type an object property with no default `T|null`, nullable issues ignored:
+     *                   Livewire hands one never initialized (a modal's, assigned in an event
+     *                   handler) to the view as null, so a guard on it must stay silent
+     *
+     * @return array<string, Union>|null null when a declaring class could not be resolved
+     */
+    public static function livewireProperties(Codebase $codebase, ClassLikeStorage $storage, bool $seed = false): ?array
+    {
         $properties = ViewClassProperties::publicOf($codebase, $storage, static fn(): bool => false);
 
         if ($properties === null) {
-            return [[], false];
+            return null;
         }
 
         $keys = [];
 
         foreach ($properties as $name => [$declaring, $property]) {
             if ($property->is_static !== true && !\in_array(\strtolower($declaring->name), self::LIVEWIRE_BASES, true)) {
-                $keys[$name] = self::typeOf($codebase, $storage, $name, $declaring, $property);
+                $type = self::typeOf($codebase, $storage, $name, $declaring, $property);
+                $keys[$name] = $seed && !$property->has_default && $type->isObjectType()
+                    ? new Union([...$type->getAtomicTypes(), new TNull()], ['ignore_nullable_issues' => true])
+                    : $type;
             }
         }
 
-        // Same for an abstract component: a concrete subclass can declare more public properties.
-        return [$keys, !$storage->abstract];
+        return $keys;
     }
 
     /**

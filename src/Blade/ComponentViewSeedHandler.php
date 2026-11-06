@@ -11,9 +11,10 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\AfterStatementAnalysisEvent;
 
 /**
- * Types a Blade class component's own view from its class (#1804): builds
- * {@see ComponentViewRegistry} once the codebase is populated, then seeds the shadow's scope on the
- * prelude's sentinel: the `Stmt\Nop` its closing tag parses to ({@see PreludeBuilder::build()}).
+ * Types a Blade class component's own view from its class (#1804), and a Livewire component's view
+ * from its component (#1935): builds {@see ComponentViewRegistry} once the codebase is populated,
+ * then seeds the shadow's scope on the prelude's sentinel: the `Stmt\Nop` its closing tag parses to
+ * ({@see PreludeBuilder::build()}).
  *
  * The sentinel is where it has to happen: Psalm applies a statement's `@var` docblocks before
  * analyzing it, so a seed written any earlier would be overwritten by the prelude's own
@@ -56,6 +57,12 @@ final class ComponentViewSeedHandler implements AfterCodebasePopulatedInterface,
         foreach ($seed as $name => $type) {
             $context->vars_in_scope['$' . $name] = $type;
             $context->vars_possibly_in_scope['$' . $name] = true;
+        }
+
+        // Only a Livewire seed types `$this`: its view runs in a closure bound to the component, so
+        // protected members and `self::` resolve as in the class.
+        if (isset($seed['this'])) {
+            $context->self = $seed['this']->getId();
         }
 
         return null;

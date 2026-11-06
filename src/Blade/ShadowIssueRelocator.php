@@ -170,6 +170,16 @@ final class ShadowIssueRelocator
             return false;
         }
 
+        // A Livewire view's `$this` is its component (#1935), whose `__get()` answers `#[Computed]`,
+        // `getXProperty()` and Filament `$this->form` reads. Psalm 7 seals magic properties by
+        // default, so each would report where the untyped view hid it as `Mixed*`. Only the
+        // component's own: `$this` in a class the template declares keeps reporting. Methods keep
+        // reporting too: `__call()` serves only macros, which
+        // {@see \Psalm\LaravelPlugin\Handlers\Magic\MacroHandler} declares.
+        if ($issue instanceof UndefinedThisPropertyFetch && self::isComponentProperty($issue)) {
+            return false;
+        }
+
         // `self::`/`static::` outside any class: this exact message shape is emitted by both
         // StaticCallAnalyzer.php (preserves the AUTHOR's own case: `self`, `SELF`, `Static`...) and
         // ClassConstAnalyzer.php (always lowercases it). The alternation is case-insensitive and
@@ -492,6 +502,14 @@ final class ShadowIssueRelocator
         }
 
         return self::rebuild($issue, $overrides);
+    }
+
+    /** An undefined property of the Livewire component the issue's view is bound to (its seed's `$this`). */
+    private static function isComponentProperty(UndefinedThisPropertyFetch $issue): bool
+    {
+        $component = ComponentViewRegistry::seedFor($issue->getFilePath())['this'] ?? null;
+
+        return $component !== null && \str_starts_with(\strtolower($issue->property_id), \strtolower($component->getId()) . '::');
     }
 
     /**
