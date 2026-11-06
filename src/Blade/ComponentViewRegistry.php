@@ -16,10 +16,12 @@ use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\LaravelPlugin\Handlers\Views\ComponentRenderData;
+use Psalm\LaravelPlugin\Handlers\Views\FrameworkViewData;
 use Psalm\LaravelPlugin\Handlers\Views\ViewClassProperties;
 use Psalm\LaravelPlugin\Internal\Ast\ClassMethodResolver;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
 /**
@@ -47,6 +49,12 @@ use Psalm\Type\Union;
  *
  * Every view any component's `render()` may name, seeded or not, also gets each `@props` entry the
  * prelude typed from its literal default reset to `mixed`.
+ *
+ * A project `Livewire\Component` subclass (#1935) claims its `render()`'s view in the same set, so
+ * a second claim or a by-name render still leaves it `mixed`. It needs no tag (Livewire always
+ * calls `render()`), statements may precede `render()`'s only `return`, and its keys subtract
+ * nothing (Livewire merges the public properties after them). The view is seeded with those
+ * properties ({@see FrameworkViewData::livewireProperties()}) and `$this` as the component.
  *
  * Static because Psalm instantiates event handlers itself and hands them no plugin state.
  *
@@ -133,7 +141,7 @@ final class ComponentViewRegistry
             }
         }
 
-        /** @var array<string, array{0: string, 1: array<array-key, true>|null, 2: bool}|null> $views declaring class => [view name, render() keys, calls $this->view()] */
+        /** @var array<string, array{0: string, 1: array<array-key, true>|null, 2: bool}|null> $views declaring class (and flavour) => [view name, render() keys, calls $this->view()] */
         $views = [];
         /** @var array<string, true> $claimed template path => true, every view a component's render() may name */
         $claimed = [];
@@ -141,7 +149,9 @@ final class ComponentViewRegistry
         $rivals = [];
 
         foreach (ClassLikeStorageProvider::getAll() as $storage) {
-            if ($storage->abstract || !isset($storage->parent_classes[self::COMPONENT])) {
+            $livewire = isset($storage->parent_classes[FrameworkViewData::LIVEWIRE]);
+
+            if ($storage->abstract || (!$livewire && !isset($storage->parent_classes[self::COMPONENT]))) {
                 continue;
             }
 
@@ -158,16 +168,20 @@ final class ComponentViewRegistry
             }
 
             // An untagged component matters only as a rival claim on a project template; one from a
-            // package renders that package's own views, so its file is not worth a parse.
+            // package renders that package's own views, so its file is not worth a parse. A Livewire
+            // component is never tag-rendered: only a project one is read.
             if (!isset(self::$tagRendered[\strtolower($storage->name)]) && !self::declaredInProject($codebase, $render)) {
                 continue;
             }
 
-            if (!\array_key_exists($declaring, $views)) {
-                $views[$declaring] = self::renderedView($codebase, $render, $templates, $rivals);
+            // Keyed by flavour too: a trait's render() can serve both, read differently by each.
+            $viewKey = $livewire ? $declaring . '#livewire' : $declaring;
+
+            if (!\array_key_exists($viewKey, $views)) {
+                $views[$viewKey] = self::renderedView($codebase, $render, $templates, $rivals, $livewire);
             }
 
-            $view = $views[$declaring];
+            $view = $views[$viewKey];
             $templatePath = $view === null ? null : ($templates[$view[0]] ?? null);
 
             if ($view === null || $templatePath === null) {
@@ -179,6 +193,13 @@ final class ComponentViewRegistry
             // An inherited `$this->view()` runs the CONCRETE class's view(), which may be overridden.
             if ($view[2] && !self::componentOwnsView($storage)) {
                 $contested[$templatePath] = true;
+
+                continue;
+            }
+
+            // render()'s keys shadow nothing: Livewire merges the public properties after them.
+            if ($livewire) {
+                $byTemplate[$templatePath][\strtolower($storage->name)] = [$storage, []];
 
                 continue;
             }
@@ -259,7 +280,7 @@ final class ComponentViewRegistry
 
             [$storage, $renderKeys] = \reset($claims);
 
-            if (!isset(self::$tagRendered[\strtolower($storage->name)])) {
+            if (!isset($storage->parent_classes[FrameworkViewData::LIVEWIRE]) && !isset(self::$tagRendered[\strtolower($storage->name)])) {
                 continue;
             }
 
@@ -296,10 +317,21 @@ final class ComponentViewRegistry
         ContractParser $parser,
     ): array {
         $source = ShadowRegistry::templateSource($templatePath);
-        $guaranteed = ComponentRenderData::guaranteedFor($codebase, $storage);
+        $livewire = isset($storage->parent_classes[FrameworkViewData::LIVEWIRE]);
+        $guaranteed = $livewire
+            ? FrameworkViewData::livewireProperties($codebase, $storage, seed: true)
+            : ComponentRenderData::guaranteedFor($codebase, $storage);
 
         if ($source === null || $guaranteed === null) {
             return [];
+        }
+
+        // `extract()` never sets `$this`, but a Livewire view runs in a closure bound to its
+        // component. The seed handler and the relocator rely on only that seed holding `$this`.
+        if ($livewire) {
+            $guaranteed = ['this' => new Union([new TNamedObject($storage->name)])] + $guaranteed;
+        } else {
+            unset($guaranteed['this']);
         }
 
         $contract = $parser->parseDeclarations($source)->vars;
@@ -308,7 +340,7 @@ final class ComponentViewRegistry
 
         foreach ($guaranteed as $name => $type) {
             if (isset($renderKeys[$name])
-                || isset(self::$namedSlots[$name])
+                || (!$livewire && isset(self::$namedSlots[$name]))
                 || isset(self::SLOT_OWNED[$name])
                 || isset(PreludeBuilder::AMBIENT_TYPES[$name])
                 || isset($contract[$name])
@@ -317,7 +349,9 @@ final class ComponentViewRegistry
                 continue;
             }
 
-            $vars[$name] = ViewClassProperties::renderablesAsString($type, $codebase);
+            // renderablesAsString() rebuilds the union: keep a Livewire seed's lenient null.
+            $vars[$name] = ViewClassProperties::renderablesAsString($type, $codebase)
+                ->setProperties(['ignore_nullable_issues' => $type->ignore_nullable_issues]);
         }
 
         return $vars;
@@ -325,16 +359,16 @@ final class ComponentViewRegistry
 
     /**
      * The view a declaring `render()` returns, the keys its own data arrays pass, and whether it
-     * goes through `$this->view()`. Null when the body is anything but one recognised `return`;
-     * then any known view name it spells is marked contested, since that render may hand the same
-     * view other data.
+     * goes through `$this->view()`. Null when the body is anything but one recognised `return` (a
+     * Livewire body may run statements before its only one); then any known view name it spells is
+     * marked contested, since that render may hand the same view other data.
      *
      * @param array<array-key, string> $templates view name => template path
      * @param array<string, true>      $contested template path => true, appended to
      *
      * @return array{0: string, 1: array<array-key, true>|null, 2: bool}|null
      */
-    private static function renderedView(Codebase $codebase, MethodIdentifier $render, array $templates, array &$contested): ?array
+    private static function renderedView(Codebase $codebase, MethodIdentifier $render, array $templates, array &$contested, bool $livewire): ?array
     {
         $resolved = ClassMethodResolver::resolve($codebase, $render);
 
@@ -343,7 +377,9 @@ final class ComponentViewRegistry
         }
 
         $stmts = $resolved['classMethod']->stmts ?? [];
-        $only = \count($stmts) === 1 ? $stmts[0] : null;
+        $returns = $livewire && \count($stmts) > 1 ? (new NodeFinder())->findInstanceOf($stmts, Stmt\Return_::class) : $stmts;
+        // The body's last statement: a lone return nested in a closure or a block is not render()'s.
+        $only = \count($returns) === 1 ? \end($stmts) : null;
         $view = $only instanceof Stmt\Return_ && $only->expr instanceof Expr ? self::viewOf($codebase, $only->expr) : null;
 
         if ($view !== null) {

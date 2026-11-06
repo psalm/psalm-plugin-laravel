@@ -13,6 +13,7 @@ use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\PropertyStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Union;
 
 /**
@@ -63,7 +64,7 @@ final class FrameworkViewData
 
     private const SIMPLE_MESSAGE = 'illuminate\notifications\messages\simplemessage';
 
-    private const LIVEWIRE = 'livewire\component';
+    public const LIVEWIRE = 'livewire\component';
 
     /** Declaring classes whose own properties Livewire never exposes. */
     private const LIVEWIRE_BASES = [self::LIVEWIRE, 'livewire\volt\component'];
@@ -193,22 +194,41 @@ final class FrameworkViewData
             return null;
         }
 
+        $keys = self::livewireProperties($codebase, $storage);
+
+        // Same for an abstract component: a concrete subclass can declare more public properties.
+        return $keys === null ? [[], false] : [$keys, !$storage->abstract];
+    }
+
+    /**
+     * The properties `HandleComponents::getView()` hands a Livewire component's view, typed. Also
+     * the seed of that view ({@see \Psalm\LaravelPlugin\Blade\ComponentViewRegistry}).
+     *
+     * @param bool $seed type an object property with no default as lenient `T|null`: Livewire hands
+     *                   one never initialized (a modal's, assigned later) to the view as null
+     *
+     * @return array<string, Union>|null null when a declaring class could not be resolved
+     */
+    public static function livewireProperties(Codebase $codebase, ClassLikeStorage $storage, bool $seed = false): ?array
+    {
         $properties = ViewClassProperties::publicOf($codebase, $storage, static fn(): bool => false);
 
         if ($properties === null) {
-            return [[], false];
+            return null;
         }
 
         $keys = [];
 
         foreach ($properties as $name => [$declaring, $property]) {
             if ($property->is_static !== true && !\in_array(\strtolower($declaring->name), self::LIVEWIRE_BASES, true)) {
-                $keys[$name] = self::typeOf($codebase, $storage, $name, $declaring, $property);
+                $type = self::typeOf($codebase, $storage, $name, $declaring, $property);
+                $keys[$name] = $seed && !$property->has_default && $type->isObjectType()
+                    ? new Union([...$type->getAtomicTypes(), new TNull()], ['ignore_nullable_issues' => true])
+                    : $type;
             }
         }
 
-        // Same for an abstract component: a concrete subclass can declare more public properties.
-        return [$keys, !$storage->abstract];
+        return $keys;
     }
 
     /**
