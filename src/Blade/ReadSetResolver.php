@@ -26,17 +26,50 @@ final class ReadSetResolver
     {
         $visited = [];
 
-        return self::walk($viewName, $visited);
+        return self::walk($viewName, $visited, true);
+    }
+
+    /**
+     * The raw `@var` declarations of the template that nothing in its include chain reads. Empty when
+     * the read set is only a lower bound (see the class docblock) or the template's `@props` were not
+     * readable, so a stale declaration is never reported on a guess.
+     *
+     * A declaration in an included partial is no read of the host's, and the other way round: only an
+     * actual read anywhere in the chain keeps a declaration alive, because the chain shares one scope.
+     *
+     * @return list<string> declared variable names (without `$`)
+     */
+    public static function staleDeclarations(string $viewName): array
+    {
+        $contract = ContractRegistry::contractFor($viewName);
+
+        if (!$contract instanceof ViewDataContract || $contract->propsUnknown || $contract->vars === []) {
+            return [];
+        }
+
+        $visited = [];
+        $reads = self::walk($viewName, $visited, false);
+
+        if ($reads === null) {
+            return [];
+        }
+
+        return \array_values(\array_filter(
+            \array_keys($contract->vars),
+            static fn(int|string $name): bool => !isset($reads[$name]),
+        ));
     }
 
     /**
      * @param array<string, true> $visited passed by reference so a diamond or a cycle in the include
      *        graph is walked once. A revisit contributing nothing is correct: the caller is building
      *        one union, and the first visit already folded that template's reads into it.
+     * @param bool $declarationsCount whether a declared name counts as consumed ({@see self::reads()})
+     *        or only a name the compiled body reads does ({@see self::staleDeclarations()})
      *
      * @return array<string, true>|null
      */
-    private static function walk(string $viewName, array &$visited): ?array
+    private static function walk(string $viewName, array &$visited, bool $declarationsCount): ?array
     {
         if (isset($visited[$viewName])) {
             return [];
@@ -56,18 +89,21 @@ final class ReadSetResolver
             return null;
         }
 
+        $reads = \array_fill_keys($contract->readVariables, true);
+
         // Declared names count as consumed wherever they are declared, not just at the top of the
         // chain: a raw `@var` docblock and `@props` are a template's stated interface, and reporting a key an
         // included partial declares but has not got round to reading yet would contradict the
         // "neither reads nor declares" semantics the call-site check already applies to the outermost
         // template. A declaration that is not a contract (a local's type hint) counts here
-        // too.
-        $reads = \array_fill_keys($contract->readVariables, true)
-            + \array_fill_keys(\array_keys($contract->vars), true)
-            + \array_fill_keys($contract->rawDeclaredVariables, true);
+        // too. A stale-declaration walk is asking whether the declaration is read, so it leaves them out.
+        if ($declarationsCount) {
+            $reads += \array_fill_keys(\array_keys($contract->vars), true)
+                + \array_fill_keys($contract->rawDeclaredVariables, true);
+        }
 
         foreach ($dataIncludes[0] as $included) {
-            $nested = self::walk($included, $visited);
+            $nested = self::walk($included, $visited, $declarationsCount);
 
             if ($nested === null) {
                 return null;

@@ -27,6 +27,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [InvalidViewData](InvalidViewData.md): the value passed for a Blade template variable does not satisfy the type that template declares for it (needs Blade analysis)
 - [BladeCompileError](BladeCompileError.md): a template failed to compile and was excluded from analysis (needs Blade analysis)
 - [UnusedViewData](UnusedViewData.md): a `view()` call site passes a data key that neither the rendered template nor anything it includes reads or declares (needs Blade analysis)
+- [UnusedViewDeclaration](UnusedViewDeclaration.md): a Blade template declares a variable with `@var` that nothing in the template or anything it includes reads (needs Blade analysis)
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.

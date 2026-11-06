@@ -16,6 +16,7 @@ use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
 use Psalm\LaravelPlugin\Issues\InvalidViewData;
 use Psalm\LaravelPlugin\Issues\MissingViewData;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
+use Psalm\LaravelPlugin\Issues\UnusedViewDeclaration;
 
 /**
  * End-to-end proof of the view-data checks that need a real `vendor/bin/psalm` run over a fixture
@@ -26,7 +27,10 @@ use Psalm\LaravelPlugin\Issues\UnusedViewData;
  *    feed it ({@see MissingViewData}, {@see InvalidViewData}), including the data Laravel and
  *    Livewire add at render time and the `@include` family;
  *  - a data key no template in the include chain reads or declares is reported
- *    ({@see UnusedViewData}; its cases live in `app/UnusedData`).
+ *    ({@see UnusedViewData}; its cases live in `app/UnusedData`);
+ *  - a raw `@var` declaration nothing in the include chain reads is reported at the template, and
+ *    its omission is no longer a missing variable ({@see UnusedViewDeclaration}; its cases live in
+ *    `app/StaleDeclaration`).
  *
  * One run serves every case: the fixture holds a file per behavior and each case asserts only the
  * issues of the files it owns. A view name or file basename must therefore stay unique across the
@@ -52,6 +56,8 @@ final class ViewContractValidationTest extends TestCase
     private const WRONG_TYPE = 'InvalidViewData';
 
     private const UNUSED = 'UnusedViewData';
+
+    private const STALE = 'UnusedViewDeclaration';
 
     private const TYPE_HINT = " Pass a value of the declared type, or correct the template's declaration.";
 
@@ -311,7 +317,8 @@ final class ViewContractValidationTest extends TestCase
         $templateIssues = [];
 
         foreach ($this->allIssues() as $issue) {
-            if (\str_ends_with((string) $issue['file_name'], 'component-invokable.blade.php')) {
+            // This case is about types: the declarations here are never read, which UnusedViewDeclaration pins elsewhere.
+            if (\str_ends_with((string) $issue['file_name'], 'component-invokable.blade.php') && $issue['type'] !== self::STALE) {
                 $issue['type'] === 'Trace'
                     ? $traces[] = (string) $issue['message']
                     : $templateIssues[] = $issue['type'] . ': ' . $issue['message'];
@@ -1210,5 +1217,116 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->unusedIssues();
 
         $this->assertSame([], $this->forFile($issues, 'Suppressed.php'), \var_export($issues, true));
+    }
+
+    /**
+     * Declarations the issue reports, keyed by template basename: the whole set is pinned so a
+     * declaration the rule flags by mistake in an unrelated fixture template shows up here.
+     *
+     * @return array<string, list<array{line: int, message: string}>>
+     */
+    private function staleDeclarations(): array
+    {
+        $stale = [];
+
+        foreach ($this->allIssues() as $issue) {
+            if ($issue['type'] === self::STALE) {
+                $stale[\basename((string) $issue['file_name'])][] = ['line' => (int) $issue['line_from'], 'message' => (string) $issue['message']];
+            }
+        }
+
+        \ksort($stale);
+
+        return $stale;
+    }
+
+    /**
+     * kanka's `settings/boosters/create.blade.php` shape: `$boost` is declared and never read, so the
+     * call site omitting it is not wrong, and the declaration is the one thing to report, once.
+     */
+    #[Test]
+    public function a_declaration_nothing_reads_is_reported_once_at_the_template_and_not_at_call_sites(): void
+    {
+        $this->assertSame([], $this->forFile($this->contractIssues(), 'StaleVar.php'), \var_export($this->contractIssues(), true));
+
+        $stale = $this->staleDeclarations()['stale-var.blade.php'] ?? [];
+
+        $this->assertCount(1, $stale, \var_export($this->staleDeclarations(), true));
+        $this->assertSame(4, $stale[0]['line'], 'the `@var` line of `$boost`, not the line of the docblock opener');
+        $this->assertSame(
+            '$boost is declared with @var but nothing in this template or the templates it includes reads it. Remove the declaration.',
+            $stale[0]['message'],
+        );
+    }
+
+    /**
+     * The rule's whole output over the fixture, by variable: a declaration the template or its chain reads
+     * is never in it. The mail and component templates declare variables only to type-check call sites.
+     */
+    #[Test]
+    public function only_declarations_nothing_in_the_chain_reads_are_reported(): void
+    {
+        $reported = [];
+
+        foreach ($this->staleDeclarations() as $template => $declarations) {
+            foreach ($declarations as $declaration) {
+                \preg_match('/^\$(\w+) is declared/', $declaration['message'], $variable);
+                $reported[$template][] = $variable[1] ?? $declaration['message'];
+            }
+
+            \sort($reported[$template]);
+        }
+
+        $this->assertSame([
+            'component-invokable.blade.php' => ['clear', 'items', 'me'],
+            'composer-literal.blade.php' => ['tags'],
+            'declared.blade.php' => ['label'],
+            'declaring-partial.blade.php' => ['note'],
+            'mail-markdown.blade.php' => ['message'],
+            'mail-notification-narrow.blade.php' => ['greeting', 'introLines'],
+            'mail-notification.blade.php' => ['displayableActionUrl', 'introLines', 'level', 'mailer', 'message'],
+            'mail-override-data.blade.php' => ['extra'],
+            'mail-props.blade.php' => ['mailer', 'message', 'order', 'sent'],
+            'mail-wrong.blade.php' => ['order'],
+            'stale-var.blade.php' => ['boost'],
+        ], $reported, \var_export($this->staleDeclarations(), true));
+    }
+
+    /** `$note` is read by the `@include`d partial, which inherits the scope: live, so the omission stays a missing variable. */
+    #[Test]
+    public function a_declaration_read_only_in_an_included_partial_is_live(): void
+    {
+        $issues = $this->contractIssues();
+
+        $this->assertReportsOnly($issues, 'ReadInPartial.php', 'note');
+        $this->assertArrayNotHasKey('stale-read-host.blade.php', $this->staleDeclarations());
+    }
+
+    /**
+     * Every gate that makes the read set a lower bound proves nothing stale, so the declaration stays
+     * unreported and the call site keeps its MissingViewData (the `@props($names)` template is exempt
+     * from the presence check whatever is read).
+     */
+    #[Test]
+    public function an_unprovable_read_set_reports_no_declaration_and_keeps_the_missing_variable(): void
+    {
+        $issues = $this->contractIssues();
+        $stale = $this->staleDeclarations();
+
+        foreach (['GateVariableVariable', 'GateExtract', 'GateDynamicInclude', 'GateCustomDirective', 'GateIncludeChain'] as $case) {
+            $this->assertReportsOnly($issues, $case . '.php', 'label');
+        }
+
+        $this->assertSame([], $this->forFile($issues, 'GateProps.php'), \var_export($issues, true));
+
+        foreach (['variable-variable', 'extract', 'dynamic-include', 'custom-directive', 'props', 'props-literal', 'chain-host', 'chain-partial'] as $gate) {
+            $this->assertArrayNotHasKey("stale-gate-{$gate}.blade.php", $stale);
+        }
+    }
+
+    #[Test]
+    public function a_suppression_in_the_declaring_docblock_silences_it(): void
+    {
+        $this->assertArrayNotHasKey('stale-suppressed.blade.php', $this->staleDeclarations());
     }
 }

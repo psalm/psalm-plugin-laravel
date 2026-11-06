@@ -10,6 +10,7 @@ use Psalm\LaravelPlugin\Issues\InvalidViewData;
 use Psalm\LaravelPlugin\Issues\MissingViewData;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
+use Psalm\LaravelPlugin\Issues\UnusedViewDeclaration;
 
 /**
  * Applies the default reporting policy for plugin diagnostics that are still
@@ -26,6 +27,7 @@ final class ExperimentalIssuePolicy
         MissingViewData::class,
         InvalidViewData::class,
         UnusedViewData::class,
+        UnusedViewDeclaration::class,
     ];
 
     public static function apply(bool $enforced): void

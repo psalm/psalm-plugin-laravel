@@ -49,9 +49,10 @@ Registered from `Plugin::registerHandlers()`. `$bladeActive` is the flag `initBl
 | `Blade\ViewTaintBridge` | `AfterExpressionAnalysis`, `AfterStatementAnalysis` | `$bladeActive`, never for an annotate run; registered AFTER `ComponentViewSeedHandler` | [Taint bridge](#taint-bridge) |
 | `Blade\BladeIssueRemapHandler` | `BeforeAddIssue` | the compile step activated | [Issue remapping](#issue-remapping) |
 | `Handlers\Views\ViewContractHandler` | `AfterStatementAnalysis` | `$bladeActive` and the project's own config enables Blade (a run where only the annotate codemod switched Blade on gets no view-data checks, matching the `initMissingViewHandler()` gate); no flag of its own | [Contracts and read sets](#contracts-and-read-sets) |
+| `Blade\UnusedDeclarationHandler` | `BeforeFileAnalysis` | same as `ViewContractHandler` | [Stale declarations](#stale-declarations) |
 | `Blade\Annotate\AnnotationCollector`, `AnnotationWriter` | `AfterStatementAnalysis`, `AfterAnalysis` | a valid annotate control file | [Annotation implementation](#annotation-implementation) |
 
-All three view-data issues (`UnusedViewData` included) are in `ExperimentalIssuePolicy`, so `<experimental>` and `issueHandlers` set their severity and nothing gates the walk (#1985). The compile pass always collects the read sets for the same reason.
+All four view-data issues (`UnusedViewData` and `UnusedViewDeclaration` included) are in `ExperimentalIssuePolicy`, so `<experimental>` and `issueHandlers` set their severity and nothing gates the walk (#1985). The compile pass always collects the read sets for the same reason.
 
 ### Degradation
 
@@ -286,6 +287,16 @@ Implementation:
 * **`readsUnknown`** is load-bearing. A parse failure, a `$$name`, an `extract()`, or a `compact()` with a non-literal argument makes the set a lower bound, and a lower bound cannot prove a key unused. `get_defined_vars()` is deliberately NOT in that list: Blade compiles it into every `@include`, so treating it as unknown would disable the rule almost everywhere.
 * **Data includes.** `ViewReferenceCollector::collectDataIncludes()` collects the manifest's seventh slot: the subset of a template's references that inherit its whole scope. Membership is decided by the DATA argument, not the directive: every scope-passing directive compiles it to `array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])`, whose position shifts with the directive's own optional data array, so the whole argument list of every call-like node is scanned for that shape. `@includeIsolated` and `@each` compile to the same `$__env->` methods but pass no parent scope and are excluded by that gate alone. A whole-scope call other than `$__env->make()`, `first()`, `renderWhen()` or `renderUnless()` sets the dynamic flag.
 * **Closure.** `Blade\ReadSetResolver` closes each template's reads UNION its declared contract vars over that graph, recursively, with a by-reference visited set (a revisit contributes nothing, which is correct for a union and terminates on a cycle). It declines on the first template in the chain whose reads are unknown, whose data-includes hold a dynamic name, or that `ContractRegistry` never claimed.
+
+### Stale declarations
+
+`UnusedViewDeclaration` (#2211) reports a raw `@var` that nothing reads, and `ViewContractHandler` stops reporting `MissingViewData` for the same variable. Both ask `ReadSetResolver::staleDeclarations()`, so the two can never disagree about whether a call site owes the variable.
+
+* **Same walk as `UnusedViewData`, one flag apart.** `ReadSetResolver::walk()` takes `$declarationsCount`. `UnusedViewData` counts a declaration as consumed (a declared key is part of the contract); here only a name the compiled body reads counts, because a declaration is the thing under test. The decline gates are therefore identical: unknown reads (`$$name`, `extract()`, a non-literal `compact()`, which every `@props` / `@aware` template hits), a dynamic include or one naming an unregistered template anywhere in the chain, and the whole-scope custom directive decline from #2209. An unreadable `@props` array on the template itself declines too.
+* **Chain-wide reads, per-template declarations.** A variable the template declares and only an `@include`d partial reads is live: the include inherits the scope. A partial's own declaration is judged against the partial's chain alone, so a partial that declares a variable only its host reads is reported in the partial.
+* **Emission** is `Blade\UnusedDeclarationHandler`, a `BeforeFileAnalysis` hook on the template's shadow (the shape of `RawDeclarationHandler`), against the declaring line through `TemplateLocation`. It runs at analysis time rather than boot, because the closure needs every contract registered. A published override owns several view names of one template; the first one's chain decides. A `@psalm-suppress UnusedViewDeclaration` in the declaring docblock, or a Blade `{{-- @psalm-suppress --}}` above the block, silences it.
+* **Call sites** skip only the missing-variable report. A value the call does pass for a stale declaration is still type-checked (`InvalidViewData`).
+* **Accepted gap.** `get_defined_vars()` is not an unknown read (see above), so a hand-written call that reads a declared variable indirectly does not keep its declaration alive.
 
 ## Taint bridge
 

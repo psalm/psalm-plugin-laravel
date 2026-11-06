@@ -22,6 +22,7 @@ final class ExperimentalIssuePolicyTest extends TestCase
         'MissingViewData',
         'InvalidViewData',
         'UnusedViewData',
+        'UnusedViewDeclaration',
     ];
 
     protected function tearDown(): void
