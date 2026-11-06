@@ -378,7 +378,8 @@ final class ComponentViewRegistry
 
         $stmts = $resolved['classMethod']->stmts ?? [];
         $returns = $livewire && \count($stmts) > 1 ? (new NodeFinder())->findInstanceOf($stmts, Stmt\Return_::class) : $stmts;
-        $only = \count($returns) === 1 ? $returns[0] : null;
+        // The body's last statement: a lone return nested in a closure or a block is not render()'s.
+        $only = \count($returns) === 1 ? \end($stmts) : null;
         $view = $only instanceof Stmt\Return_ && $only->expr instanceof Expr ? self::viewOf($codebase, $only->expr) : null;
 
         if ($view !== null) {
