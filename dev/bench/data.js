@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793984658938,
+  "lastUpdate": 1793997492361,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17770,6 +17770,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 25.43,
             "range": "± 0.39",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "35e2c4cc4d3c52af43343c606af5e0901413d03a",
+          "message": "Type `require 'bootstrap/app.php'` as the booted `Application` (#2218)\n\n* fix(cli): stop init from adding artisan and public/index.php to projectFiles\n\nBoth entry-point files `require` bootstrap/app.php (typed mixed), which\nproduced four Mixed* issues at errorLevel 1 on an unmodified Laravel\nskeleton. They hold no app logic and taint sources live inside the app\ndirectories, so drop them and the now-empty `$files` plumbing.\n\nRefs #2162\n\n* revert: keep artisan and public/index.php in init projectFiles\n\nSuperseded by typing the bootstrap include (#2162).\n\n* feat(app): type require of bootstrap/app.php as the booted Application\n\nRefs #2162\n\n* chore: drop fixture sed step and contributing note for bootstrap include handler",
+          "timestamp": "2026-11-06T21:35:50+01:00",
+          "tree_id": "e5f563b2e5b9ee1fa7b66fdb32bb09c2494f19e3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/35e2c4cc4d3c52af43343c606af5e0901413d03a"
+        },
+        "date": 1793997490784,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 24.28,
+            "range": "± 0.26",
             "unit": "s"
           },
           {
