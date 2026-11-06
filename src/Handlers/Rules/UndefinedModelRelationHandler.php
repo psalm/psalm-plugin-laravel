@@ -72,7 +72,11 @@ use Psalm\Type\Union;
  * ways static analysis cannot see (runtime `Model::resolveRelationUsing()`,
  * package macros). Resolution is also conservative: a non-model receiver, the
  * bare/abstract base `Model`, an ambiguous union, a dynamic class-string, or an
- * unresolvable intermediate model (`morphTo`) all cause the rule to defer.
+ * unresolvable intermediate model (`morphTo`) all cause the rule to defer. A concrete
+ * userland base model (`BookStack\App\Model`) is validated too, but a name that some analysed
+ * descendant defines is not reported on a call through the base type: the runtime instance may be
+ * that descendant. A name no descendant defines stays reported. The `$with` / `$withCount`
+ * defaults of a model are checked against that model alone.
  *
  * The `withCount()` / `withSum()` family (relation + ` as alias` aggregate
  * sub-selects) is intentionally out of scope for this first pass.
@@ -201,6 +205,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
                         allowsAlias: $property === 'withCount',
                         allowsPaths: $property === 'with',
                         allowsColumns: $property === 'with',
+                        receiverMayBeDescendant: false,
                         property: $property,
                     );
                 }
@@ -272,6 +277,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
                 allowsAlias: $allowsAlias,
                 allowsPaths: true,
                 allowsColumns: $methodParsesColumns && $parsesColumns,
+                receiverMayBeDescendant: true,
                 verbatimColumnsHint: $methodParsesColumns ? self::CLOSURE_COLUMNS_HINT : self::EXISTENCE_COLUMNS_HINT,
             );
         }
@@ -539,11 +545,14 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
      * intermediate related model cannot be determined (polymorphic / dynamic), so
      * the deeper segments are left unvalidated rather than guessed.
      *
+     * @param class-string<Model> $modelFqcn
      * @param bool $allowsAlias whether the calling method accepts a `relation as alias`
      *                          clause (the aggregate `load*` family) that must be
      *                          stripped before the relation lookup
      * @param bool $allowsPaths whether dot notation is meaningful for this declaration surface
      * @param bool $allowsColumns whether eager-load `:columns` syntax is meaningful
+     * @param bool $receiverMayBeDescendant whether the model is only the static bound of the runtime class, so a
+     *                                      relation defined by an analysed descendant is not a typo
      * @param array<array-key, string> $suppressedIssues
      * @param ?string $verbatimColumnsHint message suffix used when a name that is looked up verbatim
      *                                     (`$allowsColumns` false) still contains `:`; null reports plainly
@@ -557,6 +566,7 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
         bool $allowsAlias,
         bool $allowsPaths,
         bool $allowsColumns,
+        bool $receiverMayBeDescendant,
         ?string $property = null,
         ?string $verbatimColumnsHint = null,
     ): void {
@@ -581,6 +591,10 @@ final class UndefinedModelRelationHandler implements AfterCodebasePopulatedInter
             }
 
             if (!RelationResolver::relationMethodExists($codebase, $current, $name)) {
+                if ($receiverMayBeDescendant && RelationResolver::relationMethodExistsOnDescendant($codebase, $current, $name)) {
+                    return;
+                }
+
                 $context = $property === null ? '' : " from {$modelFqcn}::\${$property}";
                 // A verbatim name containing ':' is the unparsed `:columns` mistake.
                 $hint = !$allowsColumns && $verbatimColumnsHint !== null && \str_contains($name, ':')
