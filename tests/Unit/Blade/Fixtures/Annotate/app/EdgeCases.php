@@ -36,6 +36,24 @@ final class EdgeCases
         return ViewFacade::first(['edge-first', 'edge-first-fallback'], ['title' => 42]);
     }
 
+    /** `themed-host` renders `themed` through a custom include directive that may pass another type for `text`. */
+    public function themed(): View
+    {
+        return view('themed', ['text' => 'Ada']);
+    }
+
+    /** `themed-host` renders `themed-last` through a renderer that takes the view name after the scope. */
+    public function themedLast(): View
+    {
+        return view('themed-last', ['text' => 'Ada']);
+    }
+
+    /** `quiet` is named by a custom directive that passes no scope, so this is its only producer. */
+    public function quiet(): View
+    {
+        return view('quiet', ['text' => 'Ada']);
+    }
+
     /** `title` is written by the view's composer; `extra` is not. */
     public function composed(): View
     {

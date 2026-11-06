@@ -186,6 +186,10 @@ final class BladeViewDataTaintTest extends TestCase
         yield '@includeWhen(false) scope' => ['resources/views/off-when-scope.blade.php'];
         yield 'author filter that removes the variable from the scope' => ['resources/views/filtered-scope-partial.blade.php'];
         yield '`*` view data key' => ['resources/views/star-key.blade.php'];
+        // Known limitation (#2216): an app's own include directive renders through a call the bridge cannot
+        // follow, which may pass other data or render other views; neither its array nor its scope is bridged.
+        yield 'custom include directive data' => ['resources/views/custom-partial.blade.php'];
+        yield 'custom include directive scope' => ['resources/views/custom-scope-partial.blade.php'];
         yield '@includeFirst candidate after the first existing one' => ['resources/views/inc-first-never.blade.php'];
     }
 
@@ -194,6 +198,20 @@ final class BladeViewDataTaintTest extends TestCase
     public function a_value_that_does_not_flow_to_the_echo_reports_no_taint(string $template): void
     {
         $this->assertSame([], $this->taintIssuesIn($template), $this->raw());
+    }
+
+    /** The two `custom include directive` cases above prove nothing unless both includers compile to the override's call. */
+    #[Test]
+    public function the_custom_include_directive_cases_compile_to_the_override_call(): void
+    {
+        $this->warmRun();
+        $compiled = '';
+
+        foreach (\glob(self::FIXTURE . '/.cache/blade-shadows-cached/*.php') ?: [] as $path) {
+            $compiled .= (string) \file_get_contents($path);
+        }
+
+        $this->assertSame(2, \substr_count($compiled, '$__themeViews->handleViewInclude('));
     }
 
     #[Test]

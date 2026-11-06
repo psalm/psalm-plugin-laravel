@@ -65,4 +65,45 @@ final class ComponentTagCollectorTest extends TestCase
             ComponentTagCollector::collect(\token_get_all($php))[2],
         );
     }
+
+    /**
+     * #2216: an app's own `@include` (BookStack's theme override) hands the scope to a renderer that is
+     * not `$__env`. It may render the view with none of `Component::data()`'s keys, so the name counts.
+     */
+    #[Test]
+    public function collects_views_a_custom_directive_renders_with_the_whole_scope(): void
+    {
+        $scope = "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])";
+        $php = "<?php echo \$__themeViews->handleViewInclude('a.themed', {$scope}); ?>"
+            . "<?php echo \$__themeViews->handleViewInclude(\"a.data\", ['k' => 1], {$scope}); ?>"
+            . "<?php echo Theme::render(['a.first', 'a.second'], {$scope}); ?>"
+            . "<?php echo \$other->handleViewInclude('c.nested', foo({$scope})); ?>"
+            . "<?php echo \$other->handleViewInclude('c.qualified', \\array_diff_key(\\get_defined_vars(), ['__data' => 1])); ?>"
+            // Closures, interpolated strings and `($renderer)(…)` / `{$method}(…)` callees hide no render.
+            . "<?php echo \$r->render('c.closure', (function () { return []; })(), {$scope}); ?>"
+            . "<?php echo (\$renderer)('c.invoked', {$scope}); ?>"
+            . "<?php echo \$map['k']('c.indexed', {$scope}); ?>"
+            . "<?php echo \$r->{\$method}('c.braced', {$scope}); ?>"
+            . "<?php echo \$r->render('c.interpolated', [\"{\$value}\"], {$scope}); ?>";
+
+        $this->assertSame(
+            ['a.themed', '__data', '__path', 'a.data', 'k', 'a.first', 'a.second', 'c.nested', 'c.qualified', 'c.closure', 'c.invoked', 'c.indexed', 'c.braced', 'c.interpolated'],
+            ComponentTagCollector::collect(\token_get_all($php))[2],
+        );
+    }
+
+    /**
+     * Only the exact `array_diff_key(get_defined_vars(), …)` argument marks a render: a bare
+     * `get_defined_vars()` (Filament's `@capture`) or an unrelated `array_diff_key()` is no include.
+     */
+    #[Test]
+    public function ignores_calls_that_do_not_hand_over_the_compiled_scope(): void
+    {
+        $php = "<?php echo \$__themeViews->handleViewInclude('not.scope', ['k' => 1]); ?>"
+            . "<?php \$capture->run('not.capture', get_defined_vars()); ?>"
+            . "<?php \$x = array_diff_key(\$a, ['other' => 1]); \$y = \$o->with('not.diff', \$x); ?>"
+            . "<?php echo array_diff_key(get_defined_vars(), ['__data' => 1]); ?>";
+
+        $this->assertSame([], ComponentTagCollector::collect(\token_get_all($php))[2]);
+    }
 }

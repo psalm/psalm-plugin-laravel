@@ -18,6 +18,18 @@ $app->register(new class ($app) extends ServiceProvider {
 
         require_once \dirname(__DIR__) . '/app/LivewireStandIn.php';
         \Livewire\Component::macro('flash', static fn(string $message): string => $message);
+
+        // BookStack's theme `@include` override renders through a shared object, not `$__env`; the
+        // second directive names a view without handing over the scope.
+        $blade = $this->app->make('blade.compiler');
+        $blade->directive(
+            'themedInclude',
+            static fn(string $expression): string => "<?php echo \$__themeViews->handleViewInclude({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
+        );
+        $blade->directive(
+            'quietRender',
+            static fn(string $expression): string => "<?php echo \$__themeViews->renderQuietly({$expression}); ?>",
+        );
     }
 });
 

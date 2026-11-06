@@ -110,6 +110,9 @@ final class ComponentViewTypingTest extends TestCase
         yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];
         // `ViewName::normalize()` makes `components/linked` the view `components.linked`.
         yield 'also rendered by @include, spelled with a slash' => ['linked.blade.php', ['$title: mixed']];
+        // #2216: an app's own include directive hands the scope to a renderer that is not `$__env`.
+        yield 'also rendered by a custom include directive' => ['themed.blade.php', ['$title: mixed']];
+        yield 'a custom directive that hands over no scope is no include' => ['quiet.blade.php', ['$title: string']];
         yield 'a returned string with three :: segments is inline Blade' => ['suffixed.blade.php', ['$title: mixed']];
         // #1935: a Livewire view runs bound to its component, which hands it every public property.
         // An object one with no default may still be uninitialized, which Livewire passes as null.

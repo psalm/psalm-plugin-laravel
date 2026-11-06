@@ -16,6 +16,10 @@
 <x-withed/>
 <x-included/>
 @include('components.included')
+<x-themed/>
+@themedInclude('components.themed')
+<x-quiet/>
+@quietRender('components.quiet')
 <x-sized/>
 <x-toolbar/>
 <x-owned/>
