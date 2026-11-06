@@ -26,6 +26,12 @@ $app->booted(static function () use ($app): void {
     $view = $app->make('view');
     $view->composer('composed', static fn(): null => null);
 
+    // BookStack's theme `@include` override shape: the whole scope goes to a call that is not `$__env`.
+    $app->make('blade.compiler')->directive(
+        'scopedInclude',
+        static fn(string $expression): string => "<?php echo \$__scoped->render({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
+    );
+
     // Class composers whose bodies the plugin reads: see app/ComposerCallSites.php.
     $composers = 'ViewContractFixture\\Composers\\';
     $view->composer('composer-literal', $composers . 'LiteralComposer');
