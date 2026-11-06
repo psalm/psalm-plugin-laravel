@@ -161,6 +161,8 @@ See [MissingTranslation](issues/MissingTranslation.md) for details.
 
 **default**: `true`
 
+Projects set up with `psalm-laravel init` from v3.11.0 onward have `<findMissingViews value="false" />` written into `psalm.xml`, which keeps the check off. Delete that line to follow the default.
+
 The plugin checks that a view name passed to `view()`, `Factory::make()`/`first()`/`renderWhen()`/`renderUnless()`/`renderEach()` (and the `View` facade), `ResponseFactory::view()`/`response()->view()` (and the `Response` facade), `Router::view()` (and the `Route` facade), `MailMessage::view()`/`markdown()`/`text()` (including the array form of `view()`), or `TestResponse::assertViewIs()` references a Blade template that exists on disk.
 Only string literal view names are validated — dynamic names and namespaced views (e.g., `mail::html.header`) are skipped.
 
