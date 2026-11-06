@@ -112,7 +112,7 @@ Experimental. Three issues compare `view()` call sites with the declarations abo
 
 * [`MissingViewData`](issues/MissingViewData.md): a call site does not pass a required variable.
 * [`InvalidViewData`](issues/InvalidViewData.md): a passed value does not satisfy the declared type.
-* [`UnusedViewData`](issues/UnusedViewData.md): a call site passes a key the template never reads or declares. An app that overrides the `@include` directive gets false positives; suppress this issue there.
+* [`UnusedViewData`](issues/UnusedViewData.md): a call site passes a key the template never reads or declares. An app that overrides `@include` with its own directive and hands the scope over the way Blade does (`array_diff_key(get_defined_vars(), ...)`) makes the check decline for that include chain. A directive that passes the scope some other way can still report false positives; suppress this issue there.
 
 [`BladeCompileError`](issues/BladeCompileError.md) is not experimental: a template that fails to compile is skipped and reported as an error.
 

@@ -1145,6 +1145,8 @@ final class ViewContractValidationTest extends TestCase
 
         // An `@include($name)` leaves the chain's read set a lower bound.
         $this->assertSame([], $this->forFile($issues, 'DynamicInclude.php'), \var_export($issues, true));
+        // #2209: a custom directive handing the whole scope to a non-`$__env` call may render anything.
+        $this->assertSame([], $this->forFile($issues, 'CustomDirectiveInclude.php'), \var_export($issues, true));
         // `@props` (like `@aware`) compiles to `$$__key` writes, which make the read set unknowable.
         $this->assertSame([], $this->forFile($issues, 'PropsPanel.php'), \var_export($issues, true));
         // A shadow the plugin cannot parse says nothing about what the template reads.
