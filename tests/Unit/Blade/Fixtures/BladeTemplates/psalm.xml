@@ -9,6 +9,7 @@
         <directory name="app" />
     </projectFiles>
     <plugins>
+        <plugin filename="plugins/ProvidedPropertyPlugin.php" />
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <blade cacheDir=".cache/blade-shadows" />
         </pluginClass>

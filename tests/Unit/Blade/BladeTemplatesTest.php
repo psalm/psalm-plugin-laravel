@@ -308,12 +308,14 @@ final class BladeTemplatesTest extends TestCase
     }
 
     /**
-     * The `__set` counterpart is NOT dropped: its mapped twin needs a resolved `$var_id`, so for a
-     * non-variable receiver (`\Fx\Magic::make()->nope = 1`) the unmapped `UndefinedThisPropertyAssignment`
-     * is the ONLY diagnostic. The plain-variable receiver on line 8 keeps both, a real duplicate.
+     * The `__set` counterpart is dropped only when it is provably a duplicate (#2129): every access to
+     * the property has a receiver Psalm resolves a `$var_id` for, so the mapped
+     * `UndefinedMagicPropertyAssignment` twin fired. Here `missing-prop.blade.php` mixes `$magic->nope`
+     * (line 8, twin fires) with `\Fx\Magic::make()->nope` (no `$var_id`, no twin), so the unmapped
+     * issue may be the only diagnostic for the second access and stays on line 1.
      */
     #[Test]
-    public function the_assignment_duplicate_is_kept_because_its_twin_is_not_unconditional(): void
+    public function the_assignment_duplicate_is_kept_when_receivers_mix_variable_and_non_variable(): void
     {
         $this->assertCompiled('missing-prop.blade.php');
         $reported = $this->in('missing-prop.blade.php');
@@ -325,6 +327,55 @@ final class BladeTemplatesTest extends TestCase
 
         $mapped = \array_values(\array_filter($reported, static fn(array $issue): bool => $issue['type'] === 'UndefinedMagicPropertyAssignment'));
         $this->assertSame([8], \array_column($mapped, 'line'), \var_export($reported, true));
+    }
+
+    /**
+     * #2129: with only variable receivers the mapped twin is certain to have fired, so the synthesized
+     * unmapped duplicate on line 1 is dropped and the author sees the one real finding.
+     */
+    #[Test]
+    public function the_assignment_duplicate_is_dropped_when_every_receiver_is_a_variable(): void
+    {
+        $this->assertCompiled('set-var-only.blade.php');
+
+        $this->assertSame(
+            [['type' => 'UndefinedMagicPropertyAssignment', 'line' => 6]],
+            \array_map(static fn(array $issue): array => ['type' => $issue['type'], 'line' => $issue['line']], $this->in('set-var-only.blade.php')),
+            \var_export($this->in('set-var-only.blade.php'), true),
+        );
+    }
+
+    /**
+     * Every shape below leaves the unmapped issue as the only diagnostic for at least one access, so it must
+     * keep reporting on line 1: a call result and an array offset resolve no `$var_id`; `{'other'}` is a
+     * literal name the shadow scan cannot tie to an identifier; a declared protected property exists, so
+     * the twin stays silent even for a variable receiver.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function assignmentsWhoseDuplicateIsTheOnlyDiagnostic(): iterable
+    {
+        yield 'call result receiver' => ['set-call-only.blade.php'];
+        yield 'array offset receiver' => ['set-offset-only.blade.php'];
+        yield 'literal property name alongside a variable receiver' => ['set-literal-name.blade.php'];
+        yield 'declared but inaccessible property' => ['set-declared-protected.blade.php'];
+        yield 'property a provider asserts exists' => ['set-provider-declared.blade.php'];
+        yield 'sealed interface in an intersection with an unsealed class' => ['set-intersection-interface.blade.php'];
+    }
+
+    #[Test]
+    #[DataProvider('assignmentsWhoseDuplicateIsTheOnlyDiagnostic')]
+    public function the_assignment_duplicate_is_kept_when_it_may_be_the_only_diagnostic(string $template): void
+    {
+        $this->assertCompiled($template);
+
+        $unmapped = \array_values(\array_filter(
+            $this->in($template),
+            static fn(array $issue): bool => $issue['type'] === 'UndefinedThisPropertyAssignment',
+        ));
+        $this->assertCount(1, $unmapped, \var_export($this->in($template), true));
+        $this->assertSame(1, $unmapped[0]['line']);
+        $this->assertStringContainsString('(unmapped)', $unmapped[0]['message']);
     }
 
     // A template the real Blade compiler throws on is reported as an issue on the `.blade.php` file.
