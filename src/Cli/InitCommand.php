@@ -71,7 +71,9 @@ final class InitCommand extends Command
 
             <plugins>
                 <!-- All Psalm Laravel options: https://psalm.github.io/psalm-plugin-laravel/config/ -->
-                <pluginClass class="Psalm\LaravelPlugin\Plugin" />
+                <pluginClass class="Psalm\LaravelPlugin\Plugin">
+                    <experimental value="false" />
+                </pluginClass>
             </plugins>
 
             <issueHandlers>
