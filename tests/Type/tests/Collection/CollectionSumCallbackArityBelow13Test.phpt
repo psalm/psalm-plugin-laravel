@@ -34,4 +34,4 @@ function enumerable_sum_untyped_callback_on_12(Enumerable $items): void
 }
 ?>
 --EXPECTF--
-InvalidScalarArgument on line %d: Argument 1 of Illuminate\Support\Collection::sum expects callable[impure](int):(float|int|numeric-string)|null|string, but Closure[pure](int, string):int<min, max> provided
+InvalidScalarArgument on line %d: Argument 1 of Illuminate\Support\Collection::sum expects callable[impure](int):(float|int|numeric-string)|null|string, but Closure[pure](int, string):int%S provided
