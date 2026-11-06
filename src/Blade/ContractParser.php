@@ -784,6 +784,11 @@ final class ContractParser
                     }
                 }
 
+                // A PHP `include` / `require` / `eval` runs code in the template's scope that this walk cannot read.
+                if ($node instanceof Node\Expr\Include_ || $node instanceof Node\Expr\Eval_) {
+                    $this->unknown = true;
+                }
+
                 if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
                     $this->enterCall(\strtolower($node->name->toString()), $node->args);
                 }
