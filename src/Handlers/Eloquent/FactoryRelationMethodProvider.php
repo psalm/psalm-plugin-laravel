@@ -76,7 +76,7 @@ final class FactoryRelationMethodProvider implements AfterCodebasePopulatedInter
         $model = self::model($codebase, $receivers);
         if ($model === null
             || !self::isForwarderSlot($codebase, $storage, $name)
-            || !RelationResolver::isRelationMethod($codebase, $model, \str_replace(['_', '-'], '', \substr($name, 3)))
+            || !RelationResolver::isRelationMethod($codebase, $model, \str_replace('_', '', \substr($name, 3)))
         ) {
             return null;
         }
@@ -102,7 +102,7 @@ final class FactoryRelationMethodProvider implements AfterCodebasePopulatedInter
         $name = $event->getMethodNameLowercase();
         $codebase = $event->getStatementsSource()?->getCodebase();
         if (!self::isForwarderName($name)
-            || !$codebase instanceof \Psalm\Codebase
+            || !$codebase instanceof Codebase
             || !self::isForwarderSlot($codebase, $codebase->classlike_storage_provider->get($event->getFqClasslikeName()), $name)
         ) {
             return null;
@@ -140,7 +140,8 @@ final class FactoryRelationMethodProvider implements AfterCodebasePopulatedInter
     }
 
     /**
-     * No real method or pseudo-method (own, trait or ancestor `@method`, boot macro) owns the name, and `__call` is
+     * No real method (an abstract class's unimplemented interface method included, as Psalm's `methodExists()`
+     * resolves it) or pseudo-method (own, trait or ancestor `@method`, boot macro) owns the name, and `__call` is
      * Laravel's own. Psalm resolves pseudo-methods only after asking the providers, so the check is ours.
      *
      * @psalm-capabilities read-props
@@ -148,6 +149,7 @@ final class FactoryRelationMethodProvider implements AfterCodebasePopulatedInter
     private static function isForwarderSlot(Codebase $codebase, ClassLikeStorage $storage, string $name): bool
     {
         return !isset($storage->declaring_method_ids[$name])
+            && (!$storage->abstract || !isset($storage->overridden_method_ids[$name]))
             && !isset($storage->pseudo_methods[$name])
             && FactoryCount::isFactoryMethod($codebase, $storage, '__call');
     }

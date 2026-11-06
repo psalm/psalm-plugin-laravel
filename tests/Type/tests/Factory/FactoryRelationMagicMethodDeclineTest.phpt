@@ -76,6 +76,35 @@ final class UserFactory extends Factory
 /** No model binding: TModel is unresolved. */
 abstract class PhantomFactory extends Factory {}
 
+interface RealTagsContract
+{
+    public function hasTags(string $label): int;
+}
+
+/** @extends Factory<User> */
+abstract class RealContractFactory extends Factory implements RealTagsContract {}
+
+/** @extends Factory<User> */
+final class ForwardingUserFactory extends Factory
+{
+    /** @return array<string, mixed> */
+    #[\Override]
+    public function definition(): array
+    {
+        return [];
+    }
+
+    /**
+     * @param string $method
+     * @param array<array-key, mixed> $parameters
+     */
+    #[\Override]
+    public function __call($method, $parameters): static
+    {
+        return $this;
+    }
+}
+
 // Unknown, non-relation, wrongly cased, unrelated and Model-builder names.
 $_typo = User::factory()->hasLnks(2);
 $_notRelation = User::factory()->hasPassword();
@@ -86,12 +115,20 @@ $_hash = User::factory()->hash();
 $_builder = User::factory()->hasHasMany();
 $_static = UserFactory::hasTags();
 
-// A real method, an `@method` and a boot macro keep their own contracts.
+// A real method (also an abstract class's interface method), an `@method`, a boot macro and a user `__call` keep
+// their own contracts.
 $_real = User::factory()->hasLinks(2);
 $_pseudo = User::factory()->hasDocumented('x');
 /** @psalm-check-type-exact $_pseudo = int */;
 $_macro = User::factory()->hasMacroCollision('x');
 /** @psalm-check-type-exact $_macro = int */;
+
+function owned(RealContractFactory $contract, ForwardingUserFactory $forwarding): void
+{
+    $_realContract = $contract->hasTags('x');
+    /** @psalm-check-type-exact $_realContract = int */;
+    $_forwarding = $forwarding->hasTags();
+}
 
 // Wrong argument shapes on a proven forwarder.
 $_badCount = User::factory()->hasTags(true);
@@ -118,6 +155,7 @@ UndefinedMagicMethod on line %d: Magic method App\Sandbox\FactoryRelationMagicDe
 UndefinedMagicMethod on line %d: Magic method App\Sandbox\FactoryRelationMagicDecline\UserFactory::hastags does not exist
 TooFewArguments on line %d: Too few arguments for App\Sandbox\FactoryRelationMagicDecline\UserFactory::hasLinks - expecting extra to be passed
 TooFewArguments on line %d: Too few arguments for method App\Sandbox\FactoryRelationMagicDecline\UserFactory::haslinks saw 1
+UndefinedMagicMethod on line %d: Magic method App\Sandbox\FactoryRelationMagicDecline\ForwardingUserFactory::hastags does not exist
 InvalidScalarArgument on line %d: Argument 1 of App\Sandbox\FactoryRelationMagicDecline\UserFactory::hastags expects Illuminate\Database\Eloquent\Factories\Sequence|array<string, mixed>|callable[impure]|int|null, but true provided
 InvalidArgument on line %d: Argument 2 of App\Sandbox\FactoryRelationMagicDecline\UserFactory::hastags expects Illuminate\Database\Eloquent\Factories\Sequence|array<string, mixed>|callable[impure]|null, but stdClass provided
 InvalidArgument on line %d: Argument 1 of App\Sandbox\FactoryRelationMagicDecline\UserFactory::fortags expects Illuminate\Database\Eloquent\Factories\Sequence|array<string, mixed>|callable[impure]|null, but 2 provided
