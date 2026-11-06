@@ -14,4 +14,7 @@ use Psalm\Issue\PluginIssue;
 final class SerializedQueuedModel extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/SerializedQueuedModel/';
+
+    // Level 4 like UnknownModelAttribute: a model-handling defect that only Laravel's runtime would show.
+    public const ERROR_LEVEL = 4;
 }

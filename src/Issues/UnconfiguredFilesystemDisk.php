@@ -15,5 +15,6 @@ final class UnconfiguredFilesystemDisk extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/UnconfiguredFilesystemDisk/';
 
-    // No ERROR_LEVEL override: controlled by the plugin setting findUnconfiguredFilesystemDisks
+    // Level 4 mirrors Psalm's UndefinedMagicMethod: the name resolves through config, not PHP.
+    public const ERROR_LEVEL = 4;
 }

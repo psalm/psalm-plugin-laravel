@@ -84,7 +84,7 @@ final readonly class PluginConfig
         $failOnInternalError = self::xmlBoolAttr($config?->failOnInternalError, 'failOnInternalError');
         $xmlExperimental = self::xmlBoolAttr($config?->experimental, 'experimental');
         $findMissingTranslations = self::xmlBoolAttr($config?->findMissingTranslations, 'findMissingTranslations');
-        $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews');
+        $findMissingViews = self::xmlBoolAttr($config?->findMissingViews, 'findMissingViews', true);
         // experimental = early access to rules not yet promoted to default; an explicit per-rule value
         // (override or XML) always wins over it, in either direction, so it resolves after the overrides.
         $experimental = $overrides->bool('experimental') ?? $xmlExperimental;
@@ -108,9 +108,9 @@ final readonly class PluginConfig
             reportImplicitQueryBuilderCalls: $overrides->bool('reportImplicitQueryBuilderCalls') ?? $reportImplicitQueryBuilderCalls,
             findMissingTranslations: $overrides->bool('findMissingTranslations') ?? $findMissingTranslations,
             findMissingViews: $overrides->bool('findMissingViews') ?? $findMissingViews,
-            findUnconfiguredFilesystemDisks: $overrides->bool('findUnconfiguredFilesystemDisks') ?? $findUnconfiguredFilesystemDisks ?? $experimental,
+            findUnconfiguredFilesystemDisks: $overrides->bool('findUnconfiguredFilesystemDisks') ?? $findUnconfiguredFilesystemDisks ?? true,
             findUnregisteredRouteNames: $overrides->bool('findUnregisteredRouteNames') ?? $findUnregisteredRouteNames ?? $experimental,
-            findSerializedQueuedModels: $overrides->bool('findSerializedQueuedModels') ?? $findSerializedQueuedModels ?? $experimental,
+            findSerializedQueuedModels: $overrides->bool('findSerializedQueuedModels') ?? $findSerializedQueuedModels ?? true,
             findOctaneIncompatibleBinding: $overrides->bool('findOctaneIncompatibleBinding') ?? $findOctaneIncompatibleBinding,
             findPromptInjection: $overrides->bool('findPromptInjection') ?? $findPromptInjection,
             cachePath: $cachePath,

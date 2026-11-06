@@ -48,12 +48,12 @@ view('admin.dashboard');
 
 ## Configuration
 
-This check is disabled by default. Enable it in your `psalm.xml`:
+This check is enabled by default. Reported at error levels 1 to 4 (like Psalm's `UndefinedMagicMethod`), `info` at looser levels. Disable it in your `psalm.xml`:
 
 ```xml
 <plugins>
     <pluginClass class="Psalm\LaravelPlugin\Plugin">
-        <findMissingViews value="true" />
+        <findMissingViews value="false" />
     </pluginClass>
 </plugins>
 ```

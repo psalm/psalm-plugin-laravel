@@ -822,6 +822,9 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
      */
     private static function viewFileExists(string $viewName): bool
     {
+        // FileViewFinder::find() trims the name before resolving it.
+        $viewName = \trim($viewName);
+
         if (isset(self::$resolvedViews[$viewName])) {
             return self::$resolvedViews[$viewName];
         }

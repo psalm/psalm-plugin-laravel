@@ -19,6 +19,8 @@
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <failOnInternalError value="true" />
             <resolveDynamicWhereClauses value="true" />
+            <!-- On by default; fixtures name views that do not exist. Covered under psalm-with-optin-custom-issues.xml. -->
+            <findMissingViews value="false" />
         </pluginClass>
     </plugins>
     <stubs>
