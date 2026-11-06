@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\View\Compilers\BladeCompiler;
 
 // A minimal real bootstrap/app.php (branch 1 of ApplicationProvider::doGetApp()), so the booted app
 // binds 'blade.compiler' and a 'view.finder' anchored at THIS fixture's config/view.php paths.
@@ -17,6 +18,20 @@ $app->register(new class ($app) extends ServiceProvider {
         // Markdown mail swaps `mail` for its component paths at render time, so this hint never
         // renders behind a markdown() call.
         $this->loadViewsFrom(\dirname(__DIR__) . '/resources/mail-views', 'mail');
+    }
+});
+
+// A custom include directive in the shape of BookStack's theme `@include` override: it hands the
+// whole scope to a call that is not `$__env`, so what it renders is unknowable.
+$app->register(new class ($app) extends ServiceProvider {
+    public function boot(): void
+    {
+        $this->callAfterResolving('blade.compiler', static function (BladeCompiler $blade): void {
+            $blade->directive(
+                'scopedInclude',
+                static fn(string $expression): string => "<?php echo \$__scoped->render({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
+            );
+        });
     }
 });
 
