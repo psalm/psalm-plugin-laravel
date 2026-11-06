@@ -378,6 +378,8 @@ final class Plugin implements PluginEntryPointInterface
         $registration->registerHooksFromClass(Handlers\Application\OffsetHandler::class);
         require_once __DIR__ . '/Handlers/Application/ContractMethodBridgeHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContractMethodBridgeHandler::class);
+        require_once __DIR__ . '/Handlers/Application/BootstrapAppIncludeHandler.php';
+        $registration->registerHooksFromClass(Handlers\Application\BootstrapAppIncludeHandler::class);
 
         require_once __DIR__ . '/Handlers/Auth/AuthMethodHandler.php';
         $registration->registerHooksFromClass(Handlers\Auth\AuthMethodHandler::class);
