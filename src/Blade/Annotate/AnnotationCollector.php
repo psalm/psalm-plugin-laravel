@@ -18,6 +18,7 @@ use Psalm\LaravelPlugin\Blade\ContractRegistry;
 use Psalm\LaravelPlugin\Blade\PreludeBuilder;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
+use Psalm\LaravelPlugin\Blade\ViewReferenceCollector;
 use Psalm\LaravelPlugin\Handlers\Views\ViewCallChain;
 use Psalm\LaravelPlugin\Handlers\Views\ViewClassProperties;
 use Psalm\LaravelPlugin\Handlers\Views\ViewContractHandler;
@@ -677,6 +678,12 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
 
     private static function isViewBinder(Node $node): bool
     {
+        // #2216: a call handed the includer's whole scope (an app's own `@include`, BookStack's theme
+        // override) is an include whatever its receiver: it may render the view with any type for a key.
+        if ($node instanceof Expr\CallLike && ViewReferenceCollector::passesWholeScope($node->getRawArgs())) {
+            return true;
+        }
+
         if ($node instanceof Expr\FuncCall) {
             return $node->name instanceof Node\Name && $node->name->toLowerString() === 'view';
         }

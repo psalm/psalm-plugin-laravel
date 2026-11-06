@@ -23,7 +23,7 @@ view('greeting')->with('name');                 // InvalidViewData: a single-key
 view('greeting', ['name' => 'Ada']);            // OK
 ```
 
-The same applies to `->with('name', 123)` and `response()->view()`. In a template, the keys a literal data array passes to an include directive or `@extends` are checked the same way (see [supported call sites](../blade.md#supported-call-sites)).
+The same applies to `->with('name', 123)` and `response()->view()`. In a template, the keys a literal data array passes to an include directive or `@extends` are checked the same way (see [supported call sites](../blade.md#supported-call-sites)). An app's own `@include` directive is not checked ([Apps that override `@include`](../blade.md#apps-that-override-include)).
 
 ## How to fix
 

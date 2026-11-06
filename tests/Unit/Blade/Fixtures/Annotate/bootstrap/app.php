@@ -17,6 +17,18 @@ $app->register(new class ($app) extends ServiceProvider {
         // Written as a string: the plugin reads the composer's method from the analysed source, so the
         // class need not be loadable here.
         $this->app->make('view')->composer('edge-composed', 'AnnotateFixture\\EdgeComposer');
+
+        // #2216: BookStack's theme `@include` override renders through a shared object, not `$__env`;
+        // `quietRender` names a view without handing over the scope.
+        $blade = $this->app->make('blade.compiler');
+        $blade->directive(
+            'themedInclude',
+            static fn(string $expression): string => "<?php echo \$__themeViews->handleViewInclude({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
+        );
+        $blade->directive(
+            'quietRender',
+            static fn(string $expression): string => "<?php echo \$__themeViews->renderQuietly({$expression}); ?>",
+        );
     }
 });
 

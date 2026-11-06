@@ -17,7 +17,9 @@ use PhpParser\Node\Scalar\String_;
  *    `$__env->slot('name', …)`;
  *  - which views a template renders by NAME (`@include`, `@includeIf`/`When`/`Unless`/`First`,
  *    `@each`, `@extends`, `@component('view')`): all compile to a `$__env->` call carrying the
- *    name as a literal. Such a render never runs `Component::data()`.
+ *    name as a literal. Such a render never runs `Component::data()`. So does any other call handed
+ *    the includer's whole scope, `array_diff_key(get_defined_vars(), …)` (#2216: an app's own
+ *    `@include` directive, BookStack's `$__themeViews->handleViewInclude(…)`), which may render any view.
  *
  * The first two are lower bounds. `<x-dynamic-component>`, `Blade::renderComponent()`, package
  * views under a vendor hint root, and a slot whose name is an expression are invisible here. The
@@ -64,6 +66,16 @@ final class ComponentTagCollector
         for ($i = 0; $i < $count; $i++) {
             $token = $significant[$i];
 
+            if (\is_array($token) && ($token[0] === \T_STRING || $token[0] === \T_NAME_FULLY_QUALIFIED) && self::isCompiledScope($significant, $i)) {
+                foreach (self::enclosingCalls($significant, $i) as $open) {
+                    foreach (self::literalsInArguments($significant, $open) as $name) {
+                        $views[\trim(ViewName::normalize($name))] = true;
+                    }
+                }
+
+                continue;
+            }
+
             if (!\is_array($token) || $token[0] !== \T_VARIABLE) {
                 continue;
             }
@@ -106,6 +118,68 @@ final class ComponentTagCollector
             \array_map(\strval(...), \array_keys($slots)),
             \array_map(\strval(...), \array_keys($views)),
         ];
+    }
+
+    /**
+     * `array_diff_key(get_defined_vars(),` at `$at`: the data argument every scope-passing Blade
+     * directive compiles. A bare `get_defined_vars()` (Filament's `@capture`) is not it.
+     *
+     * @param list<array{0: int, 1: string, 2: int}|string> $tokens
+     *
+     * @psalm-pure
+     */
+    private static function isCompiledScope(array $tokens, int $at): bool
+    {
+        return \strtolower(\ltrim($tokens[$at][1], '\\')) === 'array_diff_key'
+            && ($tokens[$at + 1] ?? null) === '('
+            && (self::is($tokens[$at + 2] ?? null, \T_STRING, 'get_defined_vars') || self::is($tokens[$at + 2] ?? null, \T_NAME_FULLY_QUALIFIED, '\\get_defined_vars'))
+            && ($tokens[$at + 3] ?? null) === '('
+            && ($tokens[$at + 4] ?? null) === ')'
+            && ($tokens[$at + 5] ?? null) === ',';
+    }
+
+    /**
+     * The opening parenthesis of every call whose argument list holds the token at `$at`, innermost
+     * first, up to the start of its statement.
+     *
+     * @param list<array{0: int, 1: string, 2: int}|string> $tokens
+     *
+     * @return list<int>
+     *
+     * @psalm-pure
+     */
+    private static function enclosingCalls(array $tokens, int $at): array
+    {
+        $opens = [];
+        $depth = 0;
+
+        for ($i = $at - 1; $i >= 0; $i--) {
+            $token = $tokens[$i];
+
+            if ($token === ')' || $token === ']') {
+                $depth++;
+            } elseif ($token === '(' || $token === '[') {
+                if ($depth > 0) {
+                    $depth -= 1;
+                } elseif ($token === '(' && self::isCallee($tokens[$i - 1] ?? null)) {
+                    $opens[] = $i;
+                }
+            } elseif ($token === ';' || (\is_array($token) && ($token[0] === \T_OPEN_TAG || $token[0] === \T_OPEN_TAG_WITH_ECHO))) {
+                break;
+            }
+        }
+
+        return $opens;
+    }
+
+    /**
+     * @param array{0: int, 1: string, 2: int}|string|null $token
+     *
+     * @psalm-pure
+     */
+    private static function isCallee(array|string|null $token): bool
+    {
+        return \is_array($token) && ($token[0] === \T_VARIABLE || isset(self::CLASS_NAME_TOKENS[$token[0]]));
     }
 
     /**

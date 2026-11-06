@@ -186,6 +186,10 @@ final class BladeViewDataTaintTest extends TestCase
         yield '@includeWhen(false) scope' => ['resources/views/off-when-scope.blade.php'];
         yield 'author filter that removes the variable from the scope' => ['resources/views/filtered-scope-partial.blade.php'];
         yield '`*` view data key' => ['resources/views/star-key.blade.php'];
+        // Known limitation (#2216): an app's own include directive renders through a call the bridge cannot
+        // follow, which may pass other data or render other views; neither its array nor its scope is bridged.
+        yield 'custom include directive data' => ['resources/views/custom-partial.blade.php'];
+        yield 'custom include directive scope' => ['resources/views/custom-scope-partial.blade.php'];
         yield '@includeFirst candidate after the first existing one' => ['resources/views/inc-first-never.blade.php'];
     }
 

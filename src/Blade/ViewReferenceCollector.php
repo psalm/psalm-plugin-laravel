@@ -68,7 +68,7 @@ final class ViewReferenceCollector
         foreach ((new NodeFinder())->findInstanceOf($stmts, CallLike::class) as $call) {
             $args = $call->getRawArgs();
 
-            if (!$this->passesWholeScope($args)) {
+            if (!self::passesWholeScope($args)) {
                 continue;
             }
 
@@ -99,9 +99,9 @@ final class ViewReferenceCollector
      *
      * @param array<array-key, Arg|VariadicPlaceholder|ArgPlaceholder> $args
      *
-     * @psalm-mutation-free
+     * @psalm-capabilities read-props
      */
-    private function passesWholeScope(array $args): bool
+    public static function passesWholeScope(array $args): bool
     {
         foreach ($args as $arg) {
             if (!$arg instanceof Arg

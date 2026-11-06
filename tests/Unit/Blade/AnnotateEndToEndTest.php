@@ -113,6 +113,12 @@ final class AnnotateEndToEndTest extends TestCase
             self::TEMPLATES['edge-composed'],
         )];
 
+        // #2216: a custom directive that hands over no scope is no include, so its controller is the only producer.
+        yield 'a view a custom directive names without handing over the scope' => ['quiet', $declare(
+            " * @var string \$text\n",
+            self::TEMPLATES['quiet'],
+        )];
+
         // The callback's own statement records the producer; the enclosing chain is declined, and
         // its scan for nested view names must not count that same call a second time as unreadable.
         foreach (['modal-arrow', 'modal-closure', 'modal-nested'] as $name) {
@@ -165,6 +171,9 @@ final class AnnotateEndToEndTest extends TestCase
         // `View::first()` renders whichever candidate exists, with another type than the call site that is read.
         yield 'a View::first() candidate (the first)' => ['edge-first'];
         yield 'a View::first() candidate (the fallback)' => ['edge-first-fallback'];
+        // #2216: an app's own include directive (BookStack's theme override) hands the includer's scope to a
+        // renderer that is not `$__env`, so it may pass `text` with a type no controller call site shows.
+        yield 'a custom include directive that hands over the scope' => ['themed'];
     }
 
     #[Test]
@@ -215,6 +224,10 @@ final class AnnotateEndToEndTest extends TestCase
 
         // The site is the including template's own line, never the compiled shadow's cache path.
         $this->assertSame(['site' => "{$site}/resources/views/scoped-host.blade.php:2", 'names' => ['text']], $this->unreadableFor($result, 'scoped'));
+        // #2216: an app's own include directive hands the scope to a renderer that is not `$__env`: it may pass
+        // any type for `text`, so the view is open. A directive that names a view but passes no scope is no include.
+        $this->assertSame(['site' => "{$site}/resources/views/themed-host.blade.php:2", 'names' => ['text']], $this->unreadableFor($result, 'themed'));
+        $this->assertNull($this->unreadableFor($result, 'quiet'));
         // #2079: a private helper's bare view is completed by its caller, so it is an open site, not a closed one that supplies nothing.
         $this->assertNull($this->unknownFor($result, 'private-helper'));
         $this->assertSame(['site' => "{$site}/app/HelperView.php:19", 'names' => ['text']], $this->unreadableFor($result, 'private-helper'));

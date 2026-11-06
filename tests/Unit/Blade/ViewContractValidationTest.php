@@ -968,6 +968,18 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame(2, $reported[0]['line_from']);
     }
 
+    /**
+     * Known limitation (#2216): an app's own include directive (BookStack's theme `@include`) hands the
+     * scope to a renderer the plugin cannot see into, which may pass more data or render other views, so
+     * the include is not type-checked. The same array through `@include` (`wrong-type.blade.php`) reports
+     * the wrong `$title`.
+     */
+    #[Test]
+    public function a_custom_include_directive_is_not_checked_against_the_included_contract(): void
+    {
+        $this->assertSame([], $this->templateContractIssues('custom-include.blade.php'));
+    }
+
     /** The includer's own UndefinedDocblockClass already reports an unknown class; no cascade. */
     #[Test]
     public function an_include_value_of_an_undefined_class_is_not_type_checked(): void

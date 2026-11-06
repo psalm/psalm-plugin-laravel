@@ -14,6 +14,12 @@ $app->register(new class ($app) extends ServiceProvider {
     public function boot(): void
     {
         $this->loadViewsFrom(\dirname(__DIR__) . '/resources/pkg-views', 'pkg');
+
+        // BookStack's theme `@include` override: the scope goes to a renderer that is not `$__env`.
+        $this->app->make('blade.compiler')->directive(
+            'themedInclude',
+            static fn(string $expression): string => "<?php echo \$__themeViews->handleViewInclude({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
+        );
     }
 });
 
