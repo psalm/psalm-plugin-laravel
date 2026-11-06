@@ -42,6 +42,12 @@ final class EdgeCases
         return view('themed', ['text' => 'Ada']);
     }
 
+    /** `themed-host` renders `themed-last` through a renderer that takes the view name after the scope. */
+    public function themedLast(): View
+    {
+        return view('themed-last', ['text' => 'Ada']);
+    }
+
     /** `quiet` is named by a custom directive that passes no scope, so this is its only producer. */
     public function quiet(): View
     {

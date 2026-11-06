@@ -174,6 +174,7 @@ final class AnnotateEndToEndTest extends TestCase
         // #2216: an app's own include directive (BookStack's theme override) hands the includer's scope to a
         // renderer that is not `$__env`, so it may pass `text` with a type no controller call site shows.
         yield 'a custom include directive that hands over the scope' => ['themed'];
+        yield 'a custom include directive that takes the view name after the scope' => ['themed-last'];
     }
 
     #[Test]

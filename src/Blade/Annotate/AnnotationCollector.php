@@ -568,6 +568,21 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     {
         $args = \array_values($call->getArgs());
 
+        // Reached for a call handed the includer's scope that no Laravel signature describes: its renderer
+        // may take the name at any position or by any parameter name, so every literal outside the scope
+        // argument may be the view.
+        if (!self::isFactoryBinder($call)) {
+            $literals = [];
+
+            foreach ($args as $arg) {
+                if (!ViewReferenceCollector::passesWholeScope([$arg])) {
+                    $literals = [...$literals, ...\array_values((new NodeFinder())->findInstanceOf($arg->value, String_::class))];
+                }
+            }
+
+            return $literals;
+        }
+
         // By name too: `view(data: [...], view: 'home')` puts the view name anywhere.
         $arg = static function (int $position, string $name) use ($args): ?Expr {
             $found = ArgUtil::byNameOrPosition($args, $position, $name);
@@ -680,10 +695,12 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     {
         // #2216: a call handed the includer's whole scope (an app's own `@include`, BookStack's theme
         // override) is an include whatever its receiver: it may render the view with any type for a key.
-        if ($node instanceof Expr\CallLike && ViewReferenceCollector::passesWholeScope($node->getRawArgs())) {
-            return true;
-        }
+        return self::isFactoryBinder($node)
+            || $node instanceof Expr\CallLike && ViewReferenceCollector::passesWholeScope($node->getRawArgs());
+    }
 
+    private static function isFactoryBinder(Node $node): bool
+    {
         if ($node instanceof Expr\FuncCall) {
             return $node->name instanceof Node\Name && $node->name->toLowerString() === 'view';
         }

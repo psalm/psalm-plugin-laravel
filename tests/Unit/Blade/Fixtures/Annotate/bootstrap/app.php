@@ -25,6 +25,11 @@ $app->register(new class ($app) extends ServiceProvider {
             'themedInclude',
             static fn(string $expression): string => "<?php echo \$__themeViews->handleViewInclude({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
         );
+        // The view name sits after the scope: no Laravel signature describes it.
+        $blade->directive(
+            'themedLast',
+            static fn(string $expression): string => "<?php echo \$__themeViews->render(array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]), {$expression}); ?>",
+        );
         $blade->directive(
             'quietRender',
             static fn(string $expression): string => "<?php echo \$__themeViews->renderQuietly({$expression}); ?>",

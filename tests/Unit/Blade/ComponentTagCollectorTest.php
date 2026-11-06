@@ -78,10 +78,14 @@ final class ComponentTagCollectorTest extends TestCase
             . "<?php echo \$__themeViews->handleViewInclude(\"a.data\", ['k' => 1], {$scope}); ?>"
             . "<?php echo Theme::render(['a.first', 'a.second'], {$scope}); ?>"
             . "<?php echo \$other->handleViewInclude('c.nested', foo({$scope})); ?>"
-            . "<?php echo \$other->handleViewInclude('c.qualified', \\array_diff_key(\\get_defined_vars(), ['__data' => 1])); ?>";
+            . "<?php echo \$other->handleViewInclude('c.qualified', \\array_diff_key(\\get_defined_vars(), ['__data' => 1])); ?>"
+            // A `;` inside an earlier closure argument is no statement boundary; `($renderer)(…)` is a call too.
+            . "<?php echo \$r->render('c.closure', (function () { return []; })(), {$scope}); ?>"
+            . "<?php echo (\$renderer)('c.invoked', {$scope}); ?>"
+            . "<?php echo \$map['k']('c.indexed', {$scope}); ?>";
 
         $this->assertSame(
-            ['a.themed', '__data', '__path', 'a.data', 'k', 'a.first', 'a.second', 'c.nested', 'c.qualified'],
+            ['a.themed', '__data', '__path', 'a.data', 'k', 'a.first', 'a.second', 'c.nested', 'c.qualified', 'c.closure', 'c.invoked', 'c.indexed'],
             ComponentTagCollector::collect(\token_get_all($php))[2],
         );
     }

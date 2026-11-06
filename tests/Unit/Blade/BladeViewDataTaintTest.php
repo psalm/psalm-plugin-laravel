@@ -200,6 +200,20 @@ final class BladeViewDataTaintTest extends TestCase
         $this->assertSame([], $this->taintIssuesIn($template), $this->raw());
     }
 
+    /** The two `custom include directive` cases above prove nothing unless both includers compile to the override's call. */
+    #[Test]
+    public function the_custom_include_directive_cases_compile_to_the_override_call(): void
+    {
+        $this->warmRun();
+        $compiled = '';
+
+        foreach (\glob(self::FIXTURE . '/.cache/blade-shadows-cached/*.php') ?: [] as $path) {
+            $compiled .= (string) \file_get_contents($path);
+        }
+
+        $this->assertSame(2, \substr_count($compiled, '$__themeViews->handleViewInclude('));
+    }
+
     #[Test]
     public function an_escaped_attribute_bag_next_to_a_tainted_prop_reports_no_taint(): void
     {
