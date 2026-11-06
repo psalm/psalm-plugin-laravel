@@ -140,8 +140,9 @@ final class ComponentTagCollector
 
     /**
      * The opening parenthesis of every call whose argument list holds the token at `$at`, innermost
-     * first, up to the start of its statement. A `;` inside a closure argument is no statement boundary:
-     * the walk counts braces as it counts parentheses.
+     * first, back to the start of its `<?php` block. Only parentheses and brackets are counted: an
+     * earlier statement is balanced in both, whatever braces, closures or interpolations it holds,
+     * so an unmatched `(` is always one that encloses the token.
      *
      * @param list<array{0: int, 1: string, 2: int}|string> $tokens
      *
@@ -161,18 +162,14 @@ final class ComponentTagCollector
                 break;
             }
 
-            if (in_array($token, [')', ']', '}'], true)) {
+            if ($token === ')' || $token === ']') {
                 $depth++;
-            } elseif (in_array($token, ['(', '[', '{'], true)) {
+            } elseif ($token === '(' || $token === '[') {
                 if ($depth > 0) {
                     $depth -= 1;
-                } elseif ($token === '{') {
-                    break;
                 } elseif ($token === '(' && self::isCallee($tokens[$i - 1] ?? null)) {
                     $opens[] = $i;
                 }
-            } elseif ($token === ';' && $depth === 0) {
-                break;
             }
         }
 
@@ -180,7 +177,8 @@ final class ComponentTagCollector
     }
 
     /**
-     * What may precede a call's `(`: a name, `$renderer(…)`, `($renderer)(…)`, `$map['k'](…)`.
+     * What may precede a call's `(`: a name, `$renderer(…)`, `($renderer)(…)`, `$map['k'](…)`,
+     * `$object->{$method}(…)`.
      *
      * @param array{0: int, 1: string, 2: int}|string|null $token
      *
@@ -188,7 +186,7 @@ final class ComponentTagCollector
      */
     private static function isCallee(array|string|null $token): bool
     {
-        return $token === ')' || $token === ']'
+        return in_array($token, [')', ']', '}'], true)
             || \is_array($token) && ($token[0] === \T_VARIABLE || isset(self::CLASS_NAME_TOKENS[$token[0]]));
     }
 

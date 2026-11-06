@@ -568,10 +568,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     {
         $args = \array_values($call->getArgs());
 
-        // Reached for a call handed the includer's scope that no Laravel signature describes: its renderer
-        // may take the name at any position or by any parameter name, so every literal outside the scope
-        // argument may be the view.
-        if (!self::isFactoryBinder($call)) {
+        // A call handed the includer's scope that is not the compiled `$__env` one has no signature we know:
+        // its renderer may take the name at any position or by any parameter name, whatever the method is
+        // called, so every literal outside the scope argument may be the view.
+        if (ViewReferenceCollector::passesWholeScope($call->getRawArgs()) && !self::isEnvCall($call)) {
             $literals = [];
 
             foreach ($args as $arg) {
@@ -695,12 +695,10 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
     {
         // #2216: a call handed the includer's whole scope (an app's own `@include`, BookStack's theme
         // override) is an include whatever its receiver: it may render the view with any type for a key.
-        return self::isFactoryBinder($node)
-            || $node instanceof Expr\CallLike && ViewReferenceCollector::passesWholeScope($node->getRawArgs());
-    }
+        if ($node instanceof Expr\CallLike && ViewReferenceCollector::passesWholeScope($node->getRawArgs())) {
+            return true;
+        }
 
-    private static function isFactoryBinder(Node $node): bool
-    {
         if ($node instanceof Expr\FuncCall) {
             return $node->name instanceof Node\Name && $node->name->toLowerString() === 'view';
         }
@@ -750,6 +748,16 @@ final class AnnotationCollector implements AfterStatementAnalysisInterface
             && $node->var->name instanceof Node\Name
             && $node->var->name->toLowerString() === 'view'
             && $node->var->args === [];
+    }
+
+    /**
+     * The compiled directives' own factory: `$__env->make(...)` and its siblings.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isEnvCall(Expr\CallLike $call): bool
+    {
+        return $call instanceof Expr\MethodCall && $call->var instanceof Expr\Variable && $call->var->name === '__env';
     }
 
     private static function methodName(Node $call): ?string

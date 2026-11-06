@@ -79,13 +79,15 @@ final class ComponentTagCollectorTest extends TestCase
             . "<?php echo Theme::render(['a.first', 'a.second'], {$scope}); ?>"
             . "<?php echo \$other->handleViewInclude('c.nested', foo({$scope})); ?>"
             . "<?php echo \$other->handleViewInclude('c.qualified', \\array_diff_key(\\get_defined_vars(), ['__data' => 1])); ?>"
-            // A `;` inside an earlier closure argument is no statement boundary; `($renderer)(…)` is a call too.
+            // Closures, interpolated strings and `($renderer)(…)` / `{$method}(…)` callees hide no render.
             . "<?php echo \$r->render('c.closure', (function () { return []; })(), {$scope}); ?>"
             . "<?php echo (\$renderer)('c.invoked', {$scope}); ?>"
-            . "<?php echo \$map['k']('c.indexed', {$scope}); ?>";
+            . "<?php echo \$map['k']('c.indexed', {$scope}); ?>"
+            . "<?php echo \$r->{\$method}('c.braced', {$scope}); ?>"
+            . "<?php echo \$r->render('c.interpolated', [\"{\$value}\"], {$scope}); ?>";
 
         $this->assertSame(
-            ['a.themed', '__data', '__path', 'a.data', 'k', 'a.first', 'a.second', 'c.nested', 'c.qualified', 'c.closure', 'c.invoked', 'c.indexed'],
+            ['a.themed', '__data', '__path', 'a.data', 'k', 'a.first', 'a.second', 'c.nested', 'c.qualified', 'c.closure', 'c.invoked', 'c.indexed', 'c.braced', 'c.interpolated'],
             ComponentTagCollector::collect(\token_get_all($php))[2],
         );
     }

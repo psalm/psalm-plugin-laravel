@@ -25,10 +25,10 @@ $app->register(new class ($app) extends ServiceProvider {
             'themedInclude',
             static fn(string $expression): string => "<?php echo \$__themeViews->handleViewInclude({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
         );
-        // The view name sits after the scope: no Laravel signature describes it.
+        // A method named like the factory's, but with the view name after the scope: not Laravel's signature.
         $blade->directive(
             'themedLast',
-            static fn(string $expression): string => "<?php echo \$__themeViews->render(array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]), {$expression}); ?>",
+            static fn(string $expression): string => "<?php echo \$__themeViews->make(array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]), {$expression}); ?>",
         );
         $blade->directive(
             'quietRender',
