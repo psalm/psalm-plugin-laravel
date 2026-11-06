@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793997492361,
+  "lastUpdate": 1794000249031,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17805,6 +17805,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 24.28,
             "range": "± 0.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56aa1f9169471f81d7e872d657d9f53918fc4aa4",
+          "message": "Type has{Relation}() and for{Relation}() on Eloquent factories (#2219)\n\n* feat(factory): type has{Relation}() and for{Relation}() forwarders\n\nFactory::__call forwards has*/for* to the model's relations. A return-type and a params provider on Factory and its subclasses now answer the receiver factory (count kept) when the model resolves to one class and the name is a proven relation. Real methods, @method tags, boot macros and descendants that own the name are never shadowed. Refs #2215\n\n* refactor(factory): simplify has*/for* forwarder gate #2215\n\n* fix(factory): keep abstract interface methods and user __call unshadowed #2215",
+          "timestamp": "2026-11-06T22:21:55+01:00",
+          "tree_id": "ee121693292f92455a2b9726567f9cddfd00decb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/56aa1f9169471f81d7e872d657d9f53918fc4aa4"
+        },
+        "date": 1794000246978,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.58,
+            "range": "± 0.35",
             "unit": "s"
           },
           {
