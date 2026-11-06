@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793827051886,
+  "lastUpdate": 1793983491983,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17665,6 +17665,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 35.71,
             "range": "± 0.05",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0e121940a8ae9036ec4b09dc83855975b9ac435c",
+          "message": "Decline `UnusedViewData` when a custom directive passes the whole scope to its own renderer (#2213)\n\n* fix(blade): decline UnusedViewData when a custom directive passes the whole scope\n\nA custom include directive (BookStack overrides `@include` with a call on\n`$__themeViews`) hands the template's whole scope to a renderer the plugin\ncannot follow. The collector only inspected `$__env` method calls, so such a\ntemplate was recorded as including nothing and every key read by its partials\nwas reported unused. Any call-like node passing the whole scope that is not a\nrecognized `$__env` include now marks the read set unresolvable.\n\nBump the shadow manifest pass version so cached data-include facts from a\ncheckout or path repository are recomputed.\n\nRefs #2209\n\n* test: register the fixture directive in the existing booted hook\n\nAlso tighten the contributing doc wording for the #2209 decline.",
+          "timestamp": "2026-11-06T17:41:03+01:00",
+          "tree_id": "b718c8ae68da130f22d3c81245856c427c81591a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0e121940a8ae9036ec4b09dc83855975b9ac435c"
+        },
+        "date": 1793983489986,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.75,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
