@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794000249031,
+  "lastUpdate": 1794003052342,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17840,6 +17840,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 21.58,
             "range": "± 0.35",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "23aa46347f263fac40b3a4815efd38714038d87f",
+          "message": "fix(rules): do not report UndefinedModelRelation for names a model subclass defines (#2220)\n\nA concrete userland base model is only the static bound of what runs, so a relation defined by one of its subclasses is not a typo when the call goes through the base type. Names no subclass defines stay reported.",
+          "timestamp": "2026-11-06T23:07:17+01:00",
+          "tree_id": "4286d7b7d301e47e486e66d371d8f01cb6c3928c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/23aa46347f263fac40b3a4815efd38714038d87f"
+        },
+        "date": 1794003050666,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.25,
+            "range": "± 0.16",
             "unit": "s"
           },
           {
