@@ -6,7 +6,7 @@ namespace Psalm\LaravelPlugin\Internal;
 
 /**
  * Collects the route names a project's own PHP sources spell out literally, as `->name('x')`,
- * `->name(name: 'x')` or `'as' => 'x'`.
+ * `Route::name('x')`, `->name(name: 'x')` or `'as' => 'x'`.
  *
  * The booted app's router only holds the routes the boot actually registered. A route wrapped in
  * `if (config('feature.enabled'))`, or loaded by a provider that returned early, is absent from it
@@ -18,7 +18,8 @@ namespace Psalm\LaravelPlugin\Internal;
  * what counts, so comments, strings and heredocs never define a name, and only one plain string
  * literal does: concatenation, interpolation, enums and variables do not. A name composed at runtime,
  * such as the leaf of `Route::name('barcode.')->group(...)`, is never spelled out and is not found. A
- * `->name('x')` on an unrelated class counts as a definition, which only hides a finding, never adds one.
+ * `->name('x')` on an unrelated class, or an `'as' => 'x'` pair outside a route action, counts as a
+ * definition, which only hides a finding, never adds one.
  *
  * Scans every `.php` file (Blade templates excluded) under the project root, not only Psalm's
  * `<projectFiles>`: route files commonly sit next to `src/` rather than inside it
@@ -61,7 +62,9 @@ final class RouteNameDefinitionScanner
                         return true;
                     }
 
-                    return $path !== $vendorDir
+                    // Case-insensitive: realpath() keeps the caller's casing on a case-insensitive filesystem,
+                    // so a project root spelled differently from Composer's would walk vendor/.
+                    return \strcasecmp($path, (string) $vendorDir) !== 0
                         && !\in_array(\basename($path), $skipped, true)
                         && (!$isIgnored instanceof \Closure || !$isIgnored($path . \DIRECTORY_SEPARATOR));
                 },
@@ -86,7 +89,7 @@ final class RouteNameDefinitionScanner
             $code = @\file_get_contents($path);
 
             // Cheap literal pre-filter: almost no file passes it, so only a few are lexed.
-            if ($code === false || (!\str_contains($code, '->name(') && !\str_contains($code, "'as'") && !\str_contains($code, '"as"'))) {
+            if ($code === false || (!\str_contains($code, 'name(') && !\str_contains($code, "'as'") && !\str_contains($code, '"as"'))) {
                 continue;
             }
 
@@ -116,7 +119,7 @@ final class RouteNameDefinitionScanner
         $count = \count($tokens);
 
         for ($i = 0; $i < $count; $i++) {
-            $name = $tokens[$i]->id === \T_OBJECT_OPERATOR
+            $name = \in_array($tokens[$i]->id, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true)
                 ? self::nameCallArgument($tokens, $i + 1)
                 : self::actionAsValue($tokens, $i);
 
@@ -129,7 +132,7 @@ final class RouteNameDefinitionScanner
     }
 
     /**
-     * `name('x')`, `name('x',)` or `name(name: 'x')`, starting at the method name after `->`.
+     * `name('x')`, `name('x',)` or `name(name: 'x')`, starting at the method name after `->`, `?->` or `::`.
      *
      * @param list<\PhpToken> $tokens
      * @psalm-capabilities read-props
@@ -176,7 +179,7 @@ final class RouteNameDefinitionScanner
     /** @psalm-capabilities read-props */
     private static function isIdentifier(?\PhpToken $token, string $name): bool
     {
-        return $token instanceof \PhpToken && $token->id === \T_STRING && \strtolower($token->text) === $name;
+        return $token instanceof \PhpToken && $token->id === \T_STRING && $token->text === $name;
     }
 
     /**
@@ -187,7 +190,8 @@ final class RouteNameDefinitionScanner
      */
     private static function literal(?\PhpToken $token): ?string
     {
-        if (!$token instanceof \PhpToken || $token->id !== \T_CONSTANT_ENCAPSED_STRING || \str_contains($token->text, '\\')) {
+        // A binary-prefixed literal (`b'x'`) is not worth modelling.
+        if (!$token instanceof \PhpToken || $token->id !== \T_CONSTANT_ENCAPSED_STRING || \str_contains($token->text, '\\') || !\in_array($token->text[0], ["'", '"'], true)) {
             return null;
         }
 

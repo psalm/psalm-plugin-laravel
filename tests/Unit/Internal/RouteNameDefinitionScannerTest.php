@@ -44,11 +44,13 @@ final class RouteNameDefinitionScannerTest extends TestCase
                 Route::get('/e', ["as" => "as.double", 'uses' => $action]);
                 Route::get('/f', $action)->name(name: 'named.argument');
                 Route::get('/g', ['as' => 'as.commented' /* why */, 'uses' => $action]);
+                Route::name('static.direct')->get('/h', $action);
+                $route?->name('nullsafe.call');
             }
             PHP);
 
         $this->assertSame(
-            ['single.quoted', 'double.quoted', 'spread.over.lines', 'as.single', 'as.double', 'named.argument', 'as.commented'],
+            ['single.quoted', 'double.quoted', 'spread.over.lines', 'as.single', 'as.double', 'named.argument', 'as.commented', 'static.direct', 'nullsafe.call'],
             \array_keys(RouteNameDefinitionScanner::scan($this->root)),
         );
     }
@@ -80,6 +82,7 @@ final class RouteNameDefinitionScannerTest extends TestCase
             Route::get('/h', ['as' => 'orders' . '.index', 'uses' => $a]);
             Route::get('/i', ['as' => $prefix . 'x', 'uses' => $a]);
             Route::get('/j', $a)->name('first' . '.second');
+            Route::get('/k', $a)->name(b'binary.prefixed');
             $user->first_name('Not a route');
             PHP);
 
