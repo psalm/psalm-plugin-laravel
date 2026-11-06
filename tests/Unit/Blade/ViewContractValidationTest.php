@@ -199,7 +199,7 @@ final class ViewContractValidationTest extends TestCase
     {
         $issues = $this->contractIssues();
 
-        $this->assertSame([], $this->forFile($issues, 'RenderableValue.php'), \var_export($issues, true));
+        $this->assertSame([], $this->forFile([...$issues, ...$this->partialIssues()], 'RenderableValue.php'), \var_export($issues, true));
 
         $wrong = $this->forFile($issues, 'NonRenderableValue.php');
         $this->assertCount(1, $wrong, \var_export($issues, true));
@@ -727,7 +727,7 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function every_decline_gate_stays_silent(): void
     {
-        $issues = $this->contractIssues();
+        $issues = [...$this->contractIssues(), ...$this->partialIssues()];
 
         // Complete and well-typed data.
         $this->assertSame([], $this->forFile($issues, 'Correct.php'));
@@ -1050,7 +1050,7 @@ final class ViewContractValidationTest extends TestCase
         $issues = [];
 
         foreach ($this->allIssues() as $issue) {
-            if (\in_array($issue['type'], [self::MISSING, self::WRONG_TYPE], true) && \basename((string) $issue['file_name']) === $template) {
+            if (\in_array($issue['type'], [self::MISSING, self::WRONG_TYPE, self::PARTIAL_TYPE], true) && \basename((string) $issue['file_name']) === $template) {
                 $issues[] = $issue;
             }
         }

@@ -137,6 +137,15 @@ final class ViewDataClassificationTest extends TestCase
         $this->assertSame([self::HARD], \array_column($view, 'type'), \var_export($view, true));
     }
 
+    /** Full containment wins: the null or false a template bound allows is excluded by the intersection. */
+    #[Test]
+    public function an_intersection_that_excludes_null_and_false_is_not_judged(): void
+    {
+        $issues = $this->viewIssuesIn('TemplateIntersection.php');
+
+        $this->assertSame([], $issues, \var_export($issues, true));
+    }
+
     #[Test]
     public function a_value_of_unknown_type_is_not_judged(): void
     {

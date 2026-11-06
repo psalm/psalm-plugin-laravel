@@ -352,6 +352,12 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
      */
     private static function mismatch(Codebase $codebase, Type\Union $supplied, Type\Union $declared): ?ViewDataMismatch
     {
+        // Full containment is a pass whatever the null/false analysis below says: an intersection
+        // such as `T&Member` (`T of Member|null`) reads as nullable there although it never is.
+        if ($codebase->isTypeContainedByType($supplied, $declared)) {
+            return null;
+        }
+
         $comparison = new TypeComparisonResult();
 
         // `true` declared: a `false` can never be set aside, as in Psalm.
