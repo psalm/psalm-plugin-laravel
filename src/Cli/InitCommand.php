@@ -74,7 +74,6 @@ final class InitCommand extends Command
                 <pluginClass class="Psalm\LaravelPlugin\Plugin">
                     <resolveDynamicWhereClauses value="true" />
                     <findMissingTranslations value="false" />
-                    <findMissingViews value="false" />
                 </pluginClass>
             </plugins>
 

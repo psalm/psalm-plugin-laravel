@@ -18,7 +18,6 @@ final class ExperimentalIssuePolicyTest extends TestCase
     use LoadsPsalmConfigFromXml;
 
     private const EXPERIMENTAL_ISSUES = [
-        'UnknownModelAttribute',
         'UndefinedModelRelation',
         'MissingViewData',
         'InvalidViewData',
@@ -58,12 +57,12 @@ final class ExperimentalIssuePolicyTest extends TestCase
     {
         foreach ([Config::REPORT_ERROR, Config::REPORT_INFO, Config::REPORT_SUPPRESS] as $level) {
             $config = $this->loadConfig(
-                '<issueHandlers><PluginIssue name="UnknownModelAttribute" errorLevel="' . $level . '" /></issueHandlers>',
+                '<issueHandlers><PluginIssue name="UndefinedModelRelation" errorLevel="' . $level . '" /></issueHandlers>',
             );
 
             ExperimentalIssuePolicy::apply($enforced);
 
-            $this->assertSame($level, $config->getReportingLevelForFile('UnknownModelAttribute', __FILE__));
+            $this->assertSame($level, $config->getReportingLevelForFile('UndefinedModelRelation', __FILE__));
         }
     }
 

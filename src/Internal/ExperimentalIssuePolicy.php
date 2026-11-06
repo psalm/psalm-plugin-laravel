@@ -9,7 +9,6 @@ use Psalm\Issue\PluginIssue;
 use Psalm\LaravelPlugin\Issues\InvalidViewData;
 use Psalm\LaravelPlugin\Issues\MissingViewData;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
-use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
 
 /**
@@ -23,7 +22,6 @@ final class ExperimentalIssuePolicy
 {
     /** @var list<class-string<PluginIssue>> */
     private const ISSUES = [
-        UnknownModelAttribute::class,
         UndefinedModelRelation::class,
         MissingViewData::class,
         InvalidViewData::class,

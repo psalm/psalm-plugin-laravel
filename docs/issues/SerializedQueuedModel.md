@@ -10,7 +10,7 @@ Emitted when a class implementing `Illuminate\Contracts\Queue\ShouldQueue` holds
 
 One report per class, on the class declaration, naming the offending properties (the first three of them). The fix is a single `use SerializesModels;`, so a per-property report would be several findings for one edit.
 
-Controlled by the `findSerializedQueuedModels` flag (see [Configuration](../config.md)).
+Enabled by default and reported at error levels 1 to 4, `info` at looser levels. Disable it with the `findSerializedQueuedModels` flag (see [Configuration](../config.md#findserializedqueuedmodels)).
 
 ## Why this is a problem
 

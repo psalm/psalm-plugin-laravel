@@ -59,7 +59,7 @@ Correct the key to the intended attribute name. If the attribute is genuinely dy
 
 ## When it stays silent (false-positive guards)
 
-Because the rule is registered by default, it errs toward silence whenever it cannot be certain a key is wrong:
+The rule is on by default and reported at error levels 1 to 4 (like Psalm's `UndefinedMagicPropertyFetch`), `info` at looser levels. Because it runs everywhere, it errs toward silence whenever it cannot be certain a key is wrong:
 
 - **No column schema.** When migrations are disabled, or a model's table is not parsed, the column set is unknown, so the rule skips that model entirely rather than flag valid columns. With the default `columnFallback="migrations"` the columns come from your migration files.
 - **Non-literal arrays.** A variable array, a spread (`[...$attributes]`), or a dynamic key carries no statically known key names, so it is never inspected.
