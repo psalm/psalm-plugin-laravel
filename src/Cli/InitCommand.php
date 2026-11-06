@@ -39,9 +39,6 @@ final class InitCommand extends Command
     /** Conventional Laravel app directories. Only emitted if present on disk. */
     private const LARAVEL_APP_DIRS = ['app', 'bootstrap', 'config', 'database', 'lang', 'routes'];
 
-    /** Conventional Laravel entry-point files. Only emitted if present. */
-    private const LARAVEL_APP_FILES = ['public/index.php', 'artisan'];
-
     /**
      * Ignore-target candidates. Only emitted if present on disk.
      *
@@ -153,19 +150,19 @@ final class InitCommand extends Command
         $composer = $this->readComposerJson($cwd);
         $testPluginPackage = $this->testSupportPackage($composer);
         $hasTestPlugin = $this->composerHasPackage($composer, $testPluginPackage);
-        [$directories, $files] = $this->detectSourceRoots($cwd, $composer, $hasTestPlugin);
+        $directories = $this->detectSourceRoots($cwd, $composer, $hasTestPlugin);
         $ignores = $this->detectIgnoreDirs($cwd, $composer);
 
         $contents = \strtr(self::PSALM_XML_TEMPLATE, [
             '{{LEVEL}}' => $level,
-            '{{PROJECT_FILES}}' => $this->buildProjectFiles($directories, $files, $ignores, $hasTestPlugin, $testPluginPackage),
+            '{{PROJECT_FILES}}' => $this->buildProjectFiles($directories, $ignores, $hasTestPlugin, $testPluginPackage),
         ]);
 
         if (!$this->writeFile($targetPath, $contents, $io)) {
             return Command::FAILURE;
         }
 
-        $this->reportSuccess($io, $cwd, $targetPath, $existingPath !== null, $level, $directories, $files, $testPluginPackage);
+        $this->reportSuccess($io, $cwd, $targetPath, $existingPath !== null, $level, $directories, $testPluginPackage);
         return Command::SUCCESS;
     }
 
@@ -236,7 +233,6 @@ final class InitCommand extends Command
 
     /**
      * @param list<string> $directories
-     * @param list<string> $files
      */
     private function reportSuccess(
         SymfonyStyle $io,
@@ -245,7 +241,6 @@ final class InitCommand extends Command
         bool $existedBefore,
         string $level,
         array $directories,
-        array $files,
         string $testPluginPackage,
     ): void {
         $io->success(\sprintf(
@@ -256,7 +251,7 @@ final class InitCommand extends Command
         $io->writeln('Plugin enabled: <info>Psalm\\LaravelPlugin\\Plugin</info>');
         $io->writeln(\sprintf('Error level: <info>%s</info>', $level));
         $io->writeln('Scanned paths:');
-        foreach ([...$directories, ...$files] as $path) {
+        foreach ($directories as $path) {
             $io->writeln(\sprintf('  - <info>%s</info>', $path));
         }
 
@@ -289,13 +284,13 @@ final class InitCommand extends Command
      * which is what surfaces the monorepo packages/*\/src the app branch misses. See #1224.
      *
      * @param ComposerJson|null $composer
-     * @return array{0: list<string>, 1: list<string>} [directories, files]
+     * @return list<string> directories
      */
     private function detectSourceRoots(string $cwd, ?array $composer, bool $hasTestPlugin): array
     {
         $isLaravelApp = \is_file($cwd . \DIRECTORY_SEPARATOR . 'artisan');
 
-        [$conventional, $files] = $isLaravelApp
+        $conventional = $isLaravelApp
             ? $this->detectLaravelAppRoots($cwd)
             : $this->detectPackageConventions($cwd);
 
@@ -315,9 +310,8 @@ final class InitCommand extends Command
         }
 
         // Ultimate fallback so the template still validates.
-        if ($directories === [] && $files === []) {
+        if ($directories === []) {
             $directories = self::LARAVEL_APP_DIRS;
-            $files = self::LARAVEL_APP_FILES;
         }
 
         // Scanning tests/ without the matching test-support plugin floods output with
@@ -329,11 +323,15 @@ final class InitCommand extends Command
             $directories[] = 'tests';
         }
 
-        return [$directories, $files];
+        return $directories;
     }
 
     /**
-     * @return array{0: list<string>, 1: list<string>}
+     * Entry-point files (public/index.php, artisan) are intentionally not listed: they
+     * `require` bootstrap/app.php (typed mixed), producing Mixed* noise at errorLevel 1
+     * while holding no app logic. See #2162.
+     *
+     * @return list<string>
      */
     private function detectLaravelAppRoots(string $cwd): array
     {
@@ -344,21 +342,14 @@ final class InitCommand extends Command
             }
         }
 
-        $files = [];
-        foreach (self::LARAVEL_APP_FILES as $file) {
-            if (\is_file($cwd . \DIRECTORY_SEPARATOR . $file)) {
-                $files[] = $file;
-            }
-        }
-
-        return [$directories, $files];
+        return $directories;
     }
 
     /**
      * Conventional roots for a non-artisan package: config/ only. The composer map
      * (detectComposerRoots) and the src/ fallback are handled by the pipeline.
      *
-     * @return array{0: list<string>, 1: list<string>}
+     * @return list<string>
      */
     private function detectPackageConventions(string $cwd): array
     {
@@ -367,7 +358,7 @@ final class InitCommand extends Command
             $directories[] = 'config';
         }
 
-        return [$directories, []];
+        return $directories;
     }
 
     /**
@@ -566,11 +557,10 @@ final class InitCommand extends Command
      * returned string is pre-indented for direct substitution into the heredoc.
      *
      * @param list<string> $directories
-     * @param list<string> $files
      * @param list<string> $ignores
      * @psalm-pure
      */
-    private function buildProjectFiles(array $directories, array $files, array $ignores, bool $hasTestPlugin, string $testPluginPackage): string
+    private function buildProjectFiles(array $directories, array $ignores, bool $hasTestPlugin, string $testPluginPackage): string
     {
         // Two-level indent matches the heredoc: <projectFiles> at one TAB, its
         // children at two, ignoreFiles' grandchildren at three.
@@ -581,7 +571,6 @@ final class InitCommand extends Command
         // chars (e.g. `packages/Foo & Bar/src`) that would otherwise break parsing.
         $escape = static fn(string $value): string => \htmlspecialchars($value, \ENT_QUOTES | \ENT_XML1, 'UTF-8');
         $directories = \array_map($escape, $directories);
-        $files = \array_map($escape, $files);
         $ignores = \array_map($escape, $ignores);
 
         $lines = [];
@@ -595,13 +584,6 @@ final class InitCommand extends Command
             $lines[] = $itemIndent . \sprintf('<!-- composer require %s psalm/plugin-mockery for the full tests support -->', $testPluginPackage);
             $lines[] = $itemIndent . '<!-- <directory name="tests"/>-->';
             $lines[] = '';
-        }
-
-        if ($files !== []) {
-            $lines[] = '';
-            foreach ($files as $file) {
-                $lines[] = \sprintf('%s<file name="%s"/>', $itemIndent, $file);
-            }
         }
 
         // Only emit ignores that exist on disk: listing non-existent paths
