@@ -82,8 +82,8 @@ route('campaign_plugins.index'); // not reported: the name is defined above
 Details:
 
 - The scan covers every `.php` file under the application base path, not only Psalm's `<projectFiles>`, because route files often live beside `src/` (`packages/<name>/routes/web.php`). It skips Blade templates, the Composer vendor directory, `node_modules`, `storage`, `public`, `tests`, and anything matched by `<ignoreFiles>`.
-- Only names written as one plain string literal count. Concatenation, interpolation, enums and variables are not resolved.
-- The scan reads text and does not evaluate code, so a commented-out `->name('x')` also counts as a definition. That can only hide a finding, never add one.
+- Only names written as one plain string literal count, as `->name('x')`, `->name(name: 'x')` or `'as' => 'x'`. Concatenation, interpolation, enums and variables are not resolved. Comments, strings and heredocs never count as definitions.
+- The scan lexes files and does not evaluate code. A `->name('x')` call on an unrelated class counts as a definition, which can only hide a finding, never add one. A call written with whitespace before the parenthesis (`->name ('x')`) is not found.
 - A name with no definition anywhere in the project is still reported.
 
 ## Limitations

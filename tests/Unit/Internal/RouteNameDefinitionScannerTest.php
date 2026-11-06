@@ -42,11 +42,13 @@ final class RouteNameDefinitionScannerTest extends TestCase
                     );
                 Route::get('/d', ['as' => 'as.single', 'uses' => $action]);
                 Route::get('/e', ["as" => "as.double", 'uses' => $action]);
+                Route::get('/f', $action)->name(name: 'named.argument');
+                Route::get('/g', ['as' => 'as.commented' /* why */, 'uses' => $action]);
             }
             PHP);
 
         $this->assertSame(
-            ['single.quoted', 'double.quoted', 'spread.over.lines', 'as.single', 'as.double'],
+            ['single.quoted', 'double.quoted', 'spread.over.lines', 'as.single', 'as.double', 'named.argument', 'as.commented'],
             \array_keys(RouteNameDefinitionScanner::scan($this->root)),
         );
     }
@@ -79,6 +81,24 @@ final class RouteNameDefinitionScannerTest extends TestCase
             Route::get('/i', ['as' => $prefix . 'x', 'uses' => $a]);
             Route::get('/j', $a)->name('first' . '.second');
             $user->first_name('Not a route');
+            PHP);
+
+        $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
+    }
+
+    /** The lexer, not a text match, decides: none of these is a route definition. */
+    #[Test]
+    public function ignores_comments_strings_and_heredocs(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            // Route::get('/a', $a)->name('commented.out');
+            /* Route::get('/b', $a)->name('block.comment'); */
+            $help = "->name('inside.string')";
+            $text = <<<'TXT'
+            ->name('inside.nowdoc')
+            TXT;
+            $map = ['not\'as' => 'escaped.key', 'as' => 'a' . '.b'];
             PHP);
 
         $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
@@ -122,6 +142,25 @@ final class RouteNameDefinitionScannerTest extends TestCase
         $names = RouteNameDefinitionScanner::scan($this->root, static fn(string $path): bool => \str_contains($path, '/legacy/'));
 
         $this->assertSame(['current.route'], \array_keys($names));
+    }
+
+    #[Test]
+    public function does_not_enter_directories_the_ignore_callback_rejects(): void
+    {
+        $this->write('legacy/routes.php', "<?php\nRoute::get('/', \$a)->name('legacy.route');\n");
+        $this->write('routes/web.php', "<?php\nRoute::get('/', \$a)->name('current.route');\n");
+
+        $visitedFiles = [];
+        $names = RouteNameDefinitionScanner::scan($this->root, static function (string $path) use (&$visitedFiles): bool {
+            if (\str_ends_with($path, '.php')) {
+                $visitedFiles[] = \basename($path);
+            }
+
+            return \str_ends_with($path, '/legacy/');
+        });
+
+        $this->assertSame(['current.route'], \array_keys($names));
+        $this->assertSame(['web.php'], $visitedFiles, 'the ignored directory must be pruned, not walked');
     }
 
     #[Test]

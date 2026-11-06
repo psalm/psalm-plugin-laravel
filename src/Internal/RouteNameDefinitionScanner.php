@@ -5,19 +5,20 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 /**
- * Collects the route names a project's own PHP sources spell out literally, as `->name('x')` or
- * `'as' => 'x'`.
+ * Collects the route names a project's own PHP sources spell out literally, as `->name('x')`,
+ * `->name(name: 'x')` or `'as' => 'x'`.
  *
  * The booted app's router only holds the routes the boot actually registered. A route wrapped in
  * `if (config('feature.enabled'))`, or loaded by a provider that returned early, is absent from it
  * while still being defined in source. Callers use this set to tell "defined, but not registered by
  * this boot" from "defined nowhere".
  *
- * This is a text scan, deliberately: it never evaluates anything and costs a few hundred
- * milliseconds on a large app (a file is parsed only when it contains a candidate substring). A
- * name composed at runtime, such as the leaf of `Route::name('barcode.')->group(...)`, is
- * never spelled out and is not found. A commented-out definition counts as one, and so does a
- * `->name('x')` on an unrelated class: both only hide a finding, never add one.
+ * Nothing is evaluated or parsed into an AST: a file is lexed only when it contains a candidate
+ * substring, which keeps a large app at a few hundred milliseconds. The lexer (not a regex) decides
+ * what counts, so comments, strings and heredocs never define a name, and only one plain string
+ * literal does: concatenation, interpolation, enums and variables do not. A name composed at runtime,
+ * such as the leaf of `Route::name('barcode.')->group(...)`, is never spelled out and is not found. A
+ * `->name('x')` on an unrelated class counts as a definition, which only hides a finding, never adds one.
  *
  * Scans every `.php` file (Blade templates excluded) under the project root, not only Psalm's
  * `<projectFiles>`: route files commonly sit next to `src/` rather than inside it
@@ -34,20 +35,8 @@ final class RouteNameDefinitionScanner
     private const SKIPPED_DIRECTORIES = ['node_modules', '.git', 'storage', 'public', 'tests'];
 
     /**
-     * A single quoted string without escapes, or a double quoted one without escapes or
-     * interpolation, so every captured name is exactly the runtime name. The literal must also end
-     * its expression (`)` after `->name(`, `,` or `]` after `'as' =>`): `'as' => 'a' . '.b'` names
-     * `a.b`, not `a`.
-     */
-    private const DEFINITION_PATTERN = <<<'REGEX'
-        /->name\(\s*(?:'(?<single>[^'\\]*)'|"(?<double>[^"\\$]*)")\s*,?\s*\)|['"]as['"]\s*=>\s*(?:'(?<asSingle>[^'\\]*)'|"(?<asDouble>[^"\\$]*)")(?=\s*[,\])])/
-        REGEX;
-
-    /** @var list<string> */
-    private const NAME_GROUPS = ['single', 'double', 'asSingle', 'asDouble'];
-
-    /**
-     * @param (\Closure(string): bool)|null $isIgnored true for a file the analysis must not read (Psalm's `<ignoreFiles>`)
+     * @param (\Closure(string): bool)|null $isIgnored true for a file or directory (with a trailing
+     *        separator) the analysis must not read, i.e. Psalm's `<ignoreFiles>`
      * @return array<string, true> route names keyed by name
      */
     public static function scan(string $projectRoot, ?\Closure $isIgnored = null): array
@@ -67,8 +56,15 @@ final class RouteNameDefinitionScanner
         $iterator = new \RecursiveIteratorIterator(
             new \RecursiveCallbackFilterIterator(
                 new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::CURRENT_AS_PATHNAME),
-                static fn(string $path, mixed $_key, \RecursiveDirectoryIterator $inner): bool => !$inner->hasChildren()
-                    || ($path !== $vendorDir && !\in_array(\basename($path), $skipped, true)),
+                static function (string $path, mixed $_key, \RecursiveDirectoryIterator $inner) use ($vendorDir, $skipped, $isIgnored): bool {
+                    if (!$inner->hasChildren()) {
+                        return true;
+                    }
+
+                    return $path !== $vendorDir
+                        && !\in_array(\basename($path), $skipped, true)
+                        && (!$isIgnored instanceof \Closure || !$isIgnored($path . \DIRECTORY_SEPARATOR));
+                },
             ),
             \RecursiveIteratorIterator::LEAVES_ONLY,
             // An unreadable subdirectory must not abort the scan.
@@ -89,26 +85,114 @@ final class RouteNameDefinitionScanner
 
             $code = @\file_get_contents($path);
 
-            // Cheap literal pre-filter: almost no file passes it, so the regex runs on a few.
+            // Cheap literal pre-filter: almost no file passes it, so only a few are lexed.
             if ($code === false || (!\str_contains($code, '->name(') && !\str_contains($code, "'as'") && !\str_contains($code, '"as"'))) {
                 continue;
             }
 
-            if (\preg_match_all(self::DEFINITION_PATTERN, $code, $matches, \PREG_SET_ORDER) === false) {
-                continue;
-            }
-
-            foreach ($matches as $match) {
-                foreach (self::NAME_GROUPS as $group) {
-                    $name = $match[$group] ?? '';
-
-                    if ($name !== '') {
-                        $names[$name] = true;
-                    }
-                }
+            foreach (self::definedNames($code) as $name) {
+                $names[$name] = true;
             }
         }
 
         return $names;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function definedNames(string $code): array
+    {
+        $tokens = [];
+
+        foreach (\PhpToken::tokenize($code) as $token) {
+            // Whitespace, comments and the open tag.
+            if (!$token->isIgnorable()) {
+                $tokens[] = $token;
+            }
+        }
+
+        $names = [];
+        $count = \count($tokens);
+
+        for ($i = 0; $i < $count; $i++) {
+            $name = $tokens[$i]->id === \T_OBJECT_OPERATOR
+                ? self::nameCallArgument($tokens, $i + 1)
+                : self::actionAsValue($tokens, $i);
+
+            if ($name !== null) {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * `name('x')`, `name('x',)` or `name(name: 'x')`, starting at the method name after `->`.
+     *
+     * @param list<\PhpToken> $tokens
+     * @psalm-capabilities read-props
+     */
+    private static function nameCallArgument(array $tokens, int $at): ?string
+    {
+        if (!self::isIdentifier($tokens[$at] ?? null, 'name') || ($tokens[$at + 1]->text ?? '') !== '(') {
+            return null;
+        }
+
+        $at += 2;
+
+        // A named argument: `name: 'x'`.
+        if (self::isIdentifier($tokens[$at] ?? null, 'name') && ($tokens[$at + 1]->text ?? '') === ':') {
+            $at += 2;
+        }
+
+        $name = self::literal($tokens[$at] ?? null);
+        $at++;
+
+        if (($tokens[$at]->text ?? '') === ',') {
+            $at++;
+        }
+
+        return $name !== null && ($tokens[$at]->text ?? '') === ')' ? $name : null;
+    }
+
+    /**
+     * `'as' => 'x'` followed by the end of the array item, starting at the `'as'` key.
+     *
+     * @param list<\PhpToken> $tokens
+     * @psalm-capabilities read-props
+     */
+    private static function actionAsValue(array $tokens, int $at): ?string
+    {
+        if (self::literal($tokens[$at]) !== 'as' || ($tokens[$at + 1]->id ?? null) !== \T_DOUBLE_ARROW) {
+            return null;
+        }
+
+        // The literal must end the item: `'as' => 'a' . '.b'` names `a.b`, not `a`.
+        return \in_array($tokens[$at + 3]->text ?? '', [',', ']', ')'], true) ? self::literal($tokens[$at + 2] ?? null) : null;
+    }
+
+    /** @psalm-capabilities read-props */
+    private static function isIdentifier(?\PhpToken $token, string $name): bool
+    {
+        return $token instanceof \PhpToken && $token->id === \T_STRING && \strtolower($token->text) === $name;
+    }
+
+    /**
+     * The value of a string token that is exactly one escape-free literal; double-quoted strings
+     * with interpolation are not a single token, so they never reach here.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function literal(?\PhpToken $token): ?string
+    {
+        if (!$token instanceof \PhpToken || $token->id !== \T_CONSTANT_ENCAPSED_STRING || \str_contains($token->text, '\\')) {
+            return null;
+        }
+
+        $value = \substr($token->text, 1, -1);
+
+        return $value === '' ? null : $value;
     }
 }
