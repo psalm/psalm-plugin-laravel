@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Blade;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArgPlaceholder;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\CallLike;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
@@ -47,7 +48,9 @@ final class ViewReferenceCollector
      * scope, so a variable one of them reads is a variable the caller's data key feeds.
      *
      * Membership is decided by the data argument: `@includeIsolated` and `@each` compile to the
-     * same `$__env->` methods but pass no parent scope, and must not launder a read.
+     * same `$__env->` methods but pass no parent scope, and must not launder a read. Any other call
+     * handed the whole scope (a custom directive such as BookStack's theme `@include` override, or an
+     * unrecognized `$__env` method) may render any view, so it flags the set as unresolvable.
      *
      * @return array{0: list<string>, 1: bool} view names, and whether one could not be resolved
      */
@@ -62,25 +65,26 @@ final class ViewReferenceCollector
         $names = [];
         $dynamic = false;
 
-        foreach ((new NodeFinder())->findInstanceOf($stmts, MethodCall::class) as $call) {
-            if (!$call->name instanceof Identifier || !$call->var instanceof Variable || $call->var->name !== '__env') {
+        foreach ((new NodeFinder())->findInstanceOf($stmts, CallLike::class) as $call) {
+            $args = $call->getRawArgs();
+
+            if (!$this->passesWholeScope($args)) {
                 continue;
             }
 
-            $method = \strtolower($call->name->toString());
-
-            if (!$this->passesWholeScope($call->args)) {
-                continue;
-            }
+            $method = $call instanceof MethodCall && $call->name instanceof Identifier
+                && $call->var instanceof Variable && $call->var->name === '__env'
+                ? \strtolower($call->name->toString())
+                : null;
 
             match ($method) {
                 // @include, @includeIf, @extends, and the aliased-include directives.
-                'make' => $this->applyLiteral($call->args, 0, $names, $dynamic),
+                'make' => $this->applyLiteral($args, 0, $names, $dynamic),
                 // @includeFirst / @extendsFirst take a list of candidate names, any of which renders.
-                'first' => $this->applyLiteralList($call->args, $names, $dynamic),
+                'first' => $this->applyLiteralList($args, $names, $dynamic),
                 // @includeWhen / @includeUnless put the condition first.
-                'renderwhen', 'renderunless' => $this->applyLiteral($call->args, 1, $names, $dynamic),
-                default => null,
+                'renderwhen', 'renderunless' => $this->applyLiteral($args, 1, $names, $dynamic),
+                default => $dynamic = true,
             };
         }
 
