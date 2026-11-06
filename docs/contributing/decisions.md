@@ -839,7 +839,7 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 - **Reading the override's signature from the compiled `@include` probe and treating the call as `make()`**: sound only if the renderer's argument order and semantics match Laravel's, which the plugin cannot verify, and the gain (typed includes in the one app that overrides it) does not pay for a second include grammar kept in step with the `$__env` one.
 - **A `<includeRenderers>` config** naming the receiver and method: puts the contract on the user and widens the public surface for the same marginal gain.
 
-**Accepted limitation:** taint through an override include's data or scope is not followed, and a wrong type or missing key passed through it is not reported. A directive that hands the scope over another way (a bare `get_defined_vars()`, a temporary variable, a spread) is not recognised by any of the three declines.
+**Accepted limitation:** taint through an override include's data or scope is not followed, and a wrong type or missing key passed through it is not reported. A directive that hands the scope over another way (a bare `get_defined_vars()`, a temporary variable, a spread) is not recognised by any of the three declines. `ComponentTagCollector` reads tokens, so a render whose arguments hold a closure with inline HTML (`function () { ?>text<?php }`) or an attribute (`#[Attr] fn() => []`), or whose callee is a quoted function name (`'render'(...)`), is not seen; the AST-based `AnnotationCollector` and `ViewReferenceCollector` see those.
 
 ### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
 
