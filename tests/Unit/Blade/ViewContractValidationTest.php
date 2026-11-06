@@ -1277,7 +1277,7 @@ final class ViewContractValidationTest extends TestCase
             \sort($reported[$template]);
         }
 
-        $this->assertSame([
+        $expected = [
             'component-invokable.blade.php' => ['clear', 'items', 'me'],
             'composer-literal.blade.php' => ['tags'],
             'declared.blade.php' => ['label'],
@@ -1289,7 +1289,15 @@ final class ViewContractValidationTest extends TestCase
             'mail-props.blade.php' => ['mailer', 'message', 'order', 'sent'],
             'mail-wrong.blade.php' => ['order'],
             'stale-var.blade.php' => ['boost'],
-        ], $reported, \var_export($this->staleDeclarations(), true));
+        ];
+
+        // Below Laravel 12.47 `@includeIsolated` is plain text, so nothing reads `$heading` there.
+        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
+            $expected['isolated.blade.php'] = ['heading'];
+            \ksort($expected);
+        }
+
+        $this->assertSame($expected, $reported, \var_export($this->staleDeclarations(), true));
     }
 
     /** `$note` is read by the `@include`d partial, which inherits the scope: live, so the omission stays a missing variable. */
