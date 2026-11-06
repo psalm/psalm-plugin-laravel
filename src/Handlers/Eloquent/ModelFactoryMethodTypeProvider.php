@@ -127,7 +127,7 @@ final class ModelFactoryMethodTypeProvider implements AfterCodebasePopulatedInte
 
         // `static::factory()` / `$class::factory()` on a non-final model may run a subclass's own
         // `factory()`, so the argument no longer decides the count.
-        $count = FactoryCount::isLateBound($event, $codebase, $modelFqcn)
+        $count = FactoryCount::isLateBound($event->getStmt(), $codebase, $modelFqcn)
             ? FactoryCount::unknownCountUnion()
             : FactoryCount::resolveFactoryCountArgument($event->getCallArgs(), $event->getSource()->getNodeTypeProvider());
 

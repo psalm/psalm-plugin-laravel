@@ -816,4 +816,5 @@ but the handler ensures template params propagate correctly.
 | Custom collections         | `CustomCollectionHandler`                                    | Narrows `Builder::get()`, `findMany()`, `Model::all()` return types  |
 | Model attributes           | Virtual properties from `@property` / migrations             | Requires schema analysis or annotations                              |
 | Macros                     | `MacroHandler` (runtime reflection → pseudo-methods)         | Boot-time registrations only; Builder `$localMacros` not covered     |
+| Factory `has*` / `for*`    | `FactoryRelationMethodProvider` (return-type + params pair)  | Needs one bound model and a proven relation; any relation kind passes |
 | Container resolution       | `ContainerHandler`                                           | Only known bindings are narrowed                                     |

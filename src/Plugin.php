@@ -414,6 +414,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Eloquent/ModelFactoryMethodTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryCountTypeProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryUserMethodCountProvider.php';
+        require_once __DIR__ . '/Handlers/Eloquent/FactoryRelationMethodProvider.php';
         require_once __DIR__ . '/Handlers/Eloquent/FactoryModelBindingHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
@@ -469,6 +470,9 @@ final class Plugin implements PluginEntryPointInterface
         // Registers the user-method count provider on every class the binding handler synthesized a `TCount` for,
         // so it MUST be registered after it: AfterCodebasePopulated handlers run in registration order.
         $registration->registerHooksFromClass(Handlers\Eloquent\FactoryUserMethodCountProvider::class);
+        // Serves `has{Relation}()` / `for{Relation}()` (Factory::__call) on `Factory` and, per class, on every
+        // user factory subclass (providers dispatch on the receiver's exact class). See #2215.
+        $registration->registerHooksFromClass(Handlers\Eloquent\FactoryRelationMethodProvider::class);
 
         // Magic method forwarding: Relation -> Builder (decorated forwarding).
         // Must be registered BEFORE BuilderScopeHandler, BuilderPluckHandler, and

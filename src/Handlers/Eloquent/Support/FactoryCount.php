@@ -584,16 +584,16 @@ final class FactoryCount
 
     /**
      * `static::new()`, `$class::new()` or an instance receiver may name a subclass that overrides the
-     * method and presets a count, which `final` rules out. Callers then answer "count unknown".
+     * method and presets a count, which `final` rules out. Callers then answer "count unknown". `$call` is the
+     * producing call, or a `new` expression (a literal `new X()` is exactly `X`).
      *
      * @psalm-mutation-free
      */
-    public static function isLateBound(MethodReturnTypeProviderEvent $event, Codebase $codebase, string $class): bool
+    public static function isLateBound(Expr $call, Codebase $codebase, string $class): bool
     {
-        $stmt = $event->getStmt();
-        $literalClass = $stmt instanceof StaticCall
-            && $stmt->class instanceof Name
-            && !\in_array(\strtolower($stmt->class->name), ['static', 'self', 'parent'], true);
+        $literalClass = ($call instanceof StaticCall || $call instanceof Expr\New_)
+            && $call->class instanceof Name
+            && !\in_array(\strtolower($call->class->name), ['static', 'self', 'parent'], true);
 
         return !$literalClass && !$codebase->classlike_storage_provider->get($class)->final;
     }

@@ -69,7 +69,7 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
 
         // A factory that overrides how the count is set, kept or built owns its count: unknown, never narrowed.
         // That includes a descendant the receiver may hold, unless a literal `Class::times()` / `final` names the exact class.
-        $lateBound = FactoryCount::isLateBound($event, $codebase, $calledClass);
+        $lateBound = FactoryCount::isLateBound($event->getStmt(), $codebase, $calledClass);
         $countType = !FactoryCount::runsLaravelCountPath($codebase->classlike_storage_provider->get($calledClass), !$lateBound)
             ? FactoryCount::unknownCountUnion()
             : match ($methodName) {

@@ -196,3 +196,10 @@ if (\class_exists(\Laravel\Ai\Tools\Request::class)) {
 // A morph-map KEY that is itself a class name: Laravel resolves every `$types` entry through the map, so
 // `whereHasMorph(..., [Secret::class])` runs against Receipt, never Secret.
 \Illuminate\Database\Eloquent\Relations\Relation::morphMap(['App\Models\Secret' => 'App\Models\Receipt']);
+
+// A boot-time Factory macro named like a relation forwarder (#2215): Laravel's `__call` serves the macro first,
+// so `FactoryRelationMethodProvider` must leave it to `MacroHandler` (FactoryCountMagicMacroTest.phpt).
+\Illuminate\Database\Eloquent\Factories\Factory::macro(
+    'hasMacroCollision',
+    static fn(string $label): int => \strlen($label),
+);
