@@ -198,7 +198,7 @@ if (\class_exists(\Laravel\Ai\Tools\Request::class)) {
 \Illuminate\Database\Eloquent\Relations\Relation::morphMap(['App\Models\Secret' => 'App\Models\Receipt']);
 
 // A boot-time Factory macro named like a relation forwarder (#2215): Laravel's `__call` serves the macro first,
-// so `FactoryRelationMethodProvider` must leave it to `MacroHandler` (FactoryCountMagicMacroTest.phpt).
+// so `FactoryRelationMethodProvider` must leave it to `MacroHandler` (FactoryRelationMagicMethodDeclineTest.phpt).
 \Illuminate\Database\Eloquent\Factories\Factory::macro(
     'hasMacroCollision',
     static fn(string $label): int => \strlen($label),

@@ -16,7 +16,7 @@ use Psalm\Type\Union;
 /**
  * Shared relation lookups for the relation-name validation rule (`with()`,
  * `load()`, `has()`, `whereHas()`, ...). See {@see \Psalm\LaravelPlugin\Handlers\Rules\UndefinedModelRelationHandler},
- * and for the factory `has{Relation}()` / `for{Relation}()` forwarders ({@see \Psalm\LaravelPlugin\Handlers\Eloquent\FactoryRelationMethodProvider}).
+ * and for the factory `has{Relation}()` / `for{Relation}()` forwarders.
  *
  * Three distinct questions are answered here:
  *
@@ -63,22 +63,15 @@ final class RelationResolver
 
     /**
      * Whether the model's method is a relation, as `Factory::__call()` needs it (`$model->{$name}()->getRelated()`):
-     * it exists ({@see relationMethodExists()}) and either its declared return type names a `Relation` subclass, or
-     * it declares none and its body builds one (`RelationMethodParser`, which also reads trait-hosted and delegated
-     * bodies). A method Laravel's `Model` itself declares (`hasMany()`, `belongsTo()`, ...) is a relation builder,
-     * not a relation. A method that exists with a non-`Relation` declared type, or an undeclared one the parser
-     * cannot read, is NOT a relation: declining there keeps today's report, it never invents one.
+     * it exists, is not one of `Model`'s own relation builders (`hasMany()`, ...), and either declares a return type
+     * naming a `Relation` subclass or declares none and builds one in its body (`RelationMethodParser`). Anything
+     * else is not proven, so the caller keeps today's report.
      */
     public static function isRelationMethod(Codebase $codebase, string $modelFqcn, string $relationName): bool
     {
         $lcName = \strtolower($relationName);
-        $methodId = $modelFqcn . '::' . $lcName;
 
-        if (\array_key_exists($methodId, self::$isRelationCache)) {
-            return self::$isRelationCache[$methodId];
-        }
-
-        return self::$isRelationCache[$methodId] = self::resolveIsRelationMethod($codebase, $modelFqcn, $lcName);
+        return self::$isRelationCache[$modelFqcn . '::' . $lcName] ??= self::resolveIsRelationMethod($codebase, $modelFqcn, $lcName);
     }
 
     private static function resolveIsRelationMethod(Codebase $codebase, string $modelFqcn, string $lcName): bool
