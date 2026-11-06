@@ -136,4 +136,28 @@ final class UsesRoutes
     {
         return route(RouteEnum::Dashboard) . URL::route(self::DASHBOARD);
     }
+
+    /** Defined as `->name('...')` inside an `if` that is false at boot: conditionally registered, so silent. */
+    public function nameDefinedInsideFalseBranchIsSilent(): string
+    {
+        return route('feature.disabled');
+    }
+
+    /** The `'as' => '...'` route-action form counts as a definition too. */
+    public function asFormDefinitionIsSilent(): string
+    {
+        return route('feature.as_form');
+    }
+
+    /** Defined in a route file the booted app never loads (a provider returning before loadRoutesFrom()). */
+    public function nameDefinedInUnloadedRouteFileIsSilent(): string
+    {
+        return route('feature.unloaded');
+    }
+
+    /** Known limitation: the full name is only composed from a `Route::name('barcode.')` group prefix. */
+    public function groupPrefixComposedNameStaysReported(): string
+    {
+        return route('barcode.index');
+    }
 }

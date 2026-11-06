@@ -66,11 +66,31 @@ The plugin arms the check only when the route table can be trusted, and otherwis
 - The booted application resolves zero named routes, including a route cache (`bootstrap/cache/routes-v7.php`) that carries none.
 - The application registers a missing-named-route resolver (`UrlGenerator::resolveMissingNamedRoutesUsing()`), which `route()` consults before throwing. A `url` service that is not Laravel's `UrlGenerator` cannot be probed and counts as having one.
 
+## Names defined in source are skipped
+
+A route registered only under a runtime condition the analysed boot did not meet (a feature flag that is off, a service provider that returns before `loadRoutesFrom()`, a route file the boot never loads) is missing from the booted route table, yet `route()` works in production. To avoid reporting those, the plugin scans the project's own PHP files once, after reading the route table, and skips any name that appears as a literal argument of `->name('...')` or as `'as' => '...'`:
+
+```php
+// routes/web.php: not registered when marketplace.enabled is false at analysis time
+if (config('marketplace.enabled')) {
+    Route::get('/plugins', PluginController::class)->name('campaign_plugins.index');
+}
+
+route('campaign_plugins.index'); // not reported: the name is defined above
+```
+
+Details:
+
+- The scan covers every `.php` file under the application base path, not only Psalm's `<projectFiles>`, because route files often live beside `src/` (`packages/<name>/routes/web.php`). It skips Blade templates, the Composer vendor directory, `node_modules`, `storage`, `public`, `tests`, and anything matched by `<ignoreFiles>`.
+- Only names written as one plain string literal count. Concatenation, interpolation, enums and variables are not resolved.
+- The scan reads text and does not evaluate code, so a commented-out `->name('x')` also counts as a definition. That can only hide a finding, never add one.
+- A name with no definition anywhere in the project is still reported.
+
 ## Limitations
 
 - Names are checked when they are string literals, string-backed enum cases, or class constants typed as one string literal (`self::` included). Variables, concatenation, int-backed and pure enum cases, `static::` / `parent::` constants, and global constants are skipped
 - A call site guarded by `Route::has('name')` is not tracked
-- Routes registered conditionally (feature flag, env check, package-specific registration) can produce a false positive if the analysed boot does not register them like production does
+- A name composed at runtime from a group prefix is never spelled out in source, so it is still reported when its group is not registered by the analysed boot. For `Route::name('barcode.')->group(fn () => Route::get('/')->name('index'))`, only `barcode.` and `index` are found, so `route('barcode.index')` is reported when that group is conditional
 - A stale route cache (written before a route was added, renamed, or named) can produce a false positive; `php artisan route:cache` or `route:clear` fixes it
 - A missing-named-route resolver registered after boot (middleware, controller, test) cannot be detected
 - Inside Blade templates, names are checked when [Blade analysis](../blade.md) is on
