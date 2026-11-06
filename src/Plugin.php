@@ -748,7 +748,10 @@ final class Plugin implements PluginEntryPointInterface
         // Flag route() / to_route() / URL::route() / Redirect::route() calls naming an unregistered route.
         if ($pluginConfig->findUnregisteredRouteNames) {
             require_once __DIR__ . '/Handlers/Rules/UnregisteredRouteNameHandler.php';
-            Handlers\Rules\UnregisteredRouteNameHandler::init(ApplicationProvider::getApp());
+            Handlers\Rules\UnregisteredRouteNameHandler::init(
+                ApplicationProvider::getApp(),
+                ProjectAnalyzer::getInstance()->getCodebase()->config,
+            );
             $registration->registerHooksFromClass(Handlers\Rules\UnregisteredRouteNameHandler::class);
         }
 
