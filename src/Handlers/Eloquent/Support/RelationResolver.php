@@ -134,6 +134,33 @@ final class RelationResolver
     }
 
     /**
+     * Whether a class below the model has a method with this name. A base model's static type only bounds the
+     * runtime class: `$base->load('ownedBy')` is valid when the instance is a subclass that defines the relation.
+     *
+     * Subclasses are found through each storage's own ancestry, not Psalm's `dependent_classlikes`: that map also
+     * lists `@mixin` hosts, which are not subclasses, and keeps names a `reloadFiles()` has since removed. The scan
+     * is uncached for the same reason and runs only for a name the model itself lacks; the alias-aware ancestry
+     * check is limited to project classes, since a vendor class cannot extend a project model.
+     *
+     * @param class-string $modelFqcn
+     */
+    public static function relationMethodExistsOnDescendant(Codebase $codebase, string $modelFqcn, string $relationName): bool
+    {
+        $modelLc = \strtolower(ClassLineage::canonicalName($codebase, $modelFqcn));
+
+        foreach ($codebase->classlike_storage_provider::getAll() as $storage) {
+            if (
+                (isset($storage->parent_classes[$modelLc]) || $storage->user_defined && ClassLineage::isA($codebase, $storage->name, $modelFqcn))
+                && self::relationMethodExists($codebase, $storage->name, $relationName)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Resolve the related model FQCN of a relation, for walking dot-notation
      * chains. Returns null when the target cannot be statically determined
      * (polymorphic `morphTo`, dynamic class-string argument, or a relation with

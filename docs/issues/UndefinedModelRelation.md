@@ -91,6 +91,7 @@ To keep false positives near zero, the rule reports only when no method (real or
 
 * Dynamic relation names (a variable rather than a literal).
 * An un-narrowed `Builder` (the bare base `Model`) or an abstract base model.
+* A name that an analysed subclass of the receiver model defines. A concrete base model (`App\Model extends Eloquent\Model`) is only the static bound of what runs, so `$model->load('ownedBy')` on `App\Model` is not reported when a subclass declares `ownedBy()`. A name no subclass defines is still reported, and so is a model without subclasses. Intermediate models of a dot-notation path follow the same rule; `$with` / `$withCount` defaults are checked against their own model only.
 * Relations registered at runtime via `Model::resolveRelationUsing()` or package macros, which static analysis cannot see.
 * Deeper dot-notation segments after a polymorphic `morphTo`, whose related model is not statically known.
 
