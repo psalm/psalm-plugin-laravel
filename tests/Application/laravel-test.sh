@@ -264,13 +264,6 @@ else
     info "Skipping laravel/ai install: requires PHP >=8.3, running $(php -r 'echo PHP_VERSION;')"
 fi
 
-# The skeleton's `artisan` and `public/index.php` carry a `/** @var Application $app */` line that hides what
-# the plugin must supply: the type of `require 'bootstrap/app.php'`, which Psalm leaves mixed because the
-# plugin already booted that file (#2162). Drop it so both entry files are analyzed the way an `init` project
-# without that line would see them.
-sed -i.bak '/@var Application \$app/d' artisan public/index.php
-rm -f artisan.bak public/index.php.bak
-
 PSALM_CONFIG="../../tests/Application/laravel-test-psalm.xml"
 PSALM_BASELINE="../../tests/Application/laravel-test-psalm-baseline.xml"
 
