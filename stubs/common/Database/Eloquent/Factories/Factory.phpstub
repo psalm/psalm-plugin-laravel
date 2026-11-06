@@ -36,9 +36,10 @@ use Illuminate\Support\Traits\Macroable;
  * Methods that return `static` (state, for, has, etc.) propagate `TCount`
  * automatically because Psalm preserves template parameters across `static`
  * returns. A USER method declared `static` / `self` / `Factory` keeps it only when its body
- * is nothing but `return` of a count-keeping chain (FactoryUserMethodCountProvider). This keeps follow-up #696 (`for*()` / `has*()` magic methods) free
- * to add their own provider without touching plurality logic, those methods
- * just need to return `static`.
+ * is nothing but `return` of a count-keeping chain (FactoryUserMethodCountProvider).
+ * The `for*()` / `has*()` relation forwarders served by `__call()` have no declaration here:
+ * FactoryRelationMethodProvider answers them with the receiver itself, at the unknown count
+ * when a known descendant owns its count, as for Laravel's own `has()` / `for()` (#2215).
  *
  * @template TModel of Model
  * @template-covariant TCount of int|null = int|null

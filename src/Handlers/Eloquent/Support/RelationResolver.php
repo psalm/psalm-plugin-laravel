@@ -15,9 +15,10 @@ use Psalm\Type\Union;
 
 /**
  * Shared relation lookups for the relation-name validation rule (`with()`,
- * `load()`, `has()`, `whereHas()`, ...). See {@see \Psalm\LaravelPlugin\Handlers\Rules\UndefinedModelRelationHandler}.
+ * `load()`, `has()`, `whereHas()`, ...). See {@see \Psalm\LaravelPlugin\Handlers\Rules\UndefinedModelRelationHandler},
+ * and for the factory `has{Relation}()` / `for{Relation}()` forwarders.
  *
- * Two distinct questions are answered here:
+ * Three distinct questions are answered here:
  *
  *  - {@see relationMethodExists()} — "is there a method with this name at all?".
  *    This is intentionally an *existence* check, not an *is-a-relation* check:
@@ -30,6 +31,10 @@ use Psalm\Type\Union;
  *    dot-notation chains (`with('posts.comments')`). Null means "cannot resolve
  *    deeper" (polymorphic `morphTo`, dynamic class-string argument, or no
  *    declared generic), and the caller stops validating the remaining segments.
+ *
+ *  - {@see isRelationMethod()} — "is this method a relation?", type-aware. The
+ *    factory forwarders need it because their answer silences an issue Psalm
+ *    reports: an existing non-relation method throws at runtime there.
  *
  * This is a separate predicate from {@see \Psalm\LaravelPlugin\Handlers\Eloquent\ModelRelationshipPropertyHandler}'s
  * private `relationExists()`, which is *type-aware* (it must confirm a Relation
@@ -46,10 +51,59 @@ final class RelationResolver
     /** @var array<string, ?string> Cache for relatedModel() keyed by "class::lowername" */
     private static array $relatedModelCache = [];
 
+    /** @var array<string, bool> Cache for isRelationMethod() keyed by "class::lowername" */
+    private static array $isRelationCache = [];
+
     public static function reset(): void
     {
         self::$methodExistsCache = [];
         self::$relatedModelCache = [];
+        self::$isRelationCache = [];
+    }
+
+    /**
+     * Whether the model's method is a relation, as `Factory::__call()` needs it (`$model->{$name}()->getRelated()`):
+     * it exists, is not one of `Model`'s own relation builders (`hasMany()`, ...), and either declares a return type
+     * naming a `Relation` subclass or declares none and builds one in its body (`RelationMethodParser`). Anything
+     * else is not proven, so the caller keeps today's report.
+     */
+    public static function isRelationMethod(Codebase $codebase, string $modelFqcn, string $relationName): bool
+    {
+        $lcName = \strtolower($relationName);
+
+        return self::$isRelationCache[$modelFqcn . '::' . $lcName] ??= self::resolveIsRelationMethod($codebase, $modelFqcn, $lcName);
+    }
+
+    private static function resolveIsRelationMethod(Codebase $codebase, string $modelFqcn, string $lcName): bool
+    {
+        if (!self::relationMethodExists($codebase, $modelFqcn, $lcName)) {
+            return false;
+        }
+
+        $declaring = ClassLineage::storage($codebase, $modelFqcn)?->declaring_method_ids[$lcName] ?? null;
+        $base = ClassLineage::storage($codebase, Model::class)?->declaring_method_ids[$lcName] ?? null;
+        if ($declaring !== null && $base !== null && (string) $declaring === (string) $base) {
+            return false;
+        }
+
+        $selfClass = $modelFqcn;
+        try {
+            $returnType = $codebase->getMethodReturnType($modelFqcn . '::' . $lcName, $selfClass);
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return false;
+        }
+
+        if ($returnType instanceof Union) {
+            foreach ($returnType->getAtomicTypes() as $atomic) {
+                if ($atomic instanceof TNamedObject && ClassLineage::isA($codebase, $atomic->value, Relation::class)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return RelationMethodParser::parse($codebase, $modelFqcn, $lcName) !== null;
     }
 
     /**

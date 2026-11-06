@@ -448,7 +448,7 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 - A factory held in a variable, property or parameter typed as the bare class keeps the default `int|null`, so `create()` is the union.
 
 **User methods (rule over the WHOLE body):** Psalm's own `static` substitution carries the receiver's count into the result, which is only true if the body keeps it. `FactoryUserMethodCountProvider` (registered per marked class in its own `AfterCodebasePopulated` hook, which `Plugin::registerHandlers()` registers AFTER `FactoryModelBindingHandler` so the marks exist; it fires whatever the analysis order) asks `FactoryCount::keepsCount()`, which reads the method AST. The rule holds only when every statement of the body is `return <expr>;` (a property write, assignment, call statement, `unset`, `if`, loop, etc. fails it) and each returned expression is `$this` or a call chain rooted at `$this` where:
-- each call is one of `state`, `sequence`, `crossJoinSequence`, `set`, `for`, `has`, `hasAttached`, `afterMaking`, `afterCreating`, `connection`, `recycle`, or `withoutParents`, each resolving on the class to the very method Laravel's `Factory` declares (an override or a trait method aliased over the name, such as `use Conditionable { when as state; }`, fails). A call served by `__call` (a `has*` / `for*` forwarder, a macro, `trashed`) never passes: Laravel checks the macro registry first, so a macro named `hasBatch` can change the count;
+- each call is one of `state`, `sequence`, `crossJoinSequence`, `set`, `for`, `has`, `hasAttached`, `afterMaking`, `afterCreating`, `connection`, `recycle`, or `withoutParents`, each resolving on the class to the very method Laravel's `Factory` declares (an override or a trait method aliased over the name, such as `use Conditionable { when as state; }`, fails). A call served by `__call` (a `has*` / `for*` forwarder, including one the #2215 provider proves; a macro; `trashed`) never passes: Laravel checks the macro registry first, so a macro named `hasBatch` can change the count;
 - each argument is inert: a scalar or other literal, a constant fetched by name, `X::class` / `X::CONST` with a NAME class, a negative number, an array of such items (no unpacking), a closure or arrow function (as a value, never invoked), or a variable that is a by-value PARAMETER of the method with a DECLARED type (native or docblock) whose every atomic is a scalar, `null`, an array, list or shape of those, a `Closure`, or a `Model` subclass (solidtime's `forProject(?Project $p)` stays precise). An untyped, `mixed`, `iterable`, `callable`, collection or other object parameter, a by-reference or variadic one, a local variable and `$this` are not inert: `recycle($models)` iterates a user `Support\Collection` whose `all()` may bump the count. A closure given to `state()` / `sequence()` runs on attributes, never on the factory, so its body is irrelevant. Anything that evaluates an expression first fails the rule: `(expr)::class` / `(expr)::CONST` (the expression may be `$this->touch()`, which sets the count before `set()` rebuilds the factory), a call, `new`, an assignment, an include, any property fetch (`$this->prop` too: an undeclared property runs `__get()`, which may write the count), an unpacked argument (`state(...$args)` iterates user code before the factory is rebuilt), an interpolated string (a known precision limit, e.g. `->has(Post::factory()->count(3))`).
 
 What is answered, by declared return:
@@ -467,7 +467,7 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 
 **Late static identity:** when the receiver is `static`-typed (`$this`, `static::times()`), the provider result keeps `&static`, as Psalm does for a declared `static` return. A `@return static` method returning `$this->forEachSequence(...)` or `$this->count(n)` raises no `MoreSpecificReturnType` / `LessSpecificReturnStatement`.
 
-**Known gap:** `has*()` and `for*()` magic count arguments are #696.
+**`has*()` / `for*()` forwarders:** typed by their own provider pair (next section, #2215), which keeps the count by answering the receiver.
 
 **Accepted soundness gap (receiver mutation):** a method whose body fails the proof widens the factory it RETURNS, not the variable it was called on. `$f->change();` (result discarded, `change()` sets `$this->count`) leaves `$f` typed at its old count, as does reusing one factory whose permitted state closure changes `$this->count` between two `make()` calls. Pinned by `FactoryCountReceiverMutationKnownLimitation.phpt`; the caveat docblock in `FactoryUserMethodCountProvider` is the source of truth.
 
@@ -486,6 +486,30 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 - **Proving "no count" at the call site.** Sound for a chain of `new X()` / `X::new()` / `Model::factory()` followed by calls other than `count`/`times`/`forEachSequence`/`when`/`unless`, but a factory held in a variable or property still gets the union.
 
 **`resolveFactoryName()`:** the stub does not re-declare it, so Laravel's `class-string<Factory<TClass>>` takes the `TCount` default and `(new $class())->create()` is `TClass|Collection<int, TClass>`. Intended: a class-string cannot rule out a subclass that counts itself, the same rule as a factory held as the bare class. Pinned by `FactoryResolveFactoryNameTest`.
+
+### `has{Relation}()` / `for{Relation}()` are a return-type + params provider pair gated on a proven relation (#2215)
+
+**Decision:** `FactoryRelationMethodProvider` answers `$factory->hasLinks(...)` / `->forTeam(...)`, which Laravel's `Factory::__call()` forwards to `has()` / `for()` on the relation `Str::camel(substr($method, 3))`. The answer is the receiver itself, so `TCount` (#2188), `&static` and intersections ride along (`User::factory()->hasLinks(2)->create()` is `User`, `User::factory(3)->...` a `Collection`), at the unknown count when a known descendant owns its count, as for Laravel's own `has()`.
+
+**Mechanism:** a return-type + params provider pair, registered in `AfterCodebasePopulated` on `Factory` (a bare `Factory<User>` receiver) and on every descendant (providers dispatch on the receiver's exact class). On the magic path Psalm asks the return-type provider first and then runs `checkMethodArgs()`, whose `getMethodParams()` throws unless a params provider answers. No `MethodExistenceProvider`: it gets no receiver (cannot tell `Factory<User>` from `Factory<Team>`) and would make `methodExists()` true for every caller. Not pseudo-methods injected at population (`MacroHandler` style): they are per class, so `Factory<User>` cannot be served, and the unknown count cannot be expressed.
+
+**Gate (otherwise reported as before):** an instance call whose spelled name starts with lowercase `has` / `for` (Laravel's prefix test is case-sensitive; a static call reaches `Macroable::__callStatic`); the class has no real method of that name (on an abstract class also none it inherits unimplemented from an interface, `overridden_method_ids`, as Psalm's `methodExists()` reads it) and no `pseudo_methods` entry (own, trait or ancestor `@method`, boot macros), since Psalm resolves pseudo-methods only after the providers; `__call` is Laravel's own; every receiver atomic binds `TModel` (`ClassLineage::projectedTemplate()`) to one model; that model's method, named by the suffix without `_` and case-insensitively, is a relation.
+
+**"A relation"** (`RelationResolver::isRelationMethod()`): the method exists, is not one of `Model`'s own builders (`hasHasMany()` stays reported), and declares a `Relation` return type or declares none and `RelationMethodParser` reads one from its body. Runtime calls `getRelated()` on it, so a non-relation stays reported.
+
+**Arguments:** `has{X}(int|null|array<string, mixed>|callable|Sequence $count = null, array<string, mixed>|callable|Sequence|null $state = [], array<string, mixed> ...$sequence)` and `for{X}(array<string, mixed>|callable|Sequence|null $state = [])`: Laravel reads a `null` state as `[]`, and the all-arrays tail is the sequence form (13.2+). The `callable` is plain, because Psalm compares a `Sequence` through its `__invoke()` (`@return mixed`) and would report `MixedArgumentTypeCoercion`. Any unpacked argument makes it `mixed ...$parameters`: Psalm checks an unpack against every remaining parameter.
+
+**Known gaps:**
+- A macro registered after boot under a forwarder name is invisible (as for `MacroHandler`).
+- Any relation kind passes: `forLinks()` on a `HasMany` throws, `hasTeam()` on a `BelongsTo` creates nothing.
+- A `protected` / `private` relation, or one with required parameters, passes but throws.
+- With an unpack, and with named arguments (`hasLinks(count: 3)`, ignored by Laravel), arguments go unchecked.
+- A call served by `__call` never passes the user-method body rule, so a wrapper like `withLinks(): static { return $this->hasLinks(2); }` gets the default count.
+- `static::hasLinks()` / `self::hasLinks()` inside an instance method stays reported, as does a factory with its own `__call`.
+- A descendant that declares the same `has*` / `for*` name or its own `__call` is not seen through a parent-typed receiver.
+- An interface or mixin `@method` of that name is not seen.
+
+**Pinned by:** `FactoryRelationMagicMethodTest`, `FactoryRelationMagicMethodDeclineTest`.
 
 ## Variance
 
