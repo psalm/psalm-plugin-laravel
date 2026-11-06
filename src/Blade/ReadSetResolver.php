@@ -54,9 +54,10 @@ final class ReadSetResolver
             return [];
         }
 
+        // The read set never carries `$this` or a `__`-prefixed name, so their absence proves nothing.
         return \array_values(\array_filter(
             \array_keys($contract->vars),
-            static fn(int|string $name): bool => !isset($reads[$name]),
+            static fn(int|string $name): bool => !isset($reads[$name]) && !ContractParser::readSetOmits((string) $name),
         ));
     }
 
