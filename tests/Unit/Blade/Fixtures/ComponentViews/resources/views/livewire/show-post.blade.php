@@ -2,7 +2,7 @@
 @php /** @psalm-trace $this $post $limit $helped */ $probe = [$this, $post, $limit, $helped]; @endphp
 {{ $post->typo() }}
 @php $this->save(); @endphp
-@php $this->sav(); @endphp
+@php $this->publish(); @endphp
 {{ $this->total }}
 {{ $this->flash('ok') }}
 @if ($post) @endif

@@ -33,7 +33,7 @@ Without any `@var`:
 * Broken references after a refactor: classes, constants, enum cases, static calls.
 * Calls to typed helpers and facades (`route()`, `auth()`, `Str::`, ...).
 * Class components and `@props` defaults.
-* Livewire component views: `$this` is the component and each public property has its declared type, when one component's `render()` returns the view by a literal name (`{{ $post->typo() }}` and `$this->sav()` report).
+* Livewire component views: `$this` is the component and each public property has its declared type, when one component's `render()` returns the view by a literal name (`{{ $post->typo() }}` and `$this->publish()` report).
 * Plugin rules inside templates, when enabled: [`UnregisteredRouteName`](issues/UnregisteredRouteName.md) ([`findUnregisteredRouteNames`](config.md#findunregisteredroutenames)), [`MissingView`](issues/MissingView.md) on `@include` ([`findMissingViews`](config.md#findmissingviews)), [`MissingTranslation`](issues/MissingTranslation.md) ([`findMissingTranslations`](config.md#findmissingtranslations)).
 * Taint from sources inside the template: `{!! request('q') !!}` reports `TaintedHtml`; `{{ }}` and `@json()` are escaped and not flagged. See [Security](security.md).
 

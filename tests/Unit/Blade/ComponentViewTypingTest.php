@@ -172,7 +172,7 @@ final class ComponentViewTypingTest extends TestCase
         // stay silent; what the classes lack reports, `$this` in a template-declared class included.
         yield 'Livewire: a member typo on a property and on $this' => ['livewire/show-post.blade.php', [
             'UndefinedMethod: Method App\Models\Post::typo does not exist',
-            'UndefinedMagicMethod: Magic method App\Livewire\ShowPost::sav does not exist',
+            'UndefinedMagicMethod: Magic method App\Livewire\ShowPost::publish does not exist',
             'UndefinedThisPropertyFetch: Instance property LocalProbe::$missing is not defined',
         ]];
     }
