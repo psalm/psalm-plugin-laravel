@@ -51,7 +51,7 @@ Registered from `Plugin::registerHandlers()`. `$bladeActive` is the flag `initBl
 | `Handlers\Views\ViewContractHandler` | `AfterStatementAnalysis` | `$bladeActive` and the project's own config enables Blade (a run where only the annotate codemod switched Blade on gets no view-data checks, matching the `initMissingViewHandler()` gate); no flag of its own | [Contracts and read sets](#contracts-and-read-sets) |
 | `Blade\Annotate\AnnotationCollector`, `AnnotationWriter` | `AfterStatementAnalysis`, `AfterAnalysis` | a valid annotate control file | [Annotation implementation](#annotation-implementation) |
 
-All three view-data issues (`UnusedViewData` included) are in `ExperimentalIssuePolicy`, so `<experimental>` and `issueHandlers` set their severity and nothing gates the walk (#1985). The compile pass always collects the read sets for the same reason.
+All four view-data issues (`UnusedViewData` included) are in `ExperimentalIssuePolicy`, so `<experimental>` and `issueHandlers` set their severity and nothing gates the walk (#1985). The compile pass always collects the read sets for the same reason.
 
 ### Degradation
 
@@ -269,7 +269,7 @@ Types are the declared property types of a Mailable or Livewire class (expanded 
 
 Accepted imprecisions. Silent (a superset of the real keys): an uninitialized typed Mailable property counts as supplied. Accepted, in the reportable direction: an uninitialized typed Livewire property renders as `null` (`[]` for an array) at runtime, but keeps its declared type here, because widening every such property to `T|null` would reject the common `public Order $order;` assigned in `mount()`. Still reportable, because the keys are not modeled: a public property a Mailable subclass adds beyond the receiver's declared type, keys from the `Mailable::buildViewDataUsing()` callback, and Livewire `#[Computed]` properties. Not recognized call sites: `new Content(view:, with:)` and `$this->with()` in a separate statement.
 
-Gates. The per-issue pages list every gate. Both checks decline for a dynamic view name and for a chain containing a method the plugin does not model. An open data set (a spread, a dynamic key, `$mergeData`) and an unreadable `@props` array gate only `MissingViewData`; the keys the call does pass are still type-checked. A `mixed` on either side skips the type check of that key (`InvalidViewData`) and does not silence `MissingViewData`. A template that declares nothing is never checked.
+Gates. The per-issue pages list every gate. Both checks decline for a dynamic view name and for a chain containing a method the plugin does not model. An open data set (a spread, a dynamic key, `$mergeData`) and an unreadable `@props` array gate only `MissingViewData`; the keys the call does pass are still type-checked. A `mixed` on either side skips the type check of that key (`InvalidViewData`, `PossiblyInvalidViewData`) and does not silence `MissingViewData`; so does a passed template parameter bounded by `mixed` (`first()` on a raw `Collection`). A passed value that does not fit is classified like Psalm's argument analysis (see [decisions](decisions.md#view-data-mismatches-are-classified-like-psalms-argument-analysis-2210)). A template that declares nothing is never checked.
 
 ### Read sets and unused view data
 

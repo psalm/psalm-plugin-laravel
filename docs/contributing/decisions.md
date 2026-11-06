@@ -829,6 +829,19 @@ Deleting the handler would bring the #1395 false positive back, so it shrank to 
 
 **Accepted limitation:** the class is read as written. A container rebinding, extender or before-resolving hook, a factory or dispatcher subclass, a constructor that shares data, a protected method served by `__call()`, a `share()` hidden in a helper or an injected dependency, and view data added by a wildcard listener registered straight on the dispatcher (taken for an observer, such as a debugging package's view watcher, and skipped) are not seen; if the real keys differ, the call site reports, and the fix is `= null` on the declaration or a suppression. Composers registered after boot (middleware, a controller) are not read: a view whose only composer is registered at runtime is checked as if it had none, while a view with a boot composer plus a runtime one is checked against the boot keys only.
 
+### View data mismatches are classified like Psalm's argument analysis (#2210)
+
+**Decision:** `ViewContractHandler` compares with `UnionTypeComparator::isContainedBy()` and a `TypeComparisonResult`, branching as `ArgumentAnalyzer::verifyType()` does (`null` and `false` set aside, then coercion, then `canBeContainedBy()`). A value no part of which can fit stays `InvalidViewData`; a possibly-null or possibly-false value, a coercion (parent type, `mixed` parameters) and a union with a member that does not fit are `PossiblyInvalidViewData` (level 3, like `PossiblyInvalidArgument` and `ArgumentTypeCoercion`). A bare `null` or `false` is hard, as `NullArgument` is. A passed `TTemplateParam` whose bound is `mixed` declines like `mixed`.
+
+**Why:** One binary `isTypeContainedByType()` reported kanka's 25 findings alike, 16 of them possibly-null. Matching Psalm's split keeps `InvalidViewData` for the cases Psalm itself calls `InvalidArgument`.
+
+**Probed, not changed:** the view comparison agrees with core on every shape the issue called a false positive of its own:
+- `collect([[...], [...]])` for `Collection<int, array<string, mixed>>`: core reports `InvalidArgument` too (the stub infers the key as `int<0, N>`, and `TKey` is invariant). `new Collection([...])` passes in core only because an argument expression is inferred against the parameter's expected type; a view data array has none. Making the view check lenient here would hide what core reports, so it stays hard until the `collect()` inference changes.
+- A raw `Eloquent\Collection` fills its templates with their bounds (`<array-key, Model>`), so against `Collection<int, Tag>` core reports `InvalidArgument`, not a mixed coercion. A raw `Support\Collection` (`<array-key, mixed>`) is the `MixedArgumentTypeCoercion` case and is partial.
+
+**Rejected alternatives:**
+- **Scalar mismatches as a third class** (`InvalidScalarArgument`): `123` for a `string` declaration is a real contract disagreement in a template, and the issue did not ask for it.
+
 ### `@aware`'s list-form arm is gated at issue emission, not widened in a stub
 
 **Decision:** `ShadowIssueRelocator::isGeneratedAwareArgument()` drops argument 1 and string-cast issues on `$__value` in the generated list-form `$__env->getConsumableComponentData($__value)` call, and `NoValue` on `$__key` in the keyed call, only when that call text is absent from the raw template (#1695; gate from #1708, keyed `NoValue` arm from #1716). `Factory::getConsumableComponentData()` keeps Laravel's own `string $key`.

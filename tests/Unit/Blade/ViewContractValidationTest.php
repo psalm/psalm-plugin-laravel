@@ -51,9 +51,14 @@ final class ViewContractValidationTest extends TestCase
 
     private const WRONG_TYPE = 'InvalidViewData';
 
+    /** The lower-severity split of a mismatch; its own cases live in `ViewDataClassificationTest`. */
+    private const PARTIAL_TYPE = 'PossiblyInvalidViewData';
+
     private const UNUSED = 'UnusedViewData';
 
     private const TYPE_HINT = " Pass a value of the declared type, or correct the template's declaration.";
+
+    private const WIDER_HINT = ', which is wider than the declared type.' . self::TYPE_HINT;
 
     /** `--show-info` keeps the `info` default of the experimental issues in the report. */
     private const ARGUMENTS = ['-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json', '--show-info=true'];
@@ -99,6 +104,12 @@ final class ViewContractValidationTest extends TestCase
     private function contractIssues(): array
     {
         return $this->issuesOfType(self::MISSING, self::WRONG_TYPE);
+    }
+
+    /** @return list<array{type: string, file: string, message: string}> */
+    private function partialIssues(): array
+    {
+        return $this->issuesOfType(self::PARTIAL_TYPE);
     }
 
     /** @return list<array{type: string, file: string, message: string}> */
@@ -191,12 +202,13 @@ final class ViewContractValidationTest extends TestCase
         $this->assertSame([], $this->forFile($issues, 'RenderableValue.php'), \var_export($issues, true));
 
         $wrong = $this->forFile($issues, 'NonRenderableValue.php');
-        $this->assertCount(2, $wrong, \var_export($issues, true));
-        $this->assertSame([self::WRONG_TYPE, self::WRONG_TYPE], \array_column($wrong, 'type'));
+        $this->assertCount(1, $wrong, \var_export($issues, true));
+        $this->assertStringContainsString('DateTimeImmutable', $wrong[0]['message']);
 
-        $messages = \implode("\n", \array_column($wrong, 'message'));
-        $this->assertStringContainsString('DateTimeImmutable', $messages);
-        $this->assertStringContainsString('Illuminate\Contracts\View\View|int', $messages);
+        // `string|int` for a `string` declaration: only part of the union fits.
+        $partial = $this->forFile($this->partialIssues(), 'NonRenderableValue.php');
+        $this->assertCount(1, $partial, \var_export($partial, true));
+        $this->assertStringContainsString('Illuminate\Contracts\View\View|int', $partial[0]['message']);
     }
 
     /**
@@ -279,14 +291,17 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_inherited_component_methods_self_and_parent_name_its_appearing_class(): void
     {
-        $issues = $this->forFile($this->contractIssues(), 'ComponentInherited.php');
+        // A closure returning a parent class where the child is declared is a coercion, not a hard mismatch.
+        $this->assertSame([], $this->forFile($this->contractIssues(), 'ComponentInherited.php'));
+
+        $issues = $this->forFile($this->partialIssues(), 'ComponentInherited.php');
         $messages = \array_column($issues, 'message');
         \sort($messages);
 
         $this->assertSame([
-            "View 'component-inherited' declares \$retParent as \\Closure(int): \\ViewContractFixture\\VcBase, but this call passes Closure[impure](int):Illuminate\\View\\Component." . self::TYPE_HINT,
-            "View 'component-inherited' declares \$traitParent as \\Closure(int): \\ViewContractFixture\\VcBase, but this call passes Closure[impure](int):Illuminate\\View\\Component." . self::TYPE_HINT,
-            "View 'component-inherited' declares \$traitSelf as \\Closure(int): \\ViewContractFixture\\ComponentInherited, but this call passes Closure[impure](int):ViewContractFixture\\VcBase." . self::TYPE_HINT,
+            "View 'component-inherited' declares \$retParent as \\Closure(int): \\ViewContractFixture\\VcBase, but this call passes Closure[impure](int):Illuminate\\View\\Component" . self::WIDER_HINT,
+            "View 'component-inherited' declares \$traitParent as \\Closure(int): \\ViewContractFixture\\VcBase, but this call passes Closure[impure](int):Illuminate\\View\\Component" . self::WIDER_HINT,
+            "View 'component-inherited' declares \$traitSelf as \\Closure(int): \\ViewContractFixture\\ComponentInherited, but this call passes Closure[impure](int):ViewContractFixture\\VcBase" . self::WIDER_HINT,
         ], $messages);
     }
 
@@ -494,10 +509,11 @@ final class ViewContractValidationTest extends TestCase
     public function a_markdown_mailables_message_is_a_message_or_a_text_message(): void
     {
         $issues = $this->contractIssues();
-        $reported = $this->forFile($issues, 'MailableMarkdownMessage.php');
+        $reported = $this->forFile($this->partialIssues(), 'MailableMarkdownMessage.php');
 
-        $this->assertSame([self::WRONG_TYPE . ' $message'], $this->variablesOf($reported), \var_export($issues, true));
-        $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes Illuminate\Mail\Message|Illuminate\Mail\TextMessage.', $reported[0]['message']);
+        $this->assertSame([], $this->forFile($issues, 'MailableMarkdownMessage.php'));
+        $this->assertSame([self::PARTIAL_TYPE . ' $message'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString('declares $message as \Illuminate\Mail\Message, but this call passes Illuminate\Mail\Message|Illuminate\Mail\TextMessage, which may be a different type.', $reported[0]['message']);
         $this->assertSame([], $this->forFile($issues, 'MailMessageMarkdownMessage.php'), \var_export($issues, true));
     }
 
@@ -576,10 +592,12 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function a_component_properties_self_and_parent_name_their_declaring_class(): void
     {
-        $reported = $this->forFile($this->contractIssues(), 'ComponentOwner.php');
+        $this->assertSame([], $this->forFile($this->contractIssues(), 'ComponentOwner.php'));
 
-        $this->assertSame([self::WRONG_TYPE . ' $owner'], $this->variablesOf($reported), \var_export($reported, true));
-        $this->assertStringContainsString('but this call passes Illuminate\View\Component.', $reported[0]['message']);
+        $reported = $this->forFile($this->partialIssues(), 'ComponentOwner.php');
+
+        $this->assertSame([self::PARTIAL_TYPE . ' $owner'], $this->variablesOf($reported), \var_export($reported, true));
+        $this->assertStringContainsString('but this call passes Illuminate\View\Component, which is wider', $reported[0]['message']);
     }
 
     /**

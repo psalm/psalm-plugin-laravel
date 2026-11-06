@@ -289,7 +289,7 @@ final class AnnotateEndToEndTest extends TestCase
         foreach ($report as $issue) {
             if (
                 \is_array($issue)
-                && \in_array($issue['type'] ?? null, ['InvalidViewData', 'MissingViewData'], true)
+                && \in_array($issue['type'] ?? null, ['InvalidViewData', 'PossiblyInvalidViewData', 'MissingViewData'], true)
                 && \str_ends_with((string) ($issue['file_name'] ?? ''), 'Merger.php')
                 && \preg_match("/^View '([^']+)'/", (string) ($issue['message'] ?? ''), $matches) === 1
             ) {

@@ -7,8 +7,11 @@ namespace Psalm\LaravelPlugin\Handlers\Views;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
+use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\TypeParseTreeException;
+use Psalm\Internal\Type\Comparator\TypeComparisonResult;
+use Psalm\Internal\Type\Comparator\UnionTypeComparator;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\BladeBootstrapper;
 use Psalm\LaravelPlugin\Blade\ComposerKeyResolver;
@@ -22,6 +25,7 @@ use Psalm\LaravelPlugin\Blade\ViewReferenceRegistry;
 use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\LaravelPlugin\Issues\InvalidViewData;
 use Psalm\LaravelPlugin\Issues\MissingViewData;
+use Psalm\LaravelPlugin\Issues\PossiblyInvalidViewData;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\AfterStatementAnalysisInterface;
@@ -34,8 +38,9 @@ use Psalm\Type;
  * Checks a `view()` call site against the contract its template declares: a
  * `@var \App\Models\User $user` docblock or a `@props([...])` entry.
  *
- * Reports a declared variable the call never passes ({@see MissingViewData}) and a passed value
- * that does not satisfy the declared type ({@see InvalidViewData}).
+ * Reports a declared variable the call never passes ({@see MissingViewData}), a passed value that
+ * cannot satisfy the declared type ({@see InvalidViewData}), and one that only partly does
+ * ({@see PossiblyInvalidViewData}), split the way Psalm's argument analysis splits them.
  *
  * Hooked on statement analysis rather than expression analysis because expressions are visited
  * post-order: the inner `view('greeting')` of a `view('greeting')->with('name', $n)` chain would be
@@ -283,8 +288,14 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         $codebase = $source->getCodebase();
 
         // A class nothing defines is already reported where it was written (UndefinedDocblockClass).
+        // A template parameter bounded by mixed (`first()` on a raw `Collection`) is an unknown value,
+        // exactly like the mixed it stands for: Psalm expands it to its bound for the comparison.
         foreach ($supplied->getAtomicTypes() as $atomic) {
             if ($atomic instanceof Type\Atomic\TNamedObject && !$codebase->classOrInterfaceOrEnumExists($atomic->value)) {
+                return;
+            }
+
+            if ($atomic instanceof Type\Atomic\TTemplateParam && $atomic->as->hasMixed()) {
                 return;
             }
         }
@@ -303,23 +314,80 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             }
         }
 
-        // Either form may fit. The raw one still counts so a declaration naming the Renderable itself
-        // gains no new report.
-        if (
-            $codebase->isTypeContainedByType($supplied, $declared)
-            || $codebase->isTypeContainedByType(ViewClassProperties::renderablesAsString($supplied, $codebase), $declared)
-        ) {
+        $mismatch = self::mismatch($codebase, $supplied, $declared);
+
+        // Either form may fit. The Renderable-as-string one is tried second so a declaration naming
+        // the Renderable itself gains no new report; the milder verdict of the two wins.
+        if ($mismatch instanceof ViewDataMismatch) {
+            $rendered = self::mismatch($codebase, ViewClassProperties::renderablesAsString($supplied, $codebase), $declared);
+
+            if (!$rendered instanceof ViewDataMismatch || $mismatch->isHard()) {
+                $mismatch = $rendered;
+            }
+        }
+
+        if (!$mismatch instanceof ViewDataMismatch) {
             return;
         }
 
+        $message = "View '{$chain->viewName}' declares \${$var->name} as {$var->typeString}, but this call passes "
+            . LateStatic::strip($supplied)->getId() . $mismatch->describe()
+            . ". Pass a value of the declared type, or correct the template's declaration.";
+
         IssueBuffer::accepts(
-            new InvalidViewData(
-                "View '{$chain->viewName}' declares \${$var->name} as {$var->typeString}, but this call passes "
-                . LateStatic::strip($supplied)->getId() . ". Pass a value of the declared type, or correct the template's declaration.",
-                $codeLocation,
-            ),
+            $mismatch->isHard()
+                ? new InvalidViewData($message, $codeLocation)
+                : new PossiblyInvalidViewData($message, $codeLocation),
             $suppressedIssues,
         );
+    }
+
+    /**
+     * The branching of Psalm's `ArgumentAnalyzer::verifyType()`: `null` and `false` are set aside for
+     * the containment check and reported on their own (`PossiblyNullArgument`, `PossiblyFalseArgument`),
+     * then a coerced or partly overlapping value is the "possibly" family and only a value no part of
+     * which can fit is `InvalidArgument`.
+     *
+     * @return ViewDataMismatch|null `null` when the value satisfies the declaration
+     */
+    private static function mismatch(Codebase $codebase, Type\Union $supplied, Type\Union $declared): ?ViewDataMismatch
+    {
+        $comparison = new TypeComparisonResult();
+
+        // `true` declared: a `false` can never be set aside, as in Psalm.
+        $ignoreFalse = !isset($declared->getAtomicTypes()['true']);
+
+        if (!UnionTypeComparator::isContainedBy($codebase, $supplied, $declared, true, $ignoreFalse, $comparison)) {
+            if ($comparison->type_coerced) {
+                return ViewDataMismatch::Wider;
+            }
+
+            return UnionTypeComparator::canBeContainedBy($codebase, $supplied, $declared, true, true)
+                ? ViewDataMismatch::PartlyDifferent
+                : ViewDataMismatch::Incompatible;
+        }
+
+        if (!$declared->isNullable()) {
+            if ($supplied->isNull()) {
+                return ViewDataMismatch::Incompatible;
+            }
+
+            if ($supplied->isNullable() && !$supplied->ignore_nullable_issues) {
+                return ViewDataMismatch::PossiblyNull;
+            }
+        }
+
+        if (!$declared->isFalsable() && !$declared->hasBool() && !$declared->hasScalar()) {
+            if ($supplied->isFalse()) {
+                return ViewDataMismatch::Incompatible;
+            }
+
+            if ($supplied->isFalsable() && !$supplied->ignore_falsable_issues) {
+                return ViewDataMismatch::PossiblyFalse;
+            }
+        }
+
+        return null;
     }
 
     /**
