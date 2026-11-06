@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793983491983,
+  "lastUpdate": 1793984445954,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17700,6 +17700,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.75,
             "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2c2dcf1cacb5bef0334362cae70a20009cc10191",
+          "message": "Type Livewire component views from their class (`$this`, public properties) (#2206)\n\n* feat(blade): type Livewire component views from their class #1935\n\nA Livewire view was all `mixed`: `$this`, its properties and every\ncall on them went unchecked.\n\n- Livewire classes join ComponentViewRegistry's claim set, so the\n  existing declines (second claimant, rival render(), by-name render)\n  apply unchanged; render() may run statements before its only return\n- seed `$this` and the public properties FrameworkViewData already\n  computes; only a Livewire seed holds `$this`, which also binds\n  `self` (the view runs in a closure bound to the component)\n- an object property with no default is seeded `T|null`, nullable\n  issues ignored: Livewire renders one never initialized as null, so\n  the modal pattern's guards stay silent\n- drop UndefinedThisPropertyFetch on the component's own properties:\n  Psalm 7 seals magic, and `__get()` serves computed properties;\n  methods keep reporting, as `__call()` serves only boot macros\n\n* test(blade): use a dictionary word for the undefined Livewire method probe\n\n* refactor(blade): simplify Livewire view seeding\n\n* test(blade): drop Livewire decline rows covered by the shared gates\n\n* fix(blade): read a Livewire render()'s view only from its last top-level return\n\n* docs(blade): note that a composer can override a seeded component property",
+          "timestamp": "2026-11-06T17:57:08+01:00",
+          "tree_id": "0d624479ae20f364c725815e8172d550635ee4f9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2c2dcf1cacb5bef0334362cae70a20009cc10191"
+        },
+        "date": 1793984444102,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 28.11,
+            "range": "± 0.06",
             "unit": "s"
           },
           {
