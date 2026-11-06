@@ -33,6 +33,9 @@ function test_factory_make(\Illuminate\View\Factory $factory): void {
 \View::make('welcome');
 \Illuminate\Support\Facades\View::make('welcome');
 
+// Laravel's finder trims the name, so a padded literal renders `welcome`
+view(' welcome ');
+
 // Namespaced views via facade — should be skipped even if not found
 \View::make('mail::html.header');
 \Illuminate\Support\Facades\View::make('notifications::email');
