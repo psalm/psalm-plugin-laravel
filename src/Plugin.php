@@ -41,6 +41,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Issues/BladeCompileError.php';
         require_once __DIR__ . '/Issues/MissingViewData.php';
         require_once __DIR__ . '/Issues/InvalidViewData.php';
+        require_once __DIR__ . '/Issues/PossiblyInvalidViewData.php';
         require_once __DIR__ . '/Issues/UnusedViewData.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
