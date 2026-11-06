@@ -302,6 +302,15 @@ final class ContractParserTest extends TestCase
         $this->assertTrue($contract->readsUnknown);
     }
 
+    /** A PHP `include` / `require` / `eval` runs code in the template's scope that no walk of this file can read. */
+    #[Test]
+    public function a_scope_executing_construct_makes_the_read_set_unknown(): void
+    {
+        foreach (["@php\ninclude 'header.php';\n@endphp\n", "@php\nrequire_once __DIR__ . '/x.php';\n@endphp\n", "@php\neval('echo \$title;');\n@endphp\n"] as $source) {
+            $this->assertTrue($this->dataContract($source)->readsUnknown, $source);
+        }
+    }
+
     /** `@props` compiles to `$$__key = ...` writes, so every component template lands here. */
     #[Test]
     public function a_variable_variable_makes_the_read_set_unknown(): void

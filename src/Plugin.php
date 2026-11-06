@@ -42,6 +42,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Issues/MissingViewData.php';
         require_once __DIR__ . '/Issues/InvalidViewData.php';
         require_once __DIR__ . '/Issues/UnusedViewData.php';
+        require_once __DIR__ . '/Issues/UnusedViewDeclaration.php';
         ExperimentalIssuePolicy::apply($pluginConfig->experimental);
 
         // Third gated laravel/ai call site, alongside the stubs and the handler.
@@ -865,9 +866,12 @@ final class Plugin implements PluginEntryPointInterface
         if ($bladeActive && $pluginConfig->bladeEnabled) {
             require_once __DIR__ . '/Blade/ComposerKeyResolver.php';
             require_once __DIR__ . '/Blade/ReadSetResolver.php';
+            require_once __DIR__ . '/Blade/UnusedDeclarationHandler.php';
             require_once __DIR__ . '/Handlers/Views/ViewCallChain.php';
             require_once __DIR__ . '/Handlers/Views/ViewContractHandler.php';
             $registration->registerHooksFromClass(Handlers\Views\ViewContractHandler::class);
+            // Reports the declarations ViewContractHandler stops asking call sites for (#2211).
+            $registration->registerHooksFromClass(Blade\UnusedDeclarationHandler::class);
         }
 
 

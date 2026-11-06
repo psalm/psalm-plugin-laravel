@@ -679,6 +679,20 @@ final class ContractParser
     }
 
     /**
+     * Names the read set never carries: `$this`, the `__`-prefixed internals Blade compiles into every
+     * template, and Blade's own ambient names. A declaration of one is still a contract var (`$this`
+     * typed for a Livewire view, `$__label`), so a check that compares declarations with reads must skip them.
+     *
+     * @psalm-pure
+     */
+    public static function readSetOmits(string $name): bool
+    {
+        return $name === 'this'
+            || \str_starts_with($name, '__')
+            || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name]);
+    }
+
+    /**
      * @param array<string, true> $names
      *
      * @return list<string>
@@ -690,14 +704,9 @@ final class ContractParser
         $filtered = [];
 
         foreach (\array_keys($names) as $name) {
-            if ($name === 'this'
-                || \str_starts_with($name, '__')
-                || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])
-            ) {
-                continue;
+            if (!self::readSetOmits($name)) {
+                $filtered[] = $name;
             }
-
-            $filtered[] = $name;
         }
 
         \sort($filtered);
@@ -773,6 +782,11 @@ final class ContractParser
                     } elseif ($node->getAttribute('contractSkip') !== true) {
                         $this->names[$node->name] = true;
                     }
+                }
+
+                // A PHP `include` / `require` / `eval` runs code in the template's scope that this walk cannot read.
+                if ($node instanceof Node\Expr\Include_ || $node instanceof Node\Expr\Eval_) {
+                    $this->unknown = true;
                 }
 
                 if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {

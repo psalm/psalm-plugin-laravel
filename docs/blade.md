@@ -108,17 +108,18 @@ Reruns and manual correction:
 
 ## View data checks
 
-Experimental. Three issues compare `view()` call sites with the declarations above:
+Experimental. Four issues check `view()` call sites against the declarations above, and the declarations themselves:
 
 * [`MissingViewData`](issues/MissingViewData.md): a call site does not pass a required variable.
 * [`InvalidViewData`](issues/InvalidViewData.md): a passed value does not satisfy the declared type.
 * [`UnusedViewData`](issues/UnusedViewData.md): a call site passes a key the template never reads or declares. An app that overrides `@include` with its own directive and hands the scope over the way Blade does (`array_diff_key(get_defined_vars(), ...)`) makes the check decline for that include chain. A directive that passes the scope some other way can still report false positives; suppress this issue there.
+* [`UnusedViewDeclaration`](issues/UnusedViewDeclaration.md): a `@var` declaration that nothing in the template or its `@include` chain reads, reported once at the template. It replaces `MissingViewData` for that variable, because the fix is to delete the declaration. Nothing is reported when the read set is only a lower bound (`$$name`, `extract()`, a dynamic `@include`, an unreadable `@props`).
 
 [`BladeCompileError`](issues/BladeCompileError.md) is not experimental: a template that fails to compile is skipped and reported as an error.
 
 ### Reporting level
 
-The three issues run whenever Blade analysis is on. Without an explicit issue handler each is `info`: hidden unless `--show-info=true`, never failing a run, not baselined. Promote all three to `error` with [`<experimental value="true" />`](config.md#experimental):
+The four issues run whenever Blade analysis is on. Without an explicit issue handler each is `info`: hidden unless `--show-info=true`, never failing a run, not baselined. Promote all four to `error` with [`<experimental value="true" />`](config.md#experimental):
 
 ```xml
 <pluginClass class="Psalm\LaravelPlugin\Plugin">

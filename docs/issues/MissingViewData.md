@@ -31,7 +31,7 @@ In a template, `@includeIsolated('profile', [...])` is checked the same way, and
 
 1. Pass the declared variable at the call site.
 2. Declare it optional if it genuinely is: give it a default in the template's `@props([...])`, or end the declaration with `= null` (`@var string|null $subtitle = null`).
-3. Drop the declaration if the template no longer reads that variable.
+3. Drop the declaration if the template no longer reads that variable. When nothing in the template or its `@include` chain reads it, the declaration is reported instead, see [UnusedViewDeclaration](UnusedViewDeclaration.md).
 
 ## Limitations
 
@@ -39,6 +39,7 @@ The check declines rather than guess. On top of the shared [supported call sites
 
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
 - The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
+- Nothing in the template or its include chain reads the variable: the call site owes it nothing, and [UnusedViewDeclaration](UnusedViewDeclaration.md) reports the declaration. This follows the same read set as [UnusedViewData](UnusedViewData.md#limitations), so a template whose reads cannot be proven (`$$name`, `extract()`, a dynamic `@include`) keeps this report.
 - The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
 - The variable is supplied by a view composer or creator. The other declared variables of that view are still checked, but when a composer cannot be read, the whole view is skipped. See [Composers and creators](../blade.md#composers-and-creators).
 - The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public and a caller can chain `->with([...])` on its result. Its framework-supplied properties still take part in [InvalidViewData](InvalidViewData.md). See [Framework-supplied data](../blade.md#framework-supplied-data), which also lists the Mailable, MailMessage and Livewire receivers with an open key set.
