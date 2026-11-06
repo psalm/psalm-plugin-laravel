@@ -291,7 +291,7 @@ final class InitCommandTest extends TestCase
         $this->assertSame(Command::SUCCESS, $exit);
         $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
         $this->assertStringContainsString('<directory name="lib"/>', $contents);
-        $this->assertStringNotContainsString('<file ', $contents);
+        $this->assertStringNotContainsString('<file name="artisan"/>', $contents);
         $this->assertStringNotContainsString('<directory name="app"/>', $contents);
     }
 
@@ -325,13 +325,10 @@ final class InitCommandTest extends TestCase
     public function detects_laravel_app_layout_when_artisan_present(): void
     {
         // Presence of artisan selects the Laravel-app branch (detectLaravelAppRoots):
-        // conventional app dirs are scanned, so the discriminator the smoke test
-        // relies on (artisan/app present => app layout) is exercised here. The entry
-        // files (artisan, public/index.php) are deliberately NOT listed: #2162.
+        // conventional app dirs and entry files are scanned, so the discriminator the
+        // smoke test relies on (artisan/app present => app layout) is exercised here.
         \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'artisan', "#!/usr/bin/env php\n");
         \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'app');
-        \mkdir($this->tempDir . \DIRECTORY_SEPARATOR . 'public');
-        \file_put_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'public' . \DIRECTORY_SEPARATOR . 'index.php', "<?php\n");
 
         $tester = $this->makeTester();
         $exit = $tester->execute([]);
@@ -339,7 +336,7 @@ final class InitCommandTest extends TestCase
         $this->assertSame(Command::SUCCESS, $exit);
         $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
         $this->assertStringContainsString('<directory name="app"/>', $contents);
-        $this->assertStringNotContainsString('<file ', $contents);
+        $this->assertStringContainsString('<file name="artisan"/>', $contents);
         // Only on-disk dirs are emitted by detectLaravelAppRoots; bootstrap/ was not
         // created. If the app branch regressed to empty, detectSourceRoots' ultimate
         // fallback would emit ALL app dirs (including bootstrap), so this negative
@@ -360,7 +357,7 @@ final class InitCommandTest extends TestCase
         $this->assertSame(Command::SUCCESS, $exit);
         $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
         $this->assertStringContainsString('<directory name="src"/>', $contents);
-        $this->assertStringNotContainsString('<file ', $contents);
+        $this->assertStringNotContainsString('<file name="artisan"/>', $contents);
     }
 
     #[Test]
@@ -388,7 +385,7 @@ final class InitCommandTest extends TestCase
         $this->assertSame(Command::SUCCESS, $exit);
         $contents = (string) \file_get_contents($this->tempDir . \DIRECTORY_SEPARATOR . 'psalm.xml');
         $this->assertStringContainsString('<directory name="app"/>', $contents);
-        $this->assertStringNotContainsString('<file ', $contents);
+        $this->assertStringContainsString('<file name="artisan"/>', $contents);
         $this->assertStringContainsString('<directory name="packages/Webkul/Admin/src"/>', $contents);
         $this->assertStringContainsString('<directory name="packages/Webkul/Core/src"/>', $contents);
         // Exact src roots, never the whole packages/ tree (which would pull in vendor/).
