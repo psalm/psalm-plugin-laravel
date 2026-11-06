@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Illuminate\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\View\Compilers\BladeCompiler;
 
 // A minimal real bootstrap/app.php (branch 1 of ApplicationProvider::doGetApp()), so the booted app
 // binds 'blade.compiler' and a 'view.finder' anchored at THIS fixture's config/view.php paths.
@@ -21,25 +20,17 @@ $app->register(new class ($app) extends ServiceProvider {
     }
 });
 
-// A custom include directive in the shape of BookStack's theme `@include` override: it hands the
-// whole scope to a call that is not `$__env`, so what it renders is unknowable.
-$app->register(new class ($app) extends ServiceProvider {
-    public function boot(): void
-    {
-        $this->callAfterResolving('blade.compiler', static function (BladeCompiler $blade): void {
-            $blade->directive(
-                'scopedInclude',
-                static fn(string $expression): string => "<?php echo \$__scoped->render({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
-            );
-        });
-    }
-});
-
 // A view composer, as an application's service provider would register one: the `composed` view's
 // data is then not what its call sites pass.
 $app->booted(static function () use ($app): void {
     $view = $app->make('view');
     $view->composer('composed', static fn(): null => null);
+
+    // BookStack's theme `@include` override shape: the whole scope goes to a call that is not `$__env`.
+    $app->make('blade.compiler')->directive(
+        'scopedInclude',
+        static fn(string $expression): string => "<?php echo \$__scoped->render({$expression}, array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])); ?>",
+    );
 
     // Class composers whose bodies the plugin reads: see app/ComposerCallSites.php.
     $composers = 'ViewContractFixture\\Composers\\';
