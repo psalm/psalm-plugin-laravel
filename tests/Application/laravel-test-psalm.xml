@@ -11,6 +11,8 @@
     <projectFiles>
         <directory name="app"/>
         <directory name="routes"/>
+        <file name="artisan"/>
+        <file name="public/index.php"/>
         <ignoreFiles>
             <directory name="vendor"/>
         </ignoreFiles>
