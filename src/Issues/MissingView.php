@@ -14,5 +14,6 @@ final class MissingView extends PluginIssue
 {
     public const DOCUMENTATION_URL = 'https://psalm.github.io/psalm-plugin-laravel/issues/MissingView/';
 
-    // No ERROR_LEVEL override: controlled by the plugin setting findMissingViews
+    // Level 4 mirrors Psalm's UndefinedMagicMethod: the name resolves through Laravel's view finder, not PHP.
+    public const ERROR_LEVEL = 4;
 }

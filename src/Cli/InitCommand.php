@@ -71,11 +71,7 @@ final class InitCommand extends Command
 
             <plugins>
                 <!-- All Psalm Laravel options: https://psalm.github.io/psalm-plugin-laravel/config/ -->
-                <pluginClass class="Psalm\LaravelPlugin\Plugin">
-                    <resolveDynamicWhereClauses value="true" />
-                    <findMissingTranslations value="false" />
-                    <findMissingViews value="false" />
-                </pluginClass>
+                <pluginClass class="Psalm\LaravelPlugin\Plugin" />
             </plugins>
 
             <issueHandlers>
