@@ -50,12 +50,11 @@ use Psalm\Type\Union;
  * Every view any component's `render()` may name, seeded or not, also gets each `@props` entry the
  * prelude typed from its literal default reset to `mixed`.
  *
- * A project `Livewire\Component` subclass (#1935) claims its `render()`'s view in the same set, so a
- * view a second class (Livewire or not) or a by-name render reaches stays `mixed`. It needs no tag
- * (Livewire always calls `render()`), its `render()` may run statements before its only `return`,
- * and `render()`'s keys subtract nothing: Livewire merges the public properties after them. Its
- * view is seeded with those properties ({@see FrameworkViewData::livewireProperties()}) and `$this`
- * as the component, since Livewire includes it in a closure bound to the component.
+ * A project `Livewire\Component` subclass (#1935) claims its `render()`'s view in the same set, so
+ * a second claim or a by-name render still leaves it `mixed`. It needs no tag (Livewire always
+ * calls `render()`), statements may precede `render()`'s only `return`, and its keys subtract
+ * nothing (Livewire merges the public properties after them). The view is seeded with those
+ * properties ({@see FrameworkViewData::livewireProperties()}) and `$this` as the component.
  *
  * Static because Psalm instantiates event handlers itself and hands them no plugin state.
  *
@@ -64,8 +63,6 @@ use Psalm\Type\Union;
 final class ComponentViewRegistry
 {
     private const COMPONENT = 'illuminate\view\component';
-
-    private const LIVEWIRE = 'livewire\component';
 
     private const VIEW_FACADE = 'illuminate\support\facades\view';
 
@@ -152,7 +149,7 @@ final class ComponentViewRegistry
         $rivals = [];
 
         foreach (ClassLikeStorageProvider::getAll() as $storage) {
-            $livewire = isset($storage->parent_classes[self::LIVEWIRE]);
+            $livewire = isset($storage->parent_classes[FrameworkViewData::LIVEWIRE]);
 
             if ($storage->abstract || (!$livewire && !isset($storage->parent_classes[self::COMPONENT]))) {
                 continue;
@@ -177,7 +174,7 @@ final class ComponentViewRegistry
                 continue;
             }
 
-            // Keyed by flavour too: only a Livewire render() may run statements before its return.
+            // Keyed by flavour too: a trait's render() can serve both, read differently by each.
             $viewKey = $livewire ? $declaring . '#livewire' : $declaring;
 
             if (!\array_key_exists($viewKey, $views)) {
@@ -200,8 +197,7 @@ final class ComponentViewRegistry
                 continue;
             }
 
-            // Livewire always calls render() and merges the public properties after its data, so
-            // neither a tag nor render()'s keys matter.
+            // render()'s keys shadow nothing: Livewire merges the public properties after them.
             if ($livewire) {
                 $byTemplate[$templatePath][\strtolower($storage->name)] = [$storage, []];
 
@@ -284,7 +280,7 @@ final class ComponentViewRegistry
 
             [$storage, $renderKeys] = \reset($claims);
 
-            if (!isset($storage->parent_classes[self::LIVEWIRE]) && !isset(self::$tagRendered[\strtolower($storage->name)])) {
+            if (!isset($storage->parent_classes[FrameworkViewData::LIVEWIRE]) && !isset(self::$tagRendered[\strtolower($storage->name)])) {
                 continue;
             }
 
@@ -321,7 +317,7 @@ final class ComponentViewRegistry
         ContractParser $parser,
     ): array {
         $source = ShadowRegistry::templateSource($templatePath);
-        $livewire = isset($storage->parent_classes[self::LIVEWIRE]);
+        $livewire = isset($storage->parent_classes[FrameworkViewData::LIVEWIRE]);
         $guaranteed = $livewire
             ? FrameworkViewData::livewireProperties($codebase, $storage, seed: true)
             : ComponentRenderData::guaranteedFor($codebase, $storage);
@@ -330,9 +326,8 @@ final class ComponentViewRegistry
             return [];
         }
 
-        // View data never holds `$this` (`extract()` skips the name), but Livewire includes the view
-        // inside a closure bound to the component: only its seed types `$this`, which the seed
-        // handler and the relocator read as that binding.
+        // `extract()` never sets `$this`, but a Livewire view runs in a closure bound to its
+        // component. The seed handler and the relocator rely on only that seed holding `$this`.
         if ($livewire) {
             $guaranteed = ['this' => new Union([new TNamedObject($storage->name)])] + $guaranteed;
         } else {
@@ -364,9 +359,9 @@ final class ComponentViewRegistry
 
     /**
      * The view a declaring `render()` returns, the keys its own data arrays pass, and whether it
-     * goes through `$this->view()`. Null when the body is anything but one recognised `return`
-     * (for Livewire, whose data never shadows the seed, the body's only `return`); then any known
-     * view name it spells is marked contested, since that render may hand the same view other data.
+     * goes through `$this->view()`. Null when the body is anything but one recognised `return` (a
+     * Livewire body may run statements before its only one); then any known view name it spells is
+     * marked contested, since that render may hand the same view other data.
      *
      * @param array<array-key, string> $templates view name => template path
      * @param array<string, true>      $contested template path => true, appended to

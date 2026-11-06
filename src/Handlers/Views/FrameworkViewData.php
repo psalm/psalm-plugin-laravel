@@ -64,7 +64,7 @@ final class FrameworkViewData
 
     private const SIMPLE_MESSAGE = 'illuminate\notifications\messages\simplemessage';
 
-    private const LIVEWIRE = 'livewire\component';
+    public const LIVEWIRE = 'livewire\component';
 
     /** Declaring classes whose own properties Livewire never exposes. */
     private const LIVEWIRE_BASES = [self::LIVEWIRE, 'livewire\volt\component'];
@@ -204,9 +204,8 @@ final class FrameworkViewData
      * The properties `HandleComponents::getView()` hands a Livewire component's view, typed. Also
      * the seed of that view ({@see \Psalm\LaravelPlugin\Blade\ComponentViewRegistry}).
      *
-     * @param bool $seed type an object property with no default `T|null`, nullable issues ignored:
-     *                   Livewire hands one never initialized (a modal's, assigned in an event
-     *                   handler) to the view as null, so a guard on it must stay silent
+     * @param bool $seed type an object property with no default as lenient `T|null`: Livewire hands
+     *                   one never initialized (a modal's, assigned later) to the view as null
      *
      * @return array<string, Union>|null null when a declaring class could not be resolved
      */

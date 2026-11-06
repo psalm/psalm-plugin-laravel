@@ -171,11 +171,9 @@ final class ShadowIssueRelocator
         }
 
         // A Livewire view's `$this` is its component (#1935), whose `__get()` answers `#[Computed]`,
-        // `getXProperty()` and Filament `$this->form` reads. Psalm 7 seals magic properties by
-        // default, so each would report where the untyped view hid it as `Mixed*`. Only the
-        // component's own: `$this` in a class the template declares keeps reporting. Methods keep
-        // reporting too: `__call()` serves only macros, which
-        // {@see \Psalm\LaravelPlugin\Handlers\Magic\MacroHandler} declares.
+        // `getXProperty()` and Filament `$this->form` reads that Psalm 7's sealed magic properties
+        // would newly report. Scoped to the component: `$this` in a template-declared class keeps
+        // reporting. Methods need no drop: `__call()` serves only macros, which MacroHandler declares.
         if ($issue instanceof UndefinedThisPropertyFetch && self::isComponentProperty($issue)) {
             return false;
         }
