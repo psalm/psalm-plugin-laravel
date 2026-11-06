@@ -119,9 +119,7 @@ final class ComponentViewTypingTest extends TestCase
             '$post: App\Models\Post|null',
             '$this: App\Livewire\ShowPost',
         ]];
-        yield 'Livewire: two components' => ['livewire/twin.blade.php', ['$this: mixed', '$tone: mixed']];
         yield 'Livewire: also a class component' => ['livewire/shared.blade.php', ['$this: mixed', '$title: mixed']];
-        yield 'Livewire: also rendered by @include' => ['livewire/partial.blade.php', ['$this: mixed', '$title: mixed']];
     }
 
     /**

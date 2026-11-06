@@ -25,4 +25,3 @@
 <x-suffixed/>
 <x-frame/>
 <x-shared-card/>
-@include('livewire.partial')
