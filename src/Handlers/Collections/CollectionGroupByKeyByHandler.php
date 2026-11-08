@@ -77,7 +77,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         if ($method === 'keyby') {
-            return new Union([new TGenericObject($class, [$key, $value], is_static: true)]);
+            return new Union([(new TGenericObject($class, [$key, $value], is_static: true))->setIsStatic(true, true)]);
         }
 
         $innerKey = $templates[0] ?? null;
@@ -89,9 +89,9 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         $innerKey = !($preserve instanceof Union) || $preserve->isFalse() ? Type::getInt()
             : ($preserve->isTrue() ? $innerKey : Type::combineUnionTypes($innerKey, Type::getInt()));
 
-        return new Union([new TGenericObject($class, [$key,
+        return new Union([(new TGenericObject($class, [$key,
             new Union([(new TGenericObject($class, [$innerKey, $value], is_static: true))->setIsStatic(true, true)]),
-        ], is_static: true)]);
+        ], is_static: true))->setIsStatic(true, true)]);
     }
 
     /**

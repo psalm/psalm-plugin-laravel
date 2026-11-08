@@ -128,7 +128,7 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
 
         $receiverStatic = [];
         foreach ($receiver->getAtomicTypes() as $atomic) {
-            $receiverStatic[] = $atomic instanceof TNamedObject ? $atomic->setIsStatic(true) : $atomic;
+            $receiverStatic[] = $atomic instanceof TNamedObject ? $atomic->setIsStatic(true, true) : $atomic;
         }
 
         return new Union([...$receiverStatic, ...$extra]);

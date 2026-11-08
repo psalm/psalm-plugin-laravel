@@ -561,7 +561,8 @@ final class FactoryCount
             $params[] = $param;
         }
 
-        return new Union([new TGenericObject($storage->name, $params, false, $receiver?->is_static ?? false, $receiver?->extra_types ?? [])]);
+        return new Union([(new TGenericObject($storage->name, $params, false, $receiver?->is_static ?? false, $receiver?->extra_types ?? []))
+            ->setIsStatic($receiver?->is_static ?? false, $receiver?->is_static_resolved ?? false)]);
     }
 
     /**

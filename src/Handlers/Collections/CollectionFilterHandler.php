@@ -467,11 +467,11 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         Union $tKey,
         Union $narrowedValue,
     ): Union {
-        // is_static: true preserves the `&static` intersection, matching `return static`.
+        // `&static` already bound to the receiver, matching `return static`; unbound, it binds again on later calls.
         $className = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
 
         return new Union([
-            new TGenericObject($className, [$tKey, $narrowedValue], is_static: true),
+            (new TGenericObject($className, [$tKey, $narrowedValue], is_static: true))->setIsStatic(true, true),
         ]);
     }
 
