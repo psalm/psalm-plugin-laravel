@@ -77,7 +77,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
         $className = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
 
         return new Union([
-            new TGenericObject($className, [Type::getInt(), $innerValue], is_static: true),
+            (new TGenericObject($className, [Type::getInt(), $innerValue], is_static: true))->setIsStatic(true, true),
         ]);
     }
 

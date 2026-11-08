@@ -69,7 +69,9 @@ final class CollectionMakeHandler implements MethodReturnTypeProviderInterface
 
         $calledClass = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
 
-        // is_static: true preserves the `&static` intersection, matching the stub's `@return static<...>`.
-        return new Union([new TGenericObject($calledClass, [$keyType, $valueType], is_static: true)]);
+        // `&static` already bound to the called class, matching the stub's `@return static<...>`.
+        return new Union([
+            (new TGenericObject($calledClass, [$keyType, $valueType], is_static: true))->setIsStatic(true, true),
+        ]);
     }
 }
