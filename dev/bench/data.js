@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794003052342,
+  "lastUpdate": 1794133310279,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17875,6 +17875,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.25,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "049f1774f3afeb710111131a1c94fc163ce2ca51",
+          "message": "fix(handlers): bind the `static` of handler answers to the receiver (#2227)\n\nReturn type providers skip Psalm's type expansion, so an answer built with\nis_static: true kept an unbound `static`. Once the collection sat in a\ntemplate argument, the next `self<T>` call bound it again to that receiver\nand the type doubled per call (vimeo/psalm#13387).",
+          "timestamp": "2026-11-08T11:19:02+01:00",
+          "tree_id": "ca7b344c24909fcb70f9ea5b4156f94b84d9bcb1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/049f1774f3afeb710111131a1c94fc163ce2ca51"
+        },
+        "date": 1794133308261,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 24.58,
+            "range": "± 0.39",
             "unit": "s"
           },
           {
