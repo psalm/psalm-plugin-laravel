@@ -19,7 +19,7 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires `vimeo/psalm ^7.2`. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps).
+v4 requires Psalm 7. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps).
 
 Psalm 7 can suggest purity annotations through new issue types. They are off by default and appear only with `suggestPurityAnnotations="true"` in `psalm.xml`:
 
@@ -114,7 +114,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 # 1. Update PHP to 8.2+ and Laravel to 12+ if needed
 
 # 2. Upgrade Psalm to v7 and the plugin to v4 together
-composer require --dev psalm/plugin-laravel:^4.0 vimeo/psalm:^7.2 --with-all-dependencies
+composer require --dev psalm/plugin-laravel:^4.0 vimeo/psalm:^7 --with-all-dependencies
 
 # 3. Update relation generic annotations (add declaring model parameter)
 #
