@@ -106,26 +106,27 @@ final class ShadowManifest
                 continue;
             }
 
-            [$templatePath, $lineMap, $hash, $suppressions, $contract, $dataIncludes] = \array_values($entry);
+            $slots = \array_values($entry);
+            [$templatePath, $lineMap, $hash] = $slots;
 
             if (!\is_string($templatePath) || !\is_array($lineMap) || !\is_string($hash)) {
                 continue;
             }
 
-            $validSuppressions = $this->normalizeSuppressions($suppressions);
+            $validSuppressions = $this->normalizeSuppressions($slots[3]);
 
             if ($validSuppressions === null) {
                 continue;
             }
 
-            $validContract = $this->normalizeContract($contract);
+            $validContract = $this->normalizeContract($slots[4]);
 
             if ($validContract === null) {
                 continue;
             }
 
 
-            $validDataIncludes = $this->normalizeViewNames($dataIncludes);
+            $validDataIncludes = $this->normalizeViewNames($slots[5]);
 
             if ($validDataIncludes === false) {
                 continue;

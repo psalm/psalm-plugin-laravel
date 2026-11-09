@@ -41,7 +41,7 @@ $application = new Application('psalm-laravel');
 // Symfony Console: `addCommand()` was added in 7.4 and `add()` was removed in 8.x.
 // The cwd-relative autoloader (above) may pull either version from the consuming
 // project, so dispatch through the method name that the runtime version exposes.
-$register = method_exists($application, 'addCommand') ? 'addCommand' : 'add';
+$register = method_exists(Application::class, 'addCommand') ? 'addCommand' : 'add';
 foreach ([new InitCommand(), new AnalyzeCommand(), new AddCommand(), new DiagnoseCommand(), new AnnotateCommand()] as $command) {
     $application->{$register}($command);
 }
