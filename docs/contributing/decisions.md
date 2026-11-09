@@ -606,10 +606,8 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 
 **Accepted trade-offs:**
 - The facade adopts Laravel's PendingRequest params: `pool()` `$concurrency` `non-negative-int|null`, `truncateExceptionsAt()` `int<1, max>`, typed `retry()`/`afterResponse()`/`pool()` callbacks. A bare `int`, `callable` or `Closure` variable, or the documented `retry(3, 100, fn (Exception $e, PendingRequest $r) => ...)` (Laravel passes a `Throwable`), now reports `ArgumentTypeCoercion`/`MixedArgumentTypeCoercion` on the facade, as the chained and instance forms already did.
-- Fluent results print `PendingRequest&static` instead of `PendingRequest`. `pool()` returns Laravel's element type (`Response` on 12.27, `Response|\Throwable` from 12.50); `when()`/`unless()` lose the `|mixed`.
+- Fluent results print `PendingRequest&static` instead of `PendingRequest`. `pool()` returns the element type of the installed Laravel's `PendingRequest::pool()` docblock; `when()`/`unless()` lose the `|mixed`.
 - Psalm forwards on a receiver without template arguments (`PendingRequest&static`, not the `PendingRequest<bool>&static` of a typed receiver), so on Laravel 12.43+ (generic `TAsync`) a typed callback of `tap(Http::withHeaders(...), ...)` reports a false `ArgumentTypeCoercion`, pinned in `HttpFacadeTapKnownLimitation.phpt`. Upstream: the mixin step should fill missing template arguments like a declared type does.
-
-**No Psalm floor bump:** the static-call mixin step and template defaults both ship in Psalm 7.0.0, and nothing in 7.1 or 7.2 deletes facade or HTTP client code, so `^7.0` stays.
 
 **Rejected:** a generic `@mixin PendingRequest<bool>` (or `<false>`): Psalm then resolves `$this` returns to `Http&static`, so `Http::withToken('t')` stops being a PendingRequest. Native `TAsync` templates instead of `AsyncPendingRequest`: a bare `PendingRequest` reads the template bound, `PendingRequest<bool>` (probed on Psalm 7.2.0), so every verb on an injected client would be the sync|async union.
 
