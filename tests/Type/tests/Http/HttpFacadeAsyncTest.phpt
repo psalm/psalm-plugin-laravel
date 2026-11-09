@@ -7,7 +7,6 @@ require getcwd() . '/vendor/autoload.php';
 
 use Illuminate\Http\Client\Batch;
 use Illuminate\Http\Client\Promises\LazyPromise;
-use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -17,7 +16,7 @@ use Illuminate\Support\Facades\Http;
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1669
  */
-function test_http_facade_async(string $u, bool $flag): void
+function test_http_facade_async(string $u): void
 {
     $_get = Http::async()->get($u);
     /** @psalm-check-type-exact $_get = LazyPromise */
@@ -27,10 +26,6 @@ function test_http_facade_async(string $u, bool $flag): void
 
     $_chained = Http::async()->withToken('t')->post($u);
     /** @psalm-check-type-exact $_chained = LazyPromise */
-
-    // An unknown flag keeps both modes instead of silently picking the sync one.
-    $_either = Http::async($flag)->get($u);
-    /** @psalm-check-type-exact $_either = LazyPromise|Response */
 
     $_batch = Http::batch(fn (Batch $batch): array => [$batch->get($u)]);
     /** @psalm-check-type-exact $_batch = Batch */

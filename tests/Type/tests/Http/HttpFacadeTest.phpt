@@ -50,6 +50,10 @@ function test_http_facade_async_toggle(string $u): void
 
     $_sync = Http::async(false)->get($u);
     /** @psalm-check-type-exact $_sync = Response */
+
+    // PromiseInterface before 12.42, LazyPromise (a PromiseInterface) after; never the sync Response.
+    $_asyncGet = Http::async()->get($u);
+    /** @psalm-check-type $_asyncGet = \GuzzleHttp\Promise\PromiseInterface */
 }
 
 function test_http_facade_chains(string $u): void
@@ -63,7 +67,7 @@ function test_http_facade_chains(string $u): void
     $_headers = Http::withHeaders(['a' => 'b'])->acceptJson()->get($u);
     /** @psalm-check-type-exact $_headers = Response */
 
-    // Laravel's own pool() element type, which widened from Response (12.27) to Response|Throwable (12.50).
+    // Laravel's own pool() element type: it varies by version, always within Response|Throwable.
     $_pool = Http::pool(fn (\Illuminate\Http\Client\Pool $pool): array => [$pool->get($u)]);
     /** @psalm-check-type $_pool = array<array-key, Response|\Throwable> */
 }
@@ -89,5 +93,12 @@ function test_http_facade_factory_methods(): void
     Http::macro('probe', fn (): int => 1);
     Http::assertSentCount(0);
 }
+
+/** The facade stays sealed: a misspelled method is reported, not resolved to mixed. */
+function test_http_facade_unknown_method(string $u): void
+{
+    Http::definitelyNotAMethod($u);
+}
 ?>
 --EXPECTF--
+UndefinedMagicMethod on line %d: Magic method Illuminate\Support\Facades\Http::definitelynotamethod does not exist

@@ -19,7 +19,11 @@ namespace Illuminate\Support\Facades;
  * `PendingRequest&static` and a typed callback of `tap(Http::withHeaders(...), ...)` reports a false
  * ArgumentTypeCoercion (HttpFacadeTapKnownLimitation.phpt).
  *
+ * The stub docblock replaces the sealing flag Laravel's `@method` tags set on the vendor class, so the
+ * seal is restated to keep a misspelled call (`Http::psot()`) reported.
+ *
  * @mixin \Illuminate\Http\Client\PendingRequest
+ * @psalm-seal-methods
  */
 class Http extends Facade
 {
