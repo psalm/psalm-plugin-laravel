@@ -20,7 +20,7 @@ namespace Illuminate\Support\Facades;
  * ArgumentTypeCoercion (HttpFacadeTapKnownLimitation.phpt).
  *
  * The stub docblock replaces the sealing flag Laravel's `@method` tags set on the vendor class, so the
- * seal is restated to keep a misspelled call (`Http::psot()`) reported.
+ * seal is restated to keep an unknown call (`Http::definitelyNotAMethod()`) reported.
  *
  * @mixin \Illuminate\Http\Client\PendingRequest
  * @psalm-seal-methods
