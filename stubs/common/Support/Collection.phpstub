@@ -360,7 +360,6 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * The if-false type is conditional because https://github.com/vimeo/psalm/issues/11533 makes template-expanded
      * assertions keep only the first union member, so a plain `TValue` would drop null from a nullable TValue
      * (`int|null` became `int`). A possibly-null TValue resolves to `mixed` (no narrowing).
-     * A nullable TValue whose non-null part is an array, class-string or literal still loses null (see the known-limit phpt).
      * Once #9994 and #11533 ship, restore `TValue` plus first()/last()/count() on both branches
      * (including if-true `0 $this->count()`).
      * Known limits: tests/Type/tests/Collection/CollectionEmptinessAssertionsKnownLimitation.phpt.
