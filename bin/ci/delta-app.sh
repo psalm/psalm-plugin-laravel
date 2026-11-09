@@ -103,7 +103,8 @@ fast_copy() {
 # plugin composer.json so base and head analyze with the same Psalm.
 # Exact version: a range would drift to newer Psalm releases between base and head runs (or across
 # cached vendors), and an exact tag also keeps dev-master out under the apps' `minimum-stability: dev`.
-PSALM_PIN="7.0.0"
+# Must satisfy the `vimeo/psalm` constraint in the plugin's composer.json on both sides, or every app install fails.
+PSALM_PIN="7.2.0"
 
 # md5 of the plugin's dependency-affecting composer.json sections. Only `require`
 # and `autoload` change what gets installed into the app's vendor; if they match
