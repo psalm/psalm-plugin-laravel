@@ -102,7 +102,8 @@ trait WrapsWhereHas
 }
 
 /**
- * Psalm ignores `insteadof` (vimeo/psalm#12113) and still names Laravel's trait as the declaring one.
+ * Psalm 7.2 honors `insteadof`, so the user trait's untyped `whereHas` declares the method and its callback gets no
+ * relation binding.
  *
  * @extends Builder<Customer>
  */
@@ -149,7 +150,6 @@ function test_custom_relation_projects_its_related_model(DecoyRelation $relation
 function test_trait_override_keeps_its_own_contract(TraitOverrideBuilder $builder): void
 {
     $builder->whereHas('vehicles', function ($q): void {
-        /** @psalm-check-type-exact $q = Builder<Illuminate\Database\Eloquent\Model> */
         $q->where('id', 1);
     });
 }
@@ -233,6 +233,11 @@ function takes_string(string $_value): void {}
 ?>
 --EXPECTF--
 MissingParamType on line %d: Parameter $relation has no provided type
+MissingParamType on line %d: Parameter $relation has no provided type
+MissingParamType on line %d: Parameter $operator has no provided type
+MissingParamType on line %d: Parameter $count has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MixedMethodCall on line %d: Cannot determine the type of $q when calling method where
 InvalidArgument on line %d: Argument 3 of TransparentBuilder::whereHas expects string, but array<never, never> provided
 InvalidArgument on line %d: Argument 4 of TransparentBuilder::whereHas expects Illuminate\Contracts\Database\Query\Expression|int, but 'wrong' provided
 MissingClosureParamType on line %d: Parameter $q has no provided type
