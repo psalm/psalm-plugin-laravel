@@ -141,7 +141,7 @@ final class ModelPropertyResolver
             return self::extractExactlyOneModelFromUnion($atomic->getGenericValueType(), $codebase);
         }
 
-        if (($atomic instanceof TArray || $atomic instanceof TIterable) && \count($atomic->type_params) >= 2) {
+        if ($atomic instanceof TArray || $atomic instanceof TIterable) {
             return self::extractExactlyOneModelFromUnion($atomic->type_params[1], $codebase);
         }
 

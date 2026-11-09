@@ -87,7 +87,7 @@ final class ModelInstancePreparer
         // the 12.x floor has no such phase at all, which is what the guard is for (12.x reaching the call
         // would route it through Model::__call() to the query builder). Not every attribute it reads is 13.0
         // — `#[WithoutIncrementing]` is 13.2 — but the whole set is below the 13.x floor.
-        if (\method_exists($instance, 'initializeModelAttributes')) {
+        if (\method_exists($instance::class, 'initializeModelAttributes')) {
             $instance->initializeModelAttributes();
         }
     }

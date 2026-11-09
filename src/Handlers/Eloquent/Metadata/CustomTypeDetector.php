@@ -144,7 +144,14 @@ final class CustomTypeDetector
             return null;
         }
 
-        return $returnType->getName();
+        $builderClass = $returnType->getName();
+
+        // getName() yields the keyword for a `self`/`static`/`parent` return type, which is not a class-string.
+        if (\in_array($builderClass, ['self', 'static', 'parent'], true)) {
+            return null;
+        }
+
+        return $builderClass;
     }
 
     /**
@@ -315,6 +322,11 @@ final class CustomTypeDetector
         }
 
         $typeName = $returnType->getName();
+
+        // getName() yields the keyword for a `self`/`static`/`parent` return type, which is not a class-string.
+        if (\in_array($typeName, ['self', 'static', 'parent'], true)) {
+            return null;
+        }
 
         // Skip if it just returns the base EloquentCollection — not a custom collection.
         if ($typeName === EloquentCollection::class) {
