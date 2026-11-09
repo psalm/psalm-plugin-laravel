@@ -195,6 +195,39 @@ final class CollectionEmptinessAssertionsTest
         }
     }
 
+    /** @param Collection<int, array{x: int}|null> $items */
+    public function nullableShapeStaysNullable(Collection $items): void
+    {
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $_first = $items->first();
+        /** @psalm-check-type-exact $_first = array{x: int}|null */
+    }
+
+    /** @param Collection<int, 'a'|'b'|null> $items */
+    public function nullableLiteralsStayNullable(Collection $items): void
+    {
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $_first = $items->first();
+        /** @psalm-check-type-exact $_first = 'a'|'b'|null */
+    }
+
+    /** @param Collection<int, class-string|null> $items */
+    public function nullableClassStringStaysNullable(Collection $items): void
+    {
+        if ($items->isEmpty()) {
+            return;
+        }
+
+        $_first = $items->first();
+        /** @psalm-check-type-exact $_first = class-string|null */
+    }
+
     /** @param Collection<int, class-string<Model>> $models */
     public function reportedShapeClassStringStaticCall(Collection $models): void
     {
