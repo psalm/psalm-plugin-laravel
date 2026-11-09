@@ -77,7 +77,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
 
         $className = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
 
-        $isStatic = LateStatic::receiver($event, $className)?->is_static ?? false;
+        $isStatic = !LateStatic::isPlainReceiver($event, $className);
 
         return new Union([
             (new TGenericObject($className, [Type::getInt(), $innerValue], is_static: $isStatic))->setIsStatic($isStatic, $isStatic),

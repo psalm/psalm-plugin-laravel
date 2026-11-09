@@ -77,7 +77,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             return null;
         }
 
-        $isStatic = LateStatic::receiver($event, $class)?->is_static ?? false;
+        $isStatic = !LateStatic::isPlainReceiver($event, $class);
 
         if ($method === 'keyby') {
             return new Union([(new TGenericObject($class, [$key, $value], is_static: $isStatic))->setIsStatic($isStatic, $isStatic)]);

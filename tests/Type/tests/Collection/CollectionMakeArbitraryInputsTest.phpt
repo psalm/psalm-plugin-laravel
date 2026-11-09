@@ -45,9 +45,8 @@ $_fromCollection = Collection::make($existing);
 $_enum = Collection::make(MakeWidgetColor::Red);
 /** @psalm-check-type-exact $_enum = Collection<0, MakeWidgetColor> */
 
-// Defers to the stub's own inference (the resolver only resolves null/scalar/enum), so this
-// loses the &static LSB marker the handler would otherwise attach - a plain object argument
-// no longer round-trips through CollectionMakeHandler at all.
+// Defers to the stub's own inference (the resolver only resolves null/scalar/enum), so a plain
+// object argument never reaches CollectionMakeHandler's answer.
 $_dto = Collection::make(new MakePlainDto());
 /** @psalm-check-type-exact $_dto = Collection<array-key, mixed> */
 

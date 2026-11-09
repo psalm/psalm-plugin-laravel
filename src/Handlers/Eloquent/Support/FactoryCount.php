@@ -19,7 +19,6 @@ use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
-use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -547,7 +546,7 @@ final class FactoryCount
             return null;
         }
 
-        $receiver = $event instanceof MethodReturnTypeProviderEvent ? LateStatic::receiver($event, $storage->name) : null;
+        $receiver = $event instanceof MethodReturnTypeProviderEvent ? self::receiver($event, $storage->name) : null;
         $receiverParams = $receiver instanceof TGenericObject ? $receiver->type_params : $event?->getTemplateTypeParameters();
         $slots = \array_keys($storage->template_types ?? []);
 
@@ -564,6 +563,24 @@ final class FactoryCount
 
         return new Union([(new TGenericObject($storage->name, $params, false, $receiver?->is_static ?? false, $receiver?->extra_types ?? []))
             ->setIsStatic($receiver?->is_static ?? false, $receiver?->is_static_resolved ?? false)]);
+    }
+
+    /**
+     * The receiver of the call when it is a single object of `$class` (`$this->count(3)` in a `static`-returning
+     * method has `&static`, or the declared `static` return is reported as more specific than what was inferred),
+     * or the `static` keyword of `static::times(3)`. Null for a union, a template or a class-string receiver.
+     */
+    public static function receiver(MethodReturnTypeProviderEvent $event, string $class): ?TNamedObject
+    {
+        $stmt = $event->getStmt();
+        if ($stmt instanceof StaticCall) {
+            return $stmt->class instanceof Name && \strtolower($stmt->class->name) === 'static' ? new TNamedObject($class, true) : null;
+        }
+
+        $type = $event->getSource()->getNodeTypeProvider()->getType($stmt->var);
+        $atomic = $type instanceof Union && $type->isSingle() ? $type->getSingleAtomic() : null;
+
+        return $atomic instanceof TNamedObject && \strtolower($atomic->value) === \strtolower($class) ? $atomic : null;
     }
 
     /**

@@ -458,7 +458,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Build the narrowed return type with the same Collection subclass, late static only for a late static receiver.
+     * Build the narrowed return type with the same Collection subclass, plain only for a receiver proven plain.
      */
     private static function buildNarrowedReturn(
         MethodReturnTypeProviderEvent $event,
@@ -466,7 +466,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         Union $narrowedValue,
     ): Union {
         $className = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
-        $isStatic = LateStatic::receiver($event, $className)?->is_static ?? false;
+        $isStatic = !LateStatic::isPlainReceiver($event, $className);
 
         // `&static` already bound to the receiver, matching `return static`; unbound, it binds again on later calls.
         return new Union([

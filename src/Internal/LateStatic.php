@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\MutableTypeVisitor;
 use Psalm\Type\TypeNode;
 use Psalm\Type\Union;
@@ -19,22 +21,41 @@ use Psalm\Type\Union;
 final class LateStatic
 {
     /**
-     * The receiver of the call when it is a single object of `$class` (`$this->count(3)` in a `static`-returning
-     * method has `&static`, or the declared `static` return is reported as more specific than what was inferred),
-     * or the `static` keyword of `static::times(3)`. Null for a union, a template or a class-string receiver.
-     * A handler answers `&static` only when this receiver is late static, as Psalm does for a declared `static`.
+     * Whether the receiver is proven NOT late static, so a handler may answer the plain class: `Collection::make()`
+     * by name, or an instance typed as a plain object of `$class` (not `$this`, a `static` value or a template).
+     * Everything else stays unproven and keeps `&static`: `self::`/`parent::`/`$this::`/`$class::` forward the
+     * late static binding, and `$this` refined by `@psalm-if-this-is` names a base class of the called one.
      */
-    public static function receiver(MethodReturnTypeProviderEvent $event, string $class): ?TNamedObject
+    public static function isPlainReceiver(MethodReturnTypeProviderEvent $event, string $class): bool
     {
         $stmt = $event->getStmt();
         if ($stmt instanceof StaticCall) {
-            return $stmt->class instanceof Name && \strtolower($stmt->class->name) === 'static' ? new TNamedObject($class, true) : null;
+            return $stmt->class instanceof Name && !\in_array(\strtolower($stmt->class->name), ['static', 'self', 'parent'], true);
+        }
+
+        if ($stmt->var instanceof Variable && $stmt->var->name === 'this') {
+            return false;
         }
 
         $type = $event->getSource()->getNodeTypeProvider()->getType($stmt->var);
-        $atomic = $type instanceof Union && $type->isSingle() ? $type->getSingleAtomic() : null;
+        if (!$type instanceof Union) {
+            return false;
+        }
 
-        return $atomic instanceof TNamedObject && \strtolower($atomic->value) === \strtolower($class) ? $atomic : null;
+        $namesClass = false;
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if (!$atomic instanceof TNamedObject || $atomic->is_static || $atomic->extra_types !== []) {
+                return false;
+            }
+
+            $namesClass = $namesClass || \strtolower($atomic->value) === \strtolower($class);
+        }
+
+        return $namesClass;
     }
 
     /**

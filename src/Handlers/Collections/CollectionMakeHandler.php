@@ -70,8 +70,8 @@ final class CollectionMakeHandler implements MethodReturnTypeProviderInterface
 
         $calledClass = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
 
-        // Only `static::make()` is late static; `&static` is already bound to the called class, matching the stub's `@return static<...>`.
-        $isStatic = LateStatic::receiver($event, $calledClass)?->is_static ?? false;
+        // Only a call by class name is proven plain (`self::`/`parent::` forward the late static binding); `&static` is already bound to the called class, matching the stub's `@return static<...>`.
+        $isStatic = !LateStatic::isPlainReceiver($event, $calledClass);
 
         return new Union([
             (new TGenericObject($calledClass, [$keyType, $valueType], is_static: $isStatic))->setIsStatic($isStatic, $isStatic),
