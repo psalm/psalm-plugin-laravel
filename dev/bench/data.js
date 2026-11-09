@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794133310279,
+  "lastUpdate": 1794239497424,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17915,6 +17915,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1274,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d7ea1863c6544d1cbb42991227200ab7850a9fc2",
+          "message": "Require Psalm 7.2 (#2236)\n\n* build(deps): require Psalm 7.2\n\nFixes #2231. CI on 4.x fails on Psalm 7.2.0; the floor moves to 7.2\nand the workarounds for older 7.x behavior are dropped in follow-ups.\n\n* fix(stubs): restore simple conditional forms of helpers\n\nThe workarounds for vimeo/psalm#12444 and #12445 are no longer needed\non Psalm 7.2. The #12428 object-first gate stays.\n\nPart of #2231.\n\n* fix: satisfy Psalm 7.2 self-analysis\n\n- method_exists() on a class-string instead of an instance\n- drop a redundant count() on TArray/TIterable type params\n- destructure ShadowManifest entries via array_values slots\n- decline self/static/parent return types in CustomTypeDetector,\n  as getName() yields the keyword, not a class-string\n\nPart of #2231.\n\n* test: update type expectations for Psalm 7.2\n\nNullable array, class-string and literal TValue now keeps null after\nisEmpty(), so the known-limit cases move to the regular test. The\nCollection::isEmpty() docblock drops the stale limit.\n\nPart of #2231.\n\n* test(blade): skip assigned-flag guard test on Psalm 7.2.0\n\nPsalm 7.2.0 regressed the guarded nullable read (vimeo/psalm#13487).\nA todo-by tag re-arms the test once the issue closes.\n\nPart of #2231.\n\n* docs: drop the satisfied Psalm version note from decisions.md\n\nRefs #2231\n\n* docs: name only the Psalm major in the v4 upgrade guide\n\nRefs #2231",
+          "timestamp": "2026-11-09T16:48:08+01:00",
+          "tree_id": "6c8c03e043e25bf133e8345ab1d4e5009e284ad3",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d7ea1863c6544d1cbb42991227200ab7850a9fc2"
+        },
+        "date": 1794239495317,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.12,
+            "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1243,
             "unit": "MB"
           }
         ]
