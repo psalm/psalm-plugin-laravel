@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\FactoryCount;
+use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
@@ -109,7 +110,7 @@ final class FactoryUserMethodCountProvider implements AfterCodebasePopulatedInte
         $single = $declared->isSingle() ? $declared->getSingleAtomic() : null;
         if ($single instanceof TNamedObject && !self::isStatic($single) && self::isOwnClass($single, $declaring->fq_class_name)) {
             // `self` / the declaring class / bare `Factory`: the receiver itself when the body keeps the count.
-            $receiver = FactoryCount::receiver($event, $calledClass);
+            $receiver = LateStatic::receiver($event, $calledClass);
 
             return $keeps && $receiver instanceof TNamedObject ? new Union([$receiver]) : null;
         }

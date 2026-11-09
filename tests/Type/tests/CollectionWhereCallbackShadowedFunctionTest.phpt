@@ -53,14 +53,14 @@ namespace CollectionWhereCallbackShadowedFunctionTest {
         public function fullyQualifiedBuiltinNarrows(Collection $items): void
         {
             $_result = $items->where(fn (string|\stdClass $value) => \is_a($value, \stdClass::class));
-            /** @psalm-check-type-exact $_result = Collection<int, \stdClass>&static */
+            /** @psalm-check-type-exact $_result = Collection<int, \stdClass> */
         }
 
         /** @param Collection<int, string|null> $items */
         public function unshadowedBuiltinFallbackNarrows(Collection $items): void
         {
             $_result = $items->where(fn (?string $value) => !is_null($value));
-            /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+            /** @psalm-check-type-exact $_result = Collection<int, string> */
         }
 
         /** @param Collection<int, float|string|null> $items */

@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Support\LazyCollection;
 use Illuminate\Support\Traits\EnumeratesValues;
+use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TGenericObject;
@@ -69,9 +70,11 @@ final class CollectionMakeHandler implements MethodReturnTypeProviderInterface
 
         $calledClass = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
 
-        // `&static` already bound to the called class, matching the stub's `@return static<...>`.
+        // Only `static::make()` is late static; `&static` is already bound to the called class, matching the stub's `@return static<...>`.
+        $isStatic = LateStatic::receiver($event, $calledClass)?->is_static ?? false;
+
         return new Union([
-            (new TGenericObject($calledClass, [$keyType, $valueType], is_static: true))->setIsStatic(true, true),
+            (new TGenericObject($calledClass, [$keyType, $valueType], is_static: $isStatic))->setIsStatic($isStatic, $isStatic),
         ]);
     }
 }

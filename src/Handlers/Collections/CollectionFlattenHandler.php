@@ -11,6 +11,7 @@ use PhpParser\Node\Scalar\Int_;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Internal\Arg;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -45,7 +46,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
     public static function getClassLikeNames(): array
     {
         // EloquentCollection is excluded: its flatten()/collapse() call $this->toBase(),
-        // returning Support\Collection (not static), so the handler's is_static: true would
+        // returning Support\Collection (not static), so the handler's `&static` would
         // be wrong. Also, TValue is constrained to Model, so nested collections can't occur.
         return [Collection::class, LazyCollection::class];
     }
@@ -76,8 +77,10 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
 
         $className = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
 
+        $isStatic = LateStatic::receiver($event, $className)?->is_static ?? false;
+
         return new Union([
-            (new TGenericObject($className, [Type::getInt(), $innerValue], is_static: true))->setIsStatic(true, true),
+            (new TGenericObject($className, [Type::getInt(), $innerValue], is_static: $isStatic))->setIsStatic($isStatic, $isStatic),
         ]);
     }
 

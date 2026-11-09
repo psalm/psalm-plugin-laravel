@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Internal;
 
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Name;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type\Atomic;
+use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\MutableTypeVisitor;
 use Psalm\Type\TypeNode;
 use Psalm\Type\Union;
@@ -14,6 +18,25 @@ use Psalm\Type\Union;
  */
 final class LateStatic
 {
+    /**
+     * The receiver of the call when it is a single object of `$class` (`$this->count(3)` in a `static`-returning
+     * method has `&static`, or the declared `static` return is reported as more specific than what was inferred),
+     * or the `static` keyword of `static::times(3)`. Null for a union, a template or a class-string receiver.
+     * A handler answers `&static` only when this receiver is late static, as Psalm does for a declared `static`.
+     */
+    public static function receiver(MethodReturnTypeProviderEvent $event, string $class): ?TNamedObject
+    {
+        $stmt = $event->getStmt();
+        if ($stmt instanceof StaticCall) {
+            return $stmt->class instanceof Name && \strtolower($stmt->class->name) === 'static' ? new TNamedObject($class, true) : null;
+        }
+
+        $type = $event->getSource()->getNodeTypeProvider()->getType($stmt->var);
+        $atomic = $type instanceof Union && $type->isSingle() ? $type->getSingleAtomic() : null;
+
+        return $atomic instanceof TNamedObject && \strtolower($atomic->value) === \strtolower($class) ? $atomic : null;
+    }
+
     /**
      * Drops `&static` (what Collection methods return) at every depth, for output with no class scope
      * to bind it to: a template declaration, or an issue message. Callers that need the result to

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -76,8 +77,10 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             return null;
         }
 
+        $isStatic = LateStatic::receiver($event, $class)?->is_static ?? false;
+
         if ($method === 'keyby') {
-            return new Union([(new TGenericObject($class, [$key, $value], is_static: true))->setIsStatic(true, true)]);
+            return new Union([(new TGenericObject($class, [$key, $value], is_static: $isStatic))->setIsStatic($isStatic, $isStatic)]);
         }
 
         $innerKey = $templates[0] ?? null;
@@ -89,9 +92,10 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         $innerKey = !($preserve instanceof Union) || $preserve->isFalse() ? Type::getInt()
             : ($preserve->isTrue() ? $innerKey : Type::combineUnionTypes($innerKey, Type::getInt()));
 
+        // Laravel builds the inner groups with `new static` as well, so they follow the outer flag.
         return new Union([(new TGenericObject($class, [$key,
-            new Union([(new TGenericObject($class, [$innerKey, $value], is_static: true))->setIsStatic(true, true)]),
-        ], is_static: true))->setIsStatic(true, true)]);
+            new Union([(new TGenericObject($class, [$innerKey, $value], is_static: $isStatic))->setIsStatic($isStatic, $isStatic)]),
+        ], is_static: $isStatic))->setIsStatic($isStatic, $isStatic)]);
     }
 
     /**

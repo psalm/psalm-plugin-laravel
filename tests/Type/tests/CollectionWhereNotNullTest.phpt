@@ -14,14 +14,14 @@ final class CollectionWhereNotNullTest
     public function whereNotNullRemovesNull(Collection $collection): void
     {
         $_filtered = $collection->whereNotNull();
-        /** @psalm-check-type-exact $_filtered = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, string> */
     }
 
     /** @param Collection<int, int|null> $collection */
     public function whereNotNullRemovesNullFromInt(Collection $collection): void
     {
         $_filtered = $collection->whereNotNull();
-        /** @psalm-check-type-exact $_filtered = Collection<int, int>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, int> */
     }
 
     /**
@@ -42,7 +42,7 @@ final class CollectionWhereNotNullTest
     public function whereNotNullOnlyRemovesNull(Collection $collection): void
     {
         $_filtered = $collection->whereNotNull();
-        /** @psalm-check-type-exact $_filtered = Collection<int, int|string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, int|string> */
     }
 
     /**
@@ -52,7 +52,7 @@ final class CollectionWhereNotNullTest
     public function whereNotNullWithExplicitNullKey(Collection $collection): void
     {
         $_filtered = $collection->whereNotNull(null);
-        /** @psalm-check-type-exact $_filtered = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, string> */
     }
 
     /**
@@ -69,7 +69,7 @@ final class CollectionWhereNotNullTest
     public function lazyCollectionWhereNotNullRemovesNull(LazyCollection $collection): void
     {
         $_filtered = $collection->whereNotNull();
-        /** @psalm-check-type-exact $_filtered = LazyCollection<int, string>&static */
+        /** @psalm-check-type-exact $_filtered = LazyCollection<int, string> */
     }
 
     /**
@@ -112,7 +112,7 @@ final class CollectionWhereNotNullTest
     public function whereNotNullPreservesNonEmptyString(Collection $collection): void
     {
         $_filtered = $collection->whereNotNull();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-string> */
     }
 
     /**
@@ -122,7 +122,7 @@ final class CollectionWhereNotNullTest
     public function originalIssueUseCase(Collection $items): void
     {
         $_filtered = $items->whereNotNull();
-        /** @psalm-check-type-exact $_filtered = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, string> */
     }
 }
 ?>

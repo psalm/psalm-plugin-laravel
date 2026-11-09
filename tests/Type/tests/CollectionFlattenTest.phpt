@@ -14,21 +14,21 @@ final class CollectionFlattenTest
     public function flattenOneNestedCollection(Collection $collection): void
     {
         $_result = $collection->flatten(1);
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /** @param Collection<int, array<string, int>> $collection */
     public function flattenOneNestedArray(Collection $collection): void
     {
         $_result = $collection->flatten(1);
-        /** @psalm-check-type-exact $_result = Collection<int, int>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, int> */
     }
 
     /** @param Collection<string, list<string>> $collection */
     public function flattenOneNestedList(Collection $collection): void
     {
         $_result = $collection->flatten(1);
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /**
@@ -55,7 +55,7 @@ final class CollectionFlattenTest
     public function lazyCollectionFlattenOne(LazyCollection $collection): void
     {
         $_result = $collection->flatten(1);
-        /** @psalm-check-type-exact $_result = LazyCollection<int, string>&static */
+        /** @psalm-check-type-exact $_result = LazyCollection<int, string> */
     }
 
     /**
@@ -85,28 +85,28 @@ final class CollectionFlattenTest
     public function collapsePreservesInnerType(Collection $collection): void
     {
         $_result = $collection->collapse();
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /** @param Collection<int, array<string, int>> $collection */
     public function collapseNestedArray(Collection $collection): void
     {
         $_result = $collection->collapse();
-        /** @psalm-check-type-exact $_result = Collection<int, int>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, int> */
     }
 
     /** @param LazyCollection<int, Collection<int, string>> $collection */
     public function lazyCollectionCollapse(LazyCollection $collection): void
     {
         $_result = $collection->collapse();
-        /** @psalm-check-type-exact $_result = LazyCollection<int, string>&static */
+        /** @psalm-check-type-exact $_result = LazyCollection<int, string> */
     }
 
     /** @param Collection<int, array{name: string, age: int}> $collection */
     public function flattenOneKeyedArray(Collection $collection): void
     {
         $_result = $collection->flatten(1);
-        /** @psalm-check-type-exact $_result = Collection<int, int|string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, int|string> */
     }
 
     /**

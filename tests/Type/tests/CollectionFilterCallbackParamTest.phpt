@@ -18,20 +18,20 @@ final class CollectionFilterCallbackParamTest extends CfcpAnimal
     public function narrowsSupertypeToParamClass(Collection $animals): void
     {
         $_dogs = $animals->filter(fn (CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_dogs = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_dogs = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<array-key, mixed> $moves */
     public function narrowsMixedToParamClass(Collection $moves): void
     {
         $_dogs = $moves->filter(fn (CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_dogs = Collection<array-key, CfcpDog>&static */
+        /** @psalm-check-type-exact $_dogs = Collection<array-key, CfcpDog> */
     }
 
     public function narrowsUntypedCollectionToParamClass(Collection $moves): void
     {
         $_dogs = $moves->filter(fn (CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_dogs = Collection<array-key, CfcpDog>&static */
+        /** @psalm-check-type-exact $_dogs = Collection<array-key, CfcpDog> */
     }
 
     /** @param Collection<int, CfcpDog> $dogs */
@@ -59,21 +59,21 @@ final class CollectionFilterCallbackParamTest extends CfcpAnimal
     public function nullableParamDoesNotInventNull(Collection $animals): void
     {
         $_result = $animals->filter(fn (?CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<int, mixed> $items */
     public function nullableParamOnMixedKeepsNull(Collection $items): void
     {
         $_result = $items->filter(fn (?CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog|null>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog|null> */
     }
 
     /** @param Collection<int, CfcpDog|null> $dogs */
     public function nonNullableParamDropsNull(Collection $dogs): void
     {
         $_result = $dogs->filter(fn (CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<int, CfcpDog|null> $dogs */
@@ -87,42 +87,42 @@ final class CollectionFilterCallbackParamTest extends CfcpAnimal
     public function rejectNarrows(Collection $animals): void
     {
         $_dogs = $animals->reject(fn (CfcpDog $_d): bool => false);
-        /** @psalm-check-type-exact $_dogs = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_dogs = Collection<int, CfcpDog> */
     }
 
     /** @param LazyCollection<int, CfcpAnimal> $animals */
     public function lazyCollectionNarrows(LazyCollection $animals): void
     {
         $_dogs = $animals->filter(fn (CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_dogs = LazyCollection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_dogs = LazyCollection<int, CfcpDog> */
     }
 
     /** @param Collection<int, CfcpAnimal> $animals */
     public function whereNarrows(Collection $animals): void
     {
         $_dogs = $animals->where(fn (CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_dogs = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_dogs = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<int, CfcpNamed> $named */
     public function interfaceValueNarrowsToParamClass(Collection $named): void
     {
         $_result = $named->filter(fn (CfcpAnimal $_a): bool => true);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpAnimal>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpAnimal> */
     }
 
     /** @param Collection<int, CfcpSuit|CfcpDog> $items */
     public function enumParamNarrows(Collection $items): void
     {
         $_result = $items->filter(fn (CfcpSuit $_s): bool => true);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpSuit>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpSuit> */
     }
 
     /** @param Collection<int, CfcpAnimal|CfcpItem> $items */
     public function dropsUnrelatedAtomics(Collection $items): void
     {
         $_result = $items->filter(fn (CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<int, CfcpAnimal> $animals */
@@ -131,21 +131,21 @@ final class CollectionFilterCallbackParamTest extends CfcpAnimal
         $_dogs = $animals->filter(function (CfcpDog $_d, int $_key): bool {
             return true;
         });
-        /** @psalm-check-type-exact $_dogs = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_dogs = Collection<int, CfcpDog> */
     }
 
     /** @param \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $models */
     public function eloquentCollectionNarrows(\Illuminate\Database\Eloquent\Collection $models): void
     {
         $_result = $models->filter(fn (CfcpModel $_m): bool => true);
-        /** @psalm-check-type-exact $_result = \Illuminate\Database\Eloquent\Collection<int, CfcpModel>&static */
+        /** @psalm-check-type-exact $_result = \Illuminate\Database\Eloquent\Collection<int, CfcpModel> */
     }
 
     /** @param Collection<int, CfcpAnimal|null> $animals */
     public function predicateAloneStillNarrows(Collection $animals): void
     {
         $_result = $animals->filter(fn (?CfcpAnimal $_a): bool => $_a instanceof CfcpDog);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<int, CfcpAnimal|CfcpItem> $items */
@@ -153,21 +153,21 @@ final class CollectionFilterCallbackParamTest extends CfcpAnimal
     {
         // The predicate matcher alone declines (CfcpItem is not a CfcpAnimal, so the callback would throw TypeError); it only runs on the param-narrowed TValue.
         $_result = $items->filter(fn (CfcpAnimal $_a): bool => $_a instanceof CfcpDog);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<int, mixed> $items */
     public function mixedValueWithInstanceofPredicate(Collection $items): void
     {
         $_result = $items->filter(fn (?CfcpAnimal $_a): bool => $_a instanceof CfcpDog);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<int, CfcpAnimal|CfcpItem> $animals */
     public function unrecognizedPredicateStillKeepsParamNarrowing(Collection $animals): void
     {
         $_result = $animals->filter(fn (CfcpAnimal $_a): bool => $_a->name !== '');
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpAnimal>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpAnimal> */
     }
 
     /** @param Collection<int, CfcpAnimal> $animals */
@@ -178,7 +178,7 @@ final class CollectionFilterCallbackParamTest extends CfcpAnimal
 
             return true;
         });
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog> */
     }
 
     /** @param Collection<int, CfcpAnimal> $animals */
@@ -295,7 +295,7 @@ final class CollectionFilterCallbackParamTest extends CfcpAnimal
     public function unionReceiverStillNarrowsBaseBranch(Collection $c): void
     {
         $_result = $c->filter(fn (CfcpDog $_d): bool => true);
-        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>&static|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CfcpDog>|\Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>&static */
     }
 
     /** @param Collection<int, mixed> $items */
