@@ -30,7 +30,7 @@ flowchart TD
     H --- stubs["
         stubs/common/ (types + taint annotations)
         versioned dirs, ascending (e.g. stubs/12.42.0/, stubs/13.5.0/, stubs/13.8.0/)
-        stubs/integrations/carbon/ (gated on installed nesbot/carbon version)
+        stubs/integrations/carbon/ (when nesbot/carbon is installed)
         aliases.phpstub (generated here from AliasLoader: one class_alias() line per alias)
     "]
 
@@ -124,7 +124,7 @@ Stubs override Laravel's type signatures. Place them in:
 
 - `stubs/common/`: shared across Laravel versions (includes both type stubs and taint annotations)
 - `stubs/<version>/`: version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work
-- `stubs/integrations/<package>/`: optional stubs for third-party packages, gated on the package being installed. Carbon uses the `shared/` + `pre-3.12/` conditional-directory pattern in `src/Stubs/CarbonStubProvider.php`; `laravel-ai/` is one flat directory, see [the gate](#the-laravelai-integration-gate).
+- `stubs/integrations/<package>/`: optional stubs for third-party packages, gated on the package being installed. Carbon's stubs load on every installed Carbon version (`src/Stubs/CarbonStubProvider.php`); `laravel-ai/` is one flat directory, see [the gate](#the-laravelai-integration-gate).
 
 Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
