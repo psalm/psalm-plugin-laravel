@@ -591,6 +591,26 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 
 **Known limitation:** each correction can go once laravel/framework fixes its docblock. The facade's `getColumn()` stays a bare `array` because Psalm merges `array{...}|array{}` into one shape with every key optional (`array{name?: string, ...}`), which turns a `!== []`-guarded `$column['name']` into a `PossiblyUndefinedArrayOffset` false positive; `array` reports the same offset check only as the generic `PossiblyUndefinedStringArrayOffset` every plain array gets under strict config (use `isset`), and accepts the `=== []` comparison.
 
+### `Http` facade: `@mixin PendingRequest`, not restated verbs (#1669)
+
+**Decision:** `stubs/common/Support/Facades/Http.phpstub` carries `@mixin \Illuminate\Http\Client\PendingRequest`, the `Schema` pattern above, instead of restating each verb as a real static. `Http::get()` and every other method `Client\Factory::__call` forwards is analysed as the PendingRequest instance call: the PendingRequest stub's `Response` returns, its widened params and its `ssrf` sinks, `Http::async()` narrowing to `AsyncPendingRequest`. `FacadeTaintForwardingHandler` has no `Http` row: the mixin shadows every pseudo-method it decorated.
+
+**Why:**
+- The facade root forwards to a fresh sync PendingRequest, so "the PendingRequest call" is exactly the runtime.
+- Real statics would copy each signature and sink a third time (PendingRequest, AsyncPendingRequest, facade), and a missed copy silently keeps Laravel's `Response|PromiseInterface` tag. With the mixin a verb added to the PendingRequest stub (`query()`, `stubs/13.19.0/`) reaches the facade with no edit.
+- Real statics make `Http::async($flag)` unsound without extra generics; the mixin keeps the stub's `AsyncPendingRequest|PendingRequest` conditional. From Laravel 12.43 (generic PendingRequest) `Http::async($flag)->get()` is `LazyPromise|Response`; below that it stays `Response` on the facade and instance forms alike.
+- The stub's class docblock replaces the seal Laravel's `@method` tags set on the vendor facade, so it restates `@psalm-seal-methods`: an unknown `Http::definitelyNotAMethod()` stays `UndefinedMagicMethod`.
+- Measured on the app benchmark (default fixture and vito): both architectures give the same issue delta, +16 / -38. Every `PossiblyUndefinedMethod` on `PromiseInterface` from the facade form is gone; vito's +14 `TaintedInclude` are `Response::json()` flows the old union hid.
+
+**`allowStrayRequests()` restated:** Factory's own methods win at runtime over `__call`, so a Factory method must not resolve to its PendingRequest namesake. It is the only shared name whose signature differs (optional `$only`, returns the Factory), so the facade stub restates it. The Macroable statics are identical on both classes; `preventStrayRequests()` and `fake()` are real methods on the vendor facade and outrank the mixin.
+
+**Accepted trade-offs:**
+- The facade adopts Laravel's PendingRequest params: `pool()` `$concurrency` `non-negative-int|null`, `truncateExceptionsAt()` `int<1, max>`, typed `retry()`/`afterResponse()`/`pool()` callbacks. A bare `int`, `callable` or `Closure` variable, or the documented `retry(3, 100, fn (Exception $e, PendingRequest $r) => ...)` (Laravel passes a `Throwable`), now reports `ArgumentTypeCoercion`/`MixedArgumentTypeCoercion` on the facade, as the chained and instance forms already did.
+- Fluent results print `PendingRequest&static` instead of `PendingRequest`. `pool()` returns the element type of the installed Laravel's `PendingRequest::pool()` docblock; `when()`/`unless()` lose the `|mixed`.
+- Psalm forwards on a receiver without template arguments (`PendingRequest&static`, not the `PendingRequest<bool>&static` of a typed receiver), so on Laravel 12.43+ (generic `TAsync`) a typed callback of `tap(Http::withHeaders(...), ...)` reports a false `ArgumentTypeCoercion`, pinned in `HttpFacadeTapKnownLimitation.phpt`. Upstream: the mixin step should fill missing template arguments like a declared type does.
+
+**Rejected:** a generic `@mixin PendingRequest<bool>` (or `<false>`): Psalm then resolves `$this` returns to `Http&static`, so `Http::withToken('t')` stops being a PendingRequest. Native `TAsync` templates instead of `AsyncPendingRequest`: a bare `PendingRequest` reads the template bound, `PendingRequest<bool>` (probed on Psalm 7.2.0), so every verb on an injected client would be the sync|async union.
+
 ### `Arr::toCssClasses()` accepts `null`; `toCssStyles()` is not widened
 
 **Decision:** `stubs/12.50.0/Support/Arr.phpstub` widens `toCssClasses()` to `array<array-key, bool|int|string|null>|string` with a plain `@return string` (#1775). `toCssStyles()` is left as Laravel declares it.

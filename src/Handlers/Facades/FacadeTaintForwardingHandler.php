@@ -35,17 +35,19 @@ use Psalm\Storage\MethodStorage;
  * -------------------
  * Deliberately not derived from {@see \Psalm\LaravelPlugin\Stubs\FacadeMapProvider}.
  * That map answers "what does this alias resolve to at runtime", which is the facade
- * *root* — for `Http` and `Process` the root (`Client\Factory` / `Process\Factory`) is
- * a builder whose own `__call` forwards to the object that actually carries the sinks
- * (`PendingRequest` / `PendingProcess`). The forwarding target is a security fact about
- * each facade, so it is stated explicitly and verified against the vendor signatures.
+ * *root* — for `Process` the root (`Process\Factory`) is a builder whose own `__call`
+ * forwards to the object that actually carries the sinks (`PendingProcess`). The
+ * forwarding target is a security fact about each facade, so it is stated explicitly
+ * and verified against the vendor signatures.
  *
  * To extend: add `Facade::class => [TargetClass::class]` to {@see self::FACADE_TARGETS},
  * confirm the facade's `@method` tags mirror the target's real signatures, and add a
  * `.phpt` under `tests/Type/tests/TaintAnalysis/`. If the facade also has a plugin-owned
  * real method under `stubs/<layer>/Support/Facades/`, put the sink on that method directly:
  * {@see FacadeStubPrecedenceHandler} removes its shadowing pseudo-method before this
- * handler runs, so there is intentionally no pseudo target to decorate.
+ * handler runs, so there is intentionally no pseudo target to decorate. A facade stub whose
+ * `@mixin` names the target (`Http` => `PendingRequest`) needs no entry either: Psalm
+ * analyses the static call as the target's instance call, sinks included.
  *
  * Ordering and lifecycle
  * ----------------------
@@ -61,9 +63,9 @@ final class FacadeTaintForwardingHandler implements AfterCodebasePopulatedInterf
     /**
      * Facade => classes whose real methods carry the sinks the facade forwards to.
      *
-     * `Http` / `Process` point at the pending-request / pending-process builder rather
-     * than the facade root, because the root's `__call` is what forwards there (see the
-     * class docblock). Every other entry is the facade's own root class.
+     * `Process` points at the pending-process builder rather than the facade root,
+     * because the root's `__call` is what forwards there (see the class docblock).
+     * Every other entry is the facade's own root class.
      *
      * @var array<class-string, non-empty-list<class-string>>
      */
@@ -73,7 +75,6 @@ final class FacadeTaintForwardingHandler implements AfterCodebasePopulatedInterf
         \Illuminate\Support\Facades\Artisan::class => [\Illuminate\Foundation\Console\Kernel::class],
         \Illuminate\Support\Facades\Redirect::class => [\Illuminate\Routing\Redirector::class],
         \Illuminate\Support\Facades\Response::class => [\Illuminate\Routing\ResponseFactory::class],
-        \Illuminate\Support\Facades\Http::class => [\Illuminate\Http\Client\PendingRequest::class],
         \Illuminate\Support\Facades\Process::class => [\Illuminate\Process\PendingProcess::class],
         \Illuminate\Support\Facades\View::class => [\Illuminate\View\Factory::class],
     ];

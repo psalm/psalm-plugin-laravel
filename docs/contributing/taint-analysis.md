@@ -735,9 +735,10 @@ cd /tmp/taint-test && /path/to/vendor/bin/psalm --no-cache
 
 A facade declares its forwarded surface as class-level `@method` tags resolved through `__callStatic`. Psalm models those as *pseudo* methods, and a pseudo parameter cannot carry `@psalm-taint-sink`: a sink is a per-parameter bitmask populated only from a real docblock, and a `@method` tag has no per-parameter docblock. The annotated methods live on the class the facade forwards to, which the static-call path never consults.
 
-Two mechanisms close this:
+Three mechanisms close this:
 
-- `FacadeTaintForwardingHandler` copies the target class's parameter sinks onto the facade's pseudo-methods once the codebase is populated. It covers `Storage`, `File`, `Artisan`, `Redirect`, `Response`, `Http`, `Process`, and `View`, and the generated root aliases (`\Storage::get(...)`) inherit the same pseudo-method storage, so they are covered too.
+- `FacadeTaintForwardingHandler` copies the target class's parameter sinks onto the facade's pseudo-methods once the codebase is populated. It covers `Storage`, `File`, `Artisan`, `Redirect`, `Response`, `Process`, and `View`, and the generated root aliases (`\Storage::get(...)`) inherit the same pseudo-method storage, so they are covered too.
+- A facade stub with `@mixin <Target>`, as in `stubs/common/Support/Facades/Http.phpstub` (`PendingRequest`). Psalm analyses the static call as the target's instance call before it consults the pseudo-methods, so the target's own sinks apply with no copy. Use it when the facade forwards the whole target surface; restate on the facade any root method whose namesake on the target has a different signature. A re-declaring facade stub with a class docblock must restate `@psalm-seal-methods`, since its docblock replaces the seal the vendor `@method` tags set.
 - A hand-written facade stub declaring the forwarded methods as real statics, as in `stubs/common/Support/Facades/DB.phpstub`. Heavier to maintain (every signature is restated and can drift from Laravel), so prefer the handler unless the facade also needs type overrides.
 
 The limitation still applies to any facade covered by neither: user-defined facades, and core facades outside the map (`App::make(...)` is the notable one). Calling the underlying class directly always works, because the receiver is the real annotated class: `DB::connection()->unprepared(...)`, `Storage::disk()->get(...)`.
