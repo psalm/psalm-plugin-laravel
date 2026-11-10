@@ -19,7 +19,7 @@ function test_forwarding_root(): int
     return $known;
 }
 
-/** Psalm stores Macroable's `__call` (first-listed trait), PHP runs the forwarder (`insteadof`). */
+/** `insteadof` makes the forwarding trait's `__call` win over Macroable's, which is listed first. */
 function test_insteadof_forwarder_wins(): void
 {
     ReversedForwardingFacade::anything();

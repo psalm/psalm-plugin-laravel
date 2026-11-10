@@ -8,8 +8,8 @@ use App\Services\Concerns\ForwardsUnknownCalls;
 use Illuminate\Support\Traits\Macroable;
 
 /**
- * Test fixture for {@see \App\Facades\ReversedForwardingFacade}: Macroable is listed first, so Psalm's
- * storage names it, but `insteadof` makes the forwarding trait's `__call` win at runtime.
+ * Test fixture for {@see \App\Facades\ReversedForwardingFacade}: Macroable is listed first, but
+ * `insteadof` makes the forwarding trait's `__call` win at runtime.
  */
 class ReversedForwardingService
 {
