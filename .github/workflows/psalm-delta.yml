@@ -260,6 +260,7 @@ jobs:
           key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
 
       - name: Run delta for ${{ matrix.name }}
+        id: run
         # Interpolated values go through env, not inline ${{ }}, so a linter can
         # confirm no template-injection sink. Registry values are trusted but
         # env-izing keeps the pattern uniform.
@@ -290,6 +291,21 @@ jobs:
           [ -n "$FLAGS" ] && args+=(--flags "$FLAGS")
           # Harness (default branch) owns measurement; the PR cannot alter it.
           bash "$GITHUB_WORKSPACE/harness/bin/ci/delta-app.sh" "${args[@]}"
+
+      # always(): a timeout or failure before Psalm writes anything leaves only
+      # <app>--setup.log; the outcome and end time let the report say "timed out
+      # after N min while <stage>" instead of "not run". Fixed values only (outcome
+      # enum, registry timeout), written as data into out/, never $GITHUB_OUTPUT.
+      - name: Record job outcome
+        if: always()
+        env:
+          NAME: ${{ matrix.name }}
+          OUTCOME: ${{ steps.run.outcome }}
+          TIMEOUT_MINUTES: ${{ matrix.timeout || 12 }}
+        run: |
+          mkdir -p "out/$NAME"
+          printf '{"outcome": "%s", "timeout_minutes": %d, "ended": %d}\n' \
+            "$OUTCOME" "$TIMEOUT_MINUTES" "$(date +%s)" > "out/$NAME/$NAME--job.json"
 
       # Save ONLY on a same-repo head. A fork's composer install could write into
       # the app cache pre-save, and since issue_comment runs on the default ref that
