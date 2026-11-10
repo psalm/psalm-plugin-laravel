@@ -251,6 +251,12 @@ jobs:
       # is warranted. delta-app.sh re-validates the sig on reuse, so a poisoned
       # cache self-heals even on a key hit.
       #
+      # restore-keys: when the plugin's deps changed (every app misses at once),
+      # restore the newest vendor for the same app ref instead of starting cold.
+      # delta-app.sh sees the stale sig and runs `composer update --minimal-changes`
+      # over it, which downloads only the packages that moved, not ~200 GitHub
+      # zipballs per app.
+      #
       # RESTORE-ONLY; matching save is a separate non-fork-gated step (see below).
       - name: Restore app source cache
         id: cache
@@ -258,6 +264,8 @@ jobs:
         with:
           path: app-cache/${{ matrix.name }}
           key: psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-${{ hashFiles('plugin-base/composer.json') }}-v1
+          restore-keys: |
+            psalm-delta-app-${{ matrix.name }}-${{ matrix.ref }}-php${{ matrix.php }}-
 
       - name: Run delta for ${{ matrix.name }}
         id: run
