@@ -92,13 +92,19 @@ foreach ($registry['apps'] as $app) {
 }
 
 /** @param list<string> $runFlags */
-$emit = static function (string $status, array $names = [], string $label = '', string $reply = '', array $runFlags = []) use ($apps): never {
+$emit = static function (string $status, array $names = [], string $label = '', string $reply = '', array $runFlags = []) use ($apps, $members): never {
+    // `large` apps start first: matrix jobs queue behind the org's concurrent-job limit, and a slow app that
+    // gets a runner last sets the run's wall time. The report keeps the selection order (apps_csv).
+    $large = array_flip($members['large'] ?? []);
+    $matrixNames = $names;
+    usort($matrixNames, static fn(string $a, string $b): int => isset($large[$b]) <=> isset($large[$a]));
+
     echo json_encode([
         'status' => $status,
         'apps_csv' => implode(',', $names),
         'label' => $label,
         'flags' => implode(' ', $runFlags),
-        'matrix' => ['include' => array_map(static fn(string $n): array => $apps[$n], $names)],
+        'matrix' => ['include' => array_map(static fn(string $n): array => $apps[$n], $matrixNames)],
         'reply' => $reply,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "\n";
     exit(0);

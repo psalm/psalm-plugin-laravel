@@ -25,6 +25,9 @@
 #                                              exit_code, peak_rss_mb: largest process in the
 #                                              Psalm process tree incl. workers, null if
 #                                              unmeasured; see delta-measure.php)
+#   <out>/<app>/<app>--setup.log              (`== <epoch> <stage>` progress markers plus
+#                                              clone/Composer output; delta-report.php reads
+#                                              it for an app that ends without a report)
 #
 # Exit 0 even on a per-app Psalm failure: a crash log is written and the side's
 # JSON is omitted so delta-report.php renders the app as (missing) instead of
@@ -71,11 +74,31 @@ PLUGIN_BASE=$(cd "$PLUGIN_BASE" && pwd -P)
 PLUGIN_HEAD=$(cd "$PLUGIN_HEAD" && pwd -P)
 mkdir -p "$OUT/$APP"
 
+# A job that times out or fails before Psalm writes anything leaves no other trace
+# in the artifact, so the last stage and the output before it tell the report why.
+SETUP_LOG="$OUT/$APP/$APP--setup.log"
+: > "$SETUP_LOG"
+stage() {
+    echo "[$APP] $1" >&2
+    printf '== %s %s\n' "$(date +%s)" "$1" >> "$SETUP_LOG"
+}
+# Run a command with its output in the setup log; on failure, also print the tail to the job log.
+logged() {
+    local rc=0
+    "$@" >> "$SETUP_LOG" 2>&1 || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        tail -n 30 "$SETUP_LOG" >&2
+    fi
+    return $rc
+}
+
 # Default app source dir — a cacheable working copy keyed on the frozen ref.
 APP_SRC="${APP_SRC:-${OUT}/${APP}/src}"
 
 COMPOSER_FLAGS=(--no-interaction --no-progress --ignore-platform-reqs)
 export COMPOSER_MEMORY_LIMIT=-1
+# One `composer update` attempt; a healthy cold install takes 1-2 min on CI.
+COMPOSER_ATTEMPT_SECONDS=300
 
 # Optional extra CLI args, split on whitespace into arrays so each token is
 # passed as a separate argument: --psalm-args is the registry's per-app Psalm
@@ -125,16 +148,22 @@ plugin_dep_sig() {
 # The ref is an immutable commit, so a populated APP_SRC is reusable across runs
 # and is what CI caches. Clone the branch tip then reset to the exact commit,
 # with a fetch fallback when the commit is not the tip.
+#
+# Blobless: commits and trees come down, file contents only for the checked-out
+# commit. Three registry apps whose full clones had not finished after 15 min
+# (8 clones in parallel) cloned this way in 8 s. A server without partial-clone
+# support sends everything instead.
+# Not shallow: registry refs are abbreviated SHAs, which a fetch cannot name.
 
 if [[ ! -d "$APP_SRC/.git" ]]; then
-    echo "[$APP] cloning $REPO @ $REF" >&2
+    stage "cloning $REPO @ $REF"
     rm -rf "$APP_SRC"
     mkdir -p "$APP_SRC"
-    git clone --quiet --no-checkout "$REPO" "$APP_SRC"
+    logged git clone --quiet --filter=blob:none --no-checkout "$REPO" "$APP_SRC"
     (
         cd "$APP_SRC"
         git checkout --quiet "$REF" 2>/dev/null || {
-            git fetch --quiet origin "$REF"
+            logged git fetch --quiet origin "$REF"
             git checkout --quiet "$REF"
         }
     )
@@ -277,7 +306,10 @@ fi
 
 # Run the one-time source install only when needed (cache-friendly otherwise).
 if [[ "$need_install" == 1 ]]; then
-    echo "[$APP] installing dependencies" >&2
+    stage "installing dependencies"
+    # A vendor restored from an older cache entry is the starting point (Composer then installs only
+    # the difference); drop its stamp so a failed or timed-out install is never saved as current.
+    rm -f "$PLUGIN_SIG_FILE"
     (
         cd "$APP_SRC"
         # A reused source still carries the previous install's composer edits,
@@ -285,7 +317,7 @@ if [[ "$need_install" == 1 ]]; then
         # composer command in before_install. Start from the pinned files.
         git checkout --quiet HEAD -- $(git ls-files composer.json composer.lock)
         if [[ -n "$BEFORE_INSTALL" ]]; then
-            echo "[$APP] before_install: $BEFORE_INSTALL" >&2
+            stage "running before_install: $BEFORE_INSTALL"
             eval "$BEFORE_INSTALL"
         fi
     )
@@ -297,7 +329,21 @@ if [[ "$need_install" == 1 ]]; then
     # irrelevant here and would otherwise fail the whole install. The setting is
     # written into composer.json, so the per-side COW copies inherit it.
     (cd "$APP_SRC" && composer config --no-interaction policy.advisories.block false 2>/dev/null || true)
-    (cd "$APP_SRC" && composer update "${COMPOSER_FLAGS[@]}" --quiet)
+    # --minimal-changes keeps every package the app's composer.lock pins unless the plugin, the
+    # pinned Psalm or the plugin's Laravel floor forces a change: the app is analysed against its
+    # own dependency versions, the versions stay the same from run to run, and a restored vendor
+    # needs only the few packages that moved. A partial `update psalm/plugin-laravel vimeo/psalm -W`
+    # fails instead when the lock holds a Laravel below the plugin's conflict range.
+    # Composer waits up to 300 s for a stalled download and then retries it, so one hung GitHub
+    # zipball can take a whole job. Cap each attempt; the second one reuses what the first cached.
+    for attempt in 1 2; do
+        stage "running composer update (attempt $attempt)"
+        if (cd "$APP_SRC" && logged perl -e 'alarm shift; exec @ARGV' "$COMPOSER_ATTEMPT_SECONDS" \
+            composer update --minimal-changes "${COMPOSER_FLAGS[@]}"); then
+            break
+        fi
+        [[ $attempt == 2 ]] && exit 1
+    done
     # Stamp what this vendor was solved against, so a future run can verify reuse.
     printf '%s' "$want_sig" > "$PLUGIN_SIG_FILE"
 else
@@ -355,13 +401,15 @@ run_side() {
             ln -s "$plugin_dir" "$link"
             ;;
         composer)
+            stage "relinking $label with Composer"
             configure_plugin_repo "$app_dir" "$plugin_dir"
-            (cd "$app_dir" && composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}" --quiet) \
+            (cd "$app_dir" && logged composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}") \
                 || { echo "[$APP/$label] composer relink failed" >&2; rm -rf "$app_dir"; return 0; }
             rm -rf "$link"
             ln -s "$plugin_dir" "$link"
             ;;
     esac
+    stage "analysing $label"
 
     local out_txt err_txt rss_txt side_tmp t0 exit_code wall coverage count peak_rss
     out_txt=$(mktemp); err_txt=$(mktemp); rss_txt=$(mktemp); side_tmp=$(mktemp -d)

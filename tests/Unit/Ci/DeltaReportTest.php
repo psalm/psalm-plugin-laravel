@@ -69,6 +69,26 @@ final class DeltaReportTest extends TestCase
         $this->assertStringStartsWith('## ⚠️ Issues: not compared · Performance: not compared', $this->render(['base-lost']));
     }
 
+    #[Test]
+    public function an_app_without_a_crash_log_says_why_it_stopped(): void
+    {
+        $install = ['== 1000 installing dependencies', '== 1010 running composer update', '  - Downloading vendor/package'];
+        $this->stopped('timed-out', $install, ['outcome' => 'cancelled', 'timeout_minutes' => 12, 'ended' => 1000 + 12 * 60 - 30]);
+        $this->stopped('cancelled', $install, ['outcome' => 'cancelled', 'timeout_minutes' => 12, 'ended' => 1300]);
+        $this->stopped('failed', ['== 1000 running composer update', 'Your requirements could not be resolved'], ['outcome' => 'failure', 'timeout_minutes' => 12, 'ended' => 1100]);
+        $this->side('head-relink', 'base', issues: true, perf: [10.0, 80.0, 100.0]);
+        $this->stopped('head-relink', ['== 1000 analysing base-aaaa', '== 1100 relinking pr-bbbb with Composer'], ['outcome' => 'success', 'timeout_minutes' => 12, 'ended' => 1200]);
+        \mkdir($this->dir . '/not-run');
+
+        $report = $this->render(['timed-out', 'cancelled', 'failed', 'head-relink', 'not-run']);
+
+        $this->assertStringContainsString('💥 timed-out: timed out after 12 min while running composer update', $report);
+        $this->assertStringContainsString('💥 cancelled: cancelled while running composer update', $report);
+        $this->assertStringContainsString('💥 failed: failed while running composer update', $report);
+        $this->assertStringContainsString('❌ head-relink: head has no report, stopped while relinking pr-bbbb with Composer', $report);
+        $this->assertStringContainsString('💥 not-run: not run', $report);
+    }
+
     /**
      * @param array{float, float, float} $base wall, coverage, memory
      * @param array{float, float, float} $head
@@ -183,6 +203,17 @@ final class DeltaReportTest extends TestCase
         if ($crash) {
             \file_put_contents($prefix . 'crash.log', "=== x ===\n--- stderr ---\nboom\n--- stdout ---\n");
         }
+    }
+
+    /**
+     * @param list<string> $setupLog
+     * @param array<string, int|string> $job
+     */
+    private function stopped(string $app, array $setupLog, array $job): void
+    {
+        @\mkdir($this->dir . '/' . $app);
+        \file_put_contents("{$this->dir}/{$app}/{$app}--setup.log", \implode("\n", $setupLog) . "\n");
+        \file_put_contents("{$this->dir}/{$app}/{$app}--job.json", \json_encode($job, \JSON_THROW_ON_ERROR));
     }
 
     /** @param list<string> $apps */
