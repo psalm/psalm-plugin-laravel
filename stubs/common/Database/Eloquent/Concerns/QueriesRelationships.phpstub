@@ -43,16 +43,6 @@ trait QueriesRelationships
     public function orWhereBelongsTo($related, $relationshipName = null) {}
 
     /**
-     * Add subselect queries to include an aggregate value for a relationship.
-     *
-     * @param  mixed  $relations
-     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
-     * @param  string|null  $function
-     * @return $this
-     */
-    public function withAggregate($relations, $column, $function = null) {}
-
-    /**
      * Add subselect queries to count the relations.
      *
      * @param  mixed  $relations

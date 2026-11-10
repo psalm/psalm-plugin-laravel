@@ -28,7 +28,4 @@ class ForeignIdColumnDefinition extends ColumnDefinition
 
     /** Create a foreign key constraint referencing the "id" column of the related table. */
     public function constrained(?string $table = null, ?string $column = null, ?string $indexName = null): ForeignKeyDefinition {}
-
-    /** Specify which column this foreign ID references on another table. */
-    public function references(string $column, ?string $indexName = null): ForeignKeyDefinition {}
 }
