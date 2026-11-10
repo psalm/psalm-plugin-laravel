@@ -36,7 +36,7 @@ abstract class HasOneOrMany extends Relation
     /**
      * @template T
      * @param  T  $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      */
     public function findOrNew($id, $columns = ['*']) {}

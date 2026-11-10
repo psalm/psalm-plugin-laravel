@@ -113,6 +113,6 @@ function test_where_named_scope_rejects_value_arg_when_static(): void
 ?>
 --EXPECTF--
 TooManyArguments on line %d: Too many arguments for method Illuminate\Database\Eloquent\Builder::find - saw 3
-InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::find expects list<non-empty-string>, but 2 provided
+InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::find expects list<Illuminate\Contracts\Database\Query\Expression|non-empty-string>, but 2 provided
 TooManyArguments on line %d: Too many arguments for Illuminate\Database\Eloquent\Builder::whereactive - expecting 0 but saw 1
 TooManyArguments on line %d: Too many arguments for App\Models\CollidingScopeModel::whereactive - expecting 0 but saw 1

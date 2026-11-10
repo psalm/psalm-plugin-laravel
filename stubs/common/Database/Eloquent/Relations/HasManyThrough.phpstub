@@ -82,7 +82,7 @@ class HasManyThrough extends HasOneOrManyThrough
     /**
      * Execute the query and get the first related model.
      *
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return TRelatedModel|null
      */
     public function first($columns = ['*']) {}
@@ -90,7 +90,7 @@ class HasManyThrough extends HasOneOrManyThrough
     /**
      * Execute the query and get the first result or throw an exception.
      *
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -103,7 +103,7 @@ class HasManyThrough extends HasOneOrManyThrough
      * @template T
      * @psalm-param T $id
      * @param  mixed  $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>|null : TRelatedModel|null)
      */
     public function find($id, $columns = ['*']) {}
@@ -112,7 +112,7 @@ class HasManyThrough extends HasOneOrManyThrough
      * Find multiple related models by their primary keys.
      *
      * @param  mixed  $ids
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function findMany($ids, $columns = ['*']) {}
@@ -123,7 +123,7 @@ class HasManyThrough extends HasOneOrManyThrough
      * @template T
      * @psalm-param T $id
      * @param  mixed  $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
