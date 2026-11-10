@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794239497424,
+  "lastUpdate": 1794321182595,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17950,6 +17950,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1243,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56bf466dfd629316557a079092dbdaf363aab317",
+          "message": "Type `Http` facade calls like `PendingRequest` calls (#2232)\n\n* fix(stubs): type Http facade calls like PendingRequest calls\n\nThe Http facade stub carries `@mixin PendingRequest`, so `Http::get()`\nand every verb the Factory forwards resolve to the PendingRequest stub's\n`Response` returns, widened params and `ssrf` sinks; `Http::async()`\nnarrows to AsyncPendingRequest. `allowStrayRequests()` is restated as the\nonly Factory method whose PendingRequest namesake differs. The Http row\nof FacadeTaintForwardingHandler is dropped: the mixin shadows it.\n\nAdds `query()` (Laravel 13.19.0+) to the PendingRequest stub with its\n`ssrf` sink.\n\nRefs #1669\n\n* fix(stubs): keep the Http facade sealed\n\nThe facade stub's class docblock replaces the seal that Laravel's\n`@method` tags set on the vendor class, so `Http::psot()` resolved to\nmixed instead of UndefinedMagicMethod. Restate `@psalm-seal-methods`.\n\nGate the `Http::async($flag)` union on 12.43.0 (generic PendingRequest)\nand pin `Http::async()->get()` as a PromiseInterface on every version.\n\nRefs #1669\n\n* docs: avoid a typos-flagged example name\n\n* docs: drop the stale Psalm floor note from the Http facade decision",
+          "timestamp": "2026-11-10T15:29:31+01:00",
+          "tree_id": "517800e821deebe26cb05782cf84c6ba08193c8a",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/56bf466dfd629316557a079092dbdaf363aab317"
+        },
+        "date": 1794321177753,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.29,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1245,
             "unit": "MB"
           }
         ]
