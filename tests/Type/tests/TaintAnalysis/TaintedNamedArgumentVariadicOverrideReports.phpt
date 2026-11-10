@@ -1,7 +1,7 @@
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --XFAIL--
-Psalm 7.0.0-rc28 resolves a named argument a parent's variadic captures to the override's variadic, not to the override's parameter of that name (regression from vimeo/psalm#12760)
+Psalm 7.0.0-rc28 resolves a named argument a parent's variadic captures to the override's variadic, not to the override's parameter of that name (regression from vimeo/psalm#12760); tracked upstream as vimeo/psalm#13013, still failing on 7.2.1
 --FILE--
 <?php declare(strict_types=1);
 

@@ -11,6 +11,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
+use Psalm\Internal\Analyzer\InheritedMethodTaints;
 use Psalm\Internal\Analyzer\Statements\Expression\CallAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
@@ -54,11 +55,9 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
     ];
 
     /**
-     * Node attribute Psalm 7.0.0-rc6 sets (Psalm\Internal\Analyzer\InheritedMethodTaints::BODY_CLASS_ATTRIBUTE)
-     * on the arguments of a call made from inside a class. A literal rather than the constant: that class is
-     * @internal and absent in 7.0.0-rc2, and reading/writing an unknown attribute is harmless.
+     * Node attribute Psalm sets on the arguments of a call made from inside a class.
      */
-    private const BODY_CLASS_ATTRIBUTE = 'inheritedMethodBodyClass';
+    private const BODY_CLASS_ATTRIBUTE = InheritedMethodTaints::BODY_CLASS_ATTRIBUTE;
 
     /**
      * Cache: "{fqcn}#{methodName}" → bool (is this method from a Dispatchable trait?).
