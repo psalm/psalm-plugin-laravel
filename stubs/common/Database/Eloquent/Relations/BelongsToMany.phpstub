@@ -187,7 +187,7 @@ class BelongsToMany extends Relation
      *
      * Unlike `Builder::firstOr()`, the relation routes columns through
      * `shouldSelect(array $columns)`, which hard-rejects bare strings at
-     * runtime — so this stub permits only `list<non-empty-string>`.
+     * runtime — so this stub permits only a list of column names or Expressions.
      *
      * @template TValue
      *

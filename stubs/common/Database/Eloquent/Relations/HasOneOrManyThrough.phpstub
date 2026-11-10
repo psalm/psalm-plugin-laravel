@@ -50,7 +50,7 @@ abstract class HasOneOrManyThrough extends Relation
      * Override the @mixin Builder<TRelatedModel> route so the relation enforces
      * its own runtime constraint: like BelongsToMany, the through-relations
      * route columns through `shouldSelect(array $columns)`, which rejects bare
-     * strings — so this stub permits only `list<non-empty-string>`.
+     * strings — so this stub permits only a list of column names or Expressions.
      *
      * @template TValue
      *
