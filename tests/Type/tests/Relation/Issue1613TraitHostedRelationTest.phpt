@@ -3,9 +3,11 @@
 
 use App\Models\AbstractDocument;
 use App\Models\Contract;
+use App\Models\DamageReport;
 use App\Models\Mechanic;
 use App\Models\MechanicSpecialization;
 use App\Models\Part;
+use App\Models\Shop;
 use App\Models\Supplier;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -75,6 +77,30 @@ function issue1613_middle_trait_single_owner(MechanicSpecialization $specializat
 {
     $relation = $specialization->revisedFrom();
     /** @psalm-check-type-exact $relation = BelongsTo<MechanicSpecialization, MechanicSpecialization> */
+    return $relation;
+}
+
+/** `insteadof` on the model picks HasArchivedRevisions::revisions (a DamageReport relation) over HasRevisions'. */
+function issue1613_insteadof_trait_resolves_the_pick(Shop $shop): HasMany
+{
+    $relation = $shop->revisions();
+    /** @psalm-check-type-exact $relation = HasMany<DamageReport, Shop> */
+    return $relation;
+}
+
+/** The pick is made between two nested traits, so the winner is the one reached through the nested trait. */
+function issue1613_nested_insteadof_trait_resolves_the_pick(Supplier $supplier): HasMany
+{
+    $relation = $supplier->revisions();
+    /** @psalm-check-type-exact $relation = HasMany<DamageReport, Supplier> */
+    return $relation;
+}
+
+/** The pick is made inside a composed trait, not on the model. */
+function issue1613_insteadof_inside_middle_trait_resolves_the_pick(MechanicSpecialization $specialization): HasMany
+{
+    $relation = $specialization->revisions();
+    /** @psalm-check-type-exact $relation = HasMany<DamageReport, MechanicSpecialization> */
     return $relation;
 }
 

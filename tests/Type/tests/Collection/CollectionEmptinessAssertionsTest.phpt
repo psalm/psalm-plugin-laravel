@@ -22,9 +22,10 @@ final class IsNotEmptyOtherBadge
  * The stub keeps exactly one if-true and one if-false assertion on `isEmpty()`, both on `first()`:
  * vimeo/psalm#9994 drops the if-false assertions of a method with several method-call assertions,
  * and a missing if-true half lets Laravel's `@phpstan-assert-if-true null $this->last()` merge in.
- * The if-false type is `(TValue is null ? mixed : TValue)` and `isNotEmpty()` asserts nothing on `first()`/`last()`
- * because vimeo/psalm#11533: template-expanded assertions keep only the first union member, which would turn
- * `int|null` into `int` and `A|B` into `A`. A nullable `TValue` therefore stays nullable (sound, not narrowed).
+ * The if-false type is `(TValue is null ? mixed : TValue)`: Psalm also applies the negated if-true `null` to the
+ * else branch, so a plain `TValue` would turn `int|null` into `int`. `isNotEmpty()` asserts nothing on
+ * `first()`/`last()`: for a receiver union Psalm applies only the last alternative's expanded assertion
+ * (see the known-limitation phpt). A nullable `TValue` therefore stays nullable (sound, not narrowed).
  * `$first->type` on the narrowed value proves the class templates resolve (an unresolved template
  * once leaked from a negated assertion and surfaced as a non-object property fetch).
  *

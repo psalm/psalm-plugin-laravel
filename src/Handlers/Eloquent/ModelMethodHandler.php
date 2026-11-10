@@ -11,6 +11,7 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
@@ -323,16 +324,50 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
     /**
      * Magic methods forwarded via __callStatic are effectively public.
      *
+     * A method the model really declares as protected is left to Psalm, which then treats a call from outside
+     * the class as the `__callStatic` / `__call` forward PHP performs (a protected `#[Scope]` called statically
+     * is `Builder<Model>`, not `InvalidStaticInvocation`). Known gap: Psalm's first-class-callable path only
+     * consults `@method` pseudo-methods, so `$model->protectedScope(...)` from outside reports
+     * UndefinedMagicMethod (tests/Type/tests/FirstClassCallableForwardedModelCallKnownLimitation.phpt).
+     *
      * Registered defensively per concrete Model class by {@see ModelRegistrationHandler}
      * in case Psalm's visibility check is reached for fake-method-exists paths.
      */
     public static function isMethodVisible(MethodVisibilityProviderEvent $event): ?bool
     {
-        return self::isUnresolvedBuilderMethod(
-            $event->getSource()->getCodebase(),
-            $event->getFqClasslikeName(),
-            $event->getMethodNameLowercase(),
-        ) ? true : null;
+        $codebase = $event->getSource()->getCodebase();
+        $modelClass = $event->getFqClasslikeName();
+        $methodName = $event->getMethodNameLowercase();
+
+        return !self::declaresProtectedMethod($codebase, $modelClass, $methodName)
+            && self::isUnresolvedBuilderMethod($codebase, $modelClass, $methodName)
+            ? true
+            : null;
+    }
+
+    /**
+     * Whether the model's method is `protected` both where it is declared and after trait visibility
+     * adaptations (`use T { f as public; }`). Psalm's `MethodAnalyzer::isMethodVisible()` reads the declaring
+     * method's own visibility, so it forwards the outside call to `__callStatic` / `__call` only when the
+     * declaration itself is protected: an adaptation alone (`as protected` over a public trait method,
+     * `as private`, `as public`) does not change Psalm's answer, and handing such a method over would add an
+     * InaccessibleMethod to the base diagnostic. Unreadable storage counts as not declared.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function declaresProtectedMethod(Codebase $codebase, string $modelClass, string $methodName): bool
+    {
+        try {
+            $lowerName = \strtolower($methodName);
+            /** @var class-string<Model> $modelClass */
+            $declaringId = $codebase->methods->getDeclaringMethodId(new MethodIdentifier($modelClass, $lowerName));
+
+            return $declaringId instanceof MethodIdentifier
+                && $codebase->methods->getStorage($declaringId)->visibility === ClassLikeAnalyzer::VISIBILITY_PROTECTED
+                && self::effectiveVisibility($codebase, $modelClass, $lowerName) === ClassLikeAnalyzer::VISIBILITY_PROTECTED;
+        } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
+            return false;
+        }
     }
 
     /**
@@ -631,11 +666,24 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      */
     private static function hasPublicMethod(Codebase $codebase, string $modelClass, string $methodName): bool
     {
+        return self::effectiveVisibility($codebase, $modelClass, $methodName) === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+    }
+
+    /**
+     * The visibility the model's method has once trait adaptations are applied, or null when the model
+     * declares no such method.
+     *
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodName
+     * @psalm-capabilities read-props
+     */
+    private static function effectiveVisibility(Codebase $codebase, string $modelClass, string $methodName): ?int
+    {
         $methodId = new MethodIdentifier($modelClass, $methodName);
         $declaringId = $codebase->methods->getDeclaringMethodId($methodId);
 
         if (!$declaringId instanceof MethodIdentifier) {
-            return false;
+            return null;
         }
 
         // `use T { f as private; }` leaves the trait method's own visibility untouched; Psalm keeps the
@@ -645,7 +693,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             ? $codebase->classlike_storage_provider->get($appearingId->fq_class_name)->trait_visibility_map[$methodName] ?? null
             : null;
 
-        return ($adapted ?? $codebase->methods->getStorage($declaringId)->visibility) === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+        return $adapted ?? $codebase->methods->getStorage($declaringId)->visibility;
     }
 
     /**

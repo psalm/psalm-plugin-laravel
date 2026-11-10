@@ -357,10 +357,9 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * assertions of a method with several method-call assertions, and omitting the if-true half would let
      * Laravel's `@phpstan-assert-if-true null $this->last()` merge in.
      *
-     * The if-false type is conditional because https://github.com/vimeo/psalm/issues/11533 makes template-expanded
-     * assertions keep only the first union member, so a plain `TValue` would drop null from a nullable TValue
-     * (`int|null` became `int`). A possibly-null TValue resolves to `mixed` (no narrowing).
-     * Once #9994 and #11533 ship, restore `TValue` plus first()/last()/count() on both branches
+     * The if-false type is conditional because Psalm also applies the negated if-true `null` to the else branch,
+     * so a plain `TValue` would drop null from a nullable TValue (`int|null` became `int`). A possibly-null
+     * TValue resolves to `mixed` (no narrowing). Once #9994 ships, assert last() and count() on both branches
      * (including if-true `0 $this->count()`).
      * Known limits: tests/Type/tests/Collection/CollectionEmptinessAssertionsKnownLimitation.phpt.
      *
@@ -374,8 +373,11 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Determine if the collection is not empty.
      *
-     * Not asserted on first()/last(): https://github.com/vimeo/psalm/issues/11533 (template-expanded if-true
-     * assertions keep only the first union member), so `Collection<int, A|B>` would narrow first() to `A`.
+     * Only count() is asserted. first()/last() are not: for a receiver union such as
+     * `Collection<int, string>|Collection<int, int>` Psalm applies only the last alternative's expanded
+     * `TValue` assertion, so first() would collapse to `int` (a plain generic class reproduces it, see
+     * tests/Type/tests/Collection/CollectionEmptinessAssertionsKnownLimitation.phpt). `positive-int` has no
+     * template, so it holds for every alternative.
      *
      * @psalm-mutation-free
      * @psalm-assert-if-true positive-int $this->count()

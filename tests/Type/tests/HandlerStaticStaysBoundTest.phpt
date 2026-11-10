@@ -112,6 +112,14 @@ class Items extends Collection
         /** @psalm-check-type-exact $_keyed = Box<Items<int, CollectionGroupingModel>&static> */
     }
 
+    // `when()` answers the receiver unioned with the callback result; the union keeps the late static marker.
+    /** @param static<int, int> $s */
+    public function whenBound(self $s): void
+    {
+        $_when = box($s->when(true, fn () => 1))->same()->same();
+        /** @psalm-check-type-exact $_when = Box<1|Items<int, int>&static> */
+    }
+
     public function makeForwarded(): void
     {
         $_static = box(static::make('a'))->same()->same();

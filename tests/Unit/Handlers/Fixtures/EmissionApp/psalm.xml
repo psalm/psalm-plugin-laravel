@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <psalm
     errorLevel="1"
+    checkForThrowsDocblock="true"
     findUnusedCode="true"
     autoloader="autoload.php"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

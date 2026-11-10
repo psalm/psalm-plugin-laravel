@@ -78,14 +78,14 @@ use Psalm\Type\Union;
  *    method (and a morph method on a non-MorphTo), a parsed related model that is an ancestor of the receiver (the
  *    parser pins `static::class` to the declaring class), an eager-load slot with no parsed Relation type;
  *  - signature: a userland override of the method or of a method it delegates to (`whereHas()` -> `has()`) on the
- *    dispatched class, a trait other than Laravel's, or, for static and Relation receivers, on the model's own builder
+ *    dispatched class, a trait other than Laravel's (including one chosen with `insteadof`), or, for static and
+ *    Relation receivers, on the model's own builder
  *    (past `hasMorph()` the delegates run on the owner model's builder, so only that one is checked for them);
  *  - builder: a callback-slot model, or the owner model of a static, Relation or morph call, whose
  *    `newEloquentBuilder()` is overridden but yields no registered custom builder, unless its declared return type
  *    (docblock, else native) is the base `Builder` itself, nullable or generic (docblock-only, interface, union,
  *    intersection or subclass return types name a builder the plugin cannot see, #2080).
- *    Accepted limits: Psalm ignores `insteadof` (vimeo/psalm#12113), so a trait-composed override may be read from the
- *    losing trait; a model with both `#[UseEloquentBuilder]`/`$builder` and a docblock-only override is typed with the
+ *    Accepted limit: a model with both `#[UseEloquentBuilder]`/`$builder` and a docblock-only override is typed with the
  *    attribute's builder, because `CustomTypeDetector` falls through to it (at runtime the override wins, #2105).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1676
@@ -333,11 +333,10 @@ final class RelationCallbackParamsHandler implements
 
     /**
      * The declaring method of `$class::$method` when it is Laravel's own: declared by Eloquent's Builder or its
-     * `QueriesRelationships` trait, and not replaced by another trait. Psalm ignores `insteadof`
-     * (vimeo/psalm#12113), so such an override still reports Laravel's trait as the declaring one. Unknown
+     * `QueriesRelationships` trait (a user trait picked with `insteadof` is the declaring one instead). Unknown
      * classes decline.
      *
-     * @psalm-capabilities read-props
+     * @psalm-pure
      */
     private static function laravelDeclaring(Codebase $codebase, string $class, string $method): ?MethodIdentifier
     {
@@ -346,7 +345,6 @@ final class RelationCallbackParamsHandler implements
 
         return $declaring instanceof MethodIdentifier
             && \in_array(\strtolower($declaring->fq_class_name), self::LARAVEL_DECLARING_CLASSES, true)
-            && !self::traitOverrides($codebase, $class, $method)
             ? $declaring
             : null;
     }
@@ -547,45 +545,6 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * Whether a trait other than Laravel's `QueriesRelationships` declares the method on the class or an ancestor.
-     * Psalm ignores `insteadof` (vimeo/psalm#12113), so such an override still reports Laravel's trait as the
-     * declaring one. Unknown classes count as overridden.
-     *
-     * @psalm-capabilities read-props
-     */
-    private static function traitOverrides(Codebase $codebase, string $class, string $method): bool
-    {
-        $provider = $codebase->classlike_storage_provider;
-        $seen = [];
-
-        try {
-            foreach ([$class, ...\array_values($provider->get($class)->parent_classes)] as $name) {
-                $queue = \array_values($provider->get($name)->used_traits);
-                while (($trait = \array_pop($queue)) !== null) {
-                    if (isset($seen[\strtolower($trait)])) {
-                        continue;
-                    }
-
-                    $seen[\strtolower($trait)] = true;
-                    $traitStorage = $provider->get($trait);
-
-                    if (isset($traitStorage->methods[$method])) {
-                        if (\strtolower($trait) !== self::LARAVEL_DECLARING_CLASSES[1]) {
-                            return true;
-                        }
-                    } else {
-                        \array_push($queue, ...\array_values($traitStorage->used_traits));
-                    }
-                }
-            }
-        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
      * The callback's params, one per slot type.
      *
      * @param list<Union> $slots
@@ -622,8 +581,8 @@ final class RelationCallbackParamsHandler implements
      * Whether the builder a model's queries run on is one the plugin does not know: `newEloquentBuilder()` is
      * overridden (it wins over `#[UseEloquentBuilder]` and `$builder`) yet {@see ModelMethodHandler} holds no custom
      * builder for the model, so it resolves to base `Builder` and would reject the real one. The detector's own result
-     * is asked instead of re-deriving its rule from Psalm storage, which ignores `insteadof` and cannot see its
-     * interface/nullable outcomes. The one legitimate base builder is an override whose EFFECTIVE declared type
+     * is asked instead of re-deriving its rule from Psalm storage, which cannot see its interface/nullable
+     * outcomes. The one legitimate base builder is an override whose EFFECTIVE declared type
      * (docblock over native) is exactly `Builder`, optionally nullable or generic, with no intersection. Unreadable
      * storage counts as unknown.
      */

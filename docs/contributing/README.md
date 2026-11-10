@@ -30,7 +30,7 @@ flowchart TD
     H --- stubs["
         stubs/common/ (types + taint annotations)
         versioned dirs, ascending (e.g. stubs/12.42.0/, stubs/13.5.0/, stubs/13.8.0/)
-        stubs/integrations/carbon/ (gated on installed nesbot/carbon version)
+        stubs/integrations/carbon/ (when nesbot/carbon is installed)
         aliases.phpstub (generated here from AliasLoader: one class_alias() line per alias)
     "]
 
@@ -124,7 +124,7 @@ Stubs override Laravel's type signatures. Place them in:
 
 - `stubs/common/`: shared across Laravel versions (includes both type stubs and taint annotations)
 - `stubs/<version>/`: version-specific overrides, loaded when the installed Laravel is `>=` the dir name (`version_compare`). Both major-only (`stubs/13/`) and patch-level (`stubs/13.8.0/`) names work
-- `stubs/integrations/<package>/`: optional stubs for third-party packages, gated on the package being installed. Carbon uses the `shared/` + `pre-3.12/` conditional-directory pattern in `src/Stubs/CarbonStubProvider.php`; `laravel-ai/` is one flat directory, see [the gate](#the-laravelai-integration-gate).
+- `stubs/integrations/<package>/`: optional stubs for third-party packages, gated on the package being installed. Carbon's stubs load on every installed Carbon version (`src/Stubs/CarbonStubProvider.php`); `laravel-ai/` is one flat directory, see [the gate](#the-laravelai-integration-gate).
 
 Rules:
 - Verify signatures against actual Laravel code (not against Laravel PHPDoc or method signatures)
@@ -207,7 +207,7 @@ Handlers implement Psalm event interfaces to override type inference.
 Create the handler class in the appropriate `src/Handlers/` subdirectory, then register it in `Plugin::registerHandlers()`.
 `CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
 `ConditionableWhenHandler` narrows the return type of `Conditionable::when()`/`unless()`. `ConditionableCallbackParamsHandler` types their closure-literal callback params from the receiver and the `$value` narrowed to truthy/falsy. It is a params provider registered per host class, because params providers dispatch on the called class, not on the declaring trait.
-Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#12251).
+Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#12252).
 `Tappable::tap()` has no handler: its `$callback is null` conditional return lives in `stubs/common/Support/Traits/Tappable.phpstub`. Psalm before 7.0.0-rc8 collapsed such a conditional return in a stub that re-declares a reflected method to a single branch (vimeo/psalm#11837); `CollectionRandomTest.phpt` and the `tap()` type tests pin that it no longer does.
 
 `RelationCallbackParamsHandler` types the closure-literal callback of Eloquent relation-query methods (`whereHas()`, `has()`, `whereRelation()`, `withWhereHas()`, `whereHasMorph()`, ...):
