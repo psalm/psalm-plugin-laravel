@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794321182595,
+  "lastUpdate": 1794328298359,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -17985,6 +17985,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1245,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b25bef1a4b7e4aab7e2b95b5c4afb8556bce002a",
+          "message": "Answer `&static` from Collection handlers only for a late static receiver (#2229)\n\n* fix(collections): answer `&static` only for a late static receiver #2228\n\nFilter, flatten, groupBy/keyBy and make handlers answered `&static` for\nevery receiver, so a plain `Collection $c` hid that another instance's\n`static` is not this one's. Move FactoryCount::receiver() to LateStatic\nand use it to decide, as the factory handlers already do.\n\n* fix(collections): keep `&static` for receivers not proven plain #2228\n\nTreating \"receiver() returned null\" as plain answered the plain class\nfor `self::make()`, `parent::make()`, `$this::make()`, class-string and\n`static<...>` union/template receivers, and a `$this` refined by\n`@psalm-if-this-is`. PHP forwards the late static binding through\n`self::`/`parent::`, so returning those from `: static` was reported.\n\nAnswer plain only for a class-name static call or an instance typed as\na plain object; anything unproven keeps the resolved `&static`.\n\n* ci(psalm-delta): say why an app stopped without a report\n\ndelta-app.sh logs stage markers and the clone/Composer output to\n<app>--setup.log, the workflow records the job outcome, and the report\nturns \"not run\" into \"timed out after 12 min while running composer\nupdate\" or \"failed while ...\", with the last output line under --details.\n\n* ci(psalm-delta): install with --minimal-changes over the previous vendor\n\ncomposer update --minimal-changes keeps the app lock versions (1-5\npackages move instead of 90-140 with a full update) and, unlike a\npartial update of the plugin and Psalm, solves when the lock holds a\nLaravel below the plugin floor. The app cache now falls back to the\nnewest entry for the same app ref, so a plugin dependency change\ndownloads only the moved packages. Each attempt is capped at 300 s\nwith one retry: Composer waits up to 300 s per stalled download.\n\n* Revert the /psalm-delta harness changes\n\nThey moved to #2241.",
+          "timestamp": "2026-11-10T17:29:14+01:00",
+          "tree_id": "4cc9ec2048adc7dd4e639870b9bb4a6a71dfbee6",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b25bef1a4b7e4aab7e2b95b5c4afb8556bce002a"
+        },
+        "date": 1794328296288,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.21,
+            "range": "± 0.39",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1249,
             "unit": "MB"
           }
         ]
