@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794351054457,
+  "lastUpdate": 1794353297314,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18120,6 +18120,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.91,
             "range": "± 1.22",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1249,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "47a20f786dd31cbb1b9ae0ad95a5743c979203f2",
+          "message": "Accept an `Expression` column in builder and relation stubs (#2251)\n\n* fix(stubs): accept an Expression column in builder and relation column parameters #2249\n\nLaravel documents Illuminate\\Contracts\\Database\\Query\\Expression for these parameters at v12.27.0 and v13.20.0, and the runtime accepts it. Eloquent increment()/decrement() keep string: toBase()->increment() uses the column as an array key and throws for an Expression.\n\n* docs(stubs): describe the column list that firstOr() accepts on through and pivot relations #2249",
+          "timestamp": "2026-11-11T00:24:56+01:00",
+          "tree_id": "e77a5b8bde7c0c066ab058be1f3a06fc7607c11f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/47a20f786dd31cbb1b9ae0ad95a5743c979203f2"
+        },
+        "date": 1794353295412,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.19,
+            "range": "± 0.08",
             "unit": "s"
           },
           {
