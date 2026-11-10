@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794348764298,
+  "lastUpdate": 1794349331358,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18050,6 +18050,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.91,
             "range": "± 0.28",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1249,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f59f943d405baa4f0b755ea413e177b6c9e1f3ed",
+          "message": "Correct the Laravel versions for private `#[Scope]` and gate `withoutForeignKeyConstraints()` on 12.50 (#2246)\n\n* test(type): gate withoutForeignKeyConstraints inference on Laravel 12.50 #2237\n\n* docs: correct the Laravel versions that reject a private #[Scope]\n\nLaravel 12.59 added the same `! isPrivate()` check to Model::isScopeMethodWithAttribute() as 13.8.",
+          "timestamp": "2026-11-10T23:18:17+01:00",
+          "tree_id": "2068475be4a6dc0fdbe9a7e516bd7203b051a13b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f59f943d405baa4f0b755ea413e177b6c9e1f3ed"
+        },
+        "date": 1794349328552,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.73,
+            "range": "± 0.2",
             "unit": "s"
           },
           {
