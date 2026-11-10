@@ -23,6 +23,9 @@ final class EmptinessLimitBadge
  *    (ExistingAtomicMethodCallAnalyzer), so only the last alternative's assertion applies and the result
  *    depends on the union order: `Collection<string|null>|EloquentCollection<Model>` loses null,
  *    the reversed order keeps it.
+ * 4. `isNotEmpty()` asserts only `count()`: a `TValue` assertion on first()/last() would collapse a receiver
+ *    union (`Collection<int, string>|Collection<int, int>` gives `int`) for the same per-alternative reason,
+ *    and a plain generic class reproduces it. first() therefore stays nullable after the guard.
  */
 final class CollectionEmptinessAssertionsKnownLimitation
 {
@@ -55,6 +58,18 @@ final class CollectionEmptinessAssertionsKnownLimitation
 
         $_first = $items->first();
         /** @psalm-check-type-exact $_first = Illuminate\Database\Eloquent\Model|null|string */
+    }
+
+    /** @param Collection<int, string>|Collection<int, int> $items */
+    public function isNotEmptyKeepsFirstUnassertedForReceiverUnion(Collection $items): void
+    {
+        if ($items->isNotEmpty()) {
+            $_count = $items->count();
+            /** @psalm-check-type-exact $_count = int<1, max> */
+
+            $_first = $items->first();
+            /** @psalm-check-type-exact $_first = int|null|string */
+        }
     }
 
     /** @param Collection<int, EmptinessLimitBadge> $badges */
