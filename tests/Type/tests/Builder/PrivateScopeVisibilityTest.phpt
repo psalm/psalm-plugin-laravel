@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Pins #[Scope] VISIBILITY handling: a private #[Scope] is never a usable scope on any
- * supported Laravel (12-13) — 13.8+ rejects it in Model::isScopeMethodWithAttribute, and
+ * supported Laravel (12-13) — 12.59+ and 13.8+ reject it in Model::isScopeMethodWithAttribute, and
  * earlier versions break at runtime anyway (it recurses through __call). So the plugin must
  * not treat it as a scope.
  *

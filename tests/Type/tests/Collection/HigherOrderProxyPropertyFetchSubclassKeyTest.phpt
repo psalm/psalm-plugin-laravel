@@ -14,8 +14,8 @@ final class PropFetchCustomers extends EloquentCollection {}
 
 /**
  * A non-generic subclass resolves its proxy from the vendor trait annotation, whose TValue Psalm leaves
- * unresolved: the mapping goes over `Enumerable`, keyed from the proxy's TCollection. Laravel 12.27-13.30's
- * annotation has no TCollection, so the key is `array-key` there (see HigherOrderProxySubclassKeyTest).
+ * unresolved: the mapping goes over `Enumerable`, keyed from the proxy's TCollection. The annotation of Laravel 12.x and
+ * 13.0-13.30 has no TCollection, so the key is `array-key` there (see HigherOrderProxySubclassKeyTest).
  */
 function propFetchNonGenericSubclass(PropFetchCustomers $sub): void
 {
