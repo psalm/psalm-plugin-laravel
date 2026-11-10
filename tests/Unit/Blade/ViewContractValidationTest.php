@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
-use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -933,8 +932,6 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_isolated_include_omitting_a_declared_variable_is_reported_on_its_line(): void
     {
-        $this->requireIncludeIsolated();
-
         $reported = $this->templateContractIssues('isolated.blade.php');
 
         $this->assertCount(1, $reported, \var_export($reported, true));
@@ -947,8 +944,6 @@ final class ViewContractValidationTest extends TestCase
     #[Test]
     public function an_isolated_include_without_data_reports_every_required_variable(): void
     {
-        $this->requireIncludeIsolated();
-
         $reported = $this->templateContractIssues('isolated-bare.blade.php');
 
         $this->assertCount(1, $reported, \var_export($reported, true));
@@ -1014,14 +1009,6 @@ final class ViewContractValidationTest extends TestCase
         // The includer's scope is `$mergeData`, so the omitted `count` may still arrive; an authored
         // `first()` without it is not closed either.
         $this->assertSame([], $this->templateContractIssues('conditional-omitted.blade.php'));
-    }
-
-    /** `@includeIsolated` arrives in Laravel 12.47; below that Blade leaves the directive as text. */
-    private function requireIncludeIsolated(): void
-    {
-        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
-            self::markTestSkipped('@includeIsolated requires Laravel >= 12.47.');
-        }
     }
 
     /**

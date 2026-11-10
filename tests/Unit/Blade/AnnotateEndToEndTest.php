@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
-use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -227,11 +226,6 @@ final class AnnotateEndToEndTest extends TestCase
     #[Test]
     public function an_include_site_counts_as_a_producer_of_the_included_view(): void
     {
-        // Below Laravel 12.47 `@includeIsolated` is no directive: the fixture's include stays text.
-        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
-            $this->markTestSkipped('@includeIsolated needs Laravel 12.47+');
-        }
-
         // The include passes `bool` (the flow type after `??= false`), the controller `true`: declaring
         // the controller's type alone would be a type error at the include; `bool` covers both. The
         // `counter` view's controller passes `bool` too, so the two agree: the include's type is the
@@ -248,10 +242,6 @@ final class AnnotateEndToEndTest extends TestCase
     #[Test]
     public function a_view_passed_to_an_include_is_declared_as_the_string_it_renders_to(): void
     {
-        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
-            $this->markTestSkipped('@includeIsolated needs Laravel 12.47+');
-        }
-
         $this->assertSame(
             "<?php\n/**\n * @var string \$content\n */\n?>\n" . self::TEMPLATES['framed-included'],
             $this->analyse('annotate')['templates']['framed-included'] ?? null,

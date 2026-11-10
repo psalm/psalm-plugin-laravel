@@ -239,7 +239,7 @@ An include directive with a literal data array is checked like a `view()` call s
 
 * `@include`, `@includeIf`, `@extends('layout', [...])`, `@includeWhen($condition, 'view', [...])` and `@includeUnless($condition, 'view', [...])` type-check the keys their array passes. A key the array omits is never reported: the included template also inherits the including template's scope, so the key can still arrive.
 * `@includeFirst(['override', 'view'], [...])` and `@extendsFirst` do the same against the first candidate that exists on disk, which is the one Laravel renders. The check is off when any candidate is not a plain string literal (a key, a variable, surrounding spaces), when a namespaced one comes before it, and when no candidate is found. A missing key is never reported for these, even without the including scope.
-* `@includeIsolated('view', [...])` forwards no scope, so it is also checked for missing declared variables. `@includeIsolated('view')` passes no data at all, so every required variable is missing. The directive first ships in Laravel 12.47; earlier versions leave it uncompiled, so nothing is checked there.
+* `@includeIsolated('view', [...])` forwards no scope, so it is also checked for missing declared variables. `@includeIsolated('view')` passes no data at all, so every required variable is missing.
 * `@each` and `@component` are not checked, nor is data passed in a variable (`@include('view', $data)`) or a view name that is not a string literal.
 
 [UnusedViewData](../issues/UnusedViewData.md) does not judge includes.

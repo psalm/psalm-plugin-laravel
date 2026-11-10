@@ -482,12 +482,6 @@ final class ModelMetadataRegistryTest extends TestCase
     #[Test]
     public function an_int_backed_enum_connection_is_normalized_to_a_string(): void
     {
-        // The real boundary is Laravel 12.28, where `$connection` widened to `\UnitEnum|string|null` and
-        // getConnectionName() started applying enum_value(). Gate on the CAPABILITY rather than re-encode the version.
-        if (!\is_int((new PlainEnumConnectionModel())->getConnectionName())) {
-            self::markTestSkipped('enum_value() on $connection requires Laravel >= 12.28.');
-        }
-
         $codebase = $this->makeCodebase();
         $this->registerStorage(PlainEnumConnectionModel::class);
 

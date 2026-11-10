@@ -15,10 +15,8 @@ use Tests\Psalm\LaravelPlugin\Unit\Fixtures\Enums\SerializedIntStatus;
  * Same failure if unnormalized: `getConnectionName()`'s `enum_value()` yields the raw `int` backing value,
  * which the registry's `?string $connection` rejects outside every section guard, dropping the whole model.
  *
- * Laravel 12.28+, NOT 13.0: `$connection` widened to `\UnitEnum|string|null` and `getConnectionName()` began
- * applying `enum_value()` in 12.28, well before the 13.0 `#[Connection]` attribute. So this row is live on
- * most of the 12.x line, and its consuming test gates on the capability (an int back from the getter) rather
- * than on any attribute's existence. Through 12.27 the getter returns the enum object untouched.
+ * Live on every supported line, not only 13.x: `$connection` is `\UnitEnum|string|null` and `getConnectionName()`
+ * applies `enum_value()` since 12.28, well before the 13.0 `#[Connection]` attribute.
  *
  * @internal fixture used by ModelMetadataRegistryTest
  */

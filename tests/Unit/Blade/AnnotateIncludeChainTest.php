@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 
-use Illuminate\View\Compilers\BladeCompiler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
@@ -36,14 +35,6 @@ final class AnnotateIncludeChainTest extends TestCase
 
     /** @var array{dry: array<string, mixed>, written: array<string, mixed>, before: array<string, string>, after: array<string, string>}|null */
     private static ?array $runs = null;
-
-    protected function setUp(): void
-    {
-        // Below Laravel 12.47 `@includeIsolated` is no directive: the includes stay text.
-        if (!\method_exists(BladeCompiler::class, 'compileIncludeIsolated')) {
-            $this->markTestSkipped('@includeIsolated needs Laravel 12.47+');
-        }
-    }
 
     public static function tearDownAfterClass(): void
     {
