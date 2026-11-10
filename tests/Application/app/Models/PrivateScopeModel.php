@@ -26,7 +26,7 @@ final class PrivateScopeModel extends Model
 
     /**
      * Private #[Scope] shadowed by a legacy twin. The private attribute is never dispatchable
-     * (see class docblock: 13.8+ rejects it, earlier versions recurse), so the only working
+     * (see class docblock: 12.59+ and 13.8+ reject it, earlier versions recurse), so the only working
      * scope here is the legacy scopePublished() — the plugin must resolve via the legacy scope.
      *
      * @param  Builder<self>  $query
