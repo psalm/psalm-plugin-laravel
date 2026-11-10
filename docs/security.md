@@ -16,7 +16,7 @@ Security scanning runs automatically alongside type analysis, no extra configura
 | XSS             | A03:2021 | `Response::make()` with unescaped content                     |
 | XSS (Blade templates) | A03:2021 | Opt-in with `<blade />`: unescaped `{!! $userInput !!}` output, view data and class-component properties. See [Blade coverage](blade.md#security-coverage) |
 | Header Injection | A03:2021 | `Response::make()`, `response()`, and `new Response()` with user-controlled header values; mail sender/recipient addresses (`Mailable` `from()`, `to()`, `cc()`, `bcc()`, `replyTo()`; `MailMessage` `from()`, `cc()`, `bcc()`, `replyTo()`) |
-| SSRF            | A10:2021 | `Http::get()`, `Http::post()` with user-controlled URLs       |
+| SSRF            | A10:2021 | `Http::get()`, `head()`, `post()`, `put()`, `patch()`, `delete()`, `send()` and `query()` (Laravel 13.19+) with user-controlled URLs, on the facade and on `PendingRequest` |
 | File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |

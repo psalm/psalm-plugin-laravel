@@ -71,7 +71,7 @@ final class UpgradeRelationAnnotationsTest extends TestCase
     /** @return iterable<string, array{non-empty-string}> */
     public static function unchangedProvider(): iterable
     {
-        $pivot      = '\Illuminate\Database\Eloquent\Relations\Pivot';
+        $pivot = '\Illuminate\Database\Eloquent\Relations\Pivot';
 
         // Already has two params — skip (non-pivot relations).
         yield 'BelongsTo already migrated' => ["/**\n * @return BelongsTo<User, self>\n */"];
