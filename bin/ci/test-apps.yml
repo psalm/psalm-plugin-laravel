@@ -23,8 +23,9 @@
 # Fields:
 #   name         display + on-disk key (filename-safe)
 #   repo         public https clone URL
-#   ref          immutable commit SHA (the cache key; never a moving branch).
-#                Short SHAs work because delta-app.sh does a full clone.
+#   ref          immutable full 40-character commit SHA, quoted (the cache key;
+#                never a moving branch). delta-app.sh fetches only that commit,
+#                and a server takes a fetch by SHA only in full.
 #   php          PHP version the runner sets up for install/analysis. Use 8.4:
 #                modern app deps (e.g. recent symfony/console) ship PHP 8.4
 #                syntax, and --ignore-platform-reqs would otherwise install them
@@ -77,7 +78,7 @@ flags:
 apps:
   - name: monica
     repo: https://github.com/monicahq/monica.git
-    ref: e08e917
+    ref: "e08e91734170b6bbd582cb578532c3948196124e"
     php: "8.4"
     groups: [default, phpunit, sanctum, inertia]
     # Monica's lock pins laravel-lang/http-statuses at a version Packagist flags
@@ -86,45 +87,45 @@ apps:
 
   - name: pixelfed
     repo: https://github.com/pixelfed/pixelfed.git
-    ref: 67606eb
+    ref: "67606eb71bfce87c404ebc36a4542e7bed9115d9"
     php: "8.4"
     groups: [default, blade, phpunit]
 
   - name: coolify
     repo: https://github.com/coollabsio/coolify.git
-    ref: ffd69c1
+    ref: "ffd69c1b545078cc63982effdca81b6d861aada6"
     php: "8.4"
     groups: [default, blade, pest, sanctum, livewire]
 
   - name: bookstack
     repo: https://source.bookstackapp.com/bookstack.git
-    ref: 82ef735
+    ref: "82ef7356f363bd70611ba0d76d91a18b6623ef7a"
     php: "8.4"
     groups: [default, blade, phpunit]
 
   - name: solidtime
     repo: https://github.com/solidtime-io/solidtime.git
-    ref: 797fddf
+    ref: "797fddf638838079981fea74acdac416f594c980"
     php: "8.4"
     groups: [default, octane, filament, phpunit, inertia]
 
   - name: laravel-socialite
     repo: https://github.com/laravel/socialite.git
-    ref: 40e0757
+    ref: "40e0757a75637c7b2dff05d3286b0d8fc25e5c0e"
     php: "8.4"
     groups: [default, lib, phpunit, laravel-13]
     project_dir: src
 
   - name: laravel-permission
     repo: https://github.com/spatie/laravel-permission.git
-    ref: ef42ecb
+    ref: "ef42ecb781e5534d368a3853fa161e420ad51397"
     php: "8.4"
     groups: [default, lib, pest, laravel-13]
     project_dir: src
 
   - name: laravel-excel
     repo: https://github.com/SpartnerNL/Laravel-Excel.git
-    ref: 1854739
+    ref: "1854739267d81d38eae7d8c623caf523f30f256b"
     php: "8.4"
     groups: [default, lib, phpunit, laravel-13]
     project_dir: src
@@ -141,7 +142,7 @@ apps:
 
   - name: bagisto
     repo: https://github.com/bagisto/bagisto.git
-    ref: 5b83de2
+    ref: "5b83de2f20b75869e9bfdbebdf704b4a8438ed18"
     php: "8.4"
     groups: [octane, large, blade, pest, sanctum]
     # app/ is only the skeleton (Http, Providers); the code lives in
@@ -151,7 +152,7 @@ apps:
 
   - name: filament
     repo: https://github.com/filamentphp/filament.git
-    ref: 7e4b8a5
+    ref: "7e4b8a5b0e96e13cb679533a836ccfecb6089689"
     php: "8.4"
     groups: [filament, lib, large, blade, pest, laravel-13, livewire]
     # 16 packages/*/src (~14.6k issues): a cold run took 4.4 min locally on 16
@@ -160,7 +161,7 @@ apps:
 
   - name: unit3d
     repo: https://github.com/HDInnovations/UNIT3D.git
-    ref: 8b88f4c
+    ref: "8b88f4c8182eb3d3912ffef425c3224dcfd596f4"
     php: "8.4"
     groups: [octane, blade, pest, livewire, large]
     # config/secure-headers.php parse_url()s env('VITE_ECHO_ADDRESS') at boot, so
@@ -169,39 +170,39 @@ apps:
 
   - name: vito
     repo: https://github.com/vitodeploy/vito.git
-    ref: 07d265e
+    ref: "07d265ef53389f5e4e64f461992add751c4b342f"
     php: "8.4"
     groups: [blade, phpunit, sanctum, inertia]
 
   - name: laravel-backup
     repo: https://github.com/spatie/laravel-backup.git
-    ref: 23701cf
+    ref: "23701cf5d6afdb1394618561032dffc0bfa757c1"
     php: "8.4"
     groups: [lib, pest, laravel-13]
     project_dir: src
 
   - name: corcel
     repo: https://github.com/corcel/corcel.git
-    ref: 83506aa
+    ref: "83506aa195ddaa4a404ac12a56dbc51b906505fc"
     php: "8.4"
     groups: [lib, phpunit]
     project_dir: src
 
   - name: spatie-dashboard
     repo: https://github.com/spatie/dashboard.spatie.be.git
-    ref: 2318999
+    ref: "2318999b9a69cfee7d32ec9ae7f7b2d5e5ff474c"
     php: "8.4"
     groups: [phpunit]
 
   - name: tastyigniter
     repo: https://github.com/tastyigniter/TastyIgniter.git
-    ref: bb57c86
+    ref: "bb57c86d28987fec628c0940a07e258cca40c550"
     php: "8.4"
     groups: [phpunit]
 
   - name: unopim
     repo: https://github.com/unopim/unopim.git
-    ref: ab75e4b
+    ref: "ab75e4b8b7c9c5c1f0c628c1cc43cd5fec112053"
     php: "8.4"
     groups: [ai, octane, blade, pest, laravel-13, sanctum, large]
     # Bagisto layout: the code (incl. the laravel/ai usage in AiAgent) lives in
@@ -211,7 +212,7 @@ apps:
 
   - name: m3u-editor
     repo: https://github.com/m3ue/m3u-editor.git
-    ref: 3fa58e1
+    ref: "3fa58e13a899c8260ad070728310b1abecf6740a"
     php: "8.4"
     groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire, large]
     # The laravel/vet composer plugin refuses every unreviewed package; the
@@ -227,7 +228,7 @@ apps:
 
   - name: agent-fleet
     repo: https://github.com/escapeboy/agent-fleet-o.git
-    ref: 2493ec6
+    ref: "2493ec6b5e99a8fa113acc09c7c269b930f1f525"
     php: "8.4"
     groups: [ai, livewire, phpunit, laravel-13, sanctum, large]
     # Agent-fleet manager: ~70 files import Laravel\Ai, so it exercises agents,
@@ -240,7 +241,7 @@ apps:
 
   - name: relaticle
     repo: https://github.com/relaticle/relaticle.git
-    ref: 723dce9
+    ref: "723dce948d2fb9c51906b816e8463721c212ad10"
     php: "8.5"
     groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire, large]
     # The densest laravel/ai usage found in public code, on a Filament 5 CRM,
@@ -258,7 +259,7 @@ apps:
 
   - name: aureuserp
     repo: https://github.com/aureuserp/aureuserp.git
-    ref: 070cacc
+    ref: "070cacc4ec39939ac3ddbf3f62cbad8bbd0000a9"
     php: "8.4"
     groups: [filament, blade, pest, laravel-13, sanctum, livewire, large]
     # Filament 5 ERP: app/ holds 7 files, the ~2.9k-file code base is 28
@@ -267,7 +268,7 @@ apps:
 
   - name: kanka
     repo: https://github.com/owlchester/kanka.git
-    ref: 355c577
+    ref: "355c5779d91be399c0775a14b727a1ebc3f00b29"
     php: "8.4"
     groups: [blade, pest, laravel-13, livewire, large]
     # RPG worldbuilding app with 1,248 Blade templates, the largest classic
@@ -277,7 +278,7 @@ apps:
 
   - name: skuul
     repo: https://github.com/yungifez/skuul.git
-    ref: 795aabe
+    ref: "795aabe3c8a01ce330a2699ee55d90d4af79d748"
     php: "8.4"
     groups: [blade, pest, laravel-13, sanctum, livewire]
     # School management app: 434 Blade templates, mostly Livewire views.

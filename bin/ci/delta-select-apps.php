@@ -77,6 +77,11 @@ foreach ($registry['apps'] as $app) {
     if (!is_string($name) || preg_match($safe, $name) !== 1 || in_array($name, $reserved, true) || isset($apps[$name])) {
         $fail('invalid or duplicate app name: ' . var_export($name, true));
     }
+    // delta-app.sh fetches only the pinned commit, by SHA, which a server accepts only in full.
+    $ref = $app['ref'] ?? null;
+    if (!is_string($ref) || preg_match('/^[0-9a-f]{40}$/', $ref) !== 1) {
+        $fail("app {$name} ref must be a full 40-character commit SHA: " . var_export($ref, true));
+    }
     $tags = (array) ($app['groups'] ?? []);
     foreach ($tags as $tag) {
         if (!is_string($tag) || !isset($groups[$tag])) {
