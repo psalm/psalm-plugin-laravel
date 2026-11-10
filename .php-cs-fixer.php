@@ -11,6 +11,7 @@ return (new Config())
     ->setRiskyAllowed(false)
     ->setRules([
         '@PER-CS3x0' => true,
+        'binary_operator_spaces' => ['default' => 'single_space'],
         // import
         'global_namespace_import' => [
             'import_classes' => false,
@@ -22,8 +23,12 @@ return (new Config())
     ])
     ->setFinder(
         (new Finder())
-            ->in(__DIR__ . '/src')
-            ->in(__DIR__ . '/tests')
+            ->in([
+                __DIR__ . '/bin',
+                __DIR__ . '/src',
+                __DIR__ . '/tests',
+                __DIR__ . '/tools',
+            ])
             // Laravel writes packages.php/services.php into fixture bootstrap/cache dirs when
             // subprocess tests boot the app; those generated files must never be style-checked.
             ->notPath('#Fixtures/.+/bootstrap/cache/#')

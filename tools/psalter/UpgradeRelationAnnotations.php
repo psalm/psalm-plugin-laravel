@@ -86,7 +86,7 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
      */
     private const THROUGH_RELATIONS = [
         'HasManyThrough' => 'hasManyThrough',
-        'HasOneThrough'  => 'hasOneThrough',
+        'HasOneThrough' => 'hasOneThrough',
     ];
 
     /**
@@ -262,8 +262,8 @@ final class UpgradeRelationAnnotations implements AfterFunctionLikeAnalysisInter
         /** @var list<MethodCall> $calls */
         $calls = (new NodeFinder())->find(
             $stmts,
-            static fn (\PhpParser\Node $node): bool =>
-                $node instanceof MethodCall
+            static fn(\PhpParser\Node $node): bool
+                => $node instanceof MethodCall
                 && $node->name instanceof Identifier
                 && $node->name->name === $methodCallName,
         );
