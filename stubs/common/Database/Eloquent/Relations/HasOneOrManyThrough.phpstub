@@ -31,7 +31,7 @@ abstract class HasOneOrManyThrough extends Relation
     /**
      * @template T
      * @param  T  $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel|null)
      */
     public function find($id, $columns = ['*']) {}
@@ -39,7 +39,7 @@ abstract class HasOneOrManyThrough extends Relation
     /**
      * @template T
      * @param  T  $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<mixed>) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel> : TRelatedModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -54,7 +54,7 @@ abstract class HasOneOrManyThrough extends Relation
      *
      * @template TValue
      *
-     * @param  list<non-empty-string>|(\Closure(): TValue)  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>|(\Closure(): TValue)  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @return TRelatedModel|TValue
      */
@@ -62,7 +62,7 @@ abstract class HasOneOrManyThrough extends Relation
 
     /**
      * @param  int|null  $perPage
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @return \Illuminate\Pagination\LengthAwarePaginator<int, TRelatedModel>
@@ -71,7 +71,7 @@ abstract class HasOneOrManyThrough extends Relation
 
     /**
      * @param  int|null  $perPage
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @return \Illuminate\Pagination\Paginator<int, TRelatedModel>
@@ -80,7 +80,7 @@ abstract class HasOneOrManyThrough extends Relation
 
     /**
      * @param  int|null  $perPage
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @param  string  $cursorName
      * @param  string|null  $cursor
      * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel>
