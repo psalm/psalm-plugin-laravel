@@ -65,22 +65,22 @@ function test_custom_builder_legacy_trait_scope(): void
 /* -- Static model call (Model::scope()) ---------------------------------------------------- */
 
 /**
- * Known limitation: the static call is runtime-valid (protected scope → __callStatic →
- * static::query()->active()), but Psalm's MethodAnalyzer::checkStatic flags any static
- * call to a non-static method without considering accessibility + __callStatic — a false
- * positive blocked on https://github.com/vimeo/psalm/issues/11876. Same behavior as
- * class-hosted protected #[Scope] methods (see StaticBuilderMethodsTest.phpt). The
- * InvalidStaticInvocation expectations below flip when the upstream fix lands.
+ * A protected trait-hosted #[Scope] is runtime-valid on the static surface (inaccessible method →
+ * __callStatic → static::query()->active()). Psalm 7.2 models that forward, so the call resolves
+ * like the builder-instance form. Same behavior as class-hosted protected #[Scope] methods (see
+ * StaticBuilderMethodsTest.phpt).
  */
 function test_static_model_call(): void
 {
-    Contract::active();
+    $_result = Contract::active();
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\Contract> */
 }
 
-/** Same limitation on a model with a custom builder. */
+/** Same on a model with a custom builder. */
 function test_static_model_call_custom_builder(): void
 {
-    Vehicle::active();
+    $_result = Vehicle::active();
+    /** @psalm-check-type-exact $_result = App\Builders\VehicleBuilder<App\Models\Vehicle> */
 }
 
 /* -- Relation chain ($model->relation()->scope()) ------------------------------------------ */
@@ -132,7 +132,5 @@ function test_attributed_scope_sibling_non_model_rejected(): void
 }
 ?>
 --EXPECTF--
-InvalidStaticInvocation on line %d: Method App\Models\Concerns\HasFlaggedScope::active is not static, but is called statically
-InvalidStaticInvocation on line %d: Method App\Models\Concerns\HasFlaggedScope::active is not static, but is called statically
 InvalidArgument on line %d: Argument 1 of App\Builders\WorkOrderBuilder::outranks expects App\Models\WorkOrder, but 'not a model' provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::outranks expects App\Models\AbstractDocument, but 'not a model' provided

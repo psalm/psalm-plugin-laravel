@@ -11,8 +11,9 @@ use Psalm\Issue\PluginIssue;
  *
  * A `public` `#[Scope]` is more than a convention slip: calling it statically (`Post::published()`) is a
  * runtime fatal, because PHP resolves the accessible non-static method and throws before `__callStatic`
- * can route it through the query builder (see #634 / vimeo/psalm#11876). Laravel's convention is
- * `protected`, which keeps the static call routed to the builder.
+ * can route it through the query builder (see #634). Laravel's convention is `protected`, which keeps the
+ * static call routed to the builder (Psalm models that forward since 7.2, vimeo/psalm#11876, while the
+ * public form still draws `InvalidStaticInvocation`).
  *
  * Legacy `scopeXxx()` scopes are NOT reported here. Their idiomatic call (`Post::active()`) is unaffected
  * by visibility, so the plugin treats them as a pure convention nit under {@see PublicModelAccessor}. Only

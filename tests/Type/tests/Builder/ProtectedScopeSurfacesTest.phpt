@@ -6,18 +6,16 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Pins a PROTECTED #[Scope] (Laravel's documented convention) on the two surfaces that work
- * today: a builder instance (M::query()->scope()) and a relation chain
- * ($owner->relation()->scope()). Runtime: Builder::__call / Relation::__call both consult
- * hasNamedScope() and route to callNamedScope(); the relation decorates the forwarded call and
- * returns itself, so the relation type is preserved for further chaining.
+ * Pins a PROTECTED #[Scope] (Laravel's documented convention) on every surface: a builder
+ * instance (M::query()->scope()), a relation chain ($owner->relation()->scope()) and a call on
+ * the model itself. Runtime: Builder::__call / Relation::__call both consult hasNamedScope()
+ * and route to callNamedScope(); the relation decorates the forwarded call and returns itself,
+ * so the relation type is preserved for further chaining.
  *
  * Reuses DirectScopeModel::active (a protected #[Scope]). A protected method is inaccessible from
  * outside the class, so PHP routes BOTH a static and a direct-instance call to __callStatic/__call
- * and Laravel forwards to the scope (runtime-valid) — but Psalm checks the real protected signature
- * and false-positives. Those two forms bound the supported surfaces: the static call
- * (DirectScopeModel::active()) draws InvalidStaticInvocation in StaticBuilderMethodsTest, and the
- * direct-instance call is pinned below as a documented false-positive TooFewArguments.
+ * and Laravel forwards to the scope (runtime-valid); the static form is pinned in
+ * StaticBuilderMethodsTest.
  */
 
 /** Protected scope on a builder instance resolves to Builder<Model>. */
@@ -50,18 +48,17 @@ function test_protected_scope_rejects_extra_arg_on_relation(DirectScopeModel $mo
 }
 
 /**
- * Documented FALSE positive (boundary): a direct protected-instance call is inaccessible from
- * outside, so at runtime PHP routes it to Model::__call -> newQuery()->active() and the scope runs
- * with an injected $query (valid). But Psalm sees the real active(Builder $query) signature and
- * reports the missing $query as TooFewArguments. Mirrors the protected-static false positive in
- * StaticBuilderMethodsTest.
+ * A direct protected-instance call is inaccessible from outside, so at runtime PHP routes it to
+ * Model::__call -> newQuery()->active() and the scope runs with an injected $query. Psalm 7.2
+ * models that forward once the visibility provider leaves a method declared protected
+ * to Psalm, so the real active(Builder $query) signature is no longer checked.
  */
-function test_protected_scope_direct_instance_call_false_positive(DirectScopeModel $model): void
+function test_protected_scope_direct_instance_call_is_forwarded(DirectScopeModel $model): void
 {
-    $model->active();
+    $_result = $model->active();
+    /** @psalm-check-type-exact $_result = Builder<DirectScopeModel> */
 }
 ?>
 --EXPECTF--
 TooManyArguments on line %d: Too many arguments for Illuminate\Database\Eloquent\Builder::active - expecting 0 but saw 1
 TooManyArguments on line %d: Too many arguments for Illuminate\Database\Eloquent\Relations\HasMany::active - expecting 0 but saw 1
-TooFewArguments on line %d: Too few arguments for method App\Models\DirectScopeModel::active saw 0
