@@ -27,10 +27,6 @@ declare(strict_types=1);
  *   <output_dir>/<app>/<app>-<label>--issues.json
  *   <output_dir>/<app>/<app>-<label>--perf.json   (wall_seconds, type_coverage_pct, peak_rss_mb, ...)
  *   <output_dir>/<app>/<app>-<label>--crash.log   (only when the side crashed)
- *   <output_dir>/<app>/<app>--setup.log           (stage markers + clone/Composer output)
- *   <output_dir>/<app>/<app>--job.json            (CI only: job outcome, timeout, end time)
- * An app without a crash log is noted with why it stopped ("timed out after 12 min
- * while running composer update") when those two files tell.
  *
  * Issue identity is the multiset of (file_name, line_from, line_to,
  * column_from, column_to, type, message), so a PR fixing 50 issues and
@@ -261,50 +257,6 @@ $crashExcerpt = static function (string $app) use ($sideFile, $baseLabel, $headL
     }
 
     return $sides;
-};
-
-/**
- * Why an app stopped without a crash log: the last `== <epoch> <stage>` marker of
- * <app>--setup.log and the outcome the workflow recorded in <app>--job.json. A
- * cancelled job counts as timed out when it ended within two minutes of its limit
- * after the first marker (checkout and cache restore run before it).
- * Returns [note, last output line of that stage]; the note is null when neither
- * file says anything.
- *
- * @return array{?string, ?string}
- */
-$stopReason = static function (string $app) use ($outputDir, $loadJson): array {
-    $stage = null;
-    $started = null;
-    $last = null;
-    $path = "{$outputDir}/{$app}/{$app}--setup.log";
-    $lines = is_file($path) ? file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : false;
-    foreach ($lines === false ? [] : $lines as $line) {
-        if (preg_match('/^== (\d+) (.+)$/', $line, $m) === 1) {
-            $started ??= (int) $m[1];
-            $stage = $m[2];
-            $last = null;
-        } elseif (trim($line) !== '') {
-            $last = mb_strimwidth(str_replace('`', "'", trim($line)), 0, 300, '…');
-        }
-    }
-
-    $job = $loadJson("{$outputDir}/{$app}/{$app}--job.json") ?? [];
-    $outcome = is_string($job['outcome'] ?? null) ? $job['outcome'] : null;
-    $limit = is_int($job['timeout_minutes'] ?? null) ? $job['timeout_minutes'] : null;
-    $ended = is_int($job['ended'] ?? null) ? $job['ended'] : null;
-    $while = $stage === null ? '' : " while {$stage}";
-
-    $note = match (true) {
-        $outcome === 'cancelled' && $limit !== null && $started !== null && $ended !== null
-            && $ended - $started >= $limit * 60 - 120 => "timed out after {$limit} min{$while}",
-        $outcome === 'cancelled' => "cancelled{$while}",
-        $outcome === 'failure' => "failed{$while}",
-        $stage !== null => "stopped{$while}",
-        default => null,
-    };
-
-    return [$note, $note === null ? null : $last];
 };
 
 /**
@@ -973,10 +925,6 @@ function detailsBody(array $p, bool $details, bool $entries): string
         foreach ($p['crash'] as $side => $excerpt) {
             $parts[] = "**{$side} crash**: `{$excerpt}`";
         }
-
-        if ($p['setup'] !== null) {
-            $parts[] = "**last output**: `{$p['setup']}`";
-        }
     }
 
     if ($parts === []) {
@@ -1053,7 +1001,6 @@ foreach ($apps as $app) {
     $headPerf = $loadJson($sideFile($app, $headLabel, 'perf.json'));
     $row = $rows[$app] ?? null;
     $crash = [];
-    $setup = null;
     $note = '';
     $icon = '✅';
     if ($row === null) {
@@ -1068,12 +1015,6 @@ foreach ($apps as $app) {
             isset($crash['head']) => 'head crashed, no base report',
             default => 'not run',
         };
-        if ($note === 'not run' || $note === 'head has no report') {
-            [$reason, $setup] = $stopReason($app);
-            if ($reason !== null) {
-                $note = $note === 'not run' ? $reason : "{$note}, {$reason}";
-            }
-        }
     }
 
     $projects[] = [
@@ -1082,7 +1023,6 @@ foreach ($apps as $app) {
         'note' => $note,
         'row' => $row,
         'crash' => $crash,
-        'setup' => $setup,
         'wall' => [$perfNum($basePerf, 'wall_seconds'), $perfNum($headPerf, 'wall_seconds')],
         'mem' => [$perfNum($basePerf, 'peak_rss_mb'), $perfNum($headPerf, 'peak_rss_mb')],
         'cov' => [$perfNum($basePerf, 'type_coverage_pct'), $perfNum($headPerf, 'type_coverage_pct')],
