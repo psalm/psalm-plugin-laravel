@@ -72,7 +72,7 @@ jobs:
       matrix:
         include:
           # `in_process` cells skip the `subprocess` group (tests forking a real vendor/bin/psalm, ~75% of
-          # unit CPU); the PHP 8.2 + 12.27.0 and 8.5 lockfile cells run the full suite.
+          # unit CPU); the PHP 8.2 + 12.48.0 and 8.5 lockfile cells run the full suite.
           # Newest PHP + latest Laravel 13 (lockfile). Also the 8.5 side of the 8.4/8.5 getMethods()
           # initializer-order split, which is in-process (ModelMetadataRegistryTest).
           - php: '8.5'
@@ -82,10 +82,10 @@ jobs:
             in_process: true
           # Oldest PHP + declared Laravel 12 floor.
           - php: '8.2'
-            laravel: '12.27.0'
-          # Highest 12.x: the enum $connection path is live since 12.28.
+            laravel: '12.48.0'
+          # Highest 12.x.
           - php: '8.2'
-            laravel: '^12.27'
+            laravel: '^12.48'
             in_process: true
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -155,7 +155,7 @@ jobs:
           # Oldest PHP with the Laravel 12 line, newest PHP with the Laravel 13 line;
           # intermediate PHP versions add little over these two ends.
           - php: '8.2'
-            laravel: '^12.27'
+            laravel: '^12.48'
           - php: '8.5'
             laravel: '^13.20'
     name: Type test P${{ matrix.php }} | L${{ matrix.laravel }}

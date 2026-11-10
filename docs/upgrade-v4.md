@@ -7,11 +7,11 @@ nav_order: 5
 
 ## Requirements
 
-| Dependency | v3           | v4         |
-|------------|--------------|------------|
-| PHP        | ^8.2         | **^8.2**   |
-| Laravel    | 11, 12, 13   | **12, 13** |
-| Psalm      | ^6.16.1      | **7 only** |
+| Dependency | v3           | v4                   |
+|------------|--------------|----------------------|
+| PHP        | ^8.2         | **^8.2**             |
+| Laravel    | 11, 12, 13   | **^12.48 or ^13.20** |
+| Psalm      | ^6.16.1      | **7 only**           |
 
 Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
@@ -111,7 +111,7 @@ No flags needed — just run `./vendor/bin/psalm`.
 ## Upgrade steps
 
 ```bash
-# 1. Update PHP to 8.2+ and Laravel to 12+ if needed
+# 1. Update PHP to 8.2+ and Laravel to 12.48+ (or 13.20+) if needed
 
 # 2. Upgrade Psalm to v7 and the plugin to v4 together
 composer require --dev psalm/plugin-laravel:^4.0 vimeo/psalm:^7 --with-all-dependencies
