@@ -7,7 +7,7 @@ Compatibility matrix: [README](https://github.com/psalm/psalm-plugin-laravel/blo
 
 ## 3.x → 4.x
 
-4.x requires Laravel 12.48+ or 13.20+, and Psalm 7. Upgrade Psalm first (3.x ships on Psalm 6), then bump the constraint:
+4.x requires Laravel 12 or 13, and Psalm 7. Upgrade Psalm first (3.x ships on Psalm 6), then bump the constraint:
 
 ```json
 "require-dev": {

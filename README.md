@@ -35,7 +35,7 @@ composer require --dev psalm/plugin-laravel
 ./vendor/bin/psalm-laravel analyze
 ```
 
-Requires PHP 8.2+ and Laravel 12.48+ or 13.20+.
+Requires PHP 8.2+ and Laravel 12.x or 13.x.
 Full matrix under [Versions & Dependencies](#versions--dependencies).
 
 * Requires [Psalm 7](https://github.com/vimeo/psalm/releases).
@@ -125,12 +125,12 @@ For plugin configuration options, see [docs/config.md](docs/config.md).
 
 Maintained versions:
 
-| Laravel Psalm Plugin                 | PHP  |        Laravel |   Psalm | Plugin Status |
-|--------------------------------------|------|---------------:|--------:|---------------|
-| **4.x** (recommended)                | 8.2+ | 12.48+, 13.20+ |       7 | Stable        |
-| 3.x ([upgrade](UPGRADING.md#3x--4x)) | 8.2+ |     11, 12, 13 |       6 | Stable        |
-| 2.x ([upgrade](UPGRADING.md#2x--3x)) | 8.0+ |   8, 9, 10, 11 | 4, 5, 6 | Unmaintained  |
-| 1.x ([upgrade](UPGRADING.md#1x--2x)) | 7.1+ |     5, 6, 7, 8 |    3, 4 | Unmaintained  |
+| Laravel Psalm Plugin                 | PHP  |      Laravel |   Psalm | Plugin Status |
+|--------------------------------------|------|-------------:|--------:|---------------|
+| **4.x** (recommended)                | 8.2+ |       12, 13 |       7 | Stable        |
+| 3.x ([upgrade](UPGRADING.md#3x--4x)) | 8.2+ |   11, 12, 13 |       6 | Stable        |
+| 2.x ([upgrade](UPGRADING.md#2x--3x)) | 8.0+ | 8, 9, 10, 11 | 4, 5, 6 | Unmaintained  |
+| 1.x ([upgrade](UPGRADING.md#1x--2x)) | 7.1+ |   5, 6, 7, 8 |    3, 4 | Unmaintained  |
 
 See [releases](https://github.com/psalm/psalm-plugin-laravel/releases) for more details about supported PHP, Laravel and Psalm versions.
 
