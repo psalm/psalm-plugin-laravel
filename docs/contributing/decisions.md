@@ -54,6 +54,8 @@ Bug fixes (where the previous type was demonstrably wrong) are exempt.
 
 **Why:** Each supported Laravel version adds maintenance cost: version-specific stubs, conditional behavior, test matrices. Laravel's annual major release cycle means two versions covers the vast majority of active projects. Older versions receive security-only patches from Laravel and have a shrinking user base.
 
+**Minor floors:** `^12.48 || ^13.20`. A floor rises to the oldest minor that lets a capability gate, a `stubs/<version>/` split or a stub override of a Laravel docblock go (12.48: `@includeIsolated`, async `LazyPromise`, `Str::lower()`'s conditional return, `readWriteType` in every query-log entry). Each stub removal must hold on 12.48.0 and 13.20.0 both.
+
 ### New features default to permissive
 
 **Decision:** When a new feature has a strictness spectrum (e.g. sealed properties, migration inference), the default should be the least disruptive option. Stricter modes are opt-in via config.
