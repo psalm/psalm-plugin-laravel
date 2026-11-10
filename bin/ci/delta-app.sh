@@ -25,6 +25,9 @@
 #                                              exit_code, peak_rss_mb: largest process in the
 #                                              Psalm process tree incl. workers, null if
 #                                              unmeasured; see delta-measure.php)
+#   <out>/<app>/<app>--setup.log              (`== <epoch> <stage>` progress markers plus
+#                                              clone/Composer output; delta-report.php reads
+#                                              it for an app that ends without a report)
 #
 # Exit 0 even on a per-app Psalm failure: a crash log is written and the side's
 # JSON is omitted so delta-report.php renders the app as (missing) instead of
@@ -70,6 +73,24 @@ done
 PLUGIN_BASE=$(cd "$PLUGIN_BASE" && pwd -P)
 PLUGIN_HEAD=$(cd "$PLUGIN_HEAD" && pwd -P)
 mkdir -p "$OUT/$APP"
+
+# A job that times out or fails before Psalm writes anything leaves no other trace
+# in the artifact, so the last stage and the output before it tell the report why.
+SETUP_LOG="$OUT/$APP/$APP--setup.log"
+: > "$SETUP_LOG"
+stage() {
+    echo "[$APP] $1" >&2
+    printf '== %s %s\n' "$(date +%s)" "$1" >> "$SETUP_LOG"
+}
+# Run a command with its output in the setup log; on failure, also print the tail to the job log.
+logged() {
+    local rc=0
+    "$@" >> "$SETUP_LOG" 2>&1 || rc=$?
+    if [[ $rc -ne 0 ]]; then
+        tail -n 30 "$SETUP_LOG" >&2
+    fi
+    return $rc
+}
 
 # Default app source dir — a cacheable working copy keyed on the frozen ref.
 APP_SRC="${APP_SRC:-${OUT}/${APP}/src}"
@@ -127,14 +148,14 @@ plugin_dep_sig() {
 # with a fetch fallback when the commit is not the tip.
 
 if [[ ! -d "$APP_SRC/.git" ]]; then
-    echo "[$APP] cloning $REPO @ $REF" >&2
+    stage "cloning $REPO @ $REF"
     rm -rf "$APP_SRC"
     mkdir -p "$APP_SRC"
-    git clone --quiet --no-checkout "$REPO" "$APP_SRC"
+    logged git clone --quiet --no-checkout "$REPO" "$APP_SRC"
     (
         cd "$APP_SRC"
         git checkout --quiet "$REF" 2>/dev/null || {
-            git fetch --quiet origin "$REF"
+            logged git fetch --quiet origin "$REF"
             git checkout --quiet "$REF"
         }
     )
@@ -277,7 +298,7 @@ fi
 
 # Run the one-time source install only when needed (cache-friendly otherwise).
 if [[ "$need_install" == 1 ]]; then
-    echo "[$APP] installing dependencies" >&2
+    stage "installing dependencies"
     (
         cd "$APP_SRC"
         # A reused source still carries the previous install's composer edits,
@@ -285,7 +306,7 @@ if [[ "$need_install" == 1 ]]; then
         # composer command in before_install. Start from the pinned files.
         git checkout --quiet HEAD -- $(git ls-files composer.json composer.lock)
         if [[ -n "$BEFORE_INSTALL" ]]; then
-            echo "[$APP] before_install: $BEFORE_INSTALL" >&2
+            stage "running before_install: $BEFORE_INSTALL"
             eval "$BEFORE_INSTALL"
         fi
     )
@@ -297,7 +318,8 @@ if [[ "$need_install" == 1 ]]; then
     # irrelevant here and would otherwise fail the whole install. The setting is
     # written into composer.json, so the per-side COW copies inherit it.
     (cd "$APP_SRC" && composer config --no-interaction policy.advisories.block false 2>/dev/null || true)
-    (cd "$APP_SRC" && composer update "${COMPOSER_FLAGS[@]}" --quiet)
+    stage "running composer update"
+    (cd "$APP_SRC" && logged composer update "${COMPOSER_FLAGS[@]}")
     # Stamp what this vendor was solved against, so a future run can verify reuse.
     printf '%s' "$want_sig" > "$PLUGIN_SIG_FILE"
 else
@@ -355,13 +377,15 @@ run_side() {
             ln -s "$plugin_dir" "$link"
             ;;
         composer)
+            stage "relinking $label with Composer"
             configure_plugin_repo "$app_dir" "$plugin_dir"
-            (cd "$app_dir" && composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}" --quiet) \
+            (cd "$app_dir" && logged composer update psalm/plugin-laravel "${COMPOSER_FLAGS[@]}") \
                 || { echo "[$APP/$label] composer relink failed" >&2; rm -rf "$app_dir"; return 0; }
             rm -rf "$link"
             ln -s "$plugin_dir" "$link"
             ;;
     esac
+    stage "analysing $label"
 
     local out_txt err_txt rss_txt side_tmp t0 exit_code wall coverage count peak_rss
     out_txt=$(mktemp); err_txt=$(mktemp); rss_txt=$(mktemp); side_tmp=$(mktemp -d)
