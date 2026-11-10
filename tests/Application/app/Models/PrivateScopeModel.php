@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Archetype for #[Scope] VISIBILITY handling.
  *
- * A private #[Scope] is never a usable scope on any supported Laravel (12-13): 13.8+ rejects
- * it in Model::isScopeMethodWithAttribute, and earlier versions break at runtime anyway (it
+ * A private #[Scope] is never a usable scope on any supported Laravel (12-13): 12.59+ and 13.8+
+ * reject it in Model::isScopeMethodWithAttribute, and earlier versions break at runtime anyway (it
  * recurses through __call, since callNamedScope dispatches from the base Model's $this where
  * the subclass's private method is unreachable). So the plugin treats it as not-a-scope — a
  * legacy scopeXxx twin (if any) wins, otherwise it is nothing.
