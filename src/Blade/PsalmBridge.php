@@ -14,15 +14,15 @@ use Psalm\Issue\TaintedInput;
  * other Psalm line is a rewrite of this file rather than a hunt through the package.
  *
  * Each method carries the file:line it was read off. Citations are against the Psalm the branch
- * requires (`vendor/vimeo/psalm`, 7.0.0-beta24); re-read them before trusting one on another line.
+ * requires (`vendor/vimeo/psalm`, 7.2.1); re-read them before trusting one on another line.
  *
  * No taint-mode probe lives here. Psalm 6 runs one mode per invocation and `IssueBuffer::add()`
  * discards every non-`Tainted*` issue under `--taint-analysis`, which is why the 3.x pipeline asks.
- * Psalm 7 has no such mode: `Config::$run_taint_analysis` defaults to true (`Config.php:409`), which
- * is what builds the graph (`Internal/Cli/Psalm.php:1384-1385` into
- * `ProjectAnalyzer::trackTaintedInputs()`, `Internal/Analyzer/ProjectAnalyzer.php:544-547`), and
- * `IssueBuffer::add()` filters nothing on taint — its `$is_tainted` (`IssueBuffer.php:281`) only
- * exempts `Tainted*` issues from the `alreadyEmitted()` dedupe (same file, :308 and :336). One run
+ * Psalm 7 has no such mode: `Config::$run_taint_analysis` defaults to true (`Config.php:471`), which
+ * is what builds the graph (`Internal/Cli/Psalm.php:1411-1413` into
+ * `ProjectAnalyzer::trackTaintedInputs()`, `Internal/Analyzer/ProjectAnalyzer.php:553-556`), and
+ * `IssueBuffer::add()` filters nothing on taint — its `$is_tainted` (`IssueBuffer.php:336`) only
+ * exempts `Tainted*` issues from the `alreadyEmitted()` dedupe (same file, :363 and :391). One run
  * therefore emits both kinds, and there is nothing on this line to short-circuit on.
  *
  * @internal
@@ -56,7 +56,7 @@ final class PsalmBridge
      * The location of one journey step, or null for a step that has none.
      *
      * Step shape is fixed by `TaintFlowGraph::getIssueTrace()`
-     * (`vendor/vimeo/psalm/src/Psalm/Internal/Codebase/TaintFlowGraph.php:507-526`): the `location`
+     * (`vendor/vimeo/psalm/src/Psalm/Internal/Codebase/TaintFlowGraph.php:922-941`): the `location`
      * key mirrors `DataFlowNode::$code_location`, which is null for nodes that stand for a symbol
      * rather than an expression (a stubbed taint source, for one).
      *
@@ -90,8 +90,8 @@ final class PsalmBridge
      *
      * `journey_text` is a ` -> `-joined chain of `label (file_name:line:column)` descriptors, the
      * `file_name:line:column` half being `CodeLocation::getShortSummary()`
-     * (`vendor/vimeo/psalm/src/Psalm/CodeLocation.php:441-444`), assembled by
-     * `TaintFlowGraph::getPredecessorPath()` and `getSuccessorPath()` (same file, lines 438-501).
+     * (`vendor/vimeo/psalm/src/Psalm/CodeLocation.php:476-479`), assembled by
+     * `TaintFlowGraph::getPredecessorPath()` and `getSuccessorPath()` (same file, lines 853-916).
      *
      * @psalm-pure
      */

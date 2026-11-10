@@ -19,7 +19,7 @@ For Psalm's upstream taint analysis documentation, see:
 
 The upstream reference does not cover the conditional form of `@psalm-taint-escape`, nor `@psalm-assert-untainted`. Both are documented below from source, along with which analyzers actually consume them.
 
-Claims here are verified against both majors this repo targets. Source citations are Psalm 7.0.0-beta19 and will drift; the Psalm 6 line (6.16.1, backing `3.x`) implements this surface in different classes at different line numbers. Only behavioral differences between the majors are called out, at the point of use.
+Claims here are verified against both majors this repo targets. Source line citations date from Psalm 7.0.0-beta19 and have drifted (re-verify before trusting one); the behavior claims re-checked on Psalm 7.2.1 say so. The Psalm 6 line (6.16.1, backing `3.x`) implements this surface in different classes at different line numbers. Only behavioral differences between the majors are called out, at the point of use.
 
 ## Stub location
 
@@ -154,7 +154,7 @@ function filter_var(mixed $value, int $filter = FILTER_DEFAULT, array|int $optio
 - **Multiple tags accumulate.** Each `@psalm-taint-escape (...)` line is evaluated independently and the resulting masks are OR-ed, which is why `filter_var()` lists one per `FILTER_*` constant instead of nesting one large conditional.
 - **`@psalm-flow` is still mandatory**, for the same reason as the bare form: the escape node replaces the return node, so without a declared flow every other kind is dropped too. Note that `filter_var()`'s flow lists `$filter` and `$options` alongside `$value`.
 
-Verified against Psalm 7.0.0-beta19 with a three-case fixture on `filter_var()`, plain Psalm, no plugin:
+Verified against Psalm 7.2.1 with a three-case fixture on `filter_var()`, plain Psalm, no plugin:
 
 ```php
 $v = filter_var(taintSource(), FILTER_VALIDATE_INT);  // clean: literal 257 selects the escape

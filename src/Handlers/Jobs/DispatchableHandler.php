@@ -152,7 +152,7 @@ final class DispatchableHandler implements AfterExpressionAnalysisInterface
         // Delegate full argument validation (count + types) to Psalm's standard
         // argument checker. This emits TooFewArguments, TooManyArguments,
         // InvalidArgument, etc. — exactly the same errors as new ClassName(...).
-        // Psalm 7.0.0-rc6 marks the arguments of a `self::`/`parent::`/`Child::` call made from inside a class
+        // Psalm marks the arguments of a `self::`/`parent::`/`Child::` call made from inside a class
         // with the class whose body of the *called* method (here dispatch()) it analyzes, and
         // checkMethodArgs() reads that mark to pick the parameter nodes of the *checked* method. Re-checking
         // the same argument expressions against __construct() with the mark still set sends their taint to

@@ -429,7 +429,7 @@ final class ShadowIssueRelocator
         // compileAware()). Psalm does not correlate that ternary with the key it narrowed, so any
         // keyed non-string default (`null`, `false`, `0`, `[]`, an enum) reaches the list-form arm,
         // which only runs for an int key (#1695). Every argument issue on that selection is the
-        // same artifact (Psalm 7.0.0-rc28 no longer adds an InvalidCast next to an argument issue,
+        // same artifact (Psalm no longer adds an InvalidCast next to an argument issue,
         // vimeo/psalm#13036). The mirror image: an all-int-key list (`@aware(['color'])`) narrows
         // `$__key` to `never` in the keyed arm, and Psalm reports `NoValue` on it.
         if (self::isGeneratedAwareArgument($issue, $target)) {
