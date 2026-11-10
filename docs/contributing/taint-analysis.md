@@ -164,15 +164,24 @@ $v = filter_var(taintSource());                       // TaintedHtml: FILTER_DEF
 
 The middle case is the one worth remembering: an argument Psalm cannot resolve to a literal produces a report, never a silent pass.
 
-### Limitation: instance method calls ignore the conditional form
+### Instance methods, nullsafe calls and constructors
 
-Only two analyzers read `conditionally_removed_taints`: `FunctionCallReturnTypeFetcher` (plain function calls) and `StaticCallAnalyzer` (static calls). `MethodCallReturnTypeFetcher` reads `$method_storage->removed_taints` (`:536`) but contains **zero** references to `conditionally_removed_taints`, and `NewAnalyzer` does not read it either, even though it already consumes `if_true_assertions` (`:484`), so the hook point exists.
+Psalm 7.2.0 (vimeo/psalm#12621) applies the conditional form to instance method calls: `MethodCallReturnTypeFetcher` reads `conditionally_removed_taints` like `FunctionCallReturnTypeFetcher` (functions) and `StaticCallAnalyzer` (static calls) do. A literal argument selects the escape on a function, static, instance and nullsafe call alike, and a runtime value still reports (`ConditionalTaintEscapeInstanceMethod.phpt`):
 
-A stub backported to `3.x` inherits this limitation, so a conditional escape that silently fails on `4.x` fails there too.
+```php
+/**
+ * @psalm-taint-escape ($mode is 1 ? 'html' : null)
+ * @psalm-flow ($value) -> return
+ */
+public function encode(string $value, int $mode): string {}
 
-The practical consequence for this plugin: a conditional escape on an *instance method* stub is parsed, stored, and then silently never applied. Since nearly every Laravel stub here is an instance method (`Builder::where()`, `Connection::escape()`, `Encrypter::encrypt()`), the conditional form is currently usable only in `stubs/common/**/helpers.phpstub` free functions and on static methods. Do not reach for it on an instance method and assume it works. Write the type test first and watch it fail.
+echo $encoder->encode($tainted, 1);        // clean
+echo $encoder->encode($tainted, $runtime); // TaintedHtml
+```
 
-When you need argument-dependent escaping on an instance method today, use a handler instead: `RemoveTaintsInterface` receives an `AddRemoveTaintsEvent` and `MethodCallReturnTypeFetcher:303` dispatches it on the return node of every method call, so the argument inspection happens in PHP where you can gate it however you like. `WhereColumnTaintHandler` is the worked example of argument-shape-dependent stripping (see [PDO parameterized queries](#pdo-parameterized-queries)). Extending Psalm core to consume `conditionally_removed_taints` in `MethodCallReturnTypeFetcher` and `NewAnalyzer` (mirroring `StaticCallAnalyzer:300-351`; Psalm 6: `StaticCallAnalyzer:312-333`) is a small upstream change and the right long-term fix; per the repo's upstream-first policy, propose it there before growing a handler that only exists to work around the gap. Since the gap exists identically in both majors, an upstream fix would need to land on both, or a `3.x` backport of a handler-based workaround stays necessary even after `4.x` is fixed.
+**Constructors are the exception.** `NewAnalyzer` does not read `conditionally_removed_taints`, so on `__construct()` the conditional escape is parsed, stored and silently never applied: `new Wrapper($tainted, 1)` keeps the taint (`ConditionalTaintEscapeConstructorKnownLimitation.phpt`). Use a `RemoveTaintsInterface` handler there.
+
+Prefer the conditional stub form for a new argument-dependent escape on a method. A `RemoveTaintsInterface` handler stays for what a parameter-level conditional cannot name: an array position (`WhereColumnTaintHandler` strips the bound positions of a where-family `$column` array, see [PDO parameterized queries](#pdo-parameterized-queries)), a flag bitmask (`JsonEncodeTaintHandler`), and constructors. None of the plugin's four `RemoveTaintsInterface` handlers existed only because the instance-method form was ignored. A stub backported to `3.x` (Psalm 6) needs the instance-method case re-verified there before it relies on the conditional form.
 
 ### Where a conditional escape is the wrong tool
 
@@ -698,7 +707,7 @@ These are tracked as follow-ups. Until they are covered, treat the handler as a 
 2. **For database methods, check whether values are PDO-bound or raw SQL**. See [PDO parameterized queries](#pdo-parameterized-queries). Column names go into SQL identifiers (sink); values go into bindings (escape).
 3. **Choose the correct annotation type and confirm it applies at that scope**: source, sink, escape, or flow. See [Annotations quick reference](#annotations-quick-reference). A tag on the wrong scope is ignored silently, never reported.
 4. **If using `@psalm-taint-escape` or `@psalm-taint-unescape`**: always add `@psalm-flow` to preserve other taint kinds (unless the return value's other taints are truly irrelevant)
-5. **If the escape depends on an argument value**: use the conditional form, and check first that the stub is a free function or a static method. Instance methods parse it and silently never apply it. See [Conditional escapes](#conditional-escapes-psalm-taint-escape-conditional)
+5. **If the escape depends on an argument value**: use the conditional form. It applies to function, static, instance and nullsafe calls (Psalm 7.2+) but not to constructors. See [Conditional escapes](#conditional-escapes-psalm-taint-escape-conditional)
 6. **If using `@psalm-flow` on a method returning a concrete value (model, scalar, or collection)**: add `@psalm-taint-specialize` to prevent cross-call-site taint pollution, then run the existing `Tainted<NonEscapedKind>*` test for the stub to confirm within-callsite flow still propagates. The combination is not mechanically safe on every stub shape in Psalm 7, see [Flow-through factories need `@psalm-taint-specialize`](#flow-through-factories-need-psalm-taint-specialize) for the empirical-verification protocol
 7. **Match parameter types exactly** to Laravel's signatures. Do not narrow types.
 8. **Place in `stubs/common/`** under a path matching the Laravel namespace
