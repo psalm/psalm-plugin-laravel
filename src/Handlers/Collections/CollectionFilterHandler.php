@@ -29,6 +29,7 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Type\Comparator\TypeComparisonResult;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
+use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\StatementsSource;
@@ -435,7 +436,6 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
         ) && $comparison->to_string_cast !== true;
     }
 
-    /** @psalm-mutation-free */
     private static function handleWhereNotNull(MethodReturnTypeProviderEvent $event): ?Union
     {
         // Only narrow when called with no key (or explicit null key).
@@ -458,20 +458,19 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Build the narrowed return type with the same Collection subclass and is_static.
-     *
-     * @psalm-pure
+     * Build the narrowed return type with the same Collection subclass, plain only for a receiver proven plain.
      */
     private static function buildNarrowedReturn(
         MethodReturnTypeProviderEvent $event,
         Union $tKey,
         Union $narrowedValue,
     ): Union {
-        // `&static` already bound to the receiver, matching `return static`; unbound, it binds again on later calls.
         $className = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
+        $isStatic = !LateStatic::isPlainReceiver($event, $className);
 
+        // `&static` already bound to the receiver, matching `return static`; unbound, it binds again on later calls.
         return new Union([
-            (new TGenericObject($className, [$tKey, $narrowedValue], is_static: true))->setIsStatic(true, true),
+            (new TGenericObject($className, [$tKey, $narrowedValue], is_static: $isStatic))->setIsStatic($isStatic, $isStatic),
         ]);
     }
 

@@ -30,13 +30,13 @@ $_array = LazyCollection::make([1, 2]);
 /** @psalm-check-type-exact $_array = LazyCollection<int<0, 1>, 1|2> */
 
 $_string = LazyCollection::make('str');
-/** @psalm-check-type-exact $_string = LazyCollection<0, 'str'>&static */
+/** @psalm-check-type-exact $_string = LazyCollection<0, 'str'> */
 
 $_null = LazyCollection::make(null);
-/** @psalm-check-type-exact $_null = LazyCollection<never, never>&static */
+/** @psalm-check-type-exact $_null = LazyCollection<never, never> */
 
 $_int = LazyCollection::make(42);
-/** @psalm-check-type-exact $_int = LazyCollection<0, 42>&static */
+/** @psalm-check-type-exact $_int = LazyCollection<0, 42> */
 
 ?>
 --EXPECTF--

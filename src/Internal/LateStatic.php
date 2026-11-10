@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Internal;
 
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Name;
+use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Type\Atomic;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TNull;
 use Psalm\Type\MutableTypeVisitor;
 use Psalm\Type\TypeNode;
 use Psalm\Type\Union;
@@ -14,6 +20,44 @@ use Psalm\Type\Union;
  */
 final class LateStatic
 {
+    /**
+     * Whether the receiver is proven NOT late static, so a handler may answer the plain class: `Collection::make()`
+     * by name, or an instance typed as a plain object of `$class` (not `$this`, a `static` value or a template).
+     * Everything else stays unproven and keeps `&static`: `self::`/`parent::`/`$this::`/`$class::` forward the
+     * late static binding, and `$this` refined by `@psalm-if-this-is` names a base class of the called one.
+     */
+    public static function isPlainReceiver(MethodReturnTypeProviderEvent $event, string $class): bool
+    {
+        $stmt = $event->getStmt();
+        if ($stmt instanceof StaticCall) {
+            return $stmt->class instanceof Name && !\in_array(\strtolower($stmt->class->name), ['static', 'self', 'parent'], true);
+        }
+
+        if ($stmt->var instanceof Variable && $stmt->var->name === 'this') {
+            return false;
+        }
+
+        $type = $event->getSource()->getNodeTypeProvider()->getType($stmt->var);
+        if (!$type instanceof Union) {
+            return false;
+        }
+
+        $namesClass = false;
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TNull) {
+                continue;
+            }
+
+            if (!$atomic instanceof TNamedObject || $atomic->is_static || $atomic->extra_types !== []) {
+                return false;
+            }
+
+            $namesClass = $namesClass || \strtolower($atomic->value) === \strtolower($class);
+        }
+
+        return $namesClass;
+    }
+
     /**
      * Drops `&static` (what Collection methods return) at every depth, for output with no class scope
      * to bind it to: a template declaration, or an issue message. Callers that need the result to

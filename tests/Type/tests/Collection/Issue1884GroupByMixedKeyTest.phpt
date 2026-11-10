@@ -49,24 +49,24 @@ function mixed_group_by_key_resolves_to_array_key(Collection $c): void
         ->sortByDesc(fn (int $n) => $n);
 
     $_grouped = $c->groupBy(fn ($r): mixed => $r->unknown_prop ?? 'unknown');
-    /** @psalm-check-type-exact $_grouped = Collection<array-key, Collection<int, Customer>&static>&static */
+    /** @psalm-check-type-exact $_grouped = Collection<array-key, Collection<int, Customer>> */
 
     $_preserved = $c->groupBy(fn ($r) => $r->unknown_prop ?? 'unknown', true);
-    /** @psalm-check-type-exact $_preserved = Collection<array-key, Collection<int, Customer>&static>&static */
+    /** @psalm-check-type-exact $_preserved = Collection<array-key, Collection<int, Customer>> */
 }
 
 /** @param Collection<string, Customer> $c */
 function mixed_group_by_preserve_keys(Collection $c): void
 {
     $_preserved = $c->groupBy(fn ($r) => $r->unknown_prop ?? 'unknown', true);
-    /** @psalm-check-type-exact $_preserved = Collection<array-key, Collection<string, Customer>&static>&static */
+    /** @psalm-check-type-exact $_preserved = Collection<array-key, Collection<string, Customer>> */
 }
 
 /** @param Collection<int, Customer> $c */
 function mixed_key_by_key_resolves_to_array_key(Collection $c): void
 {
     $_keyed = $c->keyBy(fn ($r): mixed => $r->unknown_prop ?? 'unknown');
-    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer>&static */
+    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer> */
 }
 
 /** @param Collection<int, Customer> $c */
@@ -110,7 +110,7 @@ function intersection_receiver_defers(Collection $c, callable $by): void
 function receiver_union_and_chained_static_still_answer($c): void
 {
     $_keyed = $c->keyBy(fn ($r) => $r->unknown_prop ?? 'unknown');
-    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer>&static|\Illuminate\Database\Eloquent\Collection<array-key, Customer>&static */
+    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer>|\Illuminate\Database\Eloquent\Collection<array-key, Customer> */
 }
 
 /** @param Collection<int, Customer> $c */
