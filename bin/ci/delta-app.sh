@@ -97,6 +97,8 @@ APP_SRC="${APP_SRC:-${OUT}/${APP}/src}"
 
 COMPOSER_FLAGS=(--no-interaction --no-progress --ignore-platform-reqs)
 export COMPOSER_MEMORY_LIMIT=-1
+# One `composer update` attempt; a healthy cold install takes 1-2 min on CI.
+COMPOSER_ATTEMPT_SECONDS=300
 
 # Optional extra CLI args, split on whitespace into arrays so each token is
 # passed as a separate argument: --psalm-args is the registry's per-app Psalm
@@ -299,6 +301,9 @@ fi
 # Run the one-time source install only when needed (cache-friendly otherwise).
 if [[ "$need_install" == 1 ]]; then
     stage "installing dependencies"
+    # A vendor restored from an older cache entry is the starting point (Composer then installs only
+    # the difference); drop its stamp so a failed or timed-out install is never saved as current.
+    rm -f "$PLUGIN_SIG_FILE"
     (
         cd "$APP_SRC"
         # A reused source still carries the previous install's composer edits,
@@ -318,8 +323,21 @@ if [[ "$need_install" == 1 ]]; then
     # irrelevant here and would otherwise fail the whole install. The setting is
     # written into composer.json, so the per-side COW copies inherit it.
     (cd "$APP_SRC" && composer config --no-interaction policy.advisories.block false 2>/dev/null || true)
-    stage "running composer update"
-    (cd "$APP_SRC" && logged composer update "${COMPOSER_FLAGS[@]}")
+    # --minimal-changes keeps every package the app's composer.lock pins unless the plugin, the
+    # pinned Psalm or the plugin's Laravel floor forces a change: the app is analysed against its
+    # own dependency versions, the versions stay the same from run to run, and a restored vendor
+    # needs only the few packages that moved. A partial `update psalm/plugin-laravel vimeo/psalm -W`
+    # fails instead when the lock holds a Laravel below the plugin's conflict range.
+    # Composer waits up to 300 s for a stalled download and then retries it, so one hung GitHub
+    # zipball can take a whole job. Cap each attempt; the second one reuses what the first cached.
+    for attempt in 1 2; do
+        stage "running composer update (attempt $attempt)"
+        if (cd "$APP_SRC" && logged perl -e 'alarm shift; exec @ARGV' "$COMPOSER_ATTEMPT_SECONDS" \
+            composer update --minimal-changes "${COMPOSER_FLAGS[@]}"); then
+            break
+        fi
+        [[ $attempt == 2 ]] && exit 1
+    done
     # Stamp what this vendor was solved against, so a future run can verify reuse.
     printf '%s' "$want_sig" > "$PLUGIN_SIG_FILE"
 else
