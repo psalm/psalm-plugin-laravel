@@ -190,11 +190,10 @@ class DB extends Facade
     /**
      * Get the connection query log.
      *
-     * The facade's generated `@method` tag only says `array[]`. `readWriteType` is optional because
-     * Laravel only started logging it in 12.45, after the 12.27 floor, and a plain string
-     * because setReadWriteType() accepts any.
+     * The facade's generated `@method` tag only says `array[]`. `readWriteType` is a plain string
+     * because setReadWriteType() accepts any, and `logQuery()` always writes it.
      *
-     * @return list<array{query: string, bindings: array, time: float|null, readWriteType?: string|null}>
+     * @return list<array{query: string, bindings: array, time: float|null, readWriteType: string|null}>
      */
     public static function getQueryLog() {}
 }

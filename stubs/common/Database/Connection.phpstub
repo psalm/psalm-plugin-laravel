@@ -175,10 +175,10 @@ class Connection implements ConnectionInterface
     public function escape($value, $binary = false) {}
 
     /**
-     * Laravel documents a non-list shape and omits `readWriteType`, which the log writes from 12.45
-     * (after the 12.27 floor), hence optional. Matches the DB facade stub.
+     * Laravel documents a non-list shape and omits `readWriteType`, which `logQuery()` always writes
+     * (a plain string because setReadWriteType() accepts any). Matches the DB facade stub.
      *
-     * @return list<array{query: string, bindings: array<array-key, mixed>, time: float|null, readWriteType?: string|null}>
+     * @return list<array{query: string, bindings: array<array-key, mixed>, time: float|null, readWriteType: string|null}>
      */
     public function getQueryLog() {}
 }
