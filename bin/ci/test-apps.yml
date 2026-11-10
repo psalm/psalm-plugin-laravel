@@ -162,7 +162,7 @@ apps:
     repo: https://github.com/HDInnovations/UNIT3D.git
     ref: 8b88f4c
     php: "8.4"
-    groups: [octane, blade, pest, livewire]
+    groups: [octane, blade, pest, livewire, large]
     # config/secure-headers.php parse_url()s env('VITE_ECHO_ADDRESS') at boot, so
     # composer's artisan scripts fatal without the example .env.
     before_install: cp .env.example .env
@@ -203,7 +203,7 @@ apps:
     repo: https://github.com/unopim/unopim.git
     ref: ab75e4b
     php: "8.4"
-    groups: [ai, octane, blade, pest, laravel-13, sanctum]
+    groups: [ai, octane, blade, pest, laravel-13, sanctum, large]
     # Bagisto layout: the code (incl. the laravel/ai usage in AiAgent) lives in
     # packages/Webkul/*/src, not the app/ skeleton auto-detection would pick.
     # Tests (packages/Webkul/*/tests) excluded, like every other app.
@@ -213,7 +213,7 @@ apps:
     repo: https://github.com/m3ue/m3u-editor.git
     ref: 3fa58e1
     php: "8.4"
-    groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire]
+    groups: [ai, filament, blade, pest, laravel-13, sanctum, livewire, large]
     # The laravel/vet composer plugin refuses every unreviewed package; the
     # dev-main filament-spatie-laravel-backup tip breaks panel boot in the
     # artisan scripts; and config/broadcasting.php builds a Pusher client that
@@ -229,7 +229,7 @@ apps:
     repo: https://github.com/escapeboy/agent-fleet-o.git
     ref: 2493ec6
     php: "8.4"
-    groups: [ai, livewire, phpunit, laravel-13, sanctum]
+    groups: [ai, livewire, phpunit, laravel-13, sanctum, large]
     # Agent-fleet manager: ~70 files import Laravel\Ai, so it exercises agents,
     # tools and streaming rather than a single prompt call. Its `^1.0` resolves
     # inside the plugin's gate, unlike m3u-editor's 0.11 lock.
@@ -260,7 +260,7 @@ apps:
     repo: https://github.com/aureuserp/aureuserp.git
     ref: 070cacc
     php: "8.4"
-    groups: [filament, blade, pest, laravel-13, sanctum, livewire]
+    groups: [filament, blade, pest, laravel-13, sanctum, livewire, large]
     # Filament 5 ERP: app/ holds 7 files, the ~2.9k-file code base is 28
     # modules under plugins/webkul/*/src.
     project_dir: plugins/webkul/*/src

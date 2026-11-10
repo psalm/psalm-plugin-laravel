@@ -148,12 +148,18 @@ plugin_dep_sig() {
 # The ref is an immutable commit, so a populated APP_SRC is reusable across runs
 # and is what CI caches. Clone the branch tip then reset to the exact commit,
 # with a fetch fallback when the commit is not the tip.
+#
+# Blobless: commits and trees come down, file contents only for the checked-out
+# commit. Three registry apps whose full clones had not finished after 15 min
+# (8 clones in parallel) cloned this way in 8 s. A server without partial-clone
+# support sends everything instead.
+# Not shallow: registry refs are abbreviated SHAs, which a fetch cannot name.
 
 if [[ ! -d "$APP_SRC/.git" ]]; then
     stage "cloning $REPO @ $REF"
     rm -rf "$APP_SRC"
     mkdir -p "$APP_SRC"
-    logged git clone --quiet --no-checkout "$REPO" "$APP_SRC"
+    logged git clone --quiet --filter=blob:none --no-checkout "$REPO" "$APP_SRC"
     (
         cd "$APP_SRC"
         git checkout --quiet "$REF" 2>/dev/null || {

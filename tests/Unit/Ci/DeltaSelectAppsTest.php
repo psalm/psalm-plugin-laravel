@@ -94,6 +94,25 @@ final class DeltaSelectAppsTest extends TestCase
         $this->assertStringContainsString('invalid flag', $stderr);
     }
 
+    #[Test]
+    public function large_apps_start_first_while_the_report_keeps_the_selection_order(): void
+    {
+        $registry = [
+            'groups' => ['default' => 'Baseline', 'large' => 'Slow'],
+            'apps' => [
+                ['name' => 'alpha', 'groups' => ['default']],
+                ['name' => 'beta', 'groups' => ['default', 'large']],
+                ['name' => 'gamma', 'groups' => ['default']],
+            ],
+        ];
+
+        $selection = $this->select($registry, '');
+
+        $this->assertSame('alpha,beta,gamma', $selection['apps_csv']);
+        $this->assertIsArray($selection['matrix']);
+        $this->assertSame(['beta', 'alpha', 'gamma'], \array_column((array) $selection['matrix']['include'], 'name'));
+    }
+
     /**
      * @param array<string, mixed> $registry
      * @return array<string, mixed>
