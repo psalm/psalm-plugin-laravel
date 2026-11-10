@@ -15,8 +15,9 @@ namespace SafeNamedArgumentVariadicCaptureStripped {
     function tainted(): string { return 'attacker'; }
 
     /**
-     * Without the strip plain Psalm reports each call below against a fixed parameter the value
-     * never reaches (vimeo/psalm#12251): the variadic's node is keyed by the written offset. Each
+     * Pins the reach of the strip that vimeo/psalm#12252 forces: a named argument bound to a variadic
+     * loses its whole flow, including the genuine `html $rest` sink below. Plain Psalm 7.2 attributes
+     * these calls correctly (vimeo/psalm#12251 is fixed) and reports only that variadic sink. Each
      * callee has its own sink so no shape can mask another.
      *
      * @psalm-taint-sink file $a

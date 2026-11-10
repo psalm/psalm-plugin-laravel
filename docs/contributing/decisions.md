@@ -766,11 +766,10 @@ Dedicated security scanners (Snyk, Semgrep) with configurable severity threshold
 
 **Decision:** Strip taint from a named-argument value only when Psalm binds it to the callee's variadic and the callee resolves exactly. Everything else is left to Psalm.
 
-**Why:** vimeo/psalm#11923 is fixed in 7.0.0-rc1, so the old strip-everything handler only hid true positives. Two variadic bugs remain:
+**Why:** vimeo/psalm#11923 is fixed in 7.0.0-rc1, so the old strip-everything handler only hid true positives. vimeo/psalm#12251 (a variadic keyed by its written offset, so `v(zzz: $x)` collided with the fixed parameter declared there) is fixed too: plain Psalm 7.2.1 reports only the variadic's own sink for that shape. One variadic bug remains:
 - vimeo/psalm#12252: an unpacked argument is mapped onto every parameter and string keys are ignored, so `run(...$args)` forwarding to `handle(...$args)` reports `run(page: $x)` against `handle()`'s first parameter (#1395).
-- vimeo/psalm#12251: a variadic is keyed by its written offset, so `v(zzz: $x)` collides with the fixed parameter declared there.
 
-Deleting the handler would bring the #1395 false positive back, so it shrank to this one rule. Retire it when both bugs are fixed.
+The strip cannot be limited to that shape: telling a re-spreading callee apart needs the callee's body and every hop it forwards through, and a miss reopens the #1395 false positive. Deleting the handler brings that false positive back, so it stays at this one rule. Retire it when #12252 is fixed.
 
 **Accepted limitation:** the strip drops the whole flow, so a genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (`TaintedNamedArgumentVariadicKnownLimitation`). `AddRemoveTaintsEvent` names neither the parameter nor the destination, so no narrower strip exists.
 
