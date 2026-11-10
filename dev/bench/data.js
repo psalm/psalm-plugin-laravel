@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794349331358,
+  "lastUpdate": 1794351054457,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18085,6 +18085,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 35.73,
             "range": "± 0.2",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1249,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2da93e5233b47d48893682693e70286d7da953d7",
+          "message": "Restate the `HasRawResponse` members of laravel/ai 1.4.0 and keep CI on stable Psalm (#2248)\n\n* build: keep vimeo/psalm on stable releases\n\npsalm/psalm-plugin-api 0.4.2 is only satisfiable by vimeo/psalm dev-master, so with minimum-stability dev the solver picked Psalm master over 7.2.1 and CI analyzed with unreleased Psalm.\n\n* fix(laravel-ai): restate the HasRawResponse members laravel/ai 1.4.0 added\n\nClassificationResponse and TranscriptionResponse gained $raw, withRawResponse() and __serialize(). __serialize() returns the model output, so it is a taint source like toArray().",
+          "timestamp": "2026-11-10T23:47:35+01:00",
+          "tree_id": "597be0aac04d9ac1db6e8ae36c9f7f3624c41be1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2da93e5233b47d48893682693e70286d7da953d7"
+        },
+        "date": 1794351052857,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.91,
+            "range": "± 1.22",
             "unit": "s"
           },
           {
