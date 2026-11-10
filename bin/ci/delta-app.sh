@@ -12,7 +12,7 @@
 #
 # Usage:
 #   delta-app.sh \
-#     --app monica --repo https://github.com/monicahq/monica.git --ref e08e917 \
+#     --app monica --repo https://github.com/monicahq/monica.git --ref e08e91734170b6bbd582cb578532c3948196124e \
 #     --plugin-base /path/plugin-base --plugin-head /path/plugin-head \
 #     --out /path/output-dir --base-label base-AAAA --head-label pr-BBBB \
 #     [--project-dir app] [--before-install 'composer update foo --no-interaction'] \
@@ -146,27 +146,29 @@ plugin_dep_sig() {
 # --- 1. Clone app at the frozen commit (cache-friendly) ----------------------
 #
 # The ref is an immutable commit, so a populated APP_SRC is reusable across runs
-# and is what CI caches. Clone the branch tip then reset to the exact commit,
-# with a fetch fallback when the commit is not the tip.
-#
-# Blobless: commits and trees come down, file contents only for the checked-out
-# commit. Three registry apps whose full clones had not finished after 15 min
-# (8 clones in parallel) cloned this way in 8 s. A server without partial-clone
-# support sends everything instead.
-# Not shallow: registry refs are abbreviated SHAs, which a fetch cannot name.
+# and is what CI caches. Only that commit is fetched (depth 1, by its full SHA:
+# about 5 MB of .git for monica against 35 MB blobless). A server that refuses a
+# fetch by SHA gets a blobless clone of the history instead, then a checkout of
+# the commit, with a fetch fallback when the commit is not reachable from a branch.
 
 if [[ ! -d "$APP_SRC/.git" ]]; then
     stage "cloning $REPO @ $REF"
     rm -rf "$APP_SRC"
     mkdir -p "$APP_SRC"
-    logged git clone --quiet --filter=blob:none --no-checkout "$REPO" "$APP_SRC"
-    (
-        cd "$APP_SRC"
-        git checkout --quiet "$REF" 2>/dev/null || {
-            logged git fetch --quiet origin "$REF"
-            git checkout --quiet "$REF"
-        }
-    )
+    if ! (cd "$APP_SRC" && git init --quiet && git remote add origin "$REPO" \
+        && logged git fetch --quiet --depth 1 origin "$REF" && git checkout --quiet FETCH_HEAD); then
+        stage "cloning $REPO @ $REF without a fetch by SHA"
+        rm -rf "$APP_SRC"
+        mkdir -p "$APP_SRC"
+        logged git clone --quiet --filter=blob:none --no-checkout "$REPO" "$APP_SRC"
+        (
+            cd "$APP_SRC"
+            git checkout --quiet "$REF" 2>/dev/null || {
+                logged git fetch --quiet origin "$REF"
+                git checkout --quiet "$REF"
+            }
+        )
+    fi
 else
     echo "[$APP] reusing cached source at $APP_SRC" >&2
 fi

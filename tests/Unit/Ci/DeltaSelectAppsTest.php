@@ -15,13 +15,15 @@ use PHPUnit\Framework\TestCase;
  */
 final class DeltaSelectAppsTest extends TestCase
 {
+    private const SHA = '0123456789abcdef0123456789abcdef01234567';
+
     private const REGISTRY = [
         'groups' => ['default' => 'Baseline', 'blade' => 'Blade-heavy apps'],
         'flags' => ['--blade' => 'Blade on', '--no-blade' => 'Blade off', '--opt=camelKey=x' => 'Mixed case'],
         'apps' => [
-            ['name' => 'alpha', 'groups' => ['default']],
-            ['name' => 'beta', 'groups' => ['blade']],
-            ['name' => 'gamma', 'groups' => []],
+            ['name' => 'alpha', 'ref' => self::SHA, 'groups' => ['default']],
+            ['name' => 'beta', 'ref' => self::SHA, 'groups' => ['blade']],
+            ['name' => 'gamma', 'ref' => self::SHA, 'groups' => []],
         ],
     ];
 
@@ -95,14 +97,26 @@ final class DeltaSelectAppsTest extends TestCase
     }
 
     #[Test]
+    public function an_abbreviated_ref_fails_the_registry(): void
+    {
+        $registry = self::REGISTRY;
+        $registry['apps'][1]['ref'] = '0123456';
+
+        [$exitCode, $stdout, $stderr] = $this->execute($registry, 'blade');
+
+        $this->assertSame(2, $exitCode, $stdout);
+        $this->assertStringContainsString('app beta ref must be a full 40-character commit SHA', $stderr);
+    }
+
+    #[Test]
     public function large_apps_start_first_while_the_report_keeps_the_selection_order(): void
     {
         $registry = [
             'groups' => ['default' => 'Baseline', 'large' => 'Slow'],
             'apps' => [
-                ['name' => 'alpha', 'groups' => ['default']],
-                ['name' => 'beta', 'groups' => ['default', 'large']],
-                ['name' => 'gamma', 'groups' => ['default']],
+                ['name' => 'alpha', 'ref' => self::SHA, 'groups' => ['default']],
+                ['name' => 'beta', 'ref' => self::SHA, 'groups' => ['default', 'large']],
+                ['name' => 'gamma', 'ref' => self::SHA, 'groups' => ['default']],
             ],
         ];
 
