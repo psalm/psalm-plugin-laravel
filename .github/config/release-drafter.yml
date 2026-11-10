@@ -2,11 +2,12 @@
 
 name-template: '$RESOLVED_VERSION'
 tag-template: '$RESOLVED_VERSION'
-# Pin the draft to 4.x's history only. `3.x` is a separate major line:
-# without `filter-by-commitish`, release-drafter pulls every merged PR since the
-# last tag regardless of base branch, so 3.x PRs would leak into the 4.x draft.
+# Collect changes from 4.x history only.
 commitish: refs/heads/4.x
-filter-by-commitish: true
+# Pick the previous release by version, not by `target_commitish`: a release
+# published against a SHA (e.g. v4.19.0) is invisible to `filter-by-commitish`,
+# so the draft fell back to an older tag. The range keeps 3.x tags out.
+filter-by-range: '^4.0.0'
 categories:
   - title: 'Features'
     labels:
