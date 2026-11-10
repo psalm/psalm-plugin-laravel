@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794328298359,
+  "lastUpdate": 1794348764298,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18015,6 +18015,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 21.21,
             "range": "± 0.39",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1249,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "180adbbb00d60d1e3e1f36bdc2cde72ef05ba7ce",
+          "message": "Remove workarounds for Psalm bugs fixed in Psalm 7.2 (#2244)\n\n* refactor(eloquent): drop trait insteadof workarounds now that Psalm follows the pick #2234\n\nPsalm 7.2 applies insteadof to declaring_method_ids, so the relation parser and callback-params handler read the winning trait body instead of declining. The facade root check keeps reflection for class stubs that redeclare __call.\n\n* test(collection): pin isNotEmpty() receiver-union behavior #2235\n\nisNotEmpty() keeps asserting only count(). A TValue assertion on first()/last() collapses a receiver union (Collection<int, string>|Collection<int, int> gives int) because Psalm applies only the last alternative's expanded assertion. isEmpty() keeps its single if-true and if-false pair: vimeo/psalm#9994 is still open and a plain if-false TValue drops null from a nullable value type.\n\n* fix(eloquent): hand protected model methods to Psalm so protected scopes forward to __callStatic #2237\n\nPsalm 7.2 routes a call of an inaccessible method to __callStatic/__call, but the model visibility provider declared every scope visible, so a protected #[Scope] still drew InvalidStaticInvocation (static) or TooFewArguments (instance). The provider now declines for a method that is protected both where it is declared and after trait adaptations. A public #[Scope] static call, including one a trait adaptation re-exposes, stays InvalidStaticInvocation.\n\n* docs(taint): cite only vimeo/psalm#12252 for the named-argument variadic strip #2237\n\nPsalm 7.2.1 attributes a named argument bound to a variadic correctly (vimeo/psalm#12251 is fixed), so the strip's remaining justification is the #12252 unpacked-argument false positive. Disabling the handler turns three fixtures red.\n\n* refactor(stubs): load Carbon getter and setter stubs on every Carbon version #1059\n\nOn Psalm 7.2 the stub conditionals no longer collapse the setter on any supported Carbon (3.8.4 to 3.15), including tz('UTC') on 3.10 and 3.11. The pre-3.12 directory and its version gate go; getters narrow to int<1, 7> and int<0, 6>.\n\n* docs(taint): document conditional taint escapes on instance methods and pin constructors #2237\n\nPsalm 7.2 applies a conditional @psalm-taint-escape to instance and nullsafe method calls (vimeo/psalm#12621). Constructors still ignore it. None of the RemoveTaintsInterface handlers existed because of the old gap, so none is replaced.\n\n* fix(macros): report MissingThrowsDocblock for uncaught Request::validate() and validateWithBag() #2238\n\nPsalm 7.2 merges a pseudo-method's throw set into the caller, but the throws map never reached Laravel's @method validate tags because the macro handler skips names that already have a pseudo-method. The map is now written onto those pseudo-methods. Users with checkForThrowsDocblock now see MissingThrowsDocblock on an unhandled validate().\n\n* test(collection): pin the late-static when() answer #2237\n\nPsalm 7.2 keeps the bound flag when it combines the answer union (vimeo/psalm#13442), so when() joins the static-stays-bound fixture.\n\n* chore: cite vimeo/psalm#13013 on the XFAIL, use Psalm's body-class constant, drop unused PsalmVersion helper #2237\n\nInheritedMethodTaints::BODY_CLASS_ATTRIBUTE exists on 7.2 and self-analysis accepts the reference.\n\n* test(eloquent): pin first-class callables of forwarded model calls\n\nCustomer::where(...) and attribute scopes analyse on Psalm 7.2.1 instead of crashing, with inferred closures that differ from the runtime ones (known-limitation phpt). A dynamic where<Column>(...) and a legacy scopeXxx(...) still crash Psalm with 'storage should not be null'. Refs #1660\n\n* test(eloquent): pin native self&Interface returns on final Builder subclasses\n\nPsalm 7.2.1 resolves the intersection for an interface in the class's own implements and one inherited from a parent, where 7.0 collapsed it to never. Fixes #1450\n\n* docs(blade): drop the cold-cache-only ParseError limitation\n\nOn Psalm 7.2.1 a ParseError in a compiled Blade shadow is reported on a warm run sharing the Psalm cache directory too: the BladeIssueRemap fixture reports the same 7 ParseErrors and 130 issues cold and warm.\n\n* docs: re-point Psalm 7.0 pre-release citations to 7.2.1 where re-verified\n\nPsalmBridge file:line citations re-read against 7.2.1, the filter_var conditional-escape fixture re-run on 7.2.1, and version stamps dropped from comments whose behavior the suite pins.",
+          "timestamp": "2026-11-10T23:09:24+01:00",
+          "tree_id": "9587b230986fdf3d258f9f2c8c99e1041411a007",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/180adbbb00d60d1e3e1f36bdc2cde72ef05ba7ce"
+        },
+        "date": 1794348762736,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.91,
+            "range": "± 0.28",
             "unit": "s"
           },
           {
