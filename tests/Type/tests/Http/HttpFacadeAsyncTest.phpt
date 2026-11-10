@@ -1,7 +1,3 @@
---SKIPIF--
-<?php
-require getcwd() . '/vendor/autoload.php';
-\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.42.0');
 --FILE--
 <?php declare(strict_types=1);
 
@@ -12,7 +8,7 @@ use Illuminate\Support\Facades\Http;
 /**
  * `Http::async()` reaches the stub-only AsyncPendingRequest through the facade's `@mixin`, so the
  * verbs after it are promises, never the sync Response Laravel's `@method async()` tag implied.
- * `batch()` (12.35+) resolves to PendingRequest's like the other forwarded methods.
+ * `batch()` resolves to PendingRequest's like the other forwarded methods.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1669
  */

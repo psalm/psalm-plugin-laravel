@@ -122,8 +122,7 @@ class PendingRequest
  * Stands in for Laravel's `TAsync of bool = false` template: a bare `PendingRequest`
  * reference reads the template bound (`bool`), not the default, so a template would
  * type every HTTP method as the sync|async union. When async() is called, Psalm narrows
- * the type to this class. HTTP methods return GuzzleHttp\Promise\PromiseInterface
- * (overridden to LazyPromise in the 12.42.0+ version-specific stub).
+ * the type to this class. HTTP methods return LazyPromise, as Laravel's async requests do.
  *
  * Extends PendingRequest so fluent methods (withToken, timeout, etc.) keep
  * returning $this (AsyncPendingRequest), preserving async semantics through chains.
@@ -137,49 +136,49 @@ class AsyncPendingRequest extends PendingRequest
     public function async(bool $async = true) {}
 
     /**
-     * @return \GuzzleHttp\Promise\PromiseInterface
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
      *
      * @psalm-taint-sink ssrf $url
      */
     public function send(string $method, string $url, array $options = []) {}
 
     /**
-     * @return \GuzzleHttp\Promise\PromiseInterface
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
      *
      * @psalm-taint-sink ssrf $url
      */
     public function get(string $url, $query = null) {}
 
     /**
-     * @return \GuzzleHttp\Promise\PromiseInterface
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
      *
      * @psalm-taint-sink ssrf $url
      */
     public function post(string $url, $data = []) {}
 
     /**
-     * @return \GuzzleHttp\Promise\PromiseInterface
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
      *
      * @psalm-taint-sink ssrf $url
      */
     public function put(string $url, $data = []) {}
 
     /**
-     * @return \GuzzleHttp\Promise\PromiseInterface
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
      *
      * @psalm-taint-sink ssrf $url
      */
     public function patch(string $url, $data = []) {}
 
     /**
-     * @return \GuzzleHttp\Promise\PromiseInterface
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
      *
      * @psalm-taint-sink ssrf $url
      */
     public function delete(string $url, $data = []) {}
 
     /**
-     * @return \GuzzleHttp\Promise\PromiseInterface
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
      *
      * @psalm-taint-sink ssrf $url
      */

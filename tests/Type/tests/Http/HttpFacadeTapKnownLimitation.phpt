@@ -1,8 +1,3 @@
---SKIPIF--
-<?php
-require getcwd() . '/vendor/autoload.php';
-// PendingRequest is generic (`@template TAsync`) from Laravel 12.43.0; before that there is no bound to mismatch.
-\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.43.0');
 --FILE--
 <?php declare(strict_types=1);
 

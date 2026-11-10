@@ -29,7 +29,7 @@ flowchart TD
 
     H --- stubs["
         stubs/common/ (types + taint annotations)
-        versioned dirs, ascending (e.g. stubs/12.42.0/, stubs/13.5.0/, stubs/13.8.0/)
+        versioned dirs, ascending (e.g. stubs/12.50.0/, stubs/13.5.0/, stubs/13.8.0/)
         stubs/integrations/carbon/ (gated on installed nesbot/carbon version)
         aliases.phpstub (generated here from AliasLoader: one class_alias() line per alias)
     "]
@@ -194,12 +194,12 @@ A type test that asserts a `stubs/<version>/` override would fail on the lower c
 --SKIPIF--
 <?php
 require getcwd() . '/vendor/autoload.php';
-\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.42.0');
+\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.50.0');
 --FILE--
 ... assertion of the version-specific behavior ...
 ```
 
-`LaravelVersion::skipBelow($version)` skips when the installed Laravel is older than the stub dir (`skipFrom($version)` does the reverse for behavior only on older lines). The `--SKIPIF--` script runs in a bare process from the project root, so it requires the autoloader via `getcwd()`. See `tests/Type/tests/Http/PendingRequestTest.phpt` for a worked example (the async HTTP client types are 12.42+).
+`LaravelVersion::skipBelow($version)` skips when the installed Laravel is older than the stub dir (`skipFrom($version)` does the reverse for behavior only on older lines). The `--SKIPIF--` script runs in a bare process from the project root, so it requires the autoloader via `getcwd()`. See `tests/Type/tests/Support/ArrToCssClassesTest.phpt` for a worked example (the `stubs/12.50.0/` `Arr::toCssClasses()` override).
 
 ## How to add a handler
 

@@ -68,7 +68,7 @@ Hard-won rules. Each of these has silently produced a test that passes while ass
    --SKIPIF--
    <?php
    require getcwd() . '/vendor/autoload.php';
-   \Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.42.0');
+   \Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.50.0');
    --FILE--
    ```
 

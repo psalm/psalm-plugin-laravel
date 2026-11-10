@@ -51,9 +51,9 @@ function test_http_facade_async_toggle(string $u): void
     $_sync = Http::async(false)->get($u);
     /** @psalm-check-type-exact $_sync = Response */
 
-    // PromiseInterface before 12.42, LazyPromise (a PromiseInterface) after; never the sync Response.
+    // Never the sync Response.
     $_asyncGet = Http::async()->get($u);
-    /** @psalm-check-type $_asyncGet = \GuzzleHttp\Promise\PromiseInterface */
+    /** @psalm-check-type-exact $_asyncGet = \Illuminate\Http\Client\Promises\LazyPromise */
 }
 
 function test_http_facade_chains(string $u): void

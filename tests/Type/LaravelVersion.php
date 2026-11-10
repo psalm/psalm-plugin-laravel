@@ -20,7 +20,7 @@ use Illuminate\Foundation\Application;
  *   --SKIPIF--
  *   <?php
  *   require getcwd() . '/vendor/autoload.php';
- *   \Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.42.0');
+ *   \Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.50.0');
  *
  * Each method echoes a `skip ...` message (which the runner detects) when the test must not run.
  */

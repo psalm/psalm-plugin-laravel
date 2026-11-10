@@ -1,8 +1,3 @@
---SKIPIF--
-<?php
-require getcwd() . '/vendor/autoload.php';
-// The union needs PendingRequest's `@template TAsync` (12.43.0+); below that `async($flag)->get()` is `Response`.
-\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('12.43.0');
 --FILE--
 <?php declare(strict_types=1);
 
