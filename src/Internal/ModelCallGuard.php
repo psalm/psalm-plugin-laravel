@@ -203,22 +203,32 @@ final class ModelCallGuard
                 }
             }
 
+            // The class and every trait below it, at any depth: Laravel reflects each class's own traits only, but a
+            // trait's methods and attributes reach the model through every trait that uses it. `$seen` also ends cycles.
+            $seen = [];
+
             foreach ([\strtolower($modelClass), ...\array_keys($classStorage->parent_classes)] as $class) {
                 // The framework's own `Model` and the traits it uses are stock.
                 if ($class === 'illuminate\\database\\eloquent\\model') {
                     continue;
                 }
 
-                $storage = $codebase->classlike_storage_provider->get($class);
-                $carriers = [$storage];
+                for ($pending = [$class]; $pending !== [];) {
+                    $name = \array_pop($pending);
 
-                foreach (\array_keys($storage->used_traits) as $trait) {
-                    $carriers[] = $codebase->classlike_storage_provider->get($trait);
-                }
+                    if (isset($seen[$name])) {
+                        continue;
+                    }
 
-                foreach ($carriers as $carrier) {
+                    $seen[$name] = true;
+                    $carrier = $codebase->classlike_storage_provider->get($name);
+
                     if (self::carriesBootAttribute($codebase, $carrier)) {
                         return true;
+                    }
+
+                    foreach (\array_keys($carrier->used_traits) as $trait) {
+                        $pending[] = $trait;
                     }
                 }
             }

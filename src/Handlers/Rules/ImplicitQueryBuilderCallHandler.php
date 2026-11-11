@@ -5,8 +5,14 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
 use Illuminate\Database\Eloquent\Model;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\NullsafeMethodCall;
+use PhpParser\Node\Expr\NullsafePropertyFetch;
+use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
@@ -181,11 +187,14 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         }
 
         $nameStart = $expr->name->getStartFilePos();
+        // The call reads `$this` through its class (`Post::where()`, object-context dispatch) or its receiver
+        // (`$this->where()`, `$this->post->where()`): a rebound closure changes either. A captured variable does not.
+        $dependsOnThis = $isStatic || ($expr instanceof MethodCall && self::receiverDependsOnThis($expr->var));
         $replacements = PsalterFix::fixOrReport(
             $codebase,
             $source,
             [$issue],
-            static fn(): array => self::rewriteKeepsBehavior($modelClass, $isStatic, $source, $event->getContext(), $codebase)
+            static fn(): array => self::rewriteKeepsBehavior($modelClass, $isStatic, $dependsOnThis, $source, $event->getContext(), $codebase)
                 ? [new FileManipulation($nameStart, $nameStart, $isStatic ? 'query()->' : 'newQuery()->')]
                 : [],
         );
@@ -206,11 +215,12 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
     private static function rewriteKeepsBehavior(
         string $modelClass,
         bool $isStatic,
+        bool $dependsOnThis,
         StatementsSource $source,
         Context $context,
         Codebase $codebase,
     ): bool {
-        if (ModelCallGuard::isUnsafeEditSite($source, $isStatic)) {
+        if (ModelCallGuard::isUnsafeEditSite($source, $dependsOnThis)) {
             return false;
         }
 
@@ -219,6 +229,34 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         }
 
         return !$isStatic || !ModelCallGuard::mayRunInObjectContextOf($codebase, $modelClass, $source, $context);
+    }
+
+    /**
+     * Whether the receiver expression is `$this` or a property, method-call or array-dimension chain rooted at it.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function receiverDependsOnThis(Expr $receiver): bool
+    {
+        while (true) {
+            if ($receiver instanceof Variable) {
+                return $receiver->name === 'this';
+            }
+
+            if (
+                $receiver instanceof PropertyFetch
+                || $receiver instanceof NullsafePropertyFetch
+                || $receiver instanceof MethodCall
+                || $receiver instanceof NullsafeMethodCall
+                || $receiver instanceof ArrayDimFetch
+            ) {
+                $receiver = $receiver->var;
+
+                continue;
+            }
+
+            return false;
+        }
     }
 
     /**
