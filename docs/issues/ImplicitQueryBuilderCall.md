@@ -42,6 +42,28 @@ $recent = User::query()->active()->latest()->get();
 
 Route the call through `Model::query()` (static) or `$model->newQuery()` (instance) before the builder or scope method.
 
+## Fixing with Psalter
+
+Psalter rewrites the calls for you (the rule must be switched on in `psalm.xml`):
+
+```bash
+# Preview the diff, then apply
+./vendor/bin/psalter --issues=ImplicitQueryBuilderCall --dry-run
+./vendor/bin/psalter --issues=ImplicitQueryBuilderCall
+```
+
+One insertion per flagged call, right before the method name; the rest of the source is kept as written:
+
+- `User::where('active', 1)` becomes `User::query()->where('active', 1)`.
+- `$user->where('active', 1)` becomes `$user->newQuery()->where('active', 1)`.
+- In `User::where(...)->orderBy(...)` only the first call is forwarded, so only it gets the insertion.
+
+The path is the one Laravel already takes: `__callStatic` -> `__call` -> `newQuery()`, and `query()` is `(new static)->newQuery()`. The instance form uses `newQuery()` rather than `query()` so the query keeps the instance's connection and table.
+
+Psalter rewrites only the calls it can show take that route and reports the rest: see [When Psalter leaves a finding unfixed](index.md#when-psalter-leaves-a-finding-unfixed).
+
+One difference remains where the rewrite is made, and it is the same one you get by applying the advice by hand: the rewrite creates the query builder before the arguments are evaluated, while the magic call creates it after. The two differ only when an argument expression itself changes the default connection, or other global state the builder reads, as in `User::where('id', switchDefaultConnection())`.
+
 ## Known limitation
 
 A `public` `#[Scope]` method is accessible from every call site, so its forwarded form cannot be distinguished from a legitimate direct call by visibility alone, and is therefore not flagged. Laravel's convention wants scopes `protected` (which this rule does flag when forwarded); a `public` `#[Scope]` is independently reported as [PublicModelScope](PublicModelScope.md).
