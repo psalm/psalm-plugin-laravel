@@ -324,7 +324,7 @@ id; a guard qualifies only when it and every descendant carry the escape on thei
 That walk recurses to a fixpoint, with a visited set, because the stored property is not the
 closure its name suggests. `Populator::populateClassLikeStorage()` records DIRECT links and
 `populateCodebase()` then makes a SINGLE merge pass with no fixpoint, so a chain `A < B < C < D`
-leaves `A` listing `B` and `C` and never `D`. Re-read on Psalm 7.2.1 (`Populator::populateCodebase()` still does the single pass): a four-level agent
+leaves `A` listing `B` and `C` and never `D`. Executed during the Psalm 7.0 pre-release cycle (`Populator::populateCodebase()` still does the single pass on 7.2.1, read from source, but the run was not repeated): a four-level agent
 hierarchy whose deepest class stripped the stack was invisible and kept its ancestor's exemption.
 
 Comparing declaring ids beats reading `MethodStorage::$overridden_downstream`:

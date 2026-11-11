@@ -8,9 +8,9 @@ namespace Illuminate\Support;
  * sibling `Arr` stub (otherwise `Lottery` references become `UndefinedClass`).
  *
  * `choose()` is intentionally NOT stubbed: Laravel 13.18.0 (#60586) added the conditional
- * `@return ($times is null ? mixed : list<mixed>)` natively and a stub conditional
- * collapses against the reflected one on Psalm beta19 (upstream merge bug). Every other
- * method merges from reflection.
+ * `@return ($times is null ? mixed : list<mixed>)` natively, and a stub conditional resolves
+ * identically to the reflected one (probed on Psalm 7.2.1), so a stub would only duplicate it.
+ * Every other method merges from reflection.
  */
 class Lottery
 {

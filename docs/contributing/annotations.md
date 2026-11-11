@@ -33,7 +33,7 @@ Ground truth:
 | `@var Type [$name]` | bare, `psalm-`, `phpstan-` | property, constant, statement | Inline `@var` narrows a variable |
 | `@psalm-ignore-var` | also bare `@ignore-var` | statement | Drops the `@var` of the same docblock (for IDE-only hints) |
 | `@param-out Type $name` | bare, `psalm-`, `phpstan-` | by-ref parameter | Type after the call returns |
-| `@param-closure-this Type $name` | bare, `psalm-`, `phpstan-` | closure parameter | Type of `$this` inside the passed closure (beta23) |
+| `@param-closure-this Type $name` | bare, `psalm-`, `phpstan-` | closure parameter | Type of `$this` inside the passed closure |
 | `@property Type $name` | bare, `psalm-` | class | Magic property. Also `@property-read`, `@property-write`. Needs a real `__get` / `__set` (or `usePhpDocPropertiesWithoutMagicCall`) |
 | `@method [static] Ret name(Type $p = default)` | bare, `psalm-` | class | Magic method. Purity in parameter types allowed (`Closure[_]`). Needs a real `__call` / `__callStatic` in the hierarchy (or `usePhpDocMethodsWithoutMagicCall`), else `UndefinedMethod` |
 | `@mixin Foo` | bare only | class, trait | Forward unknown members to `Foo`. A child `@mixin` replaces the parent's |

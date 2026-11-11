@@ -9,9 +9,9 @@ namespace Illuminate\Support\Facades;
  *
  * The full class header is copied verbatim because re-declaring the class resets Psalm's
  * implements list (hard rule 2). Each method restates its own @psalm-taint-sink here even
- * though the common 3-arg declaration also carries one: a redeclared method's parameter
- * sinks are last-loaded-wins (hard rule 4), so without the restatement Laravel 13+ would
- * lose the sink. Exactly one TaintedSql is reported (TaintedSqlDbCursor.phpt).
+ * though the common 3-arg declaration also carries one: the restatement keeps the sink next to
+ * the 4-arg signature and is harmless, since a redeclared method's parameter sinks accumulate
+ * (vimeo/psalm#12479). Exactly one TaintedSql is reported (TaintedSqlDbCursor.phpt).
  *
  * stdClass is only true for PDO's DEFAULT fetch mode. $fetchUsing forwards straight to
  * PDOStatement::fetch(...$fetchUsing) (Connection::cursor()) / fetchAll(...$fetchUsing)

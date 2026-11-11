@@ -8,13 +8,15 @@ namespace Illuminate\Support;
  *  1. It DECLARES `Illuminate\Support\Arr` for projects whose analyzed vendor does not
  *     reflect `illuminate/support` (e.g. slim libraries like laravel/socialite). Without
  *     it every `Arr::` reference there becomes `UndefinedClass`.
- *  2. Re-declaring the class makes Psalm re-scan it, which is what lets it honor Laravel
- *     13.18.0's reflected conditional `@return ($number is null ? mixed : array)` on
- *     `random()` (a bare reflected conditional is otherwise dropped to `mixed`).
+ *  2. Laravel 13.18.0's reflected conditional `@return ($number is null ? mixed : array)` on
+ *     `random()` was once dropped to `mixed` unless the class was re-declared here. On Psalm 7.2.1
+ *     it resolves the same with or without this stub when `illuminate/support` is reflected, so
+ *     reason 1 is what keeps the file.
  *
- * `random()` itself is intentionally NOT stubbed: a stub conditional collapses against
- * the reflected one on Psalm beta19 (#60586 / upstream merge bug). The `Macroable` trait
- * is copied verbatim per stub convention; every static helper merges from reflection.
+ * `random()` itself is intentionally NOT stubbed: the reflected conditional already resolves
+ * literal, nullable and template-typed `$number`, and a stub conditional resolves identically
+ * (probed on Psalm 7.2.1), so a stub would only duplicate it. The `Macroable` trait is copied
+ * verbatim per stub convention; every static helper merges from reflection.
  */
 class Arr
 {
