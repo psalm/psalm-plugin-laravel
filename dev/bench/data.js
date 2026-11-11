@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794353297314,
+  "lastUpdate": 1794390005062,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18155,6 +18155,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 34.19,
             "range": "± 0.08",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1249,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "22ffb0e8f7afefbf032b4058cca0f56d2ccb9b57",
+          "message": "Re-check Psalm 7.0 pre-release citations against Psalm 7.2 (#2256)\n\n* refactor(stubs): drop the `TValue is object` wrapper from paginator getCollection()\n\nPsalm 7.2 no longer lets a plain `string` TValue reach the Model branch of\na bare `TValue is Model` conditional, so the outer object arm and its\nvimeo/psalm#12440 todo-by are obsolete. Traced eleven TValue shapes on\n7.2.1; the only difference is that the wrapper made a `mixed` TValue\nless precise.\n\nRefs #2252\n\n* test: re-point Psalm prerelease citations in tests and stub comments\n\nReplace 7.0.0-beta/rc references in phpts, a unit fixture and the throw_*()\nstub comment with the upstream issue or Psalm 7.2. The named-argument\nvariadic override XFAIL stays: vimeo/psalm#13013 still fails on 7.2.1.\n\nRefs #2252\n\n* docs: drop Psalm 7.0 prerelease citations from contributor and user docs\n\nRe-checked each claim on Psalm 7.2.1 and reworded, re-pointed or removed it.\nStub merging now documents that parameter-level taint sinks accumulate for\nre-declared methods (vimeo/psalm#12479); the stale \"last-loaded wins\"\nrule is dropped from the README and the stub-authoring rules. The `self<>`\ntrait crash, the `string... $rest` crash and the `toArray()` objections no\nlonger reproduce.\n\nRefs #2252\n\n* Revert \"refactor(stubs): drop the `TValue is object` wrapper from paginator getCollection()\"\n\nThis reverts commit daa841901c61dc6fbff71561177181d8c1bf22be.\n\n* test: pin the paginator getCollection() object arm with a template TValue\n\nThe bare `TValue is Model` conditional still misbehaves on Psalm 7.2.1\nfor a template TValue (vimeo/psalm#12440, open): `Page<T>` wrappers get\n`Eloquent\\Collection<int, T&Model>|Collection<int, T>` and a spurious\nImplicitToStringCast on `map()`. The case fails without the wrapper.\n\nRefs #2252\n\n* docs: state the parameter-sink merge rule consistently and drop short-form prerelease names\n\nStub-merging comments in StubFileFinder, the 13/13.8.0 stubs and the\nreview-bot instructions now say method parameter sinks accumulate\n(vimeo/psalm#12479) and only free functions are last-loaded-wins. Arr and\nLottery no longer claim a stub conditional collapses: it resolves\nidentically on 7.2.1. Remaining beta/rc mentions are re-pointed, and\nmeasurements not re-run on 7.2 are labelled as such.\n\nRefs #2252\n\n* docs: align the paginator getCollection() rationale and the toArray() dead end with 7.2.1 probes\n\nA plain string TValue no longer leaks the Model branch; only a template\nTValue does (vimeo/psalm#12440). The class-stub toArray() objections still\nreproduce on 7.2.1 and are restored. Arr header and the stub-merge comment\nnow match what they say further down.\n\nRefs #2252\n\n* docs: state the same-name parameter rule for stub sink merging; pin the template getCollection() type\n\nParameter sinks and @psalm-assert-untainted of a re-declared method carry\nover only to a same-named parameter (FunctionLikeNodeScanner keys them by\nname; a renamed parameter loses them on 7.2.1). AGENTS.md, README,\nStubFileFinder, .coderabbit.yaml and the 13/13.8.0 stub comments now say so.\nThe types.md table no longer lists `string... $rest` as a crash.\n\nRefs #2252\n\n* docs: tag open upstream workarounds with todo-by and trim comments\n\nAdds todo-by tags for vimeo/psalm#13013, #11880, #4816 and, in docs, for\n#11762, #11912, #12158, #12252 and #12075 where the text must change when\nthe fix lands. Shortens the stub and test comments this PR reworded.\n\nRefs #2252",
+          "timestamp": "2026-11-11T10:37:38+01:00",
+          "tree_id": "e0599cadfa3527a9441381c85db8a7a50c84322c",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/22ffb0e8f7afefbf032b4058cca0f56d2ccb9b57"
+        },
+        "date": 1794390003046,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.39,
+            "range": "± 0.52",
             "unit": "s"
           },
           {
