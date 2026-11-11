@@ -532,7 +532,7 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 
 ### `BelongsToMany` / `MorphToMany` are covariant in `TPivotModel` (#1944)
 
-**Decision:** All four `TPivotModel` declarations (`stubs/common/` `BelongsToMany` and `MorphToMany`, plus the `stubs/13/` and `stubs/13.5.0/` `BelongsToMany` re-declarations) are `@template-covariant`. A version dir re-declares the class header, so the flag must be on every copy or Psalm keeps the last-loaded (invariant) one.
+**Decision:** All five `TPivotModel` declarations (`stubs/common/` `BelongsToMany` and `MorphToMany`, plus the `stubs/13/`, `stubs/13.5.0/` and `stubs/13.41.0/` `BelongsToMany` re-declarations) are `@template-covariant`. A version dir re-declares the class header, so the flag must be on every copy or Psalm keeps the last-loaded (invariant) one.
 
 **Why:** a pivot refined with its `withPivot()` columns (`Pivot&object{role: string}`) must still satisfy every existing `BelongsToMany<..., Pivot, 'pivot'>` return and parameter. TPivotModel has no input position: callbacks receive it (covariant) and `$using` is a `class-string<TPivotModel>`.
 
