@@ -30,14 +30,16 @@ use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
  *
  * Psalter fixes it: `Post::make($a)` becomes `new Post($a)`. The fix leaves the class name and the
  * arguments untouched and only inserts `new ` and removes `::make`. It is withheld (the issue is still
- * reported) for a first-class callable `Post::make(...)`; for a named call in a non-static method or closure
- * whose `$this` is, or may be, an instance of the model (PHP runs it as `$this->__call('make')` on the current
- * instance); and for a model whose creation or dispatch pipeline is customized (own constructor,
- * `newInstance()`, `__call`, `__callStatic`, `newQuery()`, `newModelQuery()`, `newEloquentBuilder()`,
- * `newQueryWithoutScopes()`, or a builder overriding `make()`/`newModelInstance()`), where `new` would run
- * different code than `make()`. `self::make()`, `static::make()` and `parent::make()` are neither reported nor
- * fixed: late static binding and object-context `__call` dispatch make `new` non-equivalent. Below a PHP 8.4
- * target, `new Post()` cannot be dereferenced, so a chained call gets parentheses.
+ * reported) for a first-class callable `Post::make(...)`; for any call in a trait or in a non-static closure or
+ * arrow function (shared source, rebindable `$this`); for a named call in a non-static method whose `$this` is,
+ * or may be, an instance of the model (PHP runs it as `$this->__call('make')` on the current instance); for a
+ * model that customizes booting (`boot*()` methods, `#[ScopedBy]`); and for a model whose creation or dispatch
+ * pipeline is customized (own constructor, `newInstance()`, `__call`, `__callStatic`, `forwardCallTo()`,
+ * `newQuery()`, `newModelQuery()`, `newEloquentBuilder()`, `newQueryWithoutScopes()`, or a builder overriding
+ * `make()`/`newModelInstance()`), where `new` would run different code than `make()`. `self::make()`,
+ * `static::make()` and `parent::make()` are neither reported nor fixed: late static binding and object-context
+ * `__call` dispatch make `new` non-equivalent. Below a PHP 8.4 target, `new Post()` cannot be dereferenced, so a
+ * chained call gets parentheses.
  *
  * @see https://github.com/larastan/larastan/blob/2.x/src/Rules/NoModelMakeRule.php
  */
@@ -97,6 +99,7 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         if (
             $expr->isFirstClassCallable()
             || !self::hasStockCreationPipeline($className, $codebase)
+            || ModelCallGuard::isUnsafeEditSite($source)
             || ModelCallGuard::mayRunInObjectContextOf($codebase, $className, $source, $event->getContext())
         ) {
             IssueBuffer::accepts($issue, $source->getSuppressedIssues());
@@ -252,6 +255,8 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
      * neither `make()` nor `newModelInstance()`. A model that customizes any of them, even without a constructor of
      * its own, would silently lose that behavior. A `newEloquentBuilder()` override counts even when it is untyped:
      * the plugin cannot resolve its builder class then, so the builder checks below would pass on the stock Builder.
+     * Booting counts too ({@see ModelCallGuard::customizesBoot()}): a global scope registered there can add pending
+     * attributes that `make()` applies and `new` does not.
      *
      * @param class-string<Model> $className
      */
@@ -269,9 +274,9 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
             }
         }
 
-        $dispatchHooks = ['__call', '__callstatic', 'newquery', 'newmodelquery', 'neweloquentbuilder', 'newquerywithoutscopes'];
+        $dispatchHooks = ['__call', '__callstatic', 'newquery', 'newmodelquery', 'neweloquentbuilder', 'newquerywithoutscopes', 'forwardcallto', 'forwarddecoratedcallto'];
 
-        if (ModelCallGuard::overridesAny($codebase, $className, $dispatchHooks)) {
+        if (ModelCallGuard::overridesAny($codebase, $className, $dispatchHooks) || ModelCallGuard::customizesBoot($codebase, $className)) {
             return false;
         }
 

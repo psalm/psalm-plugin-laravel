@@ -66,9 +66,18 @@ Where the rewrite is made, one difference remains, and it is the same one you ge
   - A first-class callable (`User::where(...)`).
   - Calls through `self::`, `static::` or `parent::`: in an instance method `static::where(...)` runs `$this->__call()` and keeps the instance's connection and table, while `static::query()` builds a fresh model and drops them.
   - A named static call such as `User::where(...)` inside a non-static method or closure of a class that is the model, one of its subclasses or one of its ancestors. PHP keeps the object context there, so the call runs `$this->__call()` with the instance's table and connection, while `User::query()` builds a fresh model. The same call in a static method, a static closure, or an unrelated class is rewritten.
-  - A model whose class chain (ancestors and traits included) declares `__call`, `__callStatic`, `query` or `newQuery` itself rather than inheriting Eloquent's: the inserted `query()` / `newQuery()` would bypass that code.
+  - A model whose class chain (ancestors and traits included) declares `__call`, `__callStatic`, `forwardCallTo()`, `forwardDecoratedCallTo()`, `query` or `newQuery` itself rather than inheriting Eloquent's: the inserted `query()` / `newQuery()` would bypass that code.
+  - Any call inside a non-static closure or arrow function, whatever its `$this` is today: `Closure::call()`, `bind()` and `bindTo()` can rebind it to any model, which turns `User::where(...)` into that model's `__call('where')`. A `static` closure cannot be rebound, so its call is rewritten.
+  - Any call inside a trait: the trait's one source is shared by every class that uses it, and an edit that is right for one consumer can be wrong for another.
 - **Suppressed calls** (`@psalm-suppress ImplicitQueryBuilderCall`, or `<PluginIssue name="ImplicitQueryBuilderCall" errorLevel="suppress" />` in `psalm.xml`) are not rewritten.
 - **Calls in Blade templates** are reported but never rewritten.
+
+## Known gaps
+
+Psalter cannot see these at analysis time, so a rewrite can still change behavior in them. Review the diff, or suppress the call:
+
+- A relation registered at runtime with `Model::resolveRelationUsing('where', ...)`, under the called method's name: `User::where(...)` then returns that relation, `User::query()->where(...)` returns a builder.
+- A trait initializer (`initialize<TraitName>()`) with side effects that count instances, such as `++static::$counter`: the forwarded call and its rewrite may create a different number of model objects, so such a counter can differ.
 
 ## Known limitation
 

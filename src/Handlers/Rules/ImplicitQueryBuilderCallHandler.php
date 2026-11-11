@@ -93,7 +93,9 @@ use Psalm\Type\Union;
  *    instance's state; `query()` drops it);
  *  - a named static call in a non-static method or closure whose `$this` is, or may be, an instance of the
  *    target model (see {@see ModelCallGuard::mayRunInObjectContextOf()}): PHP runs it as `$this->__call()` there;
- *  - a model whose class chain overrides `__call`, `__callStatic`, `query` or `newQuery` (see
+ *  - any call in a trait or in a non-static closure or arrow function, whose edit is shared or whose `$this` can be
+ *    rebound (see {@see ModelCallGuard::isUnsafeEditSite()});
+ *  - a model whose class chain overrides `__call`, `__callStatic`, `forwardCallTo`, `query` or `newQuery` (see
  *    {@see ModelCallGuard::overridesAny()}): the insertion would bypass that code.
  */
 final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisInterface
@@ -207,7 +209,11 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         Context $context,
         Codebase $codebase,
     ): bool {
-        if (ModelCallGuard::overridesAny($codebase, $modelClass, ['__call', '__callstatic', 'query', 'newquery'])) {
+        if (ModelCallGuard::isUnsafeEditSite($source)) {
+            return false;
+        }
+
+        if (ModelCallGuard::overridesAny($codebase, $modelClass, ['__call', '__callstatic', 'query', 'newquery', 'forwardcallto', 'forwarddecoratedcallto'])) {
             return false;
         }
 

@@ -45,9 +45,19 @@ Psalter rewrites the calls for you:
   - `Post::make(...)` used as a first-class callable.
   - A named `Post::make()` inside a non-static method or closure of a class that is the model, one of its subclasses or one of its ancestors. PHP keeps the object context there, so the call runs `$this->__call('make')` on the current instance, which keeps that instance's class, table and connection, while `new Post()` builds a fresh base model. The same call in a static method, a static closure, or an unrelated class is rewritten.
   - A model whose creation pipeline is customized: a constructor that is not Eloquent's own, an overridden `newInstance()`, or an Eloquent builder that overrides `make()` or `newModelInstance()`.
-  - A model whose class chain (ancestors and traits included) declares `__call`, `__callStatic`, `newQuery()`, `newModelQuery()`, `newEloquentBuilder()` or `newQueryWithoutScopes()` itself. This includes a `newEloquentBuilder()` override with no native return type: the plugin cannot tell which builder it returns, so it cannot prove the builder's `make()` is Eloquent's own.
+  - A model whose class chain (ancestors and traits included) declares `__call`, `__callStatic`, `forwardCallTo()`, `forwardDecoratedCallTo()`, `newQuery()`, `newModelQuery()`, `newEloquentBuilder()` or `newQueryWithoutScopes()` itself. This includes a `newEloquentBuilder()` override with no native return type: the plugin cannot tell which builder it returns, so it cannot prove the builder's `make()` is Eloquent's own.
+  - A model that customizes booting: it declares `boot()`, `booting()`, `booted()` or a trait's `boot<TraitName>()` method (so every model using `SoftDeletes` is left alone), or carries `#[ScopedBy]` on itself or an ancestor. A global scope registered there can add pending attributes through its `extend()`, which `make()` applies and `new` does not.
+  - Any call inside a non-static closure or arrow function, whatever its `$this` is today: `Closure::call()`, `bind()` and `bindTo()` can rebind it to any model, which turns `Post::make()` into that model's `__call('make')`. A `static` closure cannot be rebound, so its call is rewritten.
+  - Any call inside a trait: the trait's one source is shared by every class that uses it, and an edit that is right for one consumer can be wrong for another.
 - **Never touched.** `self::make()`, `static::make()` and `parent::make()` are neither reported nor rewritten: `self::make()` in an inherited factory creates the called child class (late static binding) and `static::make()` in an instance method keeps the instance's connection, and `new self` / `new static` would change both.
 - **Suppressed calls** (`@psalm-suppress ModelMakeDiscouraged`, or `<PluginIssue name="ModelMakeDiscouraged" errorLevel="suppress" />` in `psalm.xml`) are not rewritten.
 - **Calls in Blade templates** are reported but never rewritten.
 
 Where the rewrite is made, one behavior still differs, and only in one situation: `Post::make()` pins the default connection name onto the model at the moment it is created, while `new Post()` leaves the connection unset and resolves it on first use. So the rewrite changes behavior only if the application switches the default connection between creating the model and using it (for example `DB::setDefaultConnection()` called in between): `make()` would keep using the old default, `new Post()` the new one. If your code does that, review the rewrite or suppress the call.
+
+## Known gaps
+
+Psalter cannot see these at analysis time, so a rewrite can still change behavior in them. Review the diff, or suppress the call:
+
+- A relation registered at runtime with `Model::resolveRelationUsing('make', ...)`, under the called method's name: `Post::make()` then returns that relation, `new Post()` does not.
+- A trait initializer (`initialize<TraitName>()`) with side effects that count instances, such as `++static::$counter`: `make()` creates more than one object (it builds a model for the builder and another for the result), `new` creates one.
