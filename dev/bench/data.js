@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794392411538,
+  "lastUpdate": 1794392761380,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18225,6 +18225,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.06,
             "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1250,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "2e6c84d2548b229342e6bcbd575b8f284f22a3fe",
+          "message": "chore: tag upstream Psalm workarounds with todo-by",
+          "timestamp": "2026-11-11T11:22:12+01:00",
+          "tree_id": "83b86790f2f79b6979ba5526a71f3facce85ff64",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2e6c84d2548b229342e6bcbd575b8f284f22a3fe"
+        },
+        "date": 1794392759818,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.64,
+            "range": "± 0.18",
             "unit": "s"
           },
           {
