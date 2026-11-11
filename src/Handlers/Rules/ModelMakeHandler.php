@@ -14,6 +14,7 @@ use Psalm\CodeLocation;
 use Psalm\FileManipulation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
+use Psalm\LaravelPlugin\Internal\ModelCallGuard;
 use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\ModelMakeDiscouraged;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
@@ -29,12 +30,14 @@ use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
  *
  * Psalter fixes it: `Post::make($a)` becomes `new Post($a)`. The fix leaves the class name and the
  * arguments untouched and only inserts `new ` and removes `::make`. It is withheld (the issue is still
- * reported) for a first-class callable `Post::make(...)`, and for a model whose creation pipeline is
- * customized (own constructor, `newInstance()`, or a builder overriding `make()`/`newModelInstance()`),
- * where `new` would run different code than `make()`. `self::make()`, `static::make()` and `parent::make()`
- * are neither reported nor fixed: late static binding and object-context `__call` dispatch make `new`
- * non-equivalent. Below a PHP 8.4 target, `new Post()` cannot be dereferenced, so a chained call gets
- * parentheses.
+ * reported) for a first-class callable `Post::make(...)`; for a named call in a non-static method or closure
+ * whose `$this` is, or may be, an instance of the model (PHP runs it as `$this->__call('make')` on the current
+ * instance); and for a model whose creation or dispatch pipeline is customized (own constructor,
+ * `newInstance()`, `__call`, `__callStatic`, `newQuery()`, `newModelQuery()`, `newEloquentBuilder()`,
+ * `newQueryWithoutScopes()`, or a builder overriding `make()`/`newModelInstance()`), where `new` would run
+ * different code than `make()`. `self::make()`, `static::make()` and `parent::make()` are neither reported nor
+ * fixed: late static binding and object-context `__call` dispatch make `new` non-equivalent. Below a PHP 8.4
+ * target, `new Post()` cannot be dereferenced, so a chained call gets parentheses.
  *
  * @see https://github.com/larastan/larastan/blob/2.x/src/Rules/NoModelMakeRule.php
  */
@@ -91,7 +94,11 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
 
         $codebase = $event->getCodebase();
 
-        if ($expr->isFirstClassCallable() || !self::hasStockCreationPipeline($className, $codebase)) {
+        if (
+            $expr->isFirstClassCallable()
+            || !self::hasStockCreationPipeline($className, $codebase)
+            || ModelCallGuard::mayRunInObjectContextOf($codebase, $className, $source, $event->getContext())
+        ) {
             IssueBuffer::accepts($issue, $source->getSuppressedIssues());
 
             return null;
@@ -192,6 +199,9 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         return false;
     }
 
+    /**
+     * @psalm-assert-if-true class-string<Model> $className
+     */
     private static function isModelSubclass(string $className, AfterExpressionAnalysisEvent $event): bool
     {
         if ($className === Model::class) {
@@ -235,11 +245,15 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
     }
 
     /**
-     * Whether `new $className(...)` is what `make()` runs. `make()` is Builder::make() -> newModelInstance()
-     * -> Model::newInstance() -> `new static`, so the rewrite is equivalent only while the constructor
-     * and `newInstance()` are Eloquent's own and the model's Eloquent builder overrides neither `make()`
-     * nor `newModelInstance()`. A model that customizes any of them, even without a constructor of its own,
-     * would silently lose that behavior.
+     * Whether `new $className(...)` is what `make()` runs. `make()` is `__callStatic` -> `__call` -> `newQuery()`
+     * -> Builder::make() -> newModelInstance() -> Model::newInstance() -> `new static`, so the rewrite is
+     * equivalent only while the constructor and `newInstance()` are Eloquent's own, no model in the chain
+     * customizes the magic dispatch or the query/builder factories, and the model's Eloquent builder overrides
+     * neither `make()` nor `newModelInstance()`. A model that customizes any of them, even without a constructor of
+     * its own, would silently lose that behavior. A `newEloquentBuilder()` override counts even when it is untyped:
+     * the plugin cannot resolve its builder class then, so the builder checks below would pass on the stock Builder.
+     *
+     * @param class-string<Model> $className
      */
     private static function hasStockCreationPipeline(string $className, Codebase $codebase): bool
     {
@@ -253,6 +267,12 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
             if (($classStorage->declaring_method_ids[$method] ?? null)?->fq_class_name !== Model::class) {
                 return false;
             }
+        }
+
+        $dispatchHooks = ['__call', '__callstatic', 'newquery', 'newmodelquery', 'neweloquentbuilder', 'newquerywithoutscopes'];
+
+        if (ModelCallGuard::overridesAny($codebase, $className, $dispatchHooks)) {
+            return false;
         }
 
         try {

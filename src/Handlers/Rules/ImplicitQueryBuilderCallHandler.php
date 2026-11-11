@@ -11,11 +11,13 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
+use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\FileManipulation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
+use Psalm\LaravelPlugin\Internal\ModelCallGuard;
 use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\ImplicitQueryBuilderCall;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
@@ -86,8 +88,13 @@ use Psalm\Type\Union;
  *
  * `psalter --issues=ImplicitQueryBuilderCall` inserts `query()->` (static call) or `newQuery()->`
  * (instance call) before the method name, as one edit; `__callStatic` -> `__call` -> `newQuery()` is the
- * path Laravel already takes, so behavior is unchanged. A first-class callable and a `self::` / `static::` /
- * `parent::` call are reported, not fixed (object context would keep the instance's state; `query()` drops it).
+ * path Laravel already takes, so behavior is unchanged. These are reported, not fixed:
+ *  - a first-class callable and a `self::` / `static::` / `parent::` call (object context would keep the
+ *    instance's state; `query()` drops it);
+ *  - a named static call in a non-static method or closure whose `$this` is, or may be, an instance of the
+ *    target model (see {@see ModelCallGuard::mayRunInObjectContextOf()}): PHP runs it as `$this->__call()` there;
+ *  - a model whose class chain overrides `__call`, `__callStatic`, `query` or `newQuery` (see
+ *    {@see ModelCallGuard::overridesAny()}): the insertion would bypass that code.
  */
 final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisInterface
 {
@@ -175,7 +182,9 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
             $codebase,
             $source,
             [$issue],
-            static fn(): array => [new FileManipulation($nameStart, $nameStart, $isStatic ? 'query()->' : 'newQuery()->')],
+            static fn(): array => self::rewriteKeepsBehavior($modelClass, $isStatic, $source, $event->getContext(), $codebase)
+                ? [new FileManipulation($nameStart, $nameStart, $isStatic ? 'query()->' : 'newQuery()->')]
+                : [],
         );
 
         if ($replacements !== null) {
@@ -183,6 +192,26 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         }
 
         return null;
+    }
+
+    /**
+     * Whether inserting `query()->` / `newQuery()->` keeps what the forwarded call does. When not, the
+     * issue is still reported (an empty edit list makes {@see PsalterFix::fixOrReport()} report it).
+     *
+     * @param class-string<Model> $modelClass
+     */
+    private static function rewriteKeepsBehavior(
+        string $modelClass,
+        bool $isStatic,
+        StatementsSource $source,
+        Context $context,
+        Codebase $codebase,
+    ): bool {
+        if (ModelCallGuard::overridesAny($codebase, $modelClass, ['__call', '__callstatic', 'query', 'newquery'])) {
+            return false;
+        }
+
+        return !$isStatic || !ModelCallGuard::mayRunInObjectContextOf($codebase, $modelClass, $source, $context);
     }
 
     /**

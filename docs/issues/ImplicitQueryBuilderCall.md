@@ -58,9 +58,15 @@ One insertion per flagged call, right before the method name; the rest of the so
 - `$user->where('active', 1)` becomes `$user->newQuery()->where('active', 1)`.
 - In `User::where(...)->orderBy(...)` only the first call is forwarded, so only it gets the insertion.
 
-Behavior does not change: `__callStatic` -> `__call` -> `newQuery()` is the path Laravel already takes, and `query()` is `(new static)->newQuery()`. The instance form uses `newQuery()` rather than `query()` so the query keeps the instance's connection and table.
+The path is the one Laravel already takes: `__callStatic` -> `__call` -> `newQuery()`, and `query()` is `(new static)->newQuery()`. The instance form uses `newQuery()` rather than `query()` so the query keeps the instance's connection and table. That holds only while nothing customizes the route, so Psalter rewrites only the calls it can show take that route, and reports the rest (see "Left alone, still reported" below).
 
-- **Left alone, still reported.** A first-class callable (`User::where(...)`), and calls through `self::`, `static::` or `parent::`: in an instance method `static::where(...)` runs `$this->__call()` and keeps the instance's connection and table, while `static::query()` builds a fresh model and drops them.
+Where the rewrite is made, one difference remains, and it is the same one you get by applying the advice by hand: the rewrite creates the query builder before the arguments are evaluated, while the magic call creates it after. The two differ only when an argument expression itself changes the default connection, or other global state the builder reads, as in `User::where('id', switchDefaultConnection())`.
+
+- **Left alone, still reported.**
+  - A first-class callable (`User::where(...)`).
+  - Calls through `self::`, `static::` or `parent::`: in an instance method `static::where(...)` runs `$this->__call()` and keeps the instance's connection and table, while `static::query()` builds a fresh model and drops them.
+  - A named static call such as `User::where(...)` inside a non-static method or closure of a class that is the model, one of its subclasses or one of its ancestors. PHP keeps the object context there, so the call runs `$this->__call()` with the instance's table and connection, while `User::query()` builds a fresh model. The same call in a static method, a static closure, or an unrelated class is rewritten.
+  - A model whose class chain (ancestors and traits included) declares `__call`, `__callStatic`, `query` or `newQuery` itself rather than inheriting Eloquent's: the inserted `query()` / `newQuery()` would bypass that code.
 - **Suppressed calls** (`@psalm-suppress ImplicitQueryBuilderCall`, or `<PluginIssue name="ImplicitQueryBuilderCall" errorLevel="suppress" />` in `psalm.xml`) are not rewritten.
 - **Calls in Blade templates** are reported but never rewritten.
 

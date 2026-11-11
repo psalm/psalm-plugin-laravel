@@ -52,6 +52,9 @@ use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
  *
  * Psalter fixes it by renaming the call: `singleton()` becomes `scoped()`, `singletonIf()` becomes `scopedIf()`.
  * One binding gets one rename however many resolutions its closure holds, and none of its issues are reported.
+ * The rename is only proven safe when the receiver's `scoped()` / `scopedIf()` is the framework's own (a container
+ * subclass may replace it with other parameters, and the call's named arguments would then no longer bind): such a
+ * binding is reported and left as written.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -82,6 +85,17 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         'illuminate\\container\\container::singletonif' => true,
         'illuminate\\contracts\\container\\container::singleton' => true,
         'illuminate\\contracts\\container\\container::singletonif' => true,
+    ];
+
+    /**
+     * Method IDs (declaring-class::method, lowercased) of the framework's own `scoped()` / `scopedIf()`, the
+     * only destinations the Psalter rename is proven to be valid for. Same shape as {@see self::UNSAFE_METHOD_IDS}.
+     */
+    private const STOCK_SCOPED_METHOD_IDS = [
+        'illuminate\\container\\container::scoped' => true,
+        'illuminate\\container\\container::scopedif' => true,
+        'illuminate\\contracts\\container\\container::scoped' => true,
+        'illuminate\\contracts\\container\\container::scopedif' => true,
     ];
 
     /**
@@ -221,14 +235,39 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             $event->getCodebase(),
             $event->getStatementsSource(),
             $issues,
-            static fn(): array => [
-                new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement),
-            ],
+            static fn(): array => self::scopedIsStock($event, $replacement)
+                ? [new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement)]
+                : [],
         );
 
         if ($replacements !== null) {
             $event->setFileReplacements($replacements);
         }
+    }
+
+    /**
+     * Whether `scoped()` / `scopedIf()` on the call's receiver resolves to the framework's own declaration.
+     * An unreadable receiver is not proven, so the rename is declined.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function scopedIsStock(AfterMethodCallAnalysisEvent $event, string $scopedMethod): bool
+    {
+        $receiverClass = \strstr($event->getMethodId(), '::', true);
+
+        if ($receiverClass === false) {
+            return false;
+        }
+
+        try {
+            $classStorage = $event->getCodebase()->classlike_storage_provider->get(\strtolower($receiverClass));
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        $declaring = $classStorage->declaring_method_ids[\strtolower($scopedMethod)] ?? null;
+
+        return $declaring !== null && isset(self::STOCK_SCOPED_METHOD_IDS[\strtolower((string) $declaring)]);
     }
 
     /**
