@@ -31,7 +31,9 @@ final class StubFileFinder
      * parameter sinks (`@psalm-taint-sink`, `@psalm-assert-untainted`) and method-level
      * taints (`@psalm-taint-source`/`-escape`/`-unescape`) accumulate (a re-declared free
      * function is the exception: its sinks are last-loaded-wins).
-     * Without sorting, moving or renaming stub files can silently change types. See docs/contributing/README.md "Stub merging" for details.
+     * Without sorting, moving or renaming stub files can silently change types
+     * and, for a re-declared free function, drop sinks. See
+     * docs/contributing/README.md "Stub merging" for details.
      *
      * @return list<string>
      */

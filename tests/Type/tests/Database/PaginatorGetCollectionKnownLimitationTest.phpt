@@ -45,11 +45,11 @@ function set_collection_with_plain_collection_of_models_holds_plain_support_coll
 }
 
 /**
- * Not a limitation any more: `Model::__toString()` exists (CanBeEscapedWhenCastToString), so Psalm
- * cannot rule out a plain `string` TValue being a Model and evaluates BOTH branches of a bare
- * `TValue is Model` conditional (vimeo/psalm#12440, still open). The Model branch narrows TValue
- * and leaks a spurious `Eloquent\Collection<int, Model>` into the result; the stub's outer
- * `TValue is object` arm decides the string case up front, so it resolves to the plain collection.
+ * Not a limitation: a plain `string` TValue resolves to the plain collection. A bare `TValue is Model`
+ * conditional would also resolve it on Psalm 7.2.1 (`Model::__toString()` exists, but the concrete
+ * `string` is decided); only a TEMPLATE TValue still evaluates both branches and leaks a spurious
+ * `Eloquent\Collection<int, T&Model>` (vimeo/psalm#12440, open), covered below. The stub's outer
+ * `TValue is object` arm decides both cases up front.
  *
  * @param LengthAwarePaginator<int, string> $paginator
  */

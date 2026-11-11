@@ -364,9 +364,12 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Boundaries:** `first`, `each`, `every`, `contains`, `partition`, `sortBy`, `keyBy`, `groupBy` do not qualify (early exit, or the result is not a kept subset). The receiver variable is not narrowed, and `Enumerable`-typed receivers and higher-order proxies are not covered.
 
-### `toArray()` keeps Laravel's return type (not pursued)
+### `toArray()` keeps Laravel's return type (probed dead end, Psalm 7.2.1)
 
-**Rejected:** a conditional `toArray()` return that maps `Arrayable` items to `array<array-key, mixed>`. A narrower `Eloquent\Collection` return (`array<TKey, array<array-key, mixed>>`) breaks custom serializer overrides that only satisfy `Arrayable<TKey, TValue>`. A trait-level conditional on `EnumeratesValues` probed on Psalm 7.2.1 resolves an `Arrayable` item to `array<int, array<array-key, mixed>>` and a subclass `toArray(): array` override reports nothing, so the earlier objections to that shape no longer reproduce; the `Eloquent\Collection` break is what keeps the declaration as Laravel's.
+**Rejected:** a conditional `toArray()` return that maps `Arrayable` items to `array<array-key, mixed>`.
+- On the class stubs (`Support\Collection`) the conditional resolves a concrete `Arrayable` item class, but a generic `Arrayable<int, int>` item keeps the raw `Arrayable` next to the mapped array (`Arrayable<int, int>|array<array-key, mixed>`), and so does an `Arrayable`-plus-scalar union (`...|int`), which is unsound.
+- A narrower `Eloquent\Collection` return (`array<TKey, array<array-key, mixed>>`) breaks custom serializer overrides that only satisfy `Arrayable<TKey, TValue>`: a subclass declaring `array<TKey, TValue>` reports `LessSpecificImplementedReturnType`.
+- A trait-level conditional on `EnumeratesValues` no longer reports the earlier `InvalidReturnType` on a subclass `toArray(): array` override; that objection is dropped.
 
 ### `setCollection()` keeps `@return $this`; a chained call keeps the old paginator templates (probed dead end)
 

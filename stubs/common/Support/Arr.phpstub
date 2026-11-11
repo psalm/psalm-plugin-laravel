@@ -3,7 +3,7 @@
 namespace Illuminate\Support;
 
 /**
- * Empty re-declaration kept on purpose. Two reasons:
+ * Empty re-declaration kept on purpose, for reason 1 below (reason 2 is historical):
  *
  *  1. It DECLARES `Illuminate\Support\Arr` for projects whose analyzed vendor does not
  *     reflect `illuminate/support` (e.g. slim libraries like laravel/socialite). Without

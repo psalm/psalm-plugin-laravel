@@ -36,11 +36,12 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      * collection class — only Eloquent\Builder's own pagination methods do.
      *
      * `Model::__toString()` exists (CanBeEscapedWhenCastToString), so Psalm cannot rule out a
-     * plain `string` TValue being a Model: `TValue is Model` is undecidable, both branches are
-     * evaluated, and the true branch narrows TValue to `Model`, yielding a spurious
-     * `Eloquent\Collection<TKey, Model>` next to the real `Support\Collection<TKey, string>`.
-     * The outer `TValue is object` arm decides that case first (a string is not an object, whereas
-     * a leading `TValue is string` would also match a Model, which is stringable).
+     * TEMPLATE TValue (`@template T of string`, a generic `Page<T>` wrapper) being a Model:
+     * `TValue is Model` is undecidable there, both branches are evaluated, and the true branch
+     * narrows TValue to `T&Model`, yielding a spurious `Eloquent\Collection<TKey, T&Model>` next to
+     * the real `Support\Collection<TKey, T>` (vimeo/psalm#12440; a concrete `string` TValue is
+     * already decided). The outer `TValue is object` arm decides that case first (a string is not an
+     * object, whereas a leading `TValue is string` would also match a Model, which is stringable).
      *
      * @psalm-return (TValue is object ? (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>) : \Illuminate\Support\Collection<TKey, TValue>)
      */
@@ -165,7 +166,7 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
     // @todo-by https://github.com/vimeo/psalm/issues/12440 drop the `TValue is object` wrapper from the getCollection() conditional
     /**
      * See AbstractPaginator::getCollection() above for the full conditional-return rationale
-     * (provenance gap on manual construction; string-vs-Model undecidability, which the outer
+     * (provenance gap on manual construction; template-TValue-vs-Model undecidability, which the outer
      * `TValue is object` arm resolves).
      *
      * @psalm-return (TValue is object ? (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>) : \Illuminate\Support\Collection<TKey, TValue>)
