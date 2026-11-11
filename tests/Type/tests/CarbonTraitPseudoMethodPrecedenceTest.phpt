@@ -17,16 +17,9 @@
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Carbon as IlluminateCarbon;
 
-/**
- * Psalm reports Carbon trait-vs-interface signature mismatches on any Carbon subclass (unrelated to
- * the pseudo-method precedence under test); they are listed in the expectation below.
- *
- * @psalm-suppress PropertyNotSetInConstructor
- */
-final class AppCarbon extends Carbon {}
-
-function day_of_year(Carbon $c, CarbonImmutable $i, AppCarbon $a, CarbonInterface $n): void
+function day_of_year(Carbon $c, CarbonImmutable $i, IlluminateCarbon $a, CarbonInterface $n): void
 {
     $_carbon = $c->dayOfYear();
     /** @psalm-check-type-exact $_carbon = int<1, 366> */
@@ -68,8 +61,47 @@ function class_level_tags(Carbon $c): void
     $_added = $c->addWeeks(1.5);
     /** @psalm-check-type-exact $_added = \Carbon\Carbon&static */
 }
+
+function other_trait_tags(Carbon $c): void
+{
+    // Carbon\Traits\Test::getTestNow() is static: exercises the static pseudo-method branch.
+    $_testNow = Carbon::getTestNow();
+    /** @psalm-check-type-exact $_testNow = \Carbon\CarbonInterface|\Closure|null */
+
+    // Carbon\Traits\Serialization documents `toJSON(): string`; the real method is nullable.
+    $_json = $c->toJSON();
+    /** @psalm-check-type-exact $_json = null|string */
+}
+
+/**
+ * `Traits\Date::resolveCarbon()` is protected, so an outside call dispatches through `__call`
+ * (macros) and the public `@method` tag from `Traits\Comparison` must stay in place.
+ */
+function protected_real_method(Carbon $c): void
+{
+    $_resolved = $c->resolveCarbon('2026-01-01');
+    /** @psalm-check-type-exact $_resolved = \Carbon\Carbon&static */
+}
+
+/** @method non-empty-string realMethod() */
+trait AppPseudoTag {}
+
+final class AppClass
+{
+    use AppPseudoTag;
+
+    public function realMethod(): string
+    {
+        return 'x';
+    }
+}
+
+// A pseudo-method that shadows a real method but is declared outside `Carbon\Traits\*` is the
+// user's intent and must stay (the handler must not touch it).
+function non_carbon_trait_tag(AppClass $a): void
+{
+    $_value = $a->realMethod();
+    /** @psalm-check-type-exact $_value = non-empty-string */
+}
 ?>
 --EXPECTF--
-MethodSignatureMismatch on line %d: Argument 1 of Carbon\Traits\Comparison::is has wrong type %s, expecting 'string' as defined by Carbon\CarbonInterface::is
-MethodSignatureMismatch on line %d: Argument 1 of Carbon\Traits\Comparison::isEndOfDay has wrong type %s, expecting 'bool' as defined by Carbon\CarbonInterface::isEndOfDay
-MethodSignatureMismatch on line %d: Argument 1 of Carbon\Traits\Comparison::isStartOfDay has wrong type %s, expecting 'bool' as defined by Carbon\CarbonInterface::isStartOfDay
