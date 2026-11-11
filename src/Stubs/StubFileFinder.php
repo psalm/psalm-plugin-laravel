@@ -28,11 +28,12 @@ final class StubFileFinder
      * Stub loading order matters: when multiple stubs declare the same method
      * on the same class, Psalm reuses the MethodStorage and re-applies docblock
      * parsing. Type annotations (`@return`, `@param`) are last-loaded-wins;
-     * parameter sinks (`@psalm-taint-sink`, `@psalm-assert-untainted`) and method-level
-     * taints (`@psalm-taint-source`/`-escape`/`-unescape`) accumulate (a re-declared free
-     * function is the exception: its sinks are last-loaded-wins).
+     * a re-declared method keeps the earlier `@psalm-taint-sink` and
+     * `@psalm-assert-untainted` only on a parameter of the same name, and method-level taints
+     * (`@psalm-taint-source`/`-escape`/`-unescape`) accumulate; a renamed parameter or a
+     * re-declared free function loses the earlier sinks (last-loaded-wins).
      * Without sorting, moving or renaming stub files can silently change types
-     * and, for a re-declared free function, drop sinks. See
+     * and, for those cases, drop sinks. See
      * docs/contributing/README.md "Stub merging" for details.
      *
      * @return list<string>

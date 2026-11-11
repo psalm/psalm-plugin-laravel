@@ -62,7 +62,9 @@ function string_value_paginator_get_collection_is_plain_support_collection(Lengt
 /**
  * The same bug with a TEMPLATE TValue, where a bare `TValue is Model` conditional yields
  * `Eloquent\Collection<int, T&Model>|Collection<int, T>`; the object arm keeps the plain collection
- * so generic paginator wrappers can call `contains()`/`map()` on it.
+ * so generic paginator wrappers can call `contains()`/`map()` on it. The `map()` call is what fails
+ * without the wrapper (ImplicitToStringCast against `T&Model`): `@psalm-check-type-exact` compares by
+ * containment in both directions, so it also accepts the wrapper-less union and only documents the type.
  *
  * @template T of string
  * @param LengthAwarePaginator<int, T> $paginator
@@ -70,6 +72,9 @@ function string_value_paginator_get_collection_is_plain_support_collection(Lengt
  */
 function template_string_value_paginator_get_collection_is_plain_support_collection(LengthAwarePaginator $paginator, string $item): bool
 {
+    $_collection = $paginator->getCollection();
+    /** @psalm-check-type-exact $_collection = Illuminate\Support\Collection<int, T> */
+
     $paginator->getCollection()->map(static fn (string $s): string => $s);
 
     return $paginator->getCollection()->contains($item);

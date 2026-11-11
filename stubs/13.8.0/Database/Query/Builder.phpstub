@@ -24,8 +24,8 @@ use Illuminate\Support\Traits\Macroable;
  *
  * The full class header (use-traits + implements) and the orderBy SQL taint sink are
  * copied verbatim: re-declaring the class resets Psalm's implements list, and the types of a
- * redeclared method are last-loaded-wins; the sink is restated for readability (parameter sinks
- * accumulate, vimeo/psalm#12479).
+ * redeclared method are last-loaded-wins; the sink is restated for readability (a parameter sink carries
+ * over to a same-named parameter, vimeo/psalm#12479).
  */
 class Builder implements BuilderContract
 {

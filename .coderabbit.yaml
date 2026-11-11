@@ -34,7 +34,7 @@ reviews:
       instructions: |
         - Verify signatures against Laravel source in vendor/laravel/framework, not Laravel PHPDoc or other tools' stubs.
         - A re-declared class must repeat its `implements` clause verbatim (for interfaces, the `extends` list).
-        - A version-dir override (stubs/<version>/) that redeclares a method must restate every type annotation (types are last-loaded-wins); parameter `@psalm-taint-sink`s and method-level taints accumulate, so only a re-declared free function must restate its sinks.
+        - A version-dir override (stubs/<version>/) that redeclares a method must restate every type annotation (types are last-loaded-wins); a method keeps earlier `@psalm-taint-sink`/`@psalm-assert-untainted` only on a parameter of the same name and method-level taints accumulate, so require restating the sink when a parameter is renamed and for every re-declared free function.
     - path: "src/Handlers/**/*.php"
       instructions: |
         - Handlers must return null when unsure; a non-null answer overrides Psalm's inference permanently.

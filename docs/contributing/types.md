@@ -189,4 +189,4 @@ Syntax that parses without the meaning its name suggests. Do not use it in stubs
 | `impure-callable`, `impure-Closure` | Same as bare `callable` / `Closure` |
 | `object{a: int, ...}` | Unsealed marker silently dropped |
 | `callable(int &$x): void` | `InvalidDocblock`, the whole type is lost |
-| `callable(string $name=): void`, `callable(string... $rest): void` | Uncaught exception, Psalm aborts the run |
+| `callable(string $name=): void` | Uncaught exception, Psalm aborts the run |
