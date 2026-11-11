@@ -45,11 +45,7 @@ function set_collection_with_plain_collection_of_models_holds_plain_support_coll
 }
 
 /**
- * Not a limitation: a plain `string` TValue resolves to the plain collection. A bare `TValue is Model`
- * conditional would also resolve it on Psalm 7.2.1 (`Model::__toString()` exists, but the concrete
- * `string` is decided); only a TEMPLATE TValue still evaluates both branches and leaks a spurious
- * `Eloquent\Collection<int, T&Model>` (vimeo/psalm#12440, open), covered below. The stub's outer
- * `TValue is object` arm decides both cases up front.
+ * Not a limitation: a plain `string` TValue resolves to the plain collection.
  *
  * @param LengthAwarePaginator<int, string> $paginator
  */
@@ -60,11 +56,9 @@ function string_value_paginator_get_collection_is_plain_support_collection(Lengt
 }
 
 /**
- * The same bug with a TEMPLATE TValue, where a bare `TValue is Model` conditional yields
- * `Eloquent\Collection<int, T&Model>|Collection<int, T>`; the object arm keeps the plain collection
- * so generic paginator wrappers can call `contains()`/`map()` on it. The `map()` call is what fails
- * without the wrapper (ImplicitToStringCast against `T&Model`): `@psalm-check-type-exact` compares by
- * containment in both directions, so it also accepts the wrapper-less union and only documents the type.
+ * A TEMPLATE TValue still leaks the Model branch without the stub's `TValue is object` arm
+ * (vimeo/psalm#12440). The `map()` call is what fails then (ImplicitToStringCast against `T&Model`);
+ * `@psalm-check-type-exact` accepts the wrapper-less union too, so it only documents the type.
  *
  * @template T of string
  * @param LengthAwarePaginator<int, T> $paginator

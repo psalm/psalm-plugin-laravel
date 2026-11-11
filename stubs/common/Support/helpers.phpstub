@@ -4,6 +4,7 @@
  * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Support/helpers.php}
  */
 
+// @todo-by https://github.com/vimeo/psalm/issues/4816 drop the NullObject hack
 /**
 * @see https://github.com/vimeo/psalm/issues/4816 for why this hack exists
 */

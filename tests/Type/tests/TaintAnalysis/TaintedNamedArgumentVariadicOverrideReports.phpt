@@ -7,6 +7,8 @@ Since vimeo/psalm#12760 Psalm resolves a named argument a parent's variadic capt
 
 namespace TaintedNamedArgumentVariadicOverrideReports;
 
+// @todo-by https://github.com/vimeo/psalm/issues/13013 drop the XFAIL section
+
 /** @psalm-taint-source input */
 function tainted(): string { return 'attacker'; }
 

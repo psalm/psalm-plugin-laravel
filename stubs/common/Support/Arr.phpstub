@@ -3,20 +3,12 @@
 namespace Illuminate\Support;
 
 /**
- * Empty re-declaration kept on purpose, for reason 1 below (reason 2 is historical):
+ * Empty re-declaration kept on purpose: it DECLARES `Illuminate\Support\Arr` for projects whose
+ * analyzed vendor does not reflect `illuminate/support` (e.g. slim libraries like
+ * laravel/socialite), where every `Arr::` reference would be `UndefinedClass`.
  *
- *  1. It DECLARES `Illuminate\Support\Arr` for projects whose analyzed vendor does not
- *     reflect `illuminate/support` (e.g. slim libraries like laravel/socialite). Without
- *     it every `Arr::` reference there becomes `UndefinedClass`.
- *  2. Laravel 13.18.0's reflected conditional `@return ($number is null ? mixed : array)` on
- *     `random()` was once dropped to `mixed` unless the class was re-declared here. On Psalm 7.2.1
- *     it resolves the same with or without this stub when `illuminate/support` is reflected, so
- *     reason 1 is what keeps the file.
- *
- * `random()` itself is intentionally NOT stubbed: the reflected conditional already resolves
- * literal, nullable and template-typed `$number`, and a stub conditional resolves identically
- * (probed on Psalm 7.2.1), so a stub would only duplicate it. The `Macroable` trait is copied
- * verbatim per stub convention; every static helper merges from reflection.
+ * `random()` is not stubbed: its reflected conditional already resolves. The `Macroable` trait
+ * is copied verbatim per stub convention; every static helper merges from reflection.
  */
 class Arr
 {

@@ -8,10 +8,8 @@ namespace Illuminate\Database;
  * Laravel 13+ only, so a Laravel 12 project passing a 4th argument still gets an arity error.
  *
  * The full class header is copied verbatim because re-declaring the class resets Psalm's
- * implements list (hard rule 2). Each method restates its own @psalm-taint-sink here even
- * though the common 3-arg declaration also carries one: the restatement keeps the sink next to
- * the 4-arg signature and is harmless, since a redeclared method's parameter sinks carry over to a
- * same-named parameter (vimeo/psalm#12479). Exactly one TaintedSql is reported (TaintedSqlDbCursor.phpt).
+ * implements list (hard rule 2). Each method restates its own @psalm-taint-sink next to the
+ * 4-arg signature. Exactly one TaintedSql is reported (TaintedSqlDbCursor.phpt).
  *
  * stdClass is only true for PDO's DEFAULT fetch mode. $fetchUsing forwards straight to
  * PDOStatement::fetch(...$fetchUsing) (cursor()) / fetchAll(...$fetchUsing) (selectResultSets()),
