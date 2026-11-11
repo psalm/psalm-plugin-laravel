@@ -29,6 +29,8 @@ use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Union;
 
 /**
  * Flags request-scoped service resolutions inside long-lived binding closures
@@ -52,9 +54,10 @@ use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
  *
  * Psalter fixes it by renaming the call: `singleton()` becomes `scoped()`, `singletonIf()` becomes `scopedIf()`.
  * One binding gets one rename however many resolutions its closure holds, and none of its issues are reported.
- * The rename is only proven safe when the receiver's `scoped()` / `scopedIf()` is the framework's own (a container
- * subclass may replace it with other parameters, and the call's named arguments would then no longer bind): such a
- * binding is reported and left as written.
+ * The rename is only proven safe when the receiver's `scoped()` (and, for `scopedIf()`, which calls it, `scopedIf()`
+ * too) is the framework's own on every class the receiver can be (a container subclass may replace it with other
+ * parameters, and the call's named arguments would then no longer bind): such a binding is reported and left as
+ * written.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -227,6 +230,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
         $nameNode = $expr->name;
         $replacement = $methodNameLower === 'singleton' ? 'scoped' : 'scopedIf';
+        // `scopedIf()` calls `$this->scoped()`, so renaming to it depends on both being the framework's own.
+        $destinations = $methodNameLower === 'singleton' ? ['scoped'] : ['scopedif', 'scoped'];
 
         // One rename resolves every finding of this binding, so the issues go in as one group: either the
         // method name is rewritten and none are reported, or all are. The edit is a pure function of the
@@ -235,7 +240,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             $event->getCodebase(),
             $event->getStatementsSource(),
             $issues,
-            static fn(): array => self::scopedIsStock($event, $replacement)
+            static fn(): array => self::destinationsAreStock($event, $expr, $destinations)
                 ? [new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement)]
                 : [],
         );
@@ -246,28 +251,41 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
     }
 
     /**
-     * Whether `scoped()` / `scopedIf()` on the call's receiver resolves to the framework's own declaration.
-     * An unreadable receiver is not proven, so the rename is declined.
+     * Whether every one of `$methods` on EVERY atomic of the receiver's type resolves to the framework's own
+     * declaration. A union such as `Container|SubclassWithOwnScoped` fails on its second member, and the one edit
+     * would rename the call for both. An unknown or non-class receiver is not proven, so the rename is declined.
      *
-     * @psalm-capabilities read-props
+     * @param list<lowercase-string> $methods
      */
-    private static function scopedIsStock(AfterMethodCallAnalysisEvent $event, string $scopedMethod): bool
+    private static function destinationsAreStock(AfterMethodCallAnalysisEvent $event, MethodCall $expr, array $methods): bool
     {
-        $receiverClass = \strstr($event->getMethodId(), '::', true);
+        $receiverType = $event->getStatementsSource()->getNodeTypeProvider()->getType($expr->var);
 
-        if ($receiverClass === false) {
+        if (!$receiverType instanceof Union) {
             return false;
         }
 
-        try {
-            $classStorage = $event->getCodebase()->classlike_storage_provider->get(\strtolower($receiverClass));
-        } catch (\InvalidArgumentException) {
-            return false;
+        foreach ($receiverType->getAtomicTypes() as $atomicType) {
+            if (!$atomicType instanceof TNamedObject) {
+                return false;
+            }
+
+            try {
+                $classStorage = $event->getCodebase()->classlike_storage_provider->get(\strtolower($atomicType->value));
+            } catch (\InvalidArgumentException) {
+                return false;
+            }
+
+            foreach ($methods as $method) {
+                $declaring = $classStorage->declaring_method_ids[$method] ?? null;
+
+                if ($declaring === null || !isset(self::STOCK_SCOPED_METHOD_IDS[\strtolower((string) $declaring)])) {
+                    return false;
+                }
+            }
         }
 
-        $declaring = $classStorage->declaring_method_ids[\strtolower($scopedMethod)] ?? null;
-
-        return $declaring !== null && isset(self::STOCK_SCOPED_METHOD_IDS[\strtolower((string) $declaring)]);
+        return true;
     }
 
     /**
