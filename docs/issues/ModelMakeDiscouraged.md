@@ -38,9 +38,9 @@ Psalter rewrites the calls for you:
 ./vendor/bin/psalter --issues=ModelMakeDiscouraged
 ```
 
-`Post::make($attributes)` becomes `new Post($attributes)`: the class name (alias, import or fully qualified) and the arguments are kept as written.
+`Post::make($attributes)` becomes `(new Post($attributes))`: the class name (alias, import or fully qualified) and the arguments are kept as written.
 
-- **Parentheses on older PHP targets.** Below PHP 8.4, `new Post()->save()` is a syntax error, so a call that is followed by `->`, `?->`, `::`, `[` or `(` becomes `(new Post())->save()`. Psalter reads the target from `--php-version`, or from `composer.json` when it is not passed.
+- **Parentheses.** Psalter always writes `(new Post($attributes))`, whether or not the call is chained and whatever the PHP target, so the output is valid everywhere. On PHP 8.4+ the parentheses are redundant; php-cs-fixer's `new_expression_parentheses` rule removes them.
 - **Left alone, still reported.** Psalter rewrites only when it can show that `new Post()` runs what `make()` runs. `make()` goes through `__callStatic` -> `__call` -> `newQuery()` -> the Eloquent builder's `make()` -> `newInstance()`, so these are reported and not rewritten:
   - `Post::make(...)` used as a first-class callable.
   - A named `Post::make()` inside a non-static method or closure of a class that is the model, one of its subclasses or one of its ancestors. PHP keeps the object context there, so the call runs `$this->__call('make')` on the current instance, which keeps that instance's class, table and connection, while `new Post()` builds a fresh base model. The same call in a static method, a static closure, or an unrelated class is rewritten.

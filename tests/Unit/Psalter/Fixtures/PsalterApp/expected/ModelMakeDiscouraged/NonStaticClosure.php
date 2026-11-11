@@ -32,7 +32,7 @@ final class NonStaticClosure
 
     public static function staticClosure(): Post
     {
-        $make = static fn(): Post => new Post(['title' => 'z']);
+        $make = static fn(): Post => (new Post(['title' => 'z']));
 
         return $make();
     }

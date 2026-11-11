@@ -30,13 +30,13 @@ final class ObjectContextRelatedClass extends Post
 
     public static function fromStaticMethod(): Post
     {
-        return new Post(['title' => 'x']);
+        return (new Post(['title' => 'x']));
     }
 
     public function fromStaticClosure(): Post
     {
         $run = static function (): Post {
-            return new Post(['title' => 'y']);
+            return (new Post(['title' => 'y']));
         };
 
         return $run();

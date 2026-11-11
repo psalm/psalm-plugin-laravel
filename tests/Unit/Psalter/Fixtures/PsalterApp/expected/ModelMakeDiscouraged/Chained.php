@@ -32,12 +32,12 @@ final class Chained
 
     public function nested(): mixed
     {
-        return new Post(['title' => (new Post())->title]);
+        return (new Post(['title' => (new Post())->title]));
     }
 
     public function notChained(): bool
     {
-        $post = new Post();
+        $post = (new Post());
 
         return $post->save();
     }

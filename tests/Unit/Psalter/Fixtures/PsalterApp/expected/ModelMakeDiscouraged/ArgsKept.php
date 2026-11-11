@@ -10,13 +10,13 @@ final class ArgsKept
 {
     public function build(string $title): Post
     {
-        return new Post(
+        return (new Post(
             ['title' => \strtoupper($title)],
-        );
+        ));
     }
 
     public function named(): Post
     {
-        return new Post(attributes: ['title' => 'named']);
+        return (new Post(attributes: ['title' => 'named']));
     }
 }

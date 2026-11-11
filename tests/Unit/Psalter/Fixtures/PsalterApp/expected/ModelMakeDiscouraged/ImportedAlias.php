@@ -10,11 +10,11 @@ final class ImportedAlias
 {
     public function alias(): Article
     {
-        return new Article();
+        return (new Article());
     }
 
     public function fullyQualified(): \PsalterFixture\Models\Post
     {
-        return new \PsalterFixture\Models\Post();
+        return (new \PsalterFixture\Models\Post());
     }
 }

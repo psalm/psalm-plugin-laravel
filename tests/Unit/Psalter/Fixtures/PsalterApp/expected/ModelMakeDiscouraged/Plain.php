@@ -10,6 +10,6 @@ final class Plain
 {
     public function build(): Post
     {
-        return new Post();
+        return (new Post());
     }
 }

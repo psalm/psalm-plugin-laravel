@@ -24,8 +24,8 @@ use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
  * be rewritten). The data provider discovers them, and the fixture's psalm.xml already declares every
  * fixable issue. Models a case needs live in `app/Models` (autoloaded; case files are only parsed).
  *
- * Psalter targets PHP 8.3 here whatever PHP runs the suite: that is below 8.4, where `new Post()` cannot
- * be dereferenced, so the parentheses cases are exercised on every cell.
+ * Psalter writes `(new Post())` whatever the target PHP version (it targets 8.3 here), so the output
+ * does not depend on the PHP running the suite.
  */
 #[CoversClass(Plugin::class)]
 #[CoversClass(PsalterFix::class)]
@@ -55,45 +55,16 @@ final class PsalterFixTest extends TestCase
 
             yield $relative => [$relative];
         }
-
-        foreach (\array_keys(self::generatedCases()) as $case) {
-            yield $case => [$case];
-        }
     }
 
     #[Test]
     #[DataProvider('cases')]
     public function psalter_leaves_the_case_as_its_expected_source(string $case): void
     {
-        $generated = self::generatedCases()[$case] ?? null;
+        $expectedFile = self::FIXTURE . '/expected/' . $case;
+        $this->assertFileExists($expectedFile, "Case {$case} has no expected/ counterpart.");
 
-        if ($generated !== null) {
-            $expected = $generated[1];
-        } else {
-            $expectedFile = self::FIXTURE . '/expected/' . $case;
-            $this->assertFileExists($expectedFile, "Case {$case} has no expected/ counterpart.");
-            $expected = (string) \file_get_contents($expectedFile);
-        }
-
-        $this->assertSame($expected, $this->rewrittenCases()[$case]);
-    }
-
-    /**
-     * Cases whose bytes an editor, `.editorconfig` or php-cs-fixer would normalize (a CR line ending), so they
-     * cannot live in a committed fixture file: written into the temp project before Psalter runs.
-     *
-     * @return array<string, array{string, string}> case path relative to cases/ => [input, expected output]
-     */
-    private static function generatedCases(): array
-    {
-        $source = static fn(string $call): string => "<?php\n\ndeclare(strict_types=1);\n\n"
-            . "namespace PsalterFixture\\Cases\\ModelMake;\n\nuse PsalterFixture\\Models\\Post;\n\n"
-            . "final class CrLineComment\n{\n    public function chained(): bool\n    {\n"
-            . "        return {$call} // a line comment ends at CR, not only at LF\r        ->save();\n    }\n}\n";
-
-        return [
-            'ModelMakeDiscouraged/CrLineComment.php' => [$source('Post::make()'), $source('(new Post())')],
-        ];
+        $this->assertSame((string) \file_get_contents($expectedFile), $this->rewrittenCases()[$case]);
     }
 
     /** @return array<string, string> */
@@ -109,10 +80,6 @@ final class PsalterFixTest extends TestCase
         $project = \sys_get_temp_dir() . '/psalm-laravel-psalter-' . \getmypid();
         self::removeDirectory($project);
         self::copyDirectory(self::FIXTURE, $project);
-
-        foreach (self::generatedCases() as $case => [$input]) {
-            \file_put_contents($project . '/cases/' . $case, $input);
-        }
 
         try {
             $process = new Process(
