@@ -6,7 +6,7 @@ nav_order: 3
 
 # Psalm Type Syntax
 
-Every type expression Psalm 7 accepts inside a docblock, for writing stubs and for building `Union`/`Atomic` values in handlers. Verified against Psalm `7.0.0-beta24`.
+Every type expression Psalm 7 accepts inside a docblock, for writing stubs and for building `Union`/`Atomic` values in handlers.
 
 Companion pages: [Docblock Annotations](annotations.md) (the tags that carry these types), [Purity and Capabilities](purity.md) (the `[pure]` part of callable and iterable types), [Taint Analysis Stubs](taint-analysis.md).
 
@@ -136,7 +136,7 @@ Closure[P](): void                      // purity template
 Closure[pure]                           // any pure closure, no parameter list
 ```
 
-By-reference parameters are not expressible: `callable(int &$x): void` is an `InvalidDocblock`. A named parameter cannot carry `=` (`string $name=`) or a `...` before its name (`string... $rest`): Psalm `7.0.0-beta24` crashes the whole scan on both; write the name only on required or `...$rest` parameters. The bracket part is a capability set; see [Purity and Capabilities](purity.md#callable-types) for the names, templates, and the `Closure[_]` parameter form.
+By-reference parameters are not expressible: `callable(int &$x): void` is an `InvalidDocblock`. A named parameter cannot carry `=` (`string $name=`): Psalm crashes the whole scan on it, so write the name only on required or `...$rest` parameters (`string... $rest`, with the dots before the name, parses). The bracket part is a capability set; see [Purity and Capabilities](purity.md#callable-types) for the names, templates, and the `Closure[_]` parameter form.
 
 ## Utility types
 
@@ -185,8 +185,8 @@ Syntax that parses without the meaning its name suggests. Do not use it in stubs
 | `open-resource` | Reserved word but no type: `InvalidDocblock` |
 | `non-empty-countable` | Reserved word Psalm uses internally (from `count()` checks); not writable, `InvalidDocblock` even in `@psalm-assert` |
 | `empty` | `never`, not "empty value" |
-| `self-accessing-callable`, `self-mutating-callable` (and `-Closure`) | Removed in `7.0.0-beta23`; now parse as impure `callable`. Use `callable[read-props]` / `callable[read-props\|write-this-props\|write-refs]` |
+| `self-accessing-callable`, `self-mutating-callable` (and `-Closure`) | Removed; now an `InvalidDocblock` ("Unrecognized type"). Use `callable[read-props]` / `callable[read-props\|write-this-props\|write-refs]` |
 | `impure-callable`, `impure-Closure` | Same as bare `callable` / `Closure` |
 | `object{a: int, ...}` | Unsealed marker silently dropped |
 | `callable(int &$x): void` | `InvalidDocblock`, the whole type is lost |
-| `callable(string $name=): void`, `callable(string... $rest): void` | Uncaught exception, Psalm aborts the run |
+| `callable(string $name=): void` | Uncaught exception, Psalm aborts the run |

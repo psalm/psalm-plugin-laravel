@@ -3,9 +3,9 @@
 
 use App\Models\Customer;
 
-// Regression: on Psalm 7.0.0-rc6 a Stringable object (every Eloquent model)
-// matched the `''` / `'0'` literal arms of the throw_unless() conditional, so
-// the call resolved to `never` and every following line was treated as
+// Regression (vimeo/psalm#12428): a Stringable object (every Eloquent model)
+// matches the `''` / `'0'` literal arms of a plain throw_unless() conditional, so
+// the call would resolve to `never` and every following line be treated as
 // unreachable: taint and type issues after it silently vanished. The echo in
 // each function must stay analyzed: the call to an undefined function after
 // throw_*() is the proof of reachability (UndefinedFunction).

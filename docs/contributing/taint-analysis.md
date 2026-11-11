@@ -19,7 +19,7 @@ For Psalm's upstream taint analysis documentation, see:
 
 The upstream reference does not cover the conditional form of `@psalm-taint-escape`, nor `@psalm-assert-untainted`. Both are documented below from source, along with which analyzers actually consume them.
 
-Claims here are verified against both majors this repo targets. Source line citations date from Psalm 7.0.0-beta19 and have drifted (re-verify before trusting one); the behavior claims re-checked on Psalm 7.2.1 say so. The Psalm 6 line (6.16.1, backing `3.x`) implements this surface in different classes at different line numbers. Only behavioral differences between the majors are called out, at the point of use.
+Claims here are verified against both majors this repo targets. Source line citations date from an early Psalm 7 beta and have drifted (re-verify before trusting one); the behavior claims re-checked on Psalm 7.2.1 say so. The Psalm 6 line (6.16.1, backing `3.x`) implements this surface in different classes at different line numbers. Only behavioral differences between the majors are called out, at the point of use.
 
 ## Stub location
 
@@ -324,7 +324,7 @@ id; a guard qualifies only when it and every descendant carry the escape on thei
 That walk recurses to a fixpoint, with a visited set, because the stored property is not the
 closure its name suggests. `Populator::populateClassLikeStorage()` records DIRECT links and
 `populateCodebase()` then makes a SINGLE merge pass with no fixpoint, so a chain `A < B < C < D`
-leaves `A` listing `B` and `C` and never `D`. Executed on 7.0.0-beta19: a four-level agent
+leaves `A` listing `B` and `C` and never `D`. Executed during the Psalm 7.0 pre-release cycle (`Populator::populateCodebase()` still does the single pass on 7.2.1, read from source, but the run was not repeated): a four-level agent
 hierarchy whose deepest class stripped the stack was invisible and kept its ancestor's exemption.
 
 Comparing declaring ids beats reading `MethodStorage::$overridden_downstream`:
@@ -562,7 +562,7 @@ public static function of($string) {}
 2. Add `@psalm-taint-specialize` and re-run the test. If it now reports zero errors, the stub falls into the broken-asymmetry class. Revert the annotation and file an upstream Psalm 7 reproducer with a minimal repro.
 3. Add a per-callsite regression test under `tests/Type/tests/TaintAnalysis/Safe<Stub><Method>SpecializePerCallsite.phpt` modeled on `SafeJsEncodeSpecializePerCallsite.phpt`.
 
-`e()`, `encrypt()` and `decrypt()` pass all three steps on Psalm 7.0.0-rc2. `SafeEscapeHelpersSpecializePerCallsite.phpt` pins per-callsite isolation (one `{{ decrypt($x) }}` had flagged every Blade echo of an app as a secret leak), and `TaintedEscapeHelpersSpecializedKeepFlow.phpt` pins within-callsite flow of the kinds they do not strip. `Connection::escape()` and `DB::escape()` remain known exceptions, tracked as follow-ups to #1007. Do not blanket-apply the annotation; treat every site as its own bisect. Class methods are not stubs here: `SessionGuard::hashPasswordForCookie()` is handled by `GuardTaintHandler` without `@psalm-flow` propagation (#1113), and the `Encrypter` class methods (`encrypt`/`encryptString`/`decrypt`/`decryptString`) by `EncrypterTaintHandler`, which preserves their flow via `return_source_params`. The global `encrypt()` / `decrypt()` helpers remain function stubs in `helpers.phpstub`, specialized as above.
+`e()`, `encrypt()` and `decrypt()` pass all three steps. `SafeEscapeHelpersSpecializePerCallsite.phpt` pins per-callsite isolation (one `{{ decrypt($x) }}` had flagged every Blade echo of an app as a secret leak), and `TaintedEscapeHelpersSpecializedKeepFlow.phpt` pins within-callsite flow of the kinds they do not strip. `Connection::escape()` and `DB::escape()` remain known exceptions, tracked as follow-ups to #1007. Do not blanket-apply the annotation; treat every site as its own bisect. Class methods are not stubs here: `SessionGuard::hashPasswordForCookie()` is handled by `GuardTaintHandler` without `@psalm-flow` propagation (#1113), and the `Encrypter` class methods (`encrypt`/`encryptString`/`decrypt`/`decryptString`) by `EncrypterTaintHandler`, which preserves their flow via `return_source_params`. The global `encrypt()` / `decrypt()` helpers remain function stubs in `helpers.phpstub`, specialized as above.
 
 ## Per-rule escape on Rule objects
 
@@ -689,7 +689,7 @@ function checkSafe(\Illuminate\Foundation\Auth\User $user, string $given): bool 
 
 **Runtime cost.** The handler hooks `AfterExpressionAnalysisInterface`, which fires per expression. It exits immediately when `Codebase::$taint_flow_graph` is null (i.e. when taint analysis is off), so the only cost in regular analysis is that null check. Sinks are added through the public `Codebase` taint API (`addTaintSink()`, `addTaintPath()`), and only where `Codebase::tracksTaintFlow()` holds, so a scope suppressing `TaintedInput` gets no timing sinks, like core sinks.
 
-**Issue-message limitation.** Psalm 7 hardcodes the issue message per taint kind in `TaintFlowGraph::connectSinksAndSources()`, so the emitted text is the generic `"Detected tainted user secret leaking"` rather than something CWE-208-specific. Tracked upstream as [vimeo/psalm#11762](https://github.com/vimeo/psalm/issues/11762); the handler will switch to a CWE-tagged message once a custom-message API lands. The data-flow trace itself still pinpoints the timing-unsafe comparison site, so the report is actionable today.
+**Issue-message limitation.** Psalm 7 hardcodes the issue message per taint kind in `TaintFlowGraph::connectSinksAndSources()`, so the emitted text is the generic `"Detected tainted user secret leaking"` rather than something CWE-208-specific. Tracked upstream as [vimeo/psalm#11762](https://github.com/vimeo/psalm/issues/11762); the handler will switch to a CWE-tagged message once a custom-message API lands. The data-flow trace itself still pinpoints the timing-unsafe comparison site, so the report is actionable today. <!-- @todo-by https://github.com/vimeo/psalm/issues/11762 switch the handler to a CWE-tagged message -->
 
 **Scope.** Only secret-tainted operands are flagged. Plain `===` on user input (e.g. `$request->input('name') === 'admin'`) is not reported, because the sink does not match `INPUT_*` taint kinds.
 
@@ -795,7 +795,7 @@ Declare it in the stub only if the vendor class does. `StreamableAgentResponse` 
 
 `@psalm-taint-source` on `offsetGet()` sources an explicit `$response->offsetGet('field')` call and nothing else. Psalm's `ArrayFetchAnalyzer` resolves the `$response['field']` sugar by synthesizing a `VirtualMethodCall` to `offsetGet()`, analyzing it against a **cloned** node-data set, then copying back only the resulting type. Everything that call recorded about data flow stays in the clone and is discarded, so no edge reaches the outer expression. Type inference is unaffected, which is why the gap is invisible without a taint test.
 
-The loss is not specific to source annotations: any taint edge crossing the sugar is dropped, including a plain argument-to-return pass through `offsetGet()`. This is a Psalm core soundness bug, not a Laravel one, and it silently breaks every `ArrayAccess`-based taint source in any codebase. Filed upstream as [vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912); `#1304` here was closed for the same reason. Do not add an annotation and assume the sugar is covered.
+The loss is not specific to source annotations: any taint edge crossing the sugar is dropped, including a plain argument-to-return pass through `offsetGet()`. This is a Psalm core soundness bug, not a Laravel one, and it silently breaks every `ArrayAccess`-based taint source in any codebase. Filed upstream as [vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912); `#1304` here was closed for the same reason. Do not add an annotation and assume the sugar is covered. <!-- @todo-by https://github.com/vimeo/psalm/issues/11912 ship the ArrayDimFetch branch or drop this section -->
 
 An `ArrayDimFetch` branch on `LlmOutputTaintHandler` would close it, and was prototyped, but is deliberately not shipped: `ArrayDimFetch` is among the hottest node types in any codebase, so the branch charges a per-expression cost on every analysis, and it becomes dead code the moment upstream lands. Keep the `offsetGet()` annotations anyway, since the explicit call form is genuinely covered by them.
 

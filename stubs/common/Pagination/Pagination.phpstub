@@ -35,12 +35,10 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      * TValue is a Model, because the constructor/setCollection() never upgrade the wrapped
      * collection class — only Eloquent\Builder's own pagination methods do.
      *
-     * `Model::__toString()` exists (CanBeEscapedWhenCastToString), so Psalm cannot rule out a
-     * plain `string` TValue being a Model: `TValue is Model` is undecidable, both branches are
-     * evaluated, and the true branch narrows TValue to `Model`, yielding a spurious
-     * `Eloquent\Collection<TKey, Model>` next to the real `Support\Collection<TKey, string>`.
-     * The outer `TValue is object` arm decides that case first (a string is not an object, whereas
-     * a leading `TValue is string` would also match a Model, which is stringable).
+     * `TValue is Model` is undecidable for a TEMPLATE TValue (`Model::__toString()` exists): both
+     * branches are evaluated and a generic `Page<T>` gets a spurious `Eloquent\Collection<TKey, T&Model>`
+     * (vimeo/psalm#12440). The outer `TValue is object` arm decides it first; a leading
+     * `TValue is string` would also match a Model, which is stringable.
      *
      * @psalm-return (TValue is object ? (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>) : \Illuminate\Support\Collection<TKey, TValue>)
      */
@@ -164,9 +162,7 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
 
     // @todo-by https://github.com/vimeo/psalm/issues/12440 drop the `TValue is object` wrapper from the getCollection() conditional
     /**
-     * See AbstractPaginator::getCollection() above for the full conditional-return rationale
-     * (provenance gap on manual construction; string-vs-Model undecidability, which the outer
-     * `TValue is object` arm resolves).
+     * See AbstractPaginator::getCollection() above for the rationale.
      *
      * @psalm-return (TValue is object ? (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>) : \Illuminate\Support\Collection<TKey, TValue>)
      */

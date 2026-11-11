@@ -1,0 +1,114 @@
+<?php
+
+namespace Illuminate\Database\Eloquent\Relations;
+
+/**
+ * Laravel 13.41 rewrote the related-model shape in BelongsToMany docblocks from
+ * `object{pivot: TPivotModel}` to `object{TAccessor: TPivotModel}`. Psalm reads the key of an
+ * object shape literally, so `TAccessor` becomes a property name and `->pivot` is lost on every
+ * method that stubs/common/ does not re-declare. This override re-declares those methods with the
+ * `pivot` key. Everything else merges from stubs/common/.
+ *
+ * The full class header (templates, @template-extends, @mixin, use-trait) is copied
+ * verbatim from common because re-declaring the class resets Psalm's
+ * interface/template metadata to whatever this declaration carries.
+ *
+ * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+ * Covariant TDeclaringModel — required by #913 (see Relation.phpstub for the rationale).
+ * @template-covariant TDeclaringModel of \Illuminate\Database\Eloquent\Model
+ * Covariant TPivotModel: a `withPivot()`-refined `Pivot&object{...}` must satisfy plain `Pivot` declarations (#1944).
+ * @template-covariant TPivotModel of \Illuminate\Database\Eloquent\Relations\Pivot = \Illuminate\Database\Eloquent\Relations\Pivot
+ * @template TAccessor of string = 'pivot'
+ * @template-extends Relation<TRelatedModel, TDeclaringModel, \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>>
+ * @mixin \Illuminate\Database\Eloquent\Builder<TRelatedModel>
+ */
+class BelongsToMany extends Relation
+{
+    use Concerns\InteractsWithPivotTable;
+
+    /**
+     * @param  array  $columns
+     * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>
+     */
+    public function get($columns = ['*']) {}
+
+    /**
+     * @template TReturn
+     *
+     * @param  callable(TRelatedModel&object{pivot: TPivotModel}): TReturn  $callback
+     * @param  int  $count
+     * @return \Illuminate\Support\Collection<int, TReturn>
+     */
+    public function chunkMap(callable $callback, $count = 1000) {}
+
+    /**
+     * @param  mixed  $id
+     * @param  array  $columns
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     *
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException<TRelatedModel>
+     * @throws \Illuminate\Database\MultipleRecordsFoundException
+     */
+    public function findSole($id, $columns = ['*']) {}
+
+    /**
+     * @param  array  $attributes
+     * @param  (\Closure(): array)|array  $values
+     * @param  array  $joining
+     * @param  bool  $touch
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     */
+    public function restoreOrCreate(array $attributes = [], \Closure|array $values = [], array $joining = [], $touch = true) {}
+
+    /**
+     * @param  array  $attributes
+     * @param  (\Closure(): array)|array  $values
+     * @param  array  $joining
+     * @param  bool  $touch
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     *
+     * @throws \Illuminate\Database\UniqueConstraintViolationException
+     */
+    public function createOrRestore(array $attributes = [], \Closure|array $values = [], array $joining = [], $touch = true) {}
+
+    /**
+     * @param  array  $attributes
+     * @param  string  $column
+     * @param  int|float  $default
+     * @param  int|float  $step
+     * @param  array  $extra
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     */
+    public function incrementOrCreate(array $attributes, string $column = 'count', $default = 1, $step = 1, array $extra = []) {}
+
+    /**
+     * @param  array  $attributes
+     * @param  array  $joining
+     * @param  bool  $touch
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     */
+    public function createQuietly(array $attributes = [], array $joining = [], $touch = true) {}
+
+    /**
+     * @param  iterable  $records
+     * @param  array  $joinings
+     * @return array<int, TRelatedModel&object{pivot: TPivotModel}>
+     */
+    public function createManyQuietly(iterable $records, array $joinings = []) {}
+
+    /**
+     * @param  array  $attributes
+     * @param  array  $joining
+     * @param  bool  $touch
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     */
+    public function forceCreate(array $attributes = [], array $joining = [], $touch = true) {}
+
+    /**
+     * @param  array  $attributes
+     * @param  array  $joining
+     * @param  bool  $touch
+     * @return TRelatedModel&object{pivot: TPivotModel}
+     */
+    public function forceCreateQuietly(array $attributes = [], array $joining = [], $touch = true) {}
+}

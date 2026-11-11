@@ -16,9 +16,8 @@ use Illuminate\Foundation\Http\FormRequest;
  * the tainted $default comes from an unvalidated source ('fallback'), so the
  * echo sink must still fire TaintedHtml.
  *
- * The single echo is one sink, so each finding kind is reported once. Psalm
- * 7.0.0-rc2 reported every kind twice here (two source paths into the same
- * sink, with no distinct flow behind the second).
+ * The single echo is one sink, so each finding kind is reported once (not once per source path
+ * into the same sink).
  */
 final class InputWithDefaultRequest extends FormRequest
 {
