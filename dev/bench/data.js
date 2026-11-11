@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794390005062,
+  "lastUpdate": 1794392411538,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18195,6 +18195,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1249,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7657ba4c691edab90fa6c6b75a03c01b1768540b",
+          "message": "Require Psalm 7.3 (#2260)\n\n* build: require Psalm 7.3\n\n* test: re-pin the Collection subclass callback limitation for Psalm 7.3",
+          "timestamp": "2026-11-11T11:16:36+01:00",
+          "tree_id": "a79f968e338ef262fc3389309d2bf5b743e79e72",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7657ba4c691edab90fa6c6b75a03c01b1768540b"
+        },
+        "date": 1794392409450,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.06,
+            "range": "± 0.23",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1250,
             "unit": "MB"
           }
         ]
