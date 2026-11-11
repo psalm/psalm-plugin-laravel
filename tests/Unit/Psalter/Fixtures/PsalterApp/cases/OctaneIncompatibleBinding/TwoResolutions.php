@@ -7,9 +7,7 @@ namespace PsalterFixture\Cases\Octane;
 use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 
-final class TwoResolutionsService
-{
-}
+final class TwoResolutionsService {}
 
 final class TwoResolutions extends ServiceProvider
 {
