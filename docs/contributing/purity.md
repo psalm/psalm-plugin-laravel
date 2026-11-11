@@ -6,7 +6,7 @@ nav_order: 5
 
 # Purity and Capabilities
 
-Psalm `7.0.0-beta23` replaced the four purity levels (pure, mutation-free, external-mutation-free, impure) with **capabilities**: a set of side effects a function, method, or closure may perform. The old tags still parse and map onto fixed sets. Psalm 6 (the `3.x` line) has none of this; see [Backporting](#backporting-to-3x).
+Psalm 7 replaced the four purity levels (pure, mutation-free, external-mutation-free, impure) with **capabilities**: a set of side effects a function, method, or closure may perform. The old tags still parse and map onto fixed sets. Psalm 6 (the `3.x` line) has none of this; see [Backporting](#backporting-to-3x).
 
 Upstream reference: [Purity and capabilities](https://github.com/vimeo/psalm/blob/master/docs/annotating_code/supported_annotations.md#purity-and-capabilities). Source: `vendor/vimeo/psalm/src/Psalm/Storage/Capabilities.php`.
 
@@ -102,7 +102,7 @@ The upper bound must contain the lower bound bit for bit: `write-this-props <= C
 
 ## Plugin policy
 
-- Self-analysis reports `MissingPureAnnotation` (and `MissingImmutableAnnotation` on classes) because `psalm.xml` sets `suggestPurityAnnotations="true"`; Psalm reports neither by default since 7.0.0-rc28. Annotate with what the issue suggests (`psalm --alter --issues=MissingPureAnnotation`); since beta23 the suggestion may be a `@psalm-capabilities` set instead of a legacy tag.
+- Self-analysis reports `MissingPureAnnotation` (and `MissingImmutableAnnotation` on classes) because `psalm.xml` sets `suggestPurityAnnotations="true"`; Psalm reports neither by default (`suggestPurityAnnotations` defaults to `false`). Annotate with what the issue suggests (`psalm --alter --issues=MissingPureAnnotation`); the suggestion may be a `@psalm-capabilities` set instead of a legacy tag.
 - Methods touching a static (memo caches, registries with `reset()`) stay unannotated: no legacy tag grants `read-globals`.
 - Prefer `@psalm-pure` / `@psalm-mutation-free` / `@psalm-external-mutation-free` where they fit exactly: they also parse on Psalm 6, so the `3.x` backport keeps them.
 - In stubs, a Laravel method that takes and invokes a callback is a candidate for `Closure[_]`, so pure user code can call it with a pure callback. Only where the Laravel body itself has no other effect.

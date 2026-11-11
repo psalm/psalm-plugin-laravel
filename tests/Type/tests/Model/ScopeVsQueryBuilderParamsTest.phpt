@@ -49,6 +49,7 @@ function test_aggregate_scope_unaffected(): void
     /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\CollidingScopeModel> */
 }
 
+// @todo-by https://github.com/vimeo/psalm/issues/11880 convert this test to assert the correct output
 /**
  * Upstream-blocked limitation (not a pending plugin fix): the scope-first precedence applies only to
  * static model calls routed through ModelMethodHandler. Builder-instance calls (query()->orderBy())
@@ -65,8 +66,8 @@ function test_aggregate_scope_unaffected(): void
  * Psalm throw on the absent Builder::orderBy storage.) Keep this test until upstream changes.
  *
  * Tracked upstream: https://github.com/vimeo/psalm/issues/11880 (@mixin-host method providers not
- * consulted for mixin-forwarded methods, a beta19 regression). When it is fixed this test starts
- * failing and must be converted to assert the correct output.
+ * consulted for mixin-forwarded methods). When it is fixed this test starts failing and must be
+ * converted to assert the correct output.
  */
 function test_instance_call_limitation(): void
 {

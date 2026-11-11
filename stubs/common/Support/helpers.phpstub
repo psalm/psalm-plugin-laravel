@@ -4,6 +4,7 @@
  * Stubs for {@see https://github.com/laravel/framework/blob/master/src/Illuminate/Support/helpers.php}
  */
 
+// @todo-by https://github.com/vimeo/psalm/issues/4816 drop the NullObject hack
 /**
 * @see https://github.com/vimeo/psalm/issues/4816 for why this hack exists
 */
@@ -254,7 +255,7 @@ function tap($value, $callback = null) {}
  * Throw the given exception if the given condition is true.
  *
  * Objects are split off first because a `Stringable` object (every Eloquent
- * model) also matches the `''` / `'0'` literal arms on rc6, which made
+ * model) also matches the `''` / `'0'` literal arms (vimeo/psalm#12428), which makes
  * `throw_unless($model)` resolve to `never`. An object is truthy, so `throw_if`
  * never returns for it and `throw_unless` passes it through, except an empty
  * `SimpleXMLElement`, which PHP casts to `false`: for it `throw_if` may return.

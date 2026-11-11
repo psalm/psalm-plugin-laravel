@@ -114,7 +114,7 @@ final class EmptyCollectionLookupIssueHandler implements BeforeAddIssueInterface
             return null;
         }
 
-        // "Argument 1 of Illuminate\Support\Collection::get expects never, but string provided". Psalm 7 rc2
+        // "Argument 1 of Illuminate\Support\Collection::get expects never, but string provided". Psalm 7
         // builds all four classes' messages from `getId()` this way; the provided type may carry a
         // `parent type ` / `possibly different type ` / `possibly undefined ` prefix. Anything else (e.g. the
         // "with additional array shape fields" tail) does not match and keeps the issue.
