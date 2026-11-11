@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794392761380,
+  "lastUpdate": 1794393174335,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18260,6 +18260,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 26.64,
             "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1250,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "75807c093b7eb7a1c4fceb82ed96e640db391dae",
+          "message": "Let real Carbon trait methods win over shadowing `@method` tags (#2255)\n\n* fix(carbon): let real trait methods win over Carbon @method pseudo-methods\n\nFixes #2253\n\n* fix(carbon): keep Carbon trait @method tags when the real method is not public\n\nCover getTestNow(), toJSON(), non-Carbon trait tags in the type test and use\nIlluminate\\Support\\Carbon as the subclass fixture.\n\n* fix(carbon): resolve trait pseudo-method visibility from the appearing class\n\nMirror Psalm's call-site visibility check: the appearing class's\ntrait_visibility_map, then the declaring id's own method.\n\n* docs(carbon): reference vimeo/psalm#13545 and trim comments",
+          "timestamp": "2026-11-11T11:30:07+01:00",
+          "tree_id": "f676336410638b42fccc65385e58a81b6f21d741",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/75807c093b7eb7a1c4fceb82ed96e640db391dae"
+        },
+        "date": 1794393172437,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.04,
+            "range": "± 0.75",
             "unit": "s"
           },
           {
