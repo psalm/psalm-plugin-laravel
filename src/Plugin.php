@@ -16,19 +16,38 @@ use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
 use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
+use Psalm\LaravelPlugin\Issues\ImplicitQueryBuilderCall;
+use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\LaravelPlugin\Stubs\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
+use Psalm\Plugin\PluginFixableIssuesInterface;
 use Psalm\Plugin\RegistrationInterface;
 
 /**
  * @psalm-api
  * @internal
  */
-final class Plugin implements PluginEntryPointInterface
+final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInterface
 {
+    /**
+     * The issues Psalter can fix (`psalter --issues=...`). Psalter asks before `__invoke()` and may never invoke
+     * the plugin (`--list-supported-issues`), so this is a constant list and never reads config or boots Laravel.
+     *
+     * An issue whose handler is not registered (the opt-in rule not switched on, the Octane rule disabled or not
+     * auto-enabled) never reports, so it never offers a fix either.
+     *
+     * @psalm-pure
+     * @inheritDoc
+     */
+    #[\Override]
+    public function getFixableIssues(?\SimpleXMLElement $config = null): array
+    {
+        return [ImplicitQueryBuilderCall::class, OctaneIncompatibleBinding::class];
+    }
+
     /** @inheritDoc */
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void

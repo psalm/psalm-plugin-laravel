@@ -24,10 +24,13 @@ use PhpParser\Node\Stmt\Enum_;
 use PhpParser\Node\Stmt\Interface_;
 use PhpParser\Node\Stmt\Trait_;
 use Psalm\CodeLocation;
-use Psalm\IssueBuffer;
+use Psalm\FileManipulation;
+use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
+use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Union;
 
 /**
  * Flags request-scoped service resolutions inside long-lived binding closures
@@ -48,6 +51,14 @@ use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
  * MethodCall and StaticCall; we reject StaticCall immediately (facade-form
  * bindings like `App::singleton(...)` are out of scope) and match remaining
  * calls in O(1) via an isset() lookup on the declaring method id.
+ *
+ * One binding call gets one issue however many resolutions its closure holds: it sits at the first resolution and
+ * its message names them all.
+ *
+ * Psalter fixes it by renaming the call: `singleton()` becomes `scoped()`, `singletonIf()` becomes `scopedIf()`.
+ * The rename is only made when the receiver is exactly one of Laravel's own container classes
+ * ({@see self::LARAVEL_CONTAINER_CLASSES}); a subclass may replace `scoped()` with other parameters, and the
+ * call's named arguments would then no longer bind, so such a binding is reported and left as written.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -78,6 +89,17 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         'illuminate\\container\\container::singletonif' => true,
         'illuminate\\contracts\\container\\container::singleton' => true,
         'illuminate\\contracts\\container\\container::singletonif' => true,
+    ];
+
+    /**
+     * Receiver classes (lowercased) whose `scoped()` / `scopedIf()` are the framework's own, the only ones the
+     * Psalter rename is proven for. `$this->app` in a service provider is the foundation contract.
+     */
+    private const LARAVEL_CONTAINER_CLASSES = [
+        'illuminate\\foundation\\application' => true,
+        'illuminate\\container\\container' => true,
+        'illuminate\\contracts\\container\\container' => true,
+        'illuminate\\contracts\\foundation\\application' => true,
     ];
 
     /**
@@ -197,9 +219,57 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
         $containerParamName = self::getFirstParamName($closure);
 
+        $abstracts = [];
+        $firstNode = null;
+
         foreach (self::findResolutions($closure, $containerParamName) as [$abstract, $node]) {
-            self::emitIssue($event, $methodName, $abstract, $node);
+            $abstracts[] = $abstract;
+            $firstNode ??= $node;
         }
+
+        if ($abstracts === [] || $firstNode === null) {
+            return;
+        }
+
+        $issue = self::buildIssue($event, $methodName, \array_values(\array_unique($abstracts)), $firstNode);
+
+        $nameNode = $expr->name;
+        $replacement = $methodNameLower === 'singleton' ? 'scoped' : 'scopedIf';
+
+        // The edit is a pure function of the method-name span, so a re-analysis of the same call yields the
+        // identical edit and Psalm dedupes it.
+        $replacements = PsalterFix::fixOrReport(
+            $event->getCodebase(),
+            $event->getStatementsSource(),
+            $issue,
+            self::isLaravelContainerReceiver($event, $expr)
+                ? [new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement)]
+                : [],
+        );
+
+        if ($replacements !== null) {
+            $event->setFileReplacements($replacements);
+        }
+    }
+
+    /**
+     * Whether the receiver is exactly one of Laravel's own container types, so its `scoped()` / `scopedIf()` are
+     * the framework's and the renamed call (named arguments included) binds. A subclass, a union or an unknown
+     * type is not proven: the finding is reported and left as written.
+     */
+    private static function isLaravelContainerReceiver(AfterMethodCallAnalysisEvent $event, MethodCall $expr): bool
+    {
+        $receiverType = $event->getStatementsSource()->getNodeTypeProvider()->getType($expr->var);
+
+        if (!$receiverType instanceof Union || !$receiverType->isSingle()) {
+            return false;
+        }
+
+        $atomicType = $receiverType->getSingleAtomic();
+
+        return $atomicType instanceof TNamedObject
+            && $atomicType->getIntersectionTypes() === []
+            && isset(self::LARAVEL_CONTAINER_CLASSES[\strtolower($atomicType->value)]);
     }
 
     /**
@@ -510,22 +580,25 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         );
     }
 
-    private static function emitIssue(
+    /**
+     * One issue per binding call, at the first resolution; with several, the message names every abstract.
+     *
+     * @param non-empty-list<string> $abstracts
+     * @psalm-pure
+     */
+    private static function buildIssue(
         AfterMethodCallAnalysisEvent $event,
         string $methodName,
-        string $abstract,
+        array $abstracts,
         Node $node,
-    ): void {
-        IssueBuffer::accepts(
-            new OctaneIncompatibleBinding(
-                \sprintf(
-                    "Request-scoped '%s' resolved inside %s() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.",
-                    $abstract,
-                    $methodName,
-                ),
-                new CodeLocation($event->getStatementsSource(), $node),
+    ): OctaneIncompatibleBinding {
+        return new OctaneIncompatibleBinding(
+            \sprintf(
+                "Request-scoped %s resolved inside %s() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.",
+                "'" . \implode("', '", $abstracts) . "'",
+                $methodName,
             ),
-            $event->getStatementsSource()->getSuppressedIssues(),
+            new CodeLocation($event->getStatementsSource(), $node),
         );
     }
 }

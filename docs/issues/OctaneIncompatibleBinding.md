@@ -8,6 +8,8 @@ nav_order: 7
 
 Emitted when a `singleton()` or `singletonIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, `Auth`, or `Config`.
 
+A binding is reported once, at its first request-scoped resolution; when the closure resolves several, the message names all of them.
+
 **Auto-enabled when `laravel/octane` is installed.** Projects that don't depend on the package directly can opt in via `<findOctaneIncompatibleBinding value="true" />` in `psalm.xml`. To opt out even when `laravel/octane` is installed, set `<findOctaneIncompatibleBinding value="false" />`. See [Configuration](../config.md#findoctaneincompatiblebinding).
 
 `bind()`, `bindIf()`, `scoped()`, and `scopedIf()` are NOT flagged. `bind()` re-executes the closure on every resolution; `scoped()` instances are flushed between requests under Octane (via `Container::forgetScopedInstances()`), so neither leaks captured state.
@@ -70,3 +72,17 @@ $this->app->singleton(MyService::class, function () {
 - Or change `singleton()` to `bind()`. The closure will re-run on every resolution (simpler but no intra-request caching).
 - Or keep the singleton and move the request-scoped resolution out of the constructor: inject the container and resolve lazily inside the method that actually uses it.
 - For `config` specifically, replace `$app->make('config')` with the `Config` facade inside the closure.
+
+## Fixing with Psalter
+
+```bash
+# Preview the diff, then apply
+./vendor/bin/psalter --issues=OctaneIncompatibleBinding --dry-run
+./vendor/bin/psalter --issues=OctaneIncompatibleBinding
+```
+
+`singleton()` becomes `scoped()` and `singletonIf()` becomes `scopedIf()`; only the method name is rewritten. The rename deliberately changes the binding's lifetime from one instance per worker to one per request; that is the fix, not a side effect.
+
+**Why `scoped()` and not `bind()`.** `scoped()` keeps one instance per request (or per queue job): Octane flushes it between requests through `forgetScopedInstances()`, so nothing leaks, and repeated resolutions within the request still share the instance. `bind()` would rebuild the service on every resolution. Outside Octane, a scoped binding behaves like a singleton for the lifetime of the request.
+
+Psalter only renames calls on Laravel's own container classes; see [When Psalter leaves a finding unfixed](index.md#when-psalter-leaves-a-finding-unfixed).

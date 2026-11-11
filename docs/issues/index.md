@@ -16,10 +16,10 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnconfiguredFilesystemDisk](UnconfiguredFilesystemDisk.md) — `Storage::disk()`/`drive()` references a disk name not present in `filesystems.disks` (reported at error levels 1 to 4)
 - [SerializedQueuedModel](SerializedQueuedModel.md) — a queued class holds an Eloquent model in a property without reaching `SerializesModels`, so the whole model is written into the queue payload (reported at error levels 1 to 4)
 - [ModelMakeDiscouraged](ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
-- [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed)
+- [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed) (**fixable**)
 - [PublicModelScope](PublicModelScope.md) — `public` `#[Scope]` Eloquent query scope, whose static call is a runtime fatal (reported at error levels 1 to 4)
 - [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `getXxxAttribute()` / `setXxxAttribute()` accessor or mutator, a pure convention nit (reported at error level 1)
-- [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in)
+- [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in, **fixable**)
 - [UnknownModelAttribute](UnknownModelAttribute.md) — a typo'd key passed to a model's `create()` / `fill()` / `update()`, or to a builder or relation creation call (`Post::query()->create()`, `$user->posts()->createMany()`), that matches no known attribute (reported at error levels 1 to 4)
 - [UnresolvableAppendedModelAttribute](UnresolvableAppendedModelAttribute.md) — an Eloquent `$appends` entry with no backing accessor or class cast, a runtime `BadMethodCallException` on `toArray()` / `toJson()`
 - [UndefinedModelRelation](UndefinedModelRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods that does not resolve to a relationship on the model
@@ -30,3 +30,39 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.
+
+## Fixing issues automatically
+
+Some issues can be fixed by Psalter, Psalm's code-fixing tool. The issues marked **fixable** in the list above can be fixed by running `psalter` with their names; preview the diff first with `--dry-run`:
+
+```bash
+./vendor/bin/psalter --issues=ImplicitQueryBuilderCall --dry-run
+./vendor/bin/psalter --issues=ImplicitQueryBuilderCall
+```
+
+`./vendor/bin/psalter --list-supported-issues` lists the fixable issues. An issue is fixed only while its rule is active: `ImplicitQueryBuilderCall` needs `<reportImplicitQueryBuilderCalls value="true" />`, and `OctaneIncompatibleBinding` needs the Octane rule on (auto-enabled when `laravel/octane` is installed, off with `<findOctaneIncompatibleBinding value="false" />`).
+
+### When Psalter leaves a finding unfixed
+
+A fix is made only when Psalter can show that the rewritten code does what the original did. Otherwise the finding is still reported and left for you to fix by hand. This applies to every fixable issue:
+
+- A suppressed finding (`@psalm-suppress <Issue>`, or `<PluginIssue name="<Issue>" errorLevel="suppress" />` in `psalm.xml`) is not rewritten.
+- A finding in a Blade template is reported but never rewritten.
+
+**ImplicitQueryBuilderCall** is left alone for:
+
+- A first-class callable (`User::where(...)`).
+- A call through `self::`, `static::` or `parent::`: in an instance method `static::where(...)` runs `$this->__call()` and keeps the instance's connection and table, while `static::query()` builds a fresh model and drops them.
+- A named static call such as `User::where(...)` inside a non-static method or closure of a class that is the model, one of its subclasses or one of its ancestors. PHP keeps the object context there, so the call runs `$this->__call()` with the instance's table and connection, while `User::query()` builds a fresh model. The same call in a static method, a static closure, or an unrelated class is rewritten.
+- A model whose class chain (ancestors and traits included) declares `__call`, `__callStatic`, `forwardCallTo()`, `forwardDecoratedCallTo()`, `query` or `newQuery` itself rather than inheriting Eloquent's: the inserted `query()` / `newQuery()` would bypass that code.
+- A named static call such as `User::where(...)` inside a non-static closure or arrow function, whatever its `$this` is today: `Closure::call()`, `bind()` and `bindTo()` can rebind it to any model, which turns it into that model's `__call('where')`. A `static` closure cannot be rebound, so its call is rewritten. An instance call on a captured model (`$user->where(...)` inside `function () use ($user)`) reads no `$this` and is rewritten.
+- Any call inside a trait: the trait's one source is shared by every class that uses it, and an edit that is right for one consumer can be wrong for another.
+
+**OctaneIncompatibleBinding** is renamed only when the receiver's type is exactly `Illuminate\Foundation\Application`, `Illuminate\Contracts\Foundation\Application`, `Illuminate\Container\Container` or `Illuminate\Contracts\Container\Container`. Any other receiver (a container subclass, a union, `mixed`) is reported and left as written, because a subclass may give `scoped()` / `scopedIf()` other parameters and the call's named arguments (`singleton(abstract: ..., concrete: ...)`) would then throw after the rename.
+
+#### Known gaps
+
+Psalter cannot see these at analysis time, so a rewrite can still change behavior in them. Review the diff, or suppress the call:
+
+- `ImplicitQueryBuilderCall`: a relation registered at runtime with `Model::resolveRelationUsing('where', ...)`, under the called method's name: `User::where(...)` then returns that relation, `User::query()->where(...)` returns a builder.
+- `OctaneIncompatibleBinding`: a receiver declared as one of those container types can still hold a user subclass at runtime that overrides `scoped()` or `scopedIf()`. Psalter cannot see that, so `singleton(abstract: ..., concrete: ...)` on such an instance would still throw after the rename. Review the diff, or suppress the call.
