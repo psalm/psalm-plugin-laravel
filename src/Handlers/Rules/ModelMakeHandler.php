@@ -10,6 +10,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Internal\ModelCallGuard;
 use Psalm\LaravelPlugin\Issues\ModelMakeDiscouraged;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
@@ -56,7 +57,7 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
             return null;
         }
 
-        if (!self::isModelSubclass($className, $event)) {
+        if (!ModelCallGuard::isModelSubclass($className, $event->getCodebase())) {
             return null;
         }
 
@@ -66,7 +67,7 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
             return null;
         }
 
-        $shortName = self::shortClassName($className);
+        $shortName = ModelCallGuard::shortClassName($className);
 
         IssueBuffer::accepts(
             new ModelMakeDiscouraged(
@@ -78,21 +79,6 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         );
 
         return null;
-    }
-
-    private static function isModelSubclass(string $className, AfterExpressionAnalysisEvent $event): bool
-    {
-        if ($className === Model::class) {
-            return true;
-        }
-
-        $codebase = $event->getCodebase();
-
-        if (!$codebase->classExists($className)) {
-            return false;
-        }
-
-        return $codebase->classExtends($className, Model::class);
     }
 
     /**
@@ -120,13 +106,5 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         // If make() is declared on a class other than the base Model,
         // it's a custom method — not magic indirection
         return $declaringId->fq_class_name !== Model::class;
-    }
-
-    /** @psalm-pure */
-    private static function shortClassName(string $fqcn): string
-    {
-        $pos = \strrpos($fqcn, '\\');
-
-        return $pos !== false ? \substr($fqcn, $pos + 1) : $fqcn;
     }
 }
