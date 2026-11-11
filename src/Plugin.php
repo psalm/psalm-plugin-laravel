@@ -133,6 +133,7 @@ final class Plugin implements PluginEntryPointInterface
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
 
+            // @todo-by https://github.com/vimeo/psalm/pull/12313 only the 6.x PR exists; once it lands, check whether the bound-class queue can move back into registerStubs()
             // Last: make()ing every binding runs provider and binding closures, so it must follow every other
             // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
             if ($registration instanceof \Psalm\PluginRegistrationSocket) {
@@ -290,10 +291,10 @@ final class Plugin implements PluginEntryPointInterface
         $this->queueStubbedClassesForScanning($registration, [...$stubs, ...$carbonStubs]);
     }
 
+    // @todo-by https://github.com/vimeo/psalm/issues/12075 remove queueStubbedClassesForScanning(), Psalm then merges stubs order-independently
     /**
-     * Workaround for #1616 / vimeo/psalm#12075 (reproduces on Psalm 6 and 7); remove once Psalm
-     * merges stubs order-independently. Scanning a stub records it as the file of every class it
-     * declares, after which Scanner::queueClassLikeForScanning() never queues the class's vendor
+     * Workaround for #1616 (reproduces on Psalm 6 and 7). Scanning a stub records it as the file of
+     * every class it declares, after which Scanner::queueClassLikeForScanning() never queues the class's vendor
      * file. A stubbed class that nothing queues during the main scan (e.g. reached only through
      * `app('events')` narrowing) then holds only its stubbed members, and with `__call` every
      * other method silently resolves to `mixed`.

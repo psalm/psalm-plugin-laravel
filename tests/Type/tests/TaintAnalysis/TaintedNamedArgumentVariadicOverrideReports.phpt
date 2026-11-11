@@ -1,7 +1,7 @@
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --XFAIL--
-Since vimeo/psalm#12760 Psalm resolves a named argument a parent's variadic captures to the override's variadic, not to the override's parameter of that name; tracked upstream as vimeo/psalm#13013, still failing on 7.2.1
+Since vimeo/psalm#12760 Psalm resolves a named argument a parent's variadic captures to the override's variadic, not to the override's parameter of that name; tracked upstream as vimeo/psalm#13013, still failing on 7.3.0
 --FILE--
 <?php declare(strict_types=1);
 

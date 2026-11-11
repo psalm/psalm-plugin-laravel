@@ -15,6 +15,7 @@ use Psalm\Type\Atomic\TLiteralString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
+// @todo-by https://github.com/vimeo/psalm/issues/11765 re-source the stub taint annotations on override; unpin TaintedHtmlInlineValidate and TaintedHtmlValidatedStringViaVariable
 /**
  * Narrows return types of validation methods based on declared rules:
  *
@@ -34,7 +35,6 @@ use Psalm\Type\Union;
  * @psalm-taint-source annotation for variable assignments. This means taint is lost
  * when validated data is assigned to a variable before reaching a sink.
  * Per project principle "silence over false positives", this is acceptable.
- * Upstream: https://github.com/vimeo/psalm/issues/11765
  *
  * Architecture follows {@see \Psalm\LaravelPlugin\Handlers\Console\CommandArgumentHandler}.
  */
