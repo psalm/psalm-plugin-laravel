@@ -539,6 +539,7 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         );
     }
 
+    /** @psalm-pure */
     private static function buildIssue(
         AfterMethodCallAnalysisEvent $event,
         string $methodName,

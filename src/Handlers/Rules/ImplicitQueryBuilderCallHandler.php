@@ -86,7 +86,8 @@ use Psalm\Type\Union;
  *
  * `psalter --issues=ImplicitQueryBuilderCall` inserts `query()->` (static call) or `newQuery()->`
  * (instance call) before the method name, as one edit; `__callStatic` -> `__call` -> `newQuery()` is the
- * path Laravel already takes, so behavior is unchanged. A first-class callable is reported, not fixed.
+ * path Laravel already takes, so behavior is unchanged. A first-class callable and a `self::` / `static::` /
+ * `parent::` call are reported, not fixed (object context would keep the instance's state; `query()` drops it).
  */
 final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisInterface
 {
@@ -155,9 +156,15 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
             new CodeLocation($source, $expr),
         );
 
-        // The first-class callable `Model::where(...)` is a callable on the model, not a call: prefixing
-        // `query()->` would not be a behavior-preserving rewrite, so it is reported and never fixed.
-        if ($expr->isFirstClassCallable()) {
+        // Reported, never fixed:
+        //  - the first-class callable `Model::where(...)` is a callable on the model, not a call, so
+        //    prefixing `query()->` would not be a behavior-preserving rewrite;
+        //  - `self::` / `static::` / `parent::` may run in object context, where the call dispatches to
+        //    `$this->__call()` and keeps the instance's connection and table, while `static::query()`
+        //    builds a fresh model and drops that state.
+        $isSpecialClass = $expr instanceof StaticCall && $expr->class instanceof Name && $expr->class->isSpecialClassName();
+
+        if ($expr->isFirstClassCallable() || $isSpecialClass) {
             IssueBuffer::accepts($issue, $source->getSuppressedIssues());
 
             return null;

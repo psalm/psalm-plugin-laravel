@@ -73,7 +73,7 @@ $this->app->singleton(MyService::class, function () {
 
 ## Fixing with Psalter
 
-Psalter can apply the `scoped()` fix for you (needs Psalm 7.3 or newer):
+Psalter can apply the `scoped()` fix for you:
 
 ```bash
 # Preview the diff, then apply

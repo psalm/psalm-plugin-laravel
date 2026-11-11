@@ -7,6 +7,11 @@ namespace PsalterFixture\Cases\ImplicitQueryBuilder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * `static::where()` in an instance method dispatches to `$this->__call()` and keeps the instance's
+ * connection and table, while `static::query()` builds a fresh model: these calls are reported and
+ * never rewritten.
+ */
 final class StaticInModel extends Model
 {
     /**
@@ -26,5 +31,10 @@ final class StaticInModel extends Model
     public static function viaSelf(): void
     {
         self::where('title', 'x')->get();
+    }
+
+    public function sameInstanceContext(): void
+    {
+        static::where('active', 1)->get();
     }
 }

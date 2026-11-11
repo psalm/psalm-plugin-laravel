@@ -44,7 +44,7 @@ Route the call through `Model::query()` (static) or `$model->newQuery()` (instan
 
 ## Fixing with Psalter
 
-Psalter rewrites the calls for you (needs Psalm 7.3 or newer, and the rule switched on in `psalm.xml`):
+Psalter rewrites the calls for you (the rule must be switched on in `psalm.xml`):
 
 ```bash
 # Preview the diff, then apply
@@ -54,13 +54,13 @@ Psalter rewrites the calls for you (needs Psalm 7.3 or newer, and the rule switc
 
 One insertion per flagged call, right before the method name; the rest of the source is kept as written:
 
-- `User::where('active', 1)` becomes `User::query()->where('active', 1)`, and `static::active()` / `self::where(...)` inside a model become `static::query()->active()` / `self::query()->where(...)`.
+- `User::where('active', 1)` becomes `User::query()->where('active', 1)`.
 - `$user->where('active', 1)` becomes `$user->newQuery()->where('active', 1)`.
 - In `User::where(...)->orderBy(...)` only the first call is forwarded, so only it gets the insertion.
 
 Behavior does not change: `__callStatic` -> `__call` -> `newQuery()` is the path Laravel already takes, and `query()` is `(new static)->newQuery()`. The instance form uses `newQuery()` rather than `query()` so the query keeps the instance's connection and table.
 
-- **Left alone, still reported.** A first-class callable (`User::where(...)`).
+- **Left alone, still reported.** A first-class callable (`User::where(...)`), and calls through `self::`, `static::` or `parent::`: in an instance method `static::where(...)` runs `$this->__call()` and keeps the instance's connection and table, while `static::query()` builds a fresh model and drops them.
 - **Suppressed calls** (`@psalm-suppress ImplicitQueryBuilderCall`, or `<PluginIssue name="ImplicitQueryBuilderCall" errorLevel="suppress" />` in `psalm.xml`) are not rewritten.
 - **Calls in Blade templates** are reported but never rewritten.
 

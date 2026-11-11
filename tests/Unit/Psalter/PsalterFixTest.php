@@ -55,16 +55,45 @@ final class PsalterFixTest extends TestCase
 
             yield $relative => [$relative];
         }
+
+        foreach (\array_keys(self::generatedCases()) as $case) {
+            yield $case => [$case];
+        }
     }
 
     #[Test]
     #[DataProvider('cases')]
     public function psalter_leaves_the_case_as_its_expected_source(string $case): void
     {
-        $expectedFile = self::FIXTURE . '/expected/' . $case;
-        $this->assertFileExists($expectedFile, "Case {$case} has no expected/ counterpart.");
+        $generated = self::generatedCases()[$case] ?? null;
 
-        $this->assertSame(\file_get_contents($expectedFile), $this->rewrittenCases()[$case]);
+        if ($generated !== null) {
+            $expected = $generated[1];
+        } else {
+            $expectedFile = self::FIXTURE . '/expected/' . $case;
+            $this->assertFileExists($expectedFile, "Case {$case} has no expected/ counterpart.");
+            $expected = (string) \file_get_contents($expectedFile);
+        }
+
+        $this->assertSame($expected, $this->rewrittenCases()[$case]);
+    }
+
+    /**
+     * Cases whose bytes an editor, `.editorconfig` or php-cs-fixer would normalize (a CR line ending), so they
+     * cannot live in a committed fixture file: written into the temp project before Psalter runs.
+     *
+     * @return array<string, array{string, string}> case path relative to cases/ => [input, expected output]
+     */
+    private static function generatedCases(): array
+    {
+        $source = static fn(string $call): string => "<?php\n\ndeclare(strict_types=1);\n\n"
+            . "namespace PsalterFixture\\Cases\\ModelMake;\n\nuse PsalterFixture\\Models\\Post;\n\n"
+            . "final class CrLineComment\n{\n    public function chained(): bool\n    {\n"
+            . "        return {$call} // a line comment ends at CR, not only at LF\r        ->save();\n    }\n}\n";
+
+        return [
+            'ModelMakeDiscouraged/CrLineComment.php' => [$source('Post::make()'), $source('(new Post())')],
+        ];
     }
 
     /** @return array<string, string> */
@@ -80,6 +109,10 @@ final class PsalterFixTest extends TestCase
         $project = \sys_get_temp_dir() . '/psalm-laravel-psalter-' . \getmypid();
         self::removeDirectory($project);
         self::copyDirectory(self::FIXTURE, $project);
+
+        foreach (self::generatedCases() as $case => [$input]) {
+            \file_put_contents($project . '/cases/' . $case, $input);
+        }
 
         try {
             $process = new Process(

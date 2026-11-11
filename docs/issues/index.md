@@ -33,11 +33,11 @@ Each issue page explains what it detects, why it matters, and how to fix it.
 
 ## Fixing issues automatically
 
-Some issues can be fixed by Psalter, Psalm's code-fixing tool (Psalm 7.3 or newer). The issues marked **fixable** in the list above can be fixed by running `psalter` with their names; preview the diff first with `--dry-run`:
+Some issues can be fixed by Psalter, Psalm's code-fixing tool. The issues marked **fixable** in the list above can be fixed by running `psalter` with their names; preview the diff first with `--dry-run`:
 
 ```bash
 ./vendor/bin/psalter --issues=ModelMakeDiscouraged --dry-run
 ./vendor/bin/psalter --issues=ModelMakeDiscouraged
 ```
 
-`./vendor/bin/psalter --list-supported-issues` prints every issue that can be fixed in your configuration. The opt-in and auto-enabled rules are listed only when they are switched on in `psalm.xml`.
+`./vendor/bin/psalter --list-supported-issues` prints every issue that can be fixed in your configuration: `ModelMakeDiscouraged` always, `ImplicitQueryBuilderCall` only when `<reportImplicitQueryBuilderCalls value="true" />` is set, and `OctaneIncompatibleBinding` unless `<findOctaneIncompatibleBinding value="false" />` turns the rule off.

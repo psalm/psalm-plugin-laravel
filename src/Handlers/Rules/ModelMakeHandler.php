@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
@@ -12,11 +13,11 @@ use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\FileManipulation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
 use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\ModelMakeDiscouraged;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
-use Psalm\StatementsSource;
 
 /**
  * Flags Model::make() calls and suggests using new Model() instead.
@@ -26,11 +27,14 @@ use Psalm\StatementsSource;
  * newModelInstance(). Using the constructor directly is clearer and avoids
  * the indirection.
  *
- * Psalter fixes it: `Post::make($a)` becomes `new Post($a)`, `static::make()` becomes `new static()`.
- * The fix leaves the class name and the arguments untouched and only inserts `new ` and removes
- * `::make`. It is withheld (the issue is still reported) for a first-class callable `Post::make(...)`,
- * and for a model whose constructor is not Eloquent's own, where `new` would run different code than
- * `make()`. Below a PHP 8.4 target, `new Post()` cannot be dereferenced, so a chained call gets parentheses.
+ * Psalter fixes it: `Post::make($a)` becomes `new Post($a)`. The fix leaves the class name and the
+ * arguments untouched and only inserts `new ` and removes `::make`. It is withheld (the issue is still
+ * reported) for a first-class callable `Post::make(...)`, and for a model whose creation pipeline is
+ * customized (own constructor, `newInstance()`, or a builder overriding `make()`/`newModelInstance()`),
+ * where `new` would run different code than `make()`. `self::make()`, `static::make()` and `parent::make()`
+ * are neither reported nor fixed: late static binding and object-context `__call` dispatch make `new`
+ * non-equivalent. Below a PHP 8.4 target, `new Post()` cannot be dereferenced, so a chained call gets
+ * parentheses.
  *
  * @see https://github.com/larastan/larastan/blob/2.x/src/Rules/NoModelMakeRule.php
  */
@@ -62,8 +66,8 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         }
 
         $source = $event->getStatementsSource();
-        $className = self::resolveClassName($expr->class, $source);
-        if ($className === null) {
+        $className = $expr->class->getAttribute('resolvedName');
+        if (!\is_string($className)) {
             return null;
         }
 
@@ -77,18 +81,17 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
             return null;
         }
 
-        // `static::make()` / `self::make()` are written as such, not as the enclosing model's name.
-        $written = $expr->class->isSpecialClassName() ? $expr->class->toString() : self::shortClassName($className);
+        $shortName = self::shortClassName($className);
 
         $issue = new ModelMakeDiscouraged(
-            "Use new {$written}(...) instead of {$written}::make(...). "
+            "Use new {$shortName}(...) instead of {$shortName}::make(...). "
             . 'The constructor is clearer and avoids magic method indirection.',
             new CodeLocation($source, $expr),
         );
 
         $codebase = $event->getCodebase();
 
-        if ($expr->isFirstClassCallable() || !self::usesModelConstructor($className, $codebase)) {
+        if ($expr->isFirstClassCallable() || !self::hasStockCreationPipeline($className, $codebase)) {
             IssueBuffer::accepts($issue, $source->getSuppressedIssues());
 
             return null;
@@ -170,9 +173,10 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
 
             // `#[` opens an attribute, never a comment.
             if (\substr($source, $offset, 2) === '//' || ($source[$offset] === '#' && ($source[$offset + 1] ?? '') !== '[')) {
-                $end = \strpos($source, "\n", $offset);
+                // A line comment ends at LF or CR, whichever comes first.
+                $end = $offset + \strcspn($source, "\r\n", $offset);
 
-                if ($end === false) {
+                if ($end >= $length) {
                     return false;
                 }
 
@@ -186,25 +190,6 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         }
 
         return false;
-    }
-
-    /**
-     * `self` / `static` name the enclosing class; `parent` is not resolved. Psalm's name resolver sets
-     * `resolvedName` only on real names.
-     */
-    private static function resolveClassName(Name $class, StatementsSource $source): ?string
-    {
-        if ($class->isSpecialClassName()) {
-            return match ($class->toLowerString()) {
-                'self', 'static' => $source->getFQCLN(),
-                default => null,
-            };
-        }
-
-        /** @psalm-var ?string $resolved */
-        $resolved = $class->getAttribute('resolvedName');
-
-        return \is_string($resolved) ? $resolved : null;
     }
 
     private static function isModelSubclass(string $className, AfterExpressionAnalysisEvent $event): bool
@@ -250,12 +235,13 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
     }
 
     /**
-     * Whether `new $className(...)` runs Eloquent's own constructor, which `make()` ends in. A model that
-     * declares or inherits another constructor may need arguments or do work `make()` bypasses.
-     *
-     * @psalm-mutation-free
+     * Whether `new $className(...)` is what `make()` runs. `make()` is Builder::make() -> newModelInstance()
+     * -> Model::newInstance() -> `new static`, so the rewrite is equivalent only while the constructor
+     * and `newInstance()` are Eloquent's own and the model's Eloquent builder overrides neither `make()`
+     * nor `newModelInstance()`. A model that customizes any of them, even without a constructor of its own,
+     * would silently lose that behavior.
      */
-    private static function usesModelConstructor(string $className, Codebase $codebase): bool
+    private static function hasStockCreationPipeline(string $className, Codebase $codebase): bool
     {
         try {
             $classStorage = $codebase->classlike_storage_provider->get(\strtolower($className));
@@ -263,9 +249,27 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
             return false;
         }
 
-        $declaringId = $classStorage->declaring_method_ids['__construct'] ?? null;
+        foreach (['__construct', 'newinstance'] as $method) {
+            if (($classStorage->declaring_method_ids[$method] ?? null)?->fq_class_name !== Model::class) {
+                return false;
+            }
+        }
 
-        return $declaringId !== null && $declaringId->fq_class_name === Model::class;
+        try {
+            $builderStorage = $codebase->classlike_storage_provider->get(
+                \strtolower(ModelMethodHandler::getBuilderClassForModel($classStorage->name)),
+            );
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+
+        foreach (['make', 'newmodelinstance'] as $method) {
+            if (($builderStorage->declaring_method_ids[$method] ?? null)?->fq_class_name !== Builder::class) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** @psalm-pure */

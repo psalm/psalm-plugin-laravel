@@ -19,7 +19,7 @@ Laravel 11 and Psalm 6 are no longer supported. If you need them, stay on v3.
 
 ### Psalm 7 is required
 
-v4 requires Psalm 7.3 or newer. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps).
+v4 requires Psalm 7. v3 cannot install with Psalm 7, and v4 cannot install with Psalm 6, so upgrade both packages together using the command under [Upgrade steps](#upgrade-steps).
 
 Psalm 7 can suggest purity annotations through new issue types. They are off by default and appear only with `suggestPurityAnnotations="true"` in `psalm.xml`:
 

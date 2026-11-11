@@ -26,11 +26,11 @@ $post = new Post(['title' => 'Hello']);
 
 ## How to fix
 
-Replace `Model::make($attributes)` with `new Model($attributes)`. `static::make()` and `self::make()` inside a model are reported too: use `new static()` / `new self()`.
+Replace `Model::make($attributes)` with `new Model($attributes)`. Only calls that name the model class are reported; `static::make()` / `self::make()` / `parent::make()` inside a model are not.
 
 ## Fixing with Psalter
 
-Psalter rewrites the calls for you (needs Psalm 7.3 or newer):
+Psalter rewrites the calls for you:
 
 ```bash
 # Preview the diff, then apply
@@ -38,10 +38,11 @@ Psalter rewrites the calls for you (needs Psalm 7.3 or newer):
 ./vendor/bin/psalter --issues=ModelMakeDiscouraged
 ```
 
-`Post::make($attributes)` becomes `new Post($attributes)`: the class name (alias, import or fully qualified) and the arguments are kept as written, and `static::make()` / `self::make()` inside a model become `new static()` / `new self()`.
+`Post::make($attributes)` becomes `new Post($attributes)`: the class name (alias, import or fully qualified) and the arguments are kept as written.
 
 - **Parentheses on older PHP targets.** Below PHP 8.4, `new Post()->save()` is a syntax error, so a call that is followed by `->`, `?->`, `::`, `[` or `(` becomes `(new Post())->save()`. Psalter reads the target from `--php-version`, or from `composer.json` when it is not passed.
-- **Left alone, still reported.** `Post::make(...)` used as a first-class callable, and a model whose constructor is not Eloquent's own (`new` would run different code than `make()`).
+- **Left alone, still reported.** `Post::make(...)` used as a first-class callable, and a model whose creation pipeline is customized: a constructor that is not Eloquent's own, an overridden `newInstance()`, or an Eloquent builder that overrides `make()` or `newModelInstance()` (`new` would skip that code, which `make()` runs).
+- **Never touched.** `self::make()`, `static::make()` and `parent::make()` are neither reported nor rewritten: `self::make()` in an inherited factory creates the called child class (late static binding) and `static::make()` in an instance method keeps the instance's connection, and `new self` / `new static` would change both.
 - **Suppressed calls** (`@psalm-suppress ModelMakeDiscouraged`, or `<PluginIssue name="ModelMakeDiscouraged" errorLevel="suppress" />` in `psalm.xml`) are not rewritten.
 - **Calls in Blade templates** are reported but never rewritten.
 
