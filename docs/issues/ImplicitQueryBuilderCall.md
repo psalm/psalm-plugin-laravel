@@ -42,6 +42,28 @@ $recent = User::query()->active()->latest()->get();
 
 Route the call through `Model::query()` (static) or `$model->newQuery()` (instance) before the builder or scope method.
 
+## Fixing with Psalter
+
+Psalter rewrites the calls for you (needs Psalm 7.3 or newer, and the rule switched on in `psalm.xml`):
+
+```bash
+# Preview the diff, then apply
+./vendor/bin/psalter --issues=ImplicitQueryBuilderCall --dry-run
+./vendor/bin/psalter --issues=ImplicitQueryBuilderCall
+```
+
+One insertion per flagged call, right before the method name; the rest of the source is kept as written:
+
+- `User::where('active', 1)` becomes `User::query()->where('active', 1)`, and `static::active()` / `self::where(...)` inside a model become `static::query()->active()` / `self::query()->where(...)`.
+- `$user->where('active', 1)` becomes `$user->newQuery()->where('active', 1)`.
+- In `User::where(...)->orderBy(...)` only the first call is forwarded, so only it gets the insertion.
+
+Behavior does not change: `__callStatic` -> `__call` -> `newQuery()` is the path Laravel already takes, and `query()` is `(new static)->newQuery()`. The instance form uses `newQuery()` rather than `query()` so the query keeps the instance's connection and table.
+
+- **Left alone, still reported.** A first-class callable (`User::where(...)`).
+- **Suppressed calls** (`@psalm-suppress ImplicitQueryBuilderCall`, or `<PluginIssue name="ImplicitQueryBuilderCall" errorLevel="suppress" />` in `psalm.xml`) are not rewritten.
+- **Calls in Blade templates** are reported but never rewritten.
+
 ## Known limitation
 
 A `public` `#[Scope]` method is accessible from every call site, so its forwarded form cannot be distinguished from a legitimate direct call by visibility alone, and is therefore not flagged. Laravel's convention wants scopes `protected` (which this rule does flag when forwarded); a `public` `#[Scope]` is independently reported as [PublicModelScope](PublicModelScope.md).

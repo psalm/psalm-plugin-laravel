@@ -12,9 +12,11 @@ use PhpParser\Node\Name;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\FileManipulation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
+use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\ImplicitQueryBuilderCall;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
@@ -79,6 +81,12 @@ use Psalm\Type\Union;
  * method was resolved, so it sees magic-forwarded calls that a method-resolution provider hook
  * might never be consulted for. The `instanceof` / `Identifier` / `method_exists` guards reject
  * the vast majority of expressions before any codebase lookup.
+ *
+ * ## Psalter fix
+ *
+ * `psalter --issues=ImplicitQueryBuilderCall` inserts `query()->` (static call) or `newQuery()->`
+ * (instance call) before the method name, as one edit; `__callStatic` -> `__call` -> `newQuery()` is the
+ * path Laravel already takes, so behavior is unchanged. A first-class callable is reported, not fixed.
  */
 final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisInterface
 {
@@ -134,15 +142,38 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
 
         $shortName = self::shortClassName($modelClass);
         $methodName = $expr->name->name;
+        $source = $event->getStatementsSource();
+        $isStatic = $expr instanceof StaticCall;
 
-        IssueBuffer::accepts(
-            new ImplicitQueryBuilderCall(
-                "{$shortName}::{$methodName}() is forwarded to the query builder through Laravel's "
-                . "__callStatic/__call magic. Use {$shortName}::query()->{$methodName}(...) instead.",
-                new CodeLocation($event->getStatementsSource(), $expr),
-            ),
-            $event->getStatementsSource()->getSuppressedIssues(),
+        // An instance call names no class to call `query()` on, and `$model->newQuery()` keeps the
+        // instance's connection and table, so that is the advice (and the fix) for it.
+        $entryPoint = $isStatic ? "{$shortName}::query()" : '$model->newQuery()';
+
+        $issue = new ImplicitQueryBuilderCall(
+            "{$shortName}::{$methodName}() is forwarded to the query builder through Laravel's "
+            . "__callStatic/__call magic. Use {$entryPoint}->{$methodName}(...) instead.",
+            new CodeLocation($source, $expr),
         );
+
+        // The first-class callable `Model::where(...)` is a callable on the model, not a call: prefixing
+        // `query()->` would not be a behavior-preserving rewrite, so it is reported and never fixed.
+        if ($expr->isFirstClassCallable()) {
+            IssueBuffer::accepts($issue, $source->getSuppressedIssues());
+
+            return null;
+        }
+
+        $nameStart = $expr->name->getStartFilePos();
+        $replacements = PsalterFix::fixOrReport(
+            $codebase,
+            $source,
+            [$issue],
+            static fn(): array => [new FileManipulation($nameStart, $nameStart, $isStatic ? 'query()->' : 'newQuery()->')],
+        );
+
+        if ($replacements !== null) {
+            $event->setFileReplacements($replacements);
+        }
 
         return null;
     }

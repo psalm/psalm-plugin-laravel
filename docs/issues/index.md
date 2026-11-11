@@ -19,7 +19,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed)
 - [PublicModelScope](PublicModelScope.md) — `public` `#[Scope]` Eloquent query scope, whose static call is a runtime fatal (reported at error levels 1 to 4)
 - [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `getXxxAttribute()` / `setXxxAttribute()` accessor or mutator, a pure convention nit (reported at error level 1)
-- [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in)
+- [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in, **fixable**)
 - [UnknownModelAttribute](UnknownModelAttribute.md) — a typo'd key passed to a model's `create()` / `fill()` / `update()`, or to a builder or relation creation call (`Post::query()->create()`, `$user->posts()->createMany()`), that matches no known attribute (reported at error levels 1 to 4)
 - [UnresolvableAppendedModelAttribute](UnresolvableAppendedModelAttribute.md) — an Eloquent `$appends` entry with no backing accessor or class cast, a runtime `BadMethodCallException` on `toArray()` / `toJson()`
 - [UndefinedModelRelation](UndefinedModelRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods that does not resolve to a relationship on the model
