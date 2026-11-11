@@ -15,6 +15,7 @@ use Psalm\Plugin\EventHandler\Event\AfterFunctionLikeAnalysisEvent;
 use Psalm\Plugin\EventHandler\RemoveTaintsInterface;
 use Psalm\Type\TaintKind;
 
+// @todo-by https://github.com/vimeo/psalm/issues/11765 drop the re-sourcing of validated reads, Psalm will keep the stub source
 /**
  * Applies taint to validated request data — the *mechanism* side. The
  * interpretation ("is this a validated field read, which rule governs it?")
@@ -42,7 +43,6 @@ use Psalm\Type\TaintKind;
  * server/header/file) — a rule key need not describe them; and cast accessors
  * (integer/float/…) — not taint sources.
  *
- * Upstream: stub source dropped on override — https://github.com/vimeo/psalm/issues/11765.
  * Architecture follows {@see \Psalm\Internal\Provider\AddRemoveTaints\HtmlFunctionTainter}.
  */
 final class ValidationTaintHandler implements

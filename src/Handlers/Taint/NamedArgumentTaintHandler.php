@@ -26,6 +26,7 @@ use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TNamedObject;
 
+// @todo-by https://github.com/vimeo/psalm/issues/12252 delete this handler and its registration in Plugin.php
 /**
  * Strips taint from a named-argument value that Psalm binds to the callee's variadic parameter.
  *
@@ -42,8 +43,6 @@ use Psalm\Type\Atomic\TNamedObject;
  * Accepted trade: the strip drops the argument's whole input flow ({@see \Psalm\Codebase::getInputTaints()}), so a
  * genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (pinned
  * by `TaintedNamedArgumentVariadicKnownLimitation.phpt`; rationale in decisions.md).
- *
- * Retirement: delete once vimeo/psalm#12252 is fixed.
  */
 final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterface, RemoveTaintsInterface
 {

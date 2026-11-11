@@ -7,12 +7,12 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
+// @todo-by https://github.com/vimeo/psalm/issues/11765 expect TaintedHtml here
 /**
  * Known limitation: when ValidatedTypeHandler provides a return type,
  * Psalm skips the stub's @psalm-taint-source. Taint is lost through
  * variable assignment. Per "silence over false positives" principle,
  * this is acceptable — we don't report issues we're not certain about.
- * TODO: if https://github.com/vimeo/psalm/issues/11765 is fixed, this test should expect TaintedHtml.
  *
  * Direct usage (echo $request->validated('body')) IS detected.
  * @see TaintedHtmlValidatedString.phpt

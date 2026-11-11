@@ -164,6 +164,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
 
+            // @todo-by https://github.com/vimeo/psalm/pull/12313 only the 6.x PR exists; once it lands, check whether the bound-class queue can move back into registerStubs()
             // Last: make()ing every binding runs provider and binding closures, so it must follow every other
             // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
             if ($registration instanceof \Psalm\PluginRegistrationSocket) {
@@ -321,10 +322,10 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         $this->queueStubbedClassesForScanning($registration, [...$stubs, ...$carbonStubs]);
     }
 
+    // @todo-by https://github.com/vimeo/psalm/issues/12075 remove queueStubbedClassesForScanning(), Psalm then merges stubs order-independently
     /**
-     * Workaround for #1616 / vimeo/psalm#12075 (reproduces on Psalm 6 and 7); remove once Psalm
-     * merges stubs order-independently. Scanning a stub records it as the file of every class it
-     * declares, after which Scanner::queueClassLikeForScanning() never queues the class's vendor
+     * Workaround for #1616 (reproduces on Psalm 6 and 7). Scanning a stub records it as the file of
+     * every class it declares, after which Scanner::queueClassLikeForScanning() never queues the class's vendor
      * file. A stubbed class that nothing queues during the main scan (e.g. reached only through
      * `app('events')` narrowing) then holds only its stubbed members, and with `__call` every
      * other method silently resolves to `mixed`.
@@ -694,6 +695,12 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         // init() having run above. See https://github.com/psalm/psalm-plugin-laravel/issues/1154.
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
+
+        // @todo-by https://github.com/vimeo/psalm/issues/13545 remove CarbonTraitPseudoMethodHandler and its registration
+        // Drops `@method` tags Carbon documents on its own traits (`Week::dayOfYear()`) when the class
+        // really declares the method, so the plugin's Carbon getter/setter stubs apply (#2253).
+        require_once __DIR__ . '/Handlers/Carbon/CarbonTraitPseudoMethodHandler.php';
+        $registration->registerHooksFromClass(Handlers\Carbon\CarbonTraitPseudoMethodHandler::class);
 
         // Copies taint sinks from each mapped facade's forwarding target onto the surviving
         // `@method` pseudo-methods, so `Storage::get($userInput)` is a sink like the

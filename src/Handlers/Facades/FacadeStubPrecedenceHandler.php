@@ -10,6 +10,7 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
 
+// @todo-by https://github.com/vimeo/psalm/issues/3937 remove this handler and its registration in Plugin.php
 /**
  * Lets plugin-owned real methods on first-party facade stubs outrank Laravel's generated
  * `@method` catalogue by removing only the conflicting pseudo-static entries after Psalm's
@@ -27,7 +28,6 @@ use Psalm\Storage\MethodStorage;
  * {@see FacadeTaintForwardingHandler} deliberately has no pseudo target to decorate.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1368
- * @see https://github.com/vimeo/psalm/issues/3937
  */
 final class FacadeStubPrecedenceHandler implements AfterCodebasePopulatedInterface
 {

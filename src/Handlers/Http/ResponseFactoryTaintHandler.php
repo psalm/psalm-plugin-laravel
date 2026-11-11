@@ -33,6 +33,7 @@ use Psalm\Issue\TaintedHtml;
 use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 
+// @todo-by https://github.com/vimeo/psalm/issues/11924 replace the issue-emission exemption with RemoveTaints once it carries dispatch context
 /**
  * Suppresses the `TaintedHtml` finding on a `ResponseFactory::make()` or `Illuminate\Http\Response`
  * constructor call when the call's headers prove the browser downloads the response, or that the
