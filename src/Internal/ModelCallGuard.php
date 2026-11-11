@@ -11,6 +11,7 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClosureAnalyzer;
 use Psalm\Internal\Analyzer\TraitAnalyzer;
 use Psalm\StatementsSource;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type\Atomic\TNamedObject;
 
 /**
@@ -41,6 +42,18 @@ final class ModelCallGuard
     private const STOCK_BOOT_METHOD_IDS = [
         'illuminate\\database\\eloquent\\concerns\\hasevents::boothasevents' => true,
         'illuminate\\database\\eloquent\\concerns\\hasglobalscopes::boothasglobalscopes' => true,
+    ];
+
+    private const SCOPED_BY = 'Illuminate\\Database\\Eloquent\\Attributes\\ScopedBy';
+
+    /**
+     * Attributes Laravel reads while booting and initializing a model. Compared by name (lowercase): `Boot` and
+     * `Initialize` do not exist in every supported Laravel version.
+     */
+    private const BOOT_ATTRIBUTES = [
+        'illuminate\\database\\eloquent\\attributes\\scopedby' => true,
+        'illuminate\\database\\eloquent\\attributes\\boot' => true,
+        'illuminate\\database\\eloquent\\attributes\\initialize' => true,
     ];
 
     /**
@@ -127,11 +140,13 @@ final class ModelCallGuard
      * everything that executes that source, so it is withheld where the context is not a fixed one:
      *  - inside a trait, whose body is analyzed once per consuming class but edited once, so a consumer that
      *    proves it safe would rewrite the source for the consumers that don't;
-     *  - inside a non-static closure or arrow function, which `Closure::bind()` / `bindTo()` / `call()` can rebind
-     *    to any object (even one declared in a static method), turning a named static call into
-     *    `$this->__call()` of that object. Only the innermost closure matters: a `static` one cannot be rebound.
+     *  - when the call's dispatch depends on `$this` (`$dependsOnThis`: a named static call such as `Post::where()`),
+     *    inside a non-static closure or arrow function, which `Closure::bind()` / `bindTo()` / `call()` can rebind
+     *    to any object (even one declared in a static method), turning the call into `$this->__call()` of that
+     *    object. Only the innermost closure matters: a `static` one cannot be rebound. An instance call on a
+     *    captured model (`$post->where()`) does not read `$this`, so rebinding does not change it.
      */
-    public static function isUnsafeEditSite(StatementsSource $source): bool
+    public static function isUnsafeEditSite(StatementsSource $source, bool $dependsOnThis): bool
     {
         $closureSeen = false;
 
@@ -140,7 +155,7 @@ final class ModelCallGuard
                 return true;
             }
 
-            if (!$closureSeen && $current instanceof ClosureAnalyzer) {
+            if ($dependsOnThis && !$closureSeen && $current instanceof ClosureAnalyzer) {
                 if (!$current->isStatic()) {
                     return true;
                 }
@@ -162,15 +177,16 @@ final class ModelCallGuard
     }
 
     /**
-     * Whether booting the model can change what `make()` returns: a `boot()` / `booting()` / `booted()` override or
-     * a trait's `boot<Trait>()` (a method starting with `boot` declared outside the framework `Model`), or a
-     * `#[ScopedBy]` attribute on the model or an ancestor. A global scope registered there can add pending
-     * attributes through its `extend()`, which `make()` applies and `new` does not. This also covers `SoftDeletes`.
-     * An unreadable class counts as customized.
+     * Whether booting or initializing the model can change what `make()` returns: a `boot()` / `booting()` /
+     * `booted()` override or a trait's `boot<Trait>()` (a method starting with `boot` declared outside the framework
+     * `Model`), a method marked `#[Boot]` or `#[Initialize]` whatever its name, or a `#[ScopedBy]` attribute. A global
+     * scope registered there can add pending attributes through its `extend()`, which `make()` applies and `new` does
+     * not. This also covers `SoftDeletes`. The attributes are looked for where Laravel discovers them: on the model,
+     * its ancestors and the traits they use (`HasGlobalScopes::resolveGlobalScopeAttributes()` reads the class and its
+     * traits; `Model::bootTraits()` reflects every method the class has, trait methods included). An unreadable
+     * class counts as customized.
      *
      * @param class-string<Model> $modelClass
-     *
-     * @psalm-capabilities read-props
      */
     public static function customizesBoot(Codebase $codebase, string $modelClass): bool
     {
@@ -188,14 +204,63 @@ final class ModelCallGuard
             }
 
             foreach ([\strtolower($modelClass), ...\array_keys($classStorage->parent_classes)] as $class) {
-                foreach ($codebase->classlike_storage_provider->get($class)->attributes as $attribute) {
-                    if (\strtolower($attribute->fq_class_name) === 'illuminate\\database\\eloquent\\attributes\\scopedby') {
+                // The framework's own `Model` and the traits it uses are stock.
+                if ($class === 'illuminate\\database\\eloquent\\model') {
+                    continue;
+                }
+
+                $storage = $codebase->classlike_storage_provider->get($class);
+                $carriers = [$storage];
+
+                foreach (\array_keys($storage->used_traits) as $trait) {
+                    $carriers[] = $codebase->classlike_storage_provider->get($trait);
+                }
+
+                foreach ($carriers as $carrier) {
+                    if (self::carriesBootAttribute($codebase, $carrier)) {
                         return true;
                     }
                 }
             }
         } catch (\InvalidArgumentException) {
             return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether the class (or trait) carries `#[ScopedBy]` or a subclass of it (Laravel reads it with
+     * `ReflectionAttribute::IS_INSTANCEOF`), or one of its own methods carries `#[Boot]` or `#[Initialize]`. `Boot`
+     * and `Initialize` are newer than the supported Laravel floor, so the attributes are compared by name and never
+     * referenced as classes. An attribute class whose parents cannot be read counts as `ScopedBy`.
+     */
+    private static function carriesBootAttribute(Codebase $codebase, ClassLikeStorage $carrier): bool
+    {
+        foreach ($carrier->attributes as $attribute) {
+            $name = $attribute->fq_class_name;
+
+            if (isset(self::BOOT_ATTRIBUTES[\strtolower($name)])) {
+                return true;
+            }
+
+            if ($codebase->classExists($name)) {
+                try {
+                    if ($codebase->classExtends($name, self::SCOPED_BY)) {
+                        return true;
+                    }
+                } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+                    return true;
+                }
+            }
+        }
+
+        foreach ($carrier->methods as $method) {
+            foreach ($method->attributes as $attribute) {
+                if (isset(self::BOOT_ATTRIBUTES[\strtolower($attribute->fq_class_name)])) {
+                    return true;
+                }
+            }
         }
 
         return false;

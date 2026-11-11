@@ -99,7 +99,7 @@ final class ModelMakeHandler implements AfterExpressionAnalysisInterface
         if (
             $expr->isFirstClassCallable()
             || !self::hasStockCreationPipeline($className, $codebase)
-            || ModelCallGuard::isUnsafeEditSite($source)
+            || ModelCallGuard::isUnsafeEditSite($source, true)
             || ModelCallGuard::mayRunInObjectContextOf($codebase, $className, $source, $event->getContext())
         ) {
             IssueBuffer::accepts($issue, $source->getSuppressedIssues());

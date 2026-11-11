@@ -88,3 +88,7 @@ Psalter can apply the `scoped()` fix for you:
 - **Calls in Blade templates** are reported but never rewritten.
 - Only `$container->singleton()` / `singletonIf()` method calls are fixed, the same calls the rule reports.
 - **Left alone, still reported.** A binding on a container whose `scoped()` is not Laravel's own, or, for `singletonIf()`, whose `scopedIf()` or `scoped()` is not (Laravel's `scopedIf()` calls `$this->scoped()`): a container subclass may give them other parameters, and the call's named arguments (`singleton(abstract: ..., concrete: ...)`) would then throw after the rename. The rename is made only when these methods are `Illuminate\Container\Container`'s or the `Illuminate\Contracts\Container\Container` contract's on every class the receiver can be: a union such as `PlainContainer|ContainerWithOwnScoped` is left alone, because one edit renames the call for all of its members.
+
+## Known gaps
+
+The stock check uses the receiver's declared type. A runtime subclass of that type that overrides `scoped()` or `scopedIf()` is not detected, so `singleton(abstract: ..., concrete: ...)` on such an instance would still throw after the rename. Type the receiver as the concrete container, or review the diff.
