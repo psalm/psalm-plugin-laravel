@@ -87,12 +87,20 @@ final class CarbonTraitPseudoMethodHandler implements AfterCodebasePopulatedInte
 
         // A non-public real method (`resolveCarbon()`) is not callable from outside, so the public
         // tag is what makes the call resolve (Carbon dispatches it through `__call` macros).
-        // `trait_visibility_map` carries the `use T { m as protected; }` adaptations.
+        // Mirrors MethodVisibilityAnalyzer::analyze() (Call/Method/MethodVisibilityAnalyzer.php:112-123):
+        // the declaring method's visibility, overridden by the APPEARING class's `trait_visibility_map`
+        // entry for the appearing name (`use T { m as protected; }`, `use T { orig as m; }`); a
+        // subclass does not copy that map.
+        $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
+
         try {
-            $visibility = $storage->trait_visibility_map[$methodName]
-                ?? $storages->get($realMethodId->fq_class_name)->methods[$methodName]->visibility
+            $adapted = $appearingId === null
+                ? null
+                : $storages->get($appearingId->fq_class_name)->trait_visibility_map[$appearingId->method_name] ?? null;
+            $visibility = $adapted
+                ?? $storages->get($realMethodId->fq_class_name)->methods[$realMethodId->method_name]->visibility
                 ?? null;
-        } catch (\InvalidArgumentException | UnpopulatedClasslikeException) {
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
             return false;
         }
 

@@ -103,5 +103,102 @@ function non_carbon_trait_tag(AppClass $a): void
     $_value = $a->realMethod();
     /** @psalm-check-type-exact $_value = non-empty-string */
 }
+
+// Effective visibility follows Psalm's call check: the APPEARING class's `use T { m as ... }`
+// map (a subclass keeps no copy of it) and the declaring method's own name (`original as dayOfYear`).
+trait AppHiddenDay
+{
+    protected function dayOfYear(int $dayOfYear): int
+    {
+        throw new \LogicException();
+    }
+}
+
+trait AppPublicDay
+{
+    public function dayOfYear(int $dayOfYear): int
+    {
+        throw new \LogicException();
+    }
+}
+
+trait AppNativeDay
+{
+    public function original(int $dayOfYear): int
+    {
+        throw new \LogicException();
+    }
+}
+
+class AppPublicAdaptedParent
+{
+    use \Carbon\Traits\Week;
+    use AppHiddenDay {
+        dayOfYear as public;
+    }
+}
+
+final class AppPublicAdaptedChild extends AppPublicAdaptedParent {}
+
+class AppHiddenAdaptedParent
+{
+    use \Carbon\Traits\Week;
+    use AppPublicDay {
+        dayOfYear as protected;
+    }
+
+    public function __call(string $name, array $arguments): mixed
+    {
+        return null;
+    }
+}
+
+final class AppHiddenAdaptedChild extends AppHiddenAdaptedParent
+{
+    public function probe(): void
+    {
+        // protected by the parent's adaptation: the child keeps the tag.
+        $_protected = $this->dayOfYear(5);
+        /** @psalm-check-type-exact $_protected = \AppHiddenAdaptedChild */
+    }
+}
+
+final class AppAliasedDay
+{
+    use \Carbon\Traits\Week;
+    use AppNativeDay {
+        original as dayOfYear;
+    }
+}
+
+final class AppPrivateDay
+{
+    use \Carbon\Traits\Week;
+
+    public function __call(string $name, array $arguments): mixed
+    {
+        return null;
+    }
+
+    private function dayOfYear(int $_dayOfYear): int
+    {
+        throw new \LogicException();
+    }
+}
+
+function effective_visibility(AppPublicAdaptedChild $a, AppAliasedDay $c, AppPrivateDay $d): void
+{
+    // made public by the parent's adaptation: the real method wins.
+    $_public = $a->dayOfYear(5);
+    /** @psalm-check-type-exact $_public = int */
+
+    // renamed alias of a public method: the real method wins.
+    $_alias = $c->dayOfYear(5);
+    /** @psalm-check-type-exact $_alias = int */
+
+    // private real method: the tag stays.
+    $_private = $d->dayOfYear(5);
+    /** @psalm-check-type-exact $_private = \AppPrivateDay&static */
+}
 ?>
 --EXPECTF--
