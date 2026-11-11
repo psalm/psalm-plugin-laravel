@@ -70,3 +70,20 @@ $this->app->singleton(MyService::class, function () {
 - Or change `singleton()` to `bind()`. The closure will re-run on every resolution (simpler but no intra-request caching).
 - Or keep the singleton and move the request-scoped resolution out of the constructor: inject the container and resolve lazily inside the method that actually uses it.
 - For `config` specifically, replace `$app->make('config')` with the `Config` facade inside the closure.
+
+## Fixing with Psalter
+
+Psalter can apply the `scoped()` fix for you (needs Psalm 7.3 or newer):
+
+```bash
+# Preview the diff, then apply
+./vendor/bin/psalter --issues=OctaneIncompatibleBinding --dry-run
+./vendor/bin/psalter --issues=OctaneIncompatibleBinding
+```
+
+`singleton()` becomes `scoped()` and `singletonIf()` becomes `scopedIf()`. Only the method name is rewritten: the abstract, the closure and the receiver stay as written, so it works for `$this->app` and for a container typed as `Illuminate\Contracts\Container\Container` alike. A closure that resolves several request-scoped services is renamed once.
+
+- **Why `scoped()` and not `bind()`.** `scoped()` keeps one instance per request (or per queue job): Octane flushes it between requests through `forgetScopedInstances()`, so nothing leaks, and repeated resolutions within the request still share the instance. `bind()` would rebuild the service on every resolution. Outside Octane, a scoped binding behaves like a singleton for the lifetime of the request.
+- **Suppressed calls** (`@psalm-suppress OctaneIncompatibleBinding`, or `<PluginIssue name="OctaneIncompatibleBinding" errorLevel="suppress" />` in `psalm.xml`) are not rewritten.
+- **Calls in Blade templates** are reported but never rewritten.
+- Only `$container->singleton()` / `singletonIf()` method calls are fixed, the same calls the rule reports.

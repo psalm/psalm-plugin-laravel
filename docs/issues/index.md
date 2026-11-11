@@ -16,7 +16,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnconfiguredFilesystemDisk](UnconfiguredFilesystemDisk.md) — `Storage::disk()`/`drive()` references a disk name not present in `filesystems.disks` (reported at error levels 1 to 4)
 - [SerializedQueuedModel](SerializedQueuedModel.md) — a queued class holds an Eloquent model in a property without reaching `SerializesModels`, so the whole model is written into the queue payload (reported at error levels 1 to 4)
 - [ModelMakeDiscouraged](ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()` (**fixable**)
-- [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed)
+- [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed) (**fixable**)
 - [PublicModelScope](PublicModelScope.md) — `public` `#[Scope]` Eloquent query scope, whose static call is a runtime fatal (reported at error levels 1 to 4)
 - [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `getXxxAttribute()` / `setXxxAttribute()` accessor or mutator, a pure convention nit (reported at error level 1)
 - [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in, **fixable**)

@@ -24,7 +24,8 @@ use PhpParser\Node\Stmt\Enum_;
 use PhpParser\Node\Stmt\Interface_;
 use PhpParser\Node\Stmt\Trait_;
 use Psalm\CodeLocation;
-use Psalm\IssueBuffer;
+use Psalm\FileManipulation;
+use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
@@ -48,6 +49,9 @@ use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
  * MethodCall and StaticCall; we reject StaticCall immediately (facade-form
  * bindings like `App::singleton(...)` are out of scope) and match remaining
  * calls in O(1) via an isset() lookup on the declaring method id.
+ *
+ * Psalter fixes it by renaming the call: `singleton()` becomes `scoped()`, `singletonIf()` becomes `scopedIf()`.
+ * One binding gets one rename however many resolutions its closure holds, and none of its issues are reported.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -197,8 +201,33 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
         $containerParamName = self::getFirstParamName($closure);
 
+        $issues = [];
+
         foreach (self::findResolutions($closure, $containerParamName) as [$abstract, $node]) {
-            self::emitIssue($event, $methodName, $abstract, $node);
+            $issues[] = self::buildIssue($event, $methodName, $abstract, $node);
+        }
+
+        if ($issues === []) {
+            return;
+        }
+
+        $nameNode = $expr->name;
+        $replacement = $methodNameLower === 'singleton' ? 'scoped' : 'scopedIf';
+
+        // One rename resolves every finding of this binding, so the issues go in as one group: either the
+        // method name is rewritten and none are reported, or all are. The edit is a pure function of the
+        // method-name span, so a re-analysis of the same call yields the identical edit and Psalm dedupes it.
+        $replacements = PsalterFix::fixOrReport(
+            $event->getCodebase(),
+            $event->getStatementsSource(),
+            $issues,
+            static fn(): array => [
+                new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement),
+            ],
+        );
+
+        if ($replacements !== null) {
+            $event->setFileReplacements($replacements);
         }
     }
 
@@ -510,22 +539,19 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         );
     }
 
-    private static function emitIssue(
+    private static function buildIssue(
         AfterMethodCallAnalysisEvent $event,
         string $methodName,
         string $abstract,
         Node $node,
-    ): void {
-        IssueBuffer::accepts(
-            new OctaneIncompatibleBinding(
-                \sprintf(
-                    "Request-scoped '%s' resolved inside %s() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.",
-                    $abstract,
-                    $methodName,
-                ),
-                new CodeLocation($event->getStatementsSource(), $node),
+    ): OctaneIncompatibleBinding {
+        return new OctaneIncompatibleBinding(
+            \sprintf(
+                "Request-scoped '%s' resolved inside %s() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.",
+                $abstract,
+                $methodName,
             ),
-            $event->getStatementsSource()->getSuppressedIssues(),
+            new CodeLocation($event->getStatementsSource(), $node),
         );
     }
 }
