@@ -96,9 +96,9 @@ final class CarbonStubProvider
         // Every Carbon version the plugin supports (3.8.4 and newer) gets the same stubs: the
         // narrowed getter/setter conditionals (isoWeekday(), weekday(), utcOffset(), dayOfYear(),
         // tz(), locale() on CarbonInterface) resolve the setter to `static` over reflected Carbon
-        // sources with and without their own inline conditional (#1059). `locale()` on the concrete
-        // classes still reads `static|string`: Carbon declares the conditional on both the
-        // Localization trait and CarbonInterface, and the signature ends in a variadic.
+        // sources with and without their own inline conditional (#1059). On the concrete classes
+        // `CarbonTraitPseudoMethodHandler` keeps Carbon's trait-level `@method` tags from hiding
+        // them (#2253).
         $integrationStubs = StubFileFinder::integrationStubs(\dirname(__DIR__, 2) . '/stubs', 'carbon', $output);
 
         foreach ($integrationStubs as $stub) {
