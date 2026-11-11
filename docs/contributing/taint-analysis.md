@@ -19,7 +19,7 @@ For Psalm's upstream taint analysis documentation, see:
 
 The upstream reference does not cover the conditional form of `@psalm-taint-escape`, nor `@psalm-assert-untainted`. Both are documented below from source, along with which analyzers actually consume them.
 
-Claims here are verified against both majors this repo targets. Source line citations date from Psalm 7.0.0-beta19 and have drifted (re-verify before trusting one); the behavior claims re-checked on Psalm 7.2.1 say so. The Psalm 6 line (6.16.1, backing `3.x`) implements this surface in different classes at different line numbers. Only behavioral differences between the majors are called out, at the point of use.
+Claims here are verified against both majors this repo targets. Source line citations date from an early Psalm 7 beta and have drifted (re-verify before trusting one); the behavior claims re-checked on Psalm 7.2.1 say so. The Psalm 6 line (6.16.1, backing `3.x`) implements this surface in different classes at different line numbers. Only behavioral differences between the majors are called out, at the point of use.
 
 ## Stub location
 
@@ -324,7 +324,7 @@ id; a guard qualifies only when it and every descendant carry the escape on thei
 That walk recurses to a fixpoint, with a visited set, because the stored property is not the
 closure its name suggests. `Populator::populateClassLikeStorage()` records DIRECT links and
 `populateCodebase()` then makes a SINGLE merge pass with no fixpoint, so a chain `A < B < C < D`
-leaves `A` listing `B` and `C` and never `D`. Executed on 7.0.0-beta19: a four-level agent
+leaves `A` listing `B` and `C` and never `D`. Re-read on Psalm 7.2.1 (`Populator::populateCodebase()` still does the single pass): a four-level agent
 hierarchy whose deepest class stripped the stack was invisible and kept its ancestor's exemption.
 
 Comparing declaring ids beats reading `MethodStorage::$overridden_downstream`:
@@ -562,7 +562,7 @@ public static function of($string) {}
 2. Add `@psalm-taint-specialize` and re-run the test. If it now reports zero errors, the stub falls into the broken-asymmetry class. Revert the annotation and file an upstream Psalm 7 reproducer with a minimal repro.
 3. Add a per-callsite regression test under `tests/Type/tests/TaintAnalysis/Safe<Stub><Method>SpecializePerCallsite.phpt` modeled on `SafeJsEncodeSpecializePerCallsite.phpt`.
 
-`e()`, `encrypt()` and `decrypt()` pass all three steps on Psalm 7.0.0-rc2. `SafeEscapeHelpersSpecializePerCallsite.phpt` pins per-callsite isolation (one `{{ decrypt($x) }}` had flagged every Blade echo of an app as a secret leak), and `TaintedEscapeHelpersSpecializedKeepFlow.phpt` pins within-callsite flow of the kinds they do not strip. `Connection::escape()` and `DB::escape()` remain known exceptions, tracked as follow-ups to #1007. Do not blanket-apply the annotation; treat every site as its own bisect. Class methods are not stubs here: `SessionGuard::hashPasswordForCookie()` is handled by `GuardTaintHandler` without `@psalm-flow` propagation (#1113), and the `Encrypter` class methods (`encrypt`/`encryptString`/`decrypt`/`decryptString`) by `EncrypterTaintHandler`, which preserves their flow via `return_source_params`. The global `encrypt()` / `decrypt()` helpers remain function stubs in `helpers.phpstub`, specialized as above.
+`e()`, `encrypt()` and `decrypt()` pass all three steps. `SafeEscapeHelpersSpecializePerCallsite.phpt` pins per-callsite isolation (one `{{ decrypt($x) }}` had flagged every Blade echo of an app as a secret leak), and `TaintedEscapeHelpersSpecializedKeepFlow.phpt` pins within-callsite flow of the kinds they do not strip. `Connection::escape()` and `DB::escape()` remain known exceptions, tracked as follow-ups to #1007. Do not blanket-apply the annotation; treat every site as its own bisect. Class methods are not stubs here: `SessionGuard::hashPasswordForCookie()` is handled by `GuardTaintHandler` without `@psalm-flow` propagation (#1113), and the `Encrypter` class methods (`encrypt`/`encryptString`/`decrypt`/`decryptString`) by `EncrypterTaintHandler`, which preserves their flow via `return_source_params`. The global `encrypt()` / `decrypt()` helpers remain function stubs in `helpers.phpstub`, specialized as above.
 
 ## Per-rule escape on Rule objects
 

@@ -148,10 +148,10 @@ A new gated site calls `laravelAiIntegrationEnabled()` instead of copying the ve
 When **multiple stub files declare the same method on the same class**, Psalm reuses a single MethodStorage object and re-applies docblock parsing. The merging rules differ by annotation kind:
 
 - **Type annotations** (`@return`, `@param`): last-loaded file wins (direct assignment `=`).
-- **Parameter-level taint annotations** (`@psalm-taint-sink`, `@psalm-assert-untainted`): last-loaded file wins. Each re-declaration rebuilds the parameter storages (`FunctionLikeNodeScanner` calls `setParams([])`), so sinks from an earlier file are dropped, not OR-ed. Verified on Psalm 7.0.0-rc1: an `html` sink in one stub plus an `sql` sink on the same parameter in a later stub reports only `TaintedSql`.
+- **Parameter-level taint annotations** (`@psalm-taint-sink`, `@psalm-assert-untainted`): accumulate for a re-declared method (vimeo/psalm#12479). `FunctionLikeNodeScanner` rebuilds the parameter storages (`setParams([])`) but copies `sinks`, `value_sinks` and `assert_untainted` from the earlier declaration onto the same-named parameter, so an `html` sink in one stub plus an `sql` sink on the same parameter in a later stub reports both `TaintedHtml` and `TaintedSql`, and a later stub that omits the annotation keeps the sink. A re-declared free function is not merged this way: its last-loaded declaration replaces the earlier sinks.
 - **Method-level taint annotations** (`@psalm-taint-source`, `@psalm-taint-escape`, `@psalm-taint-unescape`): all files accumulate (bitwise OR `|=` on the reused MethodStorage).
 
-Splitting annotations for the same method across two stub files is therefore fragile: which type and which sinks survive depends on load order. Always put all of them in the same file, and have an override restate every `@psalm-taint-sink` of the declaration it replaces.
+Splitting annotations for the same method across two stub files is therefore fragile: which type survives depends on load order, and a later stub cannot drop a parameter sink of an earlier one. Always put all of them in the same file, and have an override of a free function restate every `@psalm-taint-sink` of the declaration it replaces.
 
 When a **class stub and a trait stub** both declare the same method, Psalm creates **separate** MethodStorage objects, one per class/trait. There is no cross-merging: if `Connection.phpstub` overrides a method defined in `ManagesTransactions.phpstub`, the trait's annotations (including taints) are ignored for that method. To keep both type and taint annotations, put them on the class stub.
 
@@ -182,7 +182,7 @@ Authoring an override:
 
 - Declare only the changed methods; the rest merge from `common`.
 - Repeat the `implements` clause (interface stubs: the `extends` list) verbatim, because a re-declaration resets Psalm's `class_implements` / `parent_interfaces` and silently strips contracts. Class `extends` and trait `use` survive, but copy the full header anyway to stay diffable against Laravel source.
-- Types and parameter sinks replace, method-level taints accumulate (see "Stub merging"), so restate every `@psalm-taint-sink` of the method you override.
+- Types replace, parameter sinks and method-level taints accumulate (see "Stub merging"), so a version-dir override cannot drop a sink of the method it overrides; restate every `@psalm-taint-sink` only when overriding a free function.
 
 **Common vs version dir.** Return narrowing that holds across all versions (Laravel only improved its annotation) goes in `common`. A parameter widened by behavior present only in a newer Laravel (e.g. `firstOrNew`'s `values` taking `\Closure|array` only on 13) must go in the version dir: widening `common` would tell Psalm a call is valid that fatals at runtime on older versions (silent false negative).
 
@@ -208,7 +208,7 @@ Create the handler class in the appropriate `src/Handlers/` subdirectory, then r
 `CollectionGroupByKeyByHandler` specializes literal model attributes for collection `groupBy()` and `keyBy()` calls; unsupported forms defer to Laravel's stubs.
 `ConditionableWhenHandler` narrows the return type of `Conditionable::when()`/`unless()`. `ConditionableCallbackParamsHandler` types their closure-literal callback params from the receiver and the `$value` narrowed to truthy/falsy. It is a params provider registered per host class, because params providers dispatch on the called class, not on the declaring trait.
 Most taint handlers live under the Laravel feature directory whose API they cover (e.g. `Handlers/Eloquent/WhereColumnTaintHandler`); a stop-gap for an upstream Psalm bug that applies to every call site regardless of Laravel domain goes in `Handlers/Taint/` instead (e.g. `NamedArgumentTaintHandler`, vimeo/psalm#12252).
-`Tappable::tap()` has no handler: its `$callback is null` conditional return lives in `stubs/common/Support/Traits/Tappable.phpstub`. Psalm before 7.0.0-rc8 collapsed such a conditional return in a stub that re-declares a reflected method to a single branch (vimeo/psalm#11837); `CollectionRandomTest.phpt` and the `tap()` type tests pin that it no longer does.
+`Tappable::tap()` has no handler: its `$callback is null` conditional return lives in `stubs/common/Support/Traits/Tappable.phpstub`. Older Psalm collapsed such a conditional return in a stub that re-declares a reflected method to a single branch (vimeo/psalm#11837; the issue's reproducer no longer collapses on Psalm 7.2); `CollectionRandomTest.phpt` and the `tap()` type tests pin that the stub resolves both branches.
 
 `RelationCallbackParamsHandler` types the closure-literal callback of Eloquent relation-query methods (`whereHas()`, `has()`, `whereRelation()`, `withWhereHas()`, `whereHasMorph()`, ...):
 

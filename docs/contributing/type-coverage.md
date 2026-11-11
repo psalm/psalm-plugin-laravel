@@ -63,7 +63,7 @@ Restructure the code instead. Plugin self-analysis has no baseline file, and non
 
 ## 5. String and array callables in `array_map` count one mixed
 
-On Psalm 7.0.0-rc2, `array_map('strval', $keys)` and `array_map([self::class, 'fmt'], $keys)` each count 1 mixed and report no issue. `ArrayMapReturnTypeProvider` analyzes a synthetic call on an array fetch whose offset is mixed, and suppresses `MixedArrayOffset` but not the counter. Use a typed closure (`array_map(static fn(int|string $key): string => (string) $key, $keys)`) or a first-class callable (`array_map(strval(...), $keys)`), which count nothing.
+`array_map('strval', $keys)` and `array_map([self::class, 'fmt'], $keys)` each count 1 mixed and report no issue. `ArrayMapReturnTypeProvider` analyzes a synthetic call on an array fetch whose offset is mixed, and suppresses `MixedArrayOffset` but not the counter. Use a typed closure (`array_map(static fn(int|string $key): string => (string) $key, $keys)`) or a first-class callable (`array_map(strval(...), $keys)`), which count nothing.
 
 Worked example: the shared view names in `src/Blade/BladeBootstrapper.php` (#1854).
 
@@ -115,7 +115,7 @@ return null;
 
 ## 8. Locate the expression Psalm counts
 
-`--stats` prints only per-file counts. To find the lines, back up `vendor/vimeo/psalm/src/Psalm/Internal/Codebase/Analyzer.php` and add this at the top of `incrementMixedCount()` (Psalm 7.0.0-rc2):
+`--stats` prints only per-file counts. To find the lines, back up `vendor/vimeo/psalm/src/Psalm/Internal/Codebase/Analyzer.php` and add this at the top of `incrementMixedCount()`:
 
 ```php
 foreach (debug_backtrace() as $frame) {
