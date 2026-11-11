@@ -12,25 +12,12 @@ use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
 
+// @todo-by https://github.com/vimeo/psalm/issues/13545 remove CarbonTraitPseudoMethodHandler and its registration
 /**
- * Lets a real Carbon method outrank a same-name `@method` tag that Carbon documents on one of its
- * own traits (`Carbon\Traits\Week` documents `dayOfYear(int $dayOfYear)`, `Serialization` documents
- * `locale()` and `toJSON()`, ...).
- *
- * Psalm's populator merges a trait's pseudo-methods into the using class without skipping names the
- * class really declares (the parent-class merge does skip them), and method resolution reads the
- * pseudo-method before the real one. The tag then hides the real signature, and with it the plugin's
- * conditional getter/setter stubs: `Carbon::dayOfYear()` inferred `static` instead of `int<1, 366>`.
- * `CarbonInterface` does not use those traits, so it was never affected.
- *
- * Only entries declared by a `Carbon\Traits\*` trait are dropped, and only when the class has a
- * real PUBLIC method of that name (a protected one such as `resolveCarbon()` is unreachable from
- * outside, so the tag keeps routing the call). Class-level `@method` tags on `Carbon` /
- * `CarbonImmutable` without a real method (`year()`, `addWeeks()`, ...) stay. Running after
- * population also covers user subclasses, which received copies of the entries from their parent.
- *
- * @see https://github.com/psalm/psalm-plugin-laravel/issues/2253
- * @see https://github.com/vimeo/psalm/issues/3937
+ * Drops `@method` tags declared on Carbon's own traits (`Week::dayOfYear()`, `Serialization::locale()`, ...)
+ * when the class has a real public method of that name. Psalm copies trait pseudo-methods onto the
+ * using class without that check and resolves them first, which hides the real signature and the
+ * plugin's conditional stubs (#2253).
  */
 final class CarbonTraitPseudoMethodHandler implements AfterCodebasePopulatedInterface
 {
@@ -85,12 +72,9 @@ final class CarbonTraitPseudoMethodHandler implements AfterCodebasePopulatedInte
             return false;
         }
 
-        // A non-public real method (`resolveCarbon()`) is not callable from outside, so the public
-        // tag is what makes the call resolve (Carbon dispatches it through `__call` macros).
-        // Mirrors MethodVisibilityAnalyzer::analyze() (Call/Method/MethodVisibilityAnalyzer.php:112-123):
-        // the declaring method's visibility, overridden by the APPEARING class's `trait_visibility_map`
-        // entry for the appearing name (`use T { m as protected; }`, `use T { orig as m; }`); a
-        // subclass does not copy that map.
+        // A non-public real method keeps its tag: an outside call goes through `__call` (macros).
+        // Visibility is resolved as Psalm's MethodVisibilityAnalyzer does: the appearing class's
+        // `trait_visibility_map` (subclasses keep no copy), else the declaring method's own.
         $appearingId = $storage->appearing_method_ids[$methodName] ?? null;
 
         try {

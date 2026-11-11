@@ -664,6 +664,7 @@ final class Plugin implements PluginEntryPointInterface
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
+        // @todo-by https://github.com/vimeo/psalm/issues/13545 remove CarbonTraitPseudoMethodHandler and its registration
         // Drops `@method` tags Carbon documents on its own traits (`Week::dayOfYear()`) when the class
         // really declares the method, so the plugin's Carbon getter/setter stubs apply (#2253).
         require_once __DIR__ . '/Handlers/Carbon/CarbonTraitPseudoMethodHandler.php';

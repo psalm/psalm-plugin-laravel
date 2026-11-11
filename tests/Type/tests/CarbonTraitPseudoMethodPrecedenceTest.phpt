@@ -2,16 +2,10 @@
 <?php declare(strict_types=1);
 
 /**
- * Carbon's `Traits\Week` carries `@method static dayOfYear(int $dayOfYear)`, a setter-only
- * pseudo-method, while the real getter/setter `Traits\Date::dayOfYear()` is stubbed with a
- * conditional return. Psalm copies a trait's pseudo-methods into the using class without
- * checking for a same-name real method, and resolves the pseudo-method first, so the getter
- * collapsed to `static` on `Carbon` / `CarbonImmutable` (it was already `int<1, 366>` on
- * `CarbonInterface`). `CarbonTraitPseudoMethodHandler` drops those shadowing trait pseudo-methods.
- * Class-level `@method` tags with no real method behind them must keep working.
+ * Trait-level `@method` tags must not shadow real Carbon methods (`Week::dayOfYear()` hid the getter).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/2253
- * @see https://github.com/vimeo/psalm/issues/3937
+ * @see https://github.com/vimeo/psalm/issues/13545
  */
 
 use Carbon\Carbon;
@@ -52,7 +46,7 @@ function locale_getter(Carbon $c, CarbonInterface $n): void
     /** @psalm-check-type-exact $_setter = \Carbon\Carbon&static */
 }
 
-// Class-level `@method` tags have no real method behind them and must stay typed.
+// Class-level tags without a real method stay.
 function class_level_tags(Carbon $c): void
 {
     $_year = $c->year(2020);
@@ -64,19 +58,16 @@ function class_level_tags(Carbon $c): void
 
 function other_trait_tags(Carbon $c): void
 {
-    // Carbon\Traits\Test::getTestNow() is static: exercises the static pseudo-method branch.
+    // Static pseudo-method branch.
     $_testNow = Carbon::getTestNow();
     /** @psalm-check-type-exact $_testNow = \Carbon\CarbonInterface|\Closure|null */
 
-    // Carbon\Traits\Serialization documents `toJSON(): string`; the real method is nullable.
+    // The tag says `string`, the real method is nullable.
     $_json = $c->toJSON();
     /** @psalm-check-type-exact $_json = null|string */
 }
 
-/**
- * `Traits\Date::resolveCarbon()` is protected, so an outside call dispatches through `__call`
- * (macros) and the public `@method` tag from `Traits\Comparison` must stay in place.
- */
+// `resolveCarbon()` is protected: the call goes through `__call`, so its tag stays.
 function protected_real_method(Carbon $c): void
 {
     $_resolved = $c->resolveCarbon('2026-01-01');
@@ -96,16 +87,14 @@ final class AppClass
     }
 }
 
-// A pseudo-method that shadows a real method but is declared outside `Carbon\Traits\*` is the
-// user's intent and must stay (the handler must not touch it).
+// Tags declared outside `Carbon\Traits\*` are left alone.
 function non_carbon_trait_tag(AppClass $a): void
 {
     $_value = $a->realMethod();
     /** @psalm-check-type-exact $_value = non-empty-string */
 }
 
-// Effective visibility follows Psalm's call check: the APPEARING class's `use T { m as ... }`
-// map (a subclass keeps no copy of it) and the declaring method's own name (`original as dayOfYear`).
+// Effective visibility: the appearing class's `use T { m as ... }` map, and the declaring method's own name.
 trait AppHiddenDay
 {
     protected function dayOfYear(int $dayOfYear): int
@@ -157,7 +146,7 @@ final class AppHiddenAdaptedChild extends AppHiddenAdaptedParent
 {
     public function probe(): void
     {
-        // protected by the parent's adaptation: the child keeps the tag.
+        // Protected by the parent's adaptation: tag stays.
         $_protected = $this->dayOfYear(5);
         /** @psalm-check-type-exact $_protected = \AppHiddenAdaptedChild */
     }
@@ -188,15 +177,15 @@ final class AppPrivateDay
 
 function effective_visibility(AppPublicAdaptedChild $a, AppAliasedDay $c, AppPrivateDay $d): void
 {
-    // made public by the parent's adaptation: the real method wins.
+    // Made public by the parent's adaptation.
     $_public = $a->dayOfYear(5);
     /** @psalm-check-type-exact $_public = int */
 
-    // renamed alias of a public method: the real method wins.
+    // Alias of a public method.
     $_alias = $c->dayOfYear(5);
     /** @psalm-check-type-exact $_alias = int */
 
-    // private real method: the tag stays.
+    // Private real method: tag stays.
     $_private = $d->dayOfYear(5);
     /** @psalm-check-type-exact $_private = \AppPrivateDay&static */
 }

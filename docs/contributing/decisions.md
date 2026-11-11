@@ -676,21 +676,21 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 
 ### Carbon trait `@method` tags that shadow real methods are dropped by a handler, not a stub (#2253)
 
-**Decision:** `CarbonTraitPseudoMethodHandler` removes a pseudo-method declared by a `Carbon\Traits\*` trait when the class has a real PUBLIC method of the same name. Effective visibility mirrors Psalm's call check (`MethodVisibilityAnalyzer`): the declaring method's own visibility (read under the declaring id's method name, so `use T { original as dayOfYear; }` resolves `T::original`), overridden by the `trait_visibility_map` entry of the APPEARING class (a subclass keeps no copy of its parent's `use T { m as protected; }`). It drops roughly 16 to 18 trait tags per Carbon class, not only `dayOfYear()`. `Carbon::dayOfYear()` and `locale()` then resolve to the real methods and the plugin's conditional stubs, as on `CarbonInterface`.
+**Decision:** `CarbonTraitPseudoMethodHandler` removes a pseudo-method declared by a `Carbon\Traits\*` trait when the class has a real PUBLIC method of that name, so `Carbon::dayOfYear()` and `locale()` get the plugin's conditional stubs as on `CarbonInterface`. About 16 to 18 trait tags per Carbon class are dropped, not only `dayOfYear()`. Remove it when vimeo/psalm#13545 is fixed.
 
-**Why:** `Carbon\Traits\Week` documents `@method static dayOfYear(int $dayOfYear)`. Psalm's populator merges a trait's `pseudo_methods` into the using class without skipping names the class declares (the parent-class merge does skip them, vimeo/psalm#3937), and `Methods::getMethodReturnType()` reads the pseudo-method before the real one, so the getter collapsed to `static`.
+**Why:** `Carbon\Traits\Week` documents `@method static dayOfYear(int $dayOfYear)`. Psalm's populator merges a trait's `pseudo_methods` into the using class without skipping names the class declares (the parent-class merge does), and `Methods::getMethodReturnType()` reads the pseudo-method first, so the getter collapsed to `static`.
 
-**Rejected:** re-declaring `Carbon\Traits\Week` in a stub without the tag. Probed: the stub merges into the existing storage and docblock tags only add, so the pseudo-method survives and `dayOfYear()` stays `static`.
+**Visibility:** mirrors `MethodVisibilityAnalyzer`: the `trait_visibility_map` entry of the APPEARING class (a subclass keeps no copy of its parent's `use T { m as protected; }`), else the declaring method's visibility under the declaring id's method name (`use T { original as dayOfYear; }` resolves `T::original`). A protected or private real method keeps its tag: `resolveCarbon()` is protected, so an outside call goes through `__call` (macros) and needs it.
 
-**User-visible changes (all follow the real native signatures):**
+**Rejected:** re-declaring `Carbon\Traits\Week` in a stub without the tag. Stubs merge into the existing storage and docblock tags only add, so the pseudo-method survives.
+
+**User-visible changes (they follow the real native signatures):**
 - `Carbon::getTestNow()` is `CarbonInterface|Closure|null`, `toJSON()` is `?string`.
-- `yesterday()`, `tomorrow()`, `lessThan()`, `shiftTimezone()` and `getTranslationMessage()` take the real typed params instead of the tag's loose ones.
+- `yesterday()`, `tomorrow()`, `lessThan()`, `shiftTimezone()` and `getTranslationMessage()` take the real typed params.
 - `startOfWeek()` accepts `WeekDay`.
 - `CarbonInterval` and `CarbonPeriod` lose the `Traits\Date` tag for `shiftTimezone()`; the return stays `X&static`.
 
-**Boundaries:**
-- Class-level `@method` tags on `Carbon` / `CarbonImmutable` and tags from any trait outside `Carbon\Traits\` are never touched. A class-level tag without a real method (`year()`, `addWeeks()`) stays because nothing shadows it. The set of dropped tags depends on the PHP version: on PHP 8.4+ `setMicrosecond()` is a real `DateTime` method, so its `Traits\Date` tag is dropped as well.
-- A protected real method keeps its tag. `resolveCarbon()` is protected, so an outside call goes through `__call` (macros) and needs the public tag; dropping it reported `UndefinedMagicMethod`.
+**Boundaries:** class-level `@method` tags on `Carbon` / `CarbonImmutable` and tags from traits outside `Carbon\Traits\` are never touched. A class-level tag without a real method (`year()`, `addWeeks()`) stays. The dropped set depends on the PHP version: on PHP 8.4+ `setMicrosecond()` is a real `DateTime` method, so its `Traits\Date` tag goes too.
 
 ## Taint and Issue Emission
 
