@@ -41,6 +41,7 @@ flowchart TD
     I -.->|afterCodebasePopulated| FUM["FactoryUserMethodCountProvider (registered after FactoryModelBindingHandler, so it sees the marks: attaches the user-method count answers to every marked class, #2188)"]
     I -.->|afterCodebasePopulated| FRM["FactoryRelationMethodProvider (registers its has{Relation}() / for{Relation}() return-type + params closures on Factory and every descendant, #2215)"]
     I -.->|afterCodebasePopulated| FSP["FacadeStubPrecedenceHandler (drops conflicting facade @method pseudos when the plugin ships a real stubbed static method)"]
+    I -.->|afterCodebasePopulated| CTP["CarbonTraitPseudoMethodHandler (drops @method tags Carbon documents on its own traits when the class really declares the method, so the Carbon getter/setter stubs apply, #2253)"]
     I -.->|afterCodebasePopulated| FTF["FacadeTaintForwardingHandler (copies taint sinks from a facade's forwarding target onto its @method pseudo-methods)"]
     I -.->|afterCodebasePopulated| RCS["RedeclaredClassSealHandler (restores the sealAllMethods default on stub-re-declared classes with a throwing __call)"]
     I -.->|afterCodebasePopulated| CLI["CliOnlyConsoleCodeHandler (sets Psalm's cli_only on every Command, Migration and Seeder subclass)"]

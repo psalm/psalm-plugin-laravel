@@ -674,6 +674,16 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 - Disclosed gap: producer internals like `Factory::viewInstance()` are protected, so a producer subclass inheriting the mapped method but overriding the construction still narrows to the stock concrete. Accepted (matches the Cache manager precedent). A substitute implementation yields a false negative (a stock-only method resolves though the substitute lacks it), plus a false positive (a substitute-only method flagged undefined) when the stock concrete is not Macroable. The View concrete's `__call` masks the false positive; a non-Macroable producer such as PasswordBroker would exhibit it. Standard apps return the stock concrete, and a call site that hits the gap can suppress locally.
 - Excluded: driver-variant surfaces (Auth guards, Hash, Queue, Broadcast, Redis, Filesystem) where the concrete depends on runtime config.
 
+### Carbon trait `@method` tags that shadow real methods are dropped by a handler, not a stub (#2253)
+
+**Decision:** `CarbonTraitPseudoMethodHandler` removes a pseudo-method declared by a `Carbon\Traits\*` trait when the class has a real method of the same name. `Carbon::dayOfYear()` (and `locale()`, `toJSON()`) then resolve to the real method and the plugin's conditional stubs, as on `CarbonInterface`.
+
+**Why:** `Carbon\Traits\Week` documents `@method static dayOfYear(int $dayOfYear)`. Psalm's populator merges a trait's `pseudo_methods` into the using class without skipping names the class declares (the parent-class merge does skip them, vimeo/psalm#3937), and `Methods::getMethodReturnType()` reads the pseudo-method before the real one, so the getter collapsed to `static`.
+
+**Rejected:** re-declaring `Carbon\Traits\Week` in a stub without the tag. Probed: the stub merges into the existing storage and docblock tags only add, so the pseudo-method survives and `dayOfYear()` stays `static`.
+
+**Boundary:** class-level `@method` tags on `Carbon` / `CarbonImmutable` (`year()`, `addWeeks()`) have no real method behind them and are kept.
+
 ## Taint and Issue Emission
 
 ### Taint annotations: high confidence only
