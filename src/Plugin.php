@@ -16,19 +16,50 @@ use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
 use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
+use Psalm\LaravelPlugin\Issues\ImplicitQueryBuilderCall;
+use Psalm\LaravelPlugin\Issues\ModelMakeDiscouraged;
+use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\LaravelPlugin\Stubs\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
+use Psalm\Plugin\PluginFixableIssuesInterface;
 use Psalm\Plugin\RegistrationInterface;
 
 /**
  * @psalm-api
  * @internal
  */
-final class Plugin implements PluginEntryPointInterface
+final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInterface
 {
+    /**
+     * The issues Psalter can fix (`psalter --issues=...`). Psalter asks before `__invoke()` and may never invoke
+     * the plugin (`--list-supported-issues`), so this reads only the config and never boots Laravel.
+     *
+     * Each rule is declared exactly when its handler could be registered: the opt-in rule only when opted in; the
+     * Octane rule unless explicitly disabled, because auto mode (`laravel/octane` installed) needs the booted
+     * project autoloader to decide, and an unregistered handler simply never offers the fix.
+     *
+     * @inheritDoc
+     */
+    #[\Override]
+    public function getFixableIssues(?\SimpleXMLElement $config = null): array
+    {
+        $pluginConfig = PluginConfig::fromXml($config, PluginOverrides::parse((string) \getenv(PluginOverrides::ENV_VAR)));
+        $issues = [ModelMakeDiscouraged::class];
+
+        if ($pluginConfig->reportImplicitQueryBuilderCalls) {
+            $issues[] = ImplicitQueryBuilderCall::class;
+        }
+
+        if ($pluginConfig->findOctaneIncompatibleBinding !== false) {
+            $issues[] = OctaneIncompatibleBinding::class;
+        }
+
+        return $issues;
+    }
+
     /** @inheritDoc */
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void

@@ -15,7 +15,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [MissingTranslation](MissingTranslation.md) — `__()` or `trans()` references an undefined translation key (opt-in)
 - [UnconfiguredFilesystemDisk](UnconfiguredFilesystemDisk.md) — `Storage::disk()`/`drive()` references a disk name not present in `filesystems.disks` (reported at error levels 1 to 4)
 - [SerializedQueuedModel](SerializedQueuedModel.md) — a queued class holds an Eloquent model in a property without reaching `SerializesModels`, so the whole model is written into the queue payload (reported at error levels 1 to 4)
-- [ModelMakeDiscouraged](ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
+- [ModelMakeDiscouraged](ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()` (**fixable**)
 - [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed)
 - [PublicModelScope](PublicModelScope.md) — `public` `#[Scope]` Eloquent query scope, whose static call is a runtime fatal (reported at error levels 1 to 4)
 - [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `getXxxAttribute()` / `setXxxAttribute()` accessor or mutator, a pure convention nit (reported at error level 1)
@@ -30,3 +30,14 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
 
 Each issue page explains what it detects, why it matters, and how to fix it.
+
+## Fixing issues automatically
+
+Some issues can be fixed by Psalter, Psalm's code-fixing tool (Psalm 7.3 or newer). The issues marked **fixable** in the list above can be fixed by running `psalter` with their names; preview the diff first with `--dry-run`:
+
+```bash
+./vendor/bin/psalter --issues=ModelMakeDiscouraged --dry-run
+./vendor/bin/psalter --issues=ModelMakeDiscouraged
+```
+
+`./vendor/bin/psalter --list-supported-issues` prints every issue that can be fixed in your configuration. The opt-in and auto-enabled rules are listed only when they are switched on in `psalm.xml`.
