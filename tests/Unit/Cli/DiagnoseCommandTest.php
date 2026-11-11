@@ -275,7 +275,7 @@ final class DiagnoseCommandTest extends TestCase
     {
         return new Report(
             pluginVersion: '4.0.0',
-            psalmVersion: '7.0.0-beta19',
+            psalmVersion: '7.2.1',
             laravelVersion: '13.9.0',
             phpRuntimeVersion: '8.4.0',
             phpAnalysisVersion: '8.4.0',
