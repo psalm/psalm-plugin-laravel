@@ -72,6 +72,7 @@ final class PsalterFixTest extends TestCase
         'PsalterApp/ImplicitQueryBuilderCall/Suppressed.php' => 0,
         'PsalterApp/ImplicitQueryBuilderCall/TraitHosted.php' => 1,
         'PsalterApp/OctaneIncompatibleBinding/Bind.php' => 0,
+        'PsalterApp/OctaneIncompatibleBinding/ClosureRebound.php' => 2,
         'PsalterApp/OctaneIncompatibleBinding/SafeSingleton.php' => 0,
         'PsalterApp/OctaneIncompatibleBinding/Suppressed.php' => 0,
         'PsalterApp/OctaneIncompatibleBinding/TraitHosted.php' => 1,

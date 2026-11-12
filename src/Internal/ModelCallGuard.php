@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 use Illuminate\Database\Eloquent\Model;
+use PhpParser\Node;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Name;
+use PhpParser\NodeFinder;
 use Psalm\Codebase;
 use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
@@ -200,6 +205,37 @@ final class ModelCallGuard
 
         // An unexpectedly deep source chain is not proven to be a safe site.
         return true;
+    }
+
+    /**
+     * Whether the receiver of a call reads the closure's `$this` anywhere in its subtree. A walk of the whole
+     * subtree, not a chain, on purpose: `(clone $this)->where()` or `$this->posts()[0]->where()` read the binding as
+     * much as `$this->where()`, and a shape not listed must not slip through as "independent of the binding".
+     */
+    public static function receiverReadsThis(Expr $receiver): bool
+    {
+        return self::receiverContains($receiver, static fn(Node $node): bool => $node instanceof Variable && $node->name === 'this');
+    }
+
+    /** Whether the receiver contains a `self`, `static` or `parent` name, which resolves through the closure's class scope. */
+    public static function receiverReadsClassScope(Expr $receiver): bool
+    {
+        return self::receiverContains($receiver, static fn(Node $node): bool => $node instanceof Name && $node->isSpecialClassName());
+    }
+
+    /**
+     * {@see self::isUnsafeEditSite()} for a call on $receiver (an instance call, or a container method call): the
+     * edit is declined when the receiver reads what a rebound closure changes.
+     */
+    public static function isUnsafeReceiverSite(StatementsSource $source, Expr $receiver): bool
+    {
+        return self::isUnsafeEditSite($source, self::receiverReadsThis($receiver), self::receiverReadsClassScope($receiver));
+    }
+
+    /** @param \Closure(Node): bool $predicate */
+    private static function receiverContains(Expr $receiver, \Closure $predicate): bool
+    {
+        return (new NodeFinder())->findFirst($receiver, $predicate) instanceof Node;
     }
 
     /**

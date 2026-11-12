@@ -5,14 +5,10 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
 use Illuminate\Database\Eloquent\Model;
-use PhpParser\Node;
-use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
-use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
-use PhpParser\NodeFinder;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Context;
@@ -210,8 +206,8 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
             // A rebound closure changes what the call reads: `$this` through its class (`Post::where()`,
             // object-context dispatch) or its receiver (`$this->where()`, `(clone $this)->where()`), and the class
             // scope through a `self` / `static` / `parent` name in the receiver. A captured variable reads neither.
-            $readsThis = $isStatic || ($expr instanceof MethodCall && self::receiverContains($expr->var, self::isThisVariable(...)));
-            $readsClassScope = $expr instanceof MethodCall && self::receiverContains($expr->var, self::isSpecialClassName(...));
+            $readsThis = $isStatic || ($expr instanceof MethodCall && ModelCallGuard::receiverReadsThis($expr->var));
+            $readsClassScope = $expr instanceof MethodCall && ModelCallGuard::receiverReadsClassScope($expr->var);
 
             if (self::rewriteKeepsBehavior($modelClass, $methodNameLower, $isStatic, $readsThis, $readsClassScope, $source, $event->getContext(), $codebase)) {
                 $nameStart = $expr->name->getStartFilePos();
@@ -261,30 +257,6 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         // advertised "can be fixed" count matches what Psalter does.
         return !ModelCallGuard::overridesAny($codebase, $modelClass, self::INSTANCE_CALL_GUARDED)
             && !ModelCallGuard::descendantOverridesAny($codebase, $modelClass, self::INSTANCE_CALL_GUARDED, $methodNameLower);
-    }
-
-    /**
-     * Whether any node in the receiver's subtree satisfies $predicate. A walk of the whole subtree, not a chain, on
-     * purpose: `(clone $this)->where()` or `$this->posts()[0]->where()` read the binding as much as `$this->where()`,
-     * and a shape not listed must not slip through as "independent of the binding".
-     *
-     * @param \Closure(Node): bool $predicate
-     */
-    private static function receiverContains(Expr $receiver, \Closure $predicate): bool
-    {
-        return (new NodeFinder())->findFirst($receiver, $predicate) instanceof Node;
-    }
-
-    /** @psalm-capabilities read-props */
-    private static function isThisVariable(Node $node): bool
-    {
-        return $node instanceof Variable && $node->name === 'this';
-    }
-
-    /** `self`, `static` or `parent`: a name that resolves through the closure's class scope. */
-    private static function isSpecialClassName(Node $node): bool
-    {
-        return $node instanceof Name && $node->isSpecialClassName();
     }
 
     /**

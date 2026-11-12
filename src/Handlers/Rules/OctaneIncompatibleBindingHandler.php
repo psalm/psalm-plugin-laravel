@@ -27,6 +27,7 @@ use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\FileManipulation;
 use Psalm\LaravelPlugin\Internal\ClassDescendants;
+use Psalm\LaravelPlugin\Internal\ModelCallGuard;
 use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
@@ -63,7 +64,8 @@ use Psalm\Type\Union;
  * call's named arguments would then no longer bind, so such a binding is reported and left as written. The same
  * holds when any scanned class that descends from the receiver's type declares `scoped()` or `scopedIf()` itself
  * ({@see self::descendantOverridesScoped()}): the declared type may hold an instance of it at runtime. A subclass
- * Psalm never scanned stays a known gap.
+ * Psalm never scanned stays a known gap. A receiver that reads `$this` or a `self` / `static` / `parent` name inside a
+ * rebindable closure is reported too ({@see ModelCallGuard::isUnsafeReceiverSite()}).
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -255,13 +257,19 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         $containerClass = self::laravelContainerReceiver($event, $expr);
         $codebase = $event->getCodebase();
 
-        // The descendant scan is memoized per class, cheap next to Psalm's own work, and run in plain mode too so
-        // the advertised "can be fixed" count matches what Psalter does.
-        $fixable = $containerClass !== null && !self::descendantOverridesScoped($codebase, $containerClass);
+        // A closure can be rebound onto another object or class scope (`Closure::bind()`): a receiver reading `$this` or
+        // `self` / `static` / `parent` then names another container, whose `scoped()` may differ (same rule as
+        // ImplicitQueryBuilderCall). `$this->app` in a provider method, outside any closure, is unaffected.
+        $source = $event->getStatementsSource();
+        $fixable = $containerClass !== null
+            && !ModelCallGuard::isUnsafeReceiverSite($source, $expr->var)
+            // Memoized per class, cheap next to Psalm's own work, and run in plain mode too so the advertised
+            // "can be fixed" count matches what Psalter does.
+            && !self::descendantOverridesScoped($codebase, $containerClass);
 
         $replacements = PsalterFix::fixOrReport(
             $codebase,
-            $event->getStatementsSource(),
+            $source,
             $issue,
             $fixable
                 ? [new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement)]
