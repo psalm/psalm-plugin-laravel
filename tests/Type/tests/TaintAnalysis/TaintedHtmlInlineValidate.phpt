@@ -3,12 +3,11 @@
 --FILE--
 <?php declare(strict_types=1);
 
-// @todo-by https://github.com/vimeo/psalm/issues/11765 expect TaintedHtml here
 /**
  * Known limitation: $request->validate() taint is not tracked through variable
- * assignment. Same root cause as the FormRequest validated() limitation —
- * the type provider overrides the return type, suppressing taint annotation.
- * Per "silence over false positives" principle, this is acceptable.
+ * assignment: validate() is a `@method` pseudo-method with no stub source, so
+ * the assigned array carries none. Per "silence over false positives"
+ * principle, this is acceptable.
  */
 function renderValidated(\Illuminate\Http\Request $request): void {
     $data = $request->validate(['body' => 'required|string']);
