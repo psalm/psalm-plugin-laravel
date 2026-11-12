@@ -19,7 +19,6 @@ use Psalm\LaravelPlugin\Issues\SerializedQueuedModel;
 use Psalm\LaravelPlugin\Issues\UnconfiguredFilesystemDisk;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 use Psalm\StatementsSource;
-use Tests\Psalm\LaravelPlugin\Unit\Concerns\LoadsPsalmConfigFromXml;
 
 /**
  * An experimental issue is `info` by default through
@@ -29,8 +28,6 @@ use Tests\Psalm\LaravelPlugin\Unit\Concerns\LoadsPsalmConfigFromXml;
 #[CoversNothing]
 final class IssueErrorLevelTest extends TestCase
 {
-    use LoadsPsalmConfigFromXml;
-
     protected function tearDown(): void
     {
         (new \ReflectionClass(Config::class))->getProperty('instance')->setValue(null, null);
@@ -54,7 +51,7 @@ final class IssueErrorLevelTest extends TestCase
     #[DataProvider('projectLevels')]
     public function a_graduated_issue_reports_at_its_error_level_like_a_psalm_issue(string $issueClass, int $projectLevel, string $expected): void
     {
-        $config = self::loadPsalmConfigFromXml(
+        $config = Config::loadFromXML(
             \dirname(__DIR__, 3),
             '<?xml version="1.0"?><psalm xmlns="https://getpsalm.org/schema/config" errorLevel="' . $projectLevel . '" />',
         );

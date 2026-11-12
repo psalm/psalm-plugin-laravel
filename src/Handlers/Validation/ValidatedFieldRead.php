@@ -13,10 +13,10 @@ namespace Psalm\LaravelPlugin\Handlers\Validation;
 final readonly class ValidatedFieldRead
 {
     /**
-     * @param int $sourceTaints  Taint kinds to (re-)introduce; the stub source
-     *                           was dropped by a type override or absent on
-     *                           `Request::__get` (#11765). Zero for an alias —
-     *                           the underlying accessor already sourced it.
+     * @param int $sourceTaints  Taint kinds to introduce where no stub source
+     *                           applies (`validate()` pseudo-method, magic
+     *                           property read). Zero for an alias and for
+     *                           stubbed accessors, which carry their own.
      * @param int $removedTaints Taint kinds the field's rule escapes (e.g.
      *                           `email` escapes header/cookie).
      */
