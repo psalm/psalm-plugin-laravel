@@ -10,9 +10,9 @@ use Illuminate\View\Compilers\BladeCompiler;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use Psalm\LaravelPlugin\Internal\PathCaseCanonicalizer;
+use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\LaravelPlugin\Internal\VendorDirectory;
 use Psalm\Progress\Progress;
-use Psalm\Progress\VoidProgress;
 
 /**
  * Compiles every Blade template of the analyzed application into a shadow PHP file and hands both
@@ -968,14 +968,7 @@ final class BladeBootstrapper
             return;
         }
 
-        $message = 'Laravel plugin: ' . $this->disabled->getMessage();
-        $this->output->warning($message);
-
-        // Blade is opt-in, so a silent disable hides a feature the user asked for; VoidProgress
-        // (--no-progress, CI) drops warnings. Silenced: Psalm turns the notice of a write to a closed
-        // STDERR into an exception, which would skip registering the whole plugin.
-        if ($this->output instanceof VoidProgress && \defined('STDERR')) {
-            @\fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
-        }
+        // Blade is opt-in, so a silent disable hides a feature the user asked for.
+        PluginWarning::emit($this->output, 'Laravel plugin: ' . $this->disabled->getMessage());
     }
 }
