@@ -15,6 +15,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
+use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
@@ -53,6 +54,10 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $output = $this->getProgress($registration);
+        foreach ($pluginConfig->deprecations as $deprecation) {
+            PluginWarning::emit($output, $deprecation);
+        }
+
         $this->loadInitializationHandlers();
         $this->resetInvocationState();
 
@@ -935,7 +940,8 @@ final class Plugin implements PluginEntryPointInterface
             // Only warn when the user explicitly opted into missing translation detection —
             // without it, they just lose the bonus type narrowing, which isn't worth a warning
             if ($reportMissing) {
-                $output->warning(
+                PluginWarning::emit(
+                    $output,
                     'Laravel plugin: findMissingTranslations is enabled but the translator service is not bound. '
                     . 'The MissingTranslation check will be skipped.',
                 );
@@ -948,7 +954,8 @@ final class Plugin implements PluginEntryPointInterface
 
         if (!$translator instanceof \Illuminate\Translation\Translator) {
             if ($reportMissing) {
-                $output->warning(
+                PluginWarning::emit(
+                    $output,
                     'Laravel plugin: findMissingTranslations is enabled but the translator is not an instance of '
                     . 'Illuminate\Translation\Translator. The MissingTranslation check will be skipped.',
                 );
@@ -998,7 +1005,8 @@ final class Plugin implements PluginEntryPointInterface
 
         if (!$finder instanceof \Illuminate\View\FileViewFinder) {
             if ($report) {
-                $output->warning(
+                PluginWarning::emit(
+                    $output,
                     'Laravel plugin: findMissingViews is enabled but '
                     . ($problem ?? 'the view finder is not an instance of Illuminate\View\FileViewFinder.')
                     . ' The MissingView check will be skipped.',
