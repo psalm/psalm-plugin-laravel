@@ -17,19 +17,33 @@ use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
 use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
+use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\LaravelPlugin\Stubs\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
+use Psalm\Plugin\PluginFixableIssuesInterface;
 use Psalm\Plugin\RegistrationInterface;
 
 /**
  * @psalm-api
  * @internal
  */
-final class Plugin implements PluginEntryPointInterface
+final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInterface
 {
+    /**
+     * Psalter asks before `__invoke()`, so this is a constant list that never reads config or boots Laravel.
+     *
+     * @psalm-pure
+     * @inheritDoc
+     */
+    #[\Override]
+    public function getFixableIssues(?\SimpleXMLElement $config = null): array
+    {
+        return [OctaneIncompatibleBinding::class];
+    }
+
     /** @inheritDoc */
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void

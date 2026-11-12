@@ -24,7 +24,10 @@ use PhpParser\Node\Stmt\Enum_;
 use PhpParser\Node\Stmt\Interface_;
 use PhpParser\Node\Stmt\Trait_;
 use Psalm\CodeLocation;
+use Psalm\FileManipulation;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\ShadowEntry;
+use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
@@ -48,6 +51,11 @@ use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
  * MethodCall and StaticCall; we reject StaticCall immediately (facade-form
  * bindings like `App::singleton(...)` are out of scope) and match remaining
  * calls in O(1) via an isset() lookup on the declaring method id.
+ *
+ * Psalter fixes a finding by renaming the call: `singleton()` becomes `scoped()`, `singletonIf()` becomes
+ * `scopedIf()`. The declaring-method-id match already limits this to Laravel's own `Container` and its contract (a
+ * subclass that overrides `singleton()` never reports), so the receiver type needs no further gate. A finding in a
+ * Blade shadow is reported, not fixed: an edit there would rewrite the generated shadow, never the template.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -197,8 +205,28 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
         $containerParamName = self::getFirstParamName($closure);
 
+        $codebase = $event->getCodebase();
+        $source = $event->getStatementsSource();
+        $suppressed = $source->getSuppressedIssues();
+        $isShadow = ShadowRegistry::entryFor($source->getFilePath()) instanceof ShadowEntry;
+        $replacement = $methodNameLower === 'singleton' ? 'scoped' : 'scopedIf';
+        $edits = [];
+
         foreach (self::findResolutions($closure, $containerParamName) as [$abstract, $node]) {
-            self::emitIssue($event, $methodName, $abstract, $node);
+            $issue = self::buildIssue($event, $methodName, $abstract, $node);
+
+            if (!$isShadow && $codebase->shouldFixIssue($issue, $suppressed)) {
+                // Every resolution of one closure yields the same edit; Psalm dedupes by start:end.
+                $edits = [new FileManipulation($expr->name->getStartFilePos(), $expr->name->getEndFilePos() + 1, $replacement)];
+
+                continue;
+            }
+
+            IssueBuffer::accepts($issue, $suppressed, !$isShadow);
+        }
+
+        if ($edits !== []) {
+            $event->setFileReplacements($edits);
         }
     }
 
@@ -510,22 +538,20 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         );
     }
 
-    private static function emitIssue(
+    /** @psalm-pure */
+    private static function buildIssue(
         AfterMethodCallAnalysisEvent $event,
         string $methodName,
         string $abstract,
         Node $node,
-    ): void {
-        IssueBuffer::accepts(
-            new OctaneIncompatibleBinding(
-                \sprintf(
-                    "Request-scoped '%s' resolved inside %s() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.",
-                    $abstract,
-                    $methodName,
-                ),
-                new CodeLocation($event->getStatementsSource(), $node),
+    ): OctaneIncompatibleBinding {
+        return new OctaneIncompatibleBinding(
+            \sprintf(
+                "Request-scoped '%s' resolved inside %s() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.",
+                $abstract,
+                $methodName,
             ),
-            $event->getStatementsSource()->getSuppressedIssues(),
+            new CodeLocation($event->getStatementsSource(), $node),
         );
     }
 }

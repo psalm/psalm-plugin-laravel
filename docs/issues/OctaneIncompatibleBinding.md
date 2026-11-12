@@ -70,3 +70,9 @@ $this->app->singleton(MyService::class, function () {
 - Or change `singleton()` to `bind()`. The closure will re-run on every resolution (simpler but no intra-request caching).
 - Or keep the singleton and move the request-scoped resolution out of the constructor: inject the container and resolve lazily inside the method that actually uses it.
 - For `config` specifically, replace `$app->make('config')` with the `Config` facade inside the closure.
+
+## Fixing with Psalter
+
+[Psalter](https://psalm.dev/docs/manipulating_code/fixing/) fixes this issue (`--issues=OctaneIncompatibleBinding`) by renaming `singleton()` to `scoped()` and `singletonIf()` to `scopedIf()`. Findings inside Blade templates are not rewritten.
+
+Known gap: a container subclass that overrides only `scoped()` or `scopedIf()` (and not `singleton()`) gets the renamed call, which may not accept the same arguments.
