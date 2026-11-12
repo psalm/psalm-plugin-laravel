@@ -909,7 +909,8 @@ final class BladeBootstrapper
         $named = \array_slice(\array_keys($failures), 0, self::FAILURES_TO_NAME);
         $suffix = $count > \count($named) ? ', ...' : '';
 
-        $this->output->warning(
+        PluginWarning::emit(
+            $this->output,
             "Laravel plugin: {$count} Blade template(s) were skipped and are not analyzed ("
             . \implode(', ', $named) . $suffix . '). Run with --debug for the individual causes.',
         );
