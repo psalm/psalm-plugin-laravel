@@ -9,8 +9,10 @@ use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClosure;
+use Psalm\Type\Atomic\TNever;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TString;
+use Psalm\Type\Atomic\TVoid;
 
 /**
  * Narrows the return type of env() based on the default value argument.
@@ -85,7 +87,8 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
     }
 
     /**
-     * Replaces each Closure atomic with its return type; an untyped closure becomes mixed.
+     * Replaces each Closure atomic with its return type; an untyped closure becomes mixed,
+     * void becomes null, never is dropped.
      *
      * @psalm-pure
      */
@@ -100,10 +103,16 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
             }
 
             foreach (($atomic->return_type ?? Type::getMixed())->getAtomicTypes() as $returned) {
-                $atomics[] = $returned;
+                // value() yields null for a void closure; a never closure never returns a value
+                if ($returned instanceof TVoid) {
+                    $atomics[] = new TNull();
+                } elseif (!$returned instanceof TNever) {
+                    $atomics[] = $returned;
+                }
             }
         }
 
-        return $atomics === [] ? $default : new Type\Union($atomics);
+        // only never-returning closures: nothing to add, so the result is plain string
+        return $atomics === [] ? new Type\Union([new TString()]) : new Type\Union($atomics);
     }
 }
