@@ -62,6 +62,13 @@ function groupBy(Collection $items): void
     /** @psalm-check-type-exact $_keyed = Box<Collection<int, CollectionGroupingModel>> */
 }
 
+/** @param Collection<int, int> $c */
+function when(Collection $c): void
+{
+    $_when = box($c->when(true, fn () => 1))->same()->same();
+    /** @psalm-check-type-exact $_when = Box<1|Collection<int, int>> */
+}
+
 function make(): void
 {
     $_made = box(Collection::make('a'))->same()->same();
@@ -80,6 +87,12 @@ class Items extends Collection
     {
         // `$other` may be another subclass than `static`, so its plain answer is not this `static`.
         return $other->filter();
+    }
+
+    /** @param self<TKey, TValue> $other */
+    public function whenOf(self $other): static|int
+    {
+        return $other->when(true, fn (): int => 1);
     }
 
     // Only a receiver proven plain gets the plain class. Everything else is not proven, so it keeps `&static`:
@@ -212,6 +225,18 @@ class Items extends Collection
         return $this->filter();
     }
 
+    public function returnWhenThis(): static|int
+    {
+        return $this->when(true, fn (): int => 1);
+    }
+
+    /** @param static<int, int> $s */
+    public function returnWhenBound(self $s): static|int
+    {
+        return $s->when(true, fn (): int => 1);
+    }
+
+
     /** @param static<int, string|null>|static<string, string|null> $s */
     public function unionReceiver(self $s): void
     {
@@ -234,6 +259,13 @@ class Items extends Collection
     {
         $_filtered = box($this->filter())->same()->same();
         /** @psalm-check-type-exact $_filtered = Box<Items<int, non-falsy-string>&static> */
+    }
+
+    /** @psalm-if-this-is Collection<int, int> */
+    public function whenRefinedThis(): void
+    {
+        $_when = box($this->when(true, fn () => 1))->same()->same();
+        /** @psalm-check-type-exact $_when = Box<1|Collection<int, int>&static> */
     }
 }
 
@@ -269,3 +301,5 @@ function factoryCount(): void
 --EXPECTF--
 MoreSpecificReturnType on line %d: The declared return type 'App\Sandbox\HandlerStaticStaysBound\Items&static' for App\Sandbox\HandlerStaticStaysBound\Items::filledOf is more specific than the inferred return type '%s'
 LessSpecificReturnStatement on line %d: The type '%s' is more general than the declared return type 'App\Sandbox\HandlerStaticStaysBound\Items&static' for App\Sandbox\HandlerStaticStaysBound\Items::filledOf
+MoreSpecificReturnType on line %d: The declared return type '%s' for App\Sandbox\HandlerStaticStaysBound\Items::whenOf is more specific than the inferred return type '%s'
+LessSpecificReturnStatement on line %d: The type '%s' is more general than the declared return type '%s' for App\Sandbox\HandlerStaticStaysBound\Items::whenOf
