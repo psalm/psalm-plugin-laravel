@@ -128,7 +128,7 @@ final class CollectionReindexAllTest
     {
         $r = $c->values()->all();
         /** @psalm-check-type-exact $r = list<Customer> */;
-        echo $r[0]?->id ?? '';
+        echo $r[0]->id ?? '';
     }
 
     /**
