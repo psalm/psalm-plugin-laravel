@@ -19,9 +19,9 @@ final class PluginWarning
     {
         $output->warning($message);
 
-        // Silenced: Psalm turns the notice of a write to a closed STDERR into an exception,
-        // which would abort plugin registration.
-        if ($output instanceof VoidProgress && \defined('STDERR')) {
+        // A closed STDERR (an app bootstrap may fclose() it) makes fwrite() throw a TypeError, and Psalm
+        // turns a failed-write notice into an exception; either would abort plugin registration.
+        if ($output instanceof VoidProgress && \defined('STDERR') && \get_resource_type(\STDERR) === 'stream') {
             @\fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
         }
     }
