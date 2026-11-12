@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794489373241,
+  "lastUpdate": 1794518472305,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18440,6 +18440,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1273,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d799ffc609969143b952eac1cdcec3b7a2bbb09d",
+          "message": "fix(stubs): restore method sealing on re-declared facade stubs #2233 (#2270)\n\nA facade stub's class docblock replaces the sealing flag that Laravel's @method tags set on the vendor class, so unknown static calls on App, Event, Route, Schema (common and 13.34.0) and DB (13) were not reported and returned mixed. Restate @psalm-seal-methods on each.",
+          "timestamp": "2026-11-12T22:18:31+01:00",
+          "tree_id": "65438dae2cf7755afe8c9fd041118516b409634f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d799ffc609969143b952eac1cdcec3b7a2bbb09d"
+        },
+        "date": 1794518470624,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.74,
+            "range": "± 0.56",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1272,
             "unit": "MB"
           }
         ]
