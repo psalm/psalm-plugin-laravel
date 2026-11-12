@@ -73,22 +73,6 @@ $this->app->singleton(MyService::class, function () {
 
 ## Fixing with Psalter
 
-```bash
-# Preview the diff, then apply
-./vendor/bin/psalter --issues=OctaneIncompatibleBinding --dry-run
-./vendor/bin/psalter --issues=OctaneIncompatibleBinding
-```
-
-`singleton()` becomes `scoped()` and `singletonIf()` becomes `scopedIf()`; only the method name changes:
-
-```php
-// Before
-$this->app->singleton(MyService::class, fn ($app) => new MyService($app->make(Request::class)));
-
-// After
-$this->app->scoped(MyService::class, fn ($app) => new MyService($app->make(Request::class)));
-```
-
-The rename changes the binding's lifetime from one instance per worker to one per request, which is the fix. A finding inside a Blade template is reported but not rewritten. Suppressed findings are left alone.
+[Psalter](https://psalm.dev/docs/manipulating_code/fixing/) fixes this issue (`--issues=OctaneIncompatibleBinding`) by renaming `singleton()` to `scoped()` and `singletonIf()` to `scopedIf()`. Findings inside Blade templates are not rewritten.
 
 Known gap: a container subclass that overrides only `scoped()` or `scopedIf()` (and not `singleton()`) gets the renamed call, which may not accept the same arguments.

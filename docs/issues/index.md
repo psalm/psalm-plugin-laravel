@@ -29,12 +29,6 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnusedViewData](UnusedViewData.md): a `view()` call site passes a data key that neither the rendered template nor anything it includes reads or declares (needs Blade analysis)
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
 
-Some issues can be fixed by Psalter, Psalm's code-fixing tool. The issues marked **fixable** in the list above are fixed by running `psalter` with their names; preview the diff first with `--dry-run`:
-
-```bash
-./vendor/bin/psalter --issues=OctaneIncompatibleBinding --dry-run
-```
-
-`./vendor/bin/psalter --list-supported-issues` lists the fixable issues. An issue is fixed only while its rule is active.
+Issues marked **fixable** can be fixed automatically with [Psalter](https://psalm.dev/docs/manipulating_code/fixing/) while their rule is active.
 
 Each issue page explains what it detects, why it matters, and how to fix it.
