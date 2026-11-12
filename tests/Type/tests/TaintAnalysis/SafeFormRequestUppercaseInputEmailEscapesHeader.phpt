@@ -5,8 +5,6 @@
 
 namespace App\Http\Requests;
 
-// @todo-by https://github.com/vimeo/psalm/issues/13604 drop the TaintedHeader expectation
-
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -15,8 +13,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * resolver originally inspected the source spelling and missed this shape.
  *
  * The header sink is pinned at the current false positive: Psalm drops the
- * `email` rule's escape for a call nested in a concatenation
- * (vimeo/psalm#13604).
+ * `email` rule's escape for a call nested in a concatenation.
+ *
+ * @todo-by https://github.com/vimeo/psalm/issues/13604 drop the TaintedHeader expectation
  */
 final class UppercaseInputEmailRequest extends FormRequest
 {

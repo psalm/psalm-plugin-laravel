@@ -5,8 +5,6 @@
 
 namespace App\Http\Requests;
 
-// @todo-by https://github.com/vimeo/psalm/issues/13604 drop the TaintedHeader expectation
-
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -32,10 +30,12 @@ use Illuminate\Foundation\Http\FormRequest;
  *   - Header sink in a post-validation helper should NOT report: the
  *     'email' rule's INPUT_HEADER escape covers it. Pinned at the current
  *     false positive: Psalm drops the escape for a call nested in a
- *     concatenation (vimeo/psalm#13604).
+ *     concatenation.
  *   - HTML sink in the same context DOES report TaintedHtml +
  *     TaintedTextWithQuotes — the email rule leaves html taint intact,
  *     so flow from $this->input('email') is preserved end-to-end.
+ *
+ * @todo-by https://github.com/vimeo/psalm/issues/13604 drop the TaintedHeader expectation
  */
 final class SelfTaintEmailRequest extends FormRequest
 {
