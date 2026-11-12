@@ -163,6 +163,14 @@ class AppServiceProvider extends ServiceProvider
             return new MyService($app['redirect']);
         });
 
+        // Bad. One issue per binding, at its first resolution, naming every request-scoped service the closure
+        // resolves (a repeated abstract is named once).
+        $this->app->singleton('svc.33', function (Application $app): MyService {
+            $session = $app->make(SessionStore::class);
+
+            return new MyService([$app->make(Request::class), $session, $app->make(SessionStore::class)]);
+        });
+
         // Good. bind() re-executes per resolution, so request-scoped resolution is fine.
         $this->app->bind('svc.ok1', function (Application $app): MyService {
             return new MyService($app->make(Request::class));
@@ -293,3 +301,4 @@ OctaneIncompatibleBinding on line %d: Request-scoped 'cookie' resolved inside si
 OctaneIncompatibleBinding on line %d: Request-scoped 'config' resolved inside singleton() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'url' resolved inside singleton() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.
 OctaneIncompatibleBinding on line %d: Request-scoped 'redirect' resolved inside singleton() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.
+OctaneIncompatibleBinding on line %d: Request-scoped 'Illuminate\Session\Store', 'Illuminate\Http\Request' resolved inside singleton() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.
