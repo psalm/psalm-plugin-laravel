@@ -7,6 +7,7 @@ use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use IteratorAggregate;
 use JsonSerializable;
+use Stringable;
 
 /**
  * Laravel 13 (from 13.2.0) calls the `sum()` callback with `($item, $key)`; every
@@ -17,8 +18,11 @@ use JsonSerializable;
  *
  * @extends \Illuminate\Contracts\Support\Arrayable<TKey, TValue>
  * @extends \IteratorAggregate<TKey, TValue>
+ *
+ * `Stringable` is listed explicitly: the real interface gets it implicitly from
+ * declaring `__toString()`, which this stub does not redeclare.
  */
-interface Enumerable extends Arrayable, Countable, IteratorAggregate, Jsonable, JsonSerializable
+interface Enumerable extends Arrayable, Countable, IteratorAggregate, Jsonable, JsonSerializable, Stringable
 {
     /**
      * Same contract as the `common` declaration, with the key passed to the callback.
