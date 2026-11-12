@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794474121792,
+  "lastUpdate": 1794475060592,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18370,6 +18370,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1273,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0a10fd81d3db7d0d50868fbf942b55a0dbad8b49",
+          "message": "test: adapt type tests to psalm 7.3.1 #0 (#2266)\n\n- nullsafe outer proxy fetch and sealed-shape unpack now resolve\n- method arguments are checked against method template bounds\n  (vimeo/psalm#13447)\n- an untyped trait override takes the replaced method's docblock\n- `parent` in a closure param is named as the resolved class",
+          "timestamp": "2026-11-12T10:14:25+01:00",
+          "tree_id": "84cf2cb17942ff7e3a27c530cd31ea3f4f8b6677",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0a10fd81d3db7d0d50868fbf942b55a0dbad8b49"
+        },
+        "date": 1794475058133,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.4,
+            "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1272,
             "unit": "MB"
           }
         ]
