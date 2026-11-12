@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace PsalterFixture\Cases\ImplicitQueryBuilder;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Subclasses that only inherit Eloquent's dispatch do not stop the rewrite: the same shapes as
- * DescendantOverridesMagicCall are rewritten.
+ * Subclasses that leave Eloquent's dispatch alone do not stop the rewrite: the same shapes as
+ * DescendantOverridesMagicCall are rewritten, also with a subclass that overrides `newQuery()` (it is on both
+ * paths).
  */
 class DescendantPlainBase extends Model
 {
@@ -19,6 +21,16 @@ class DescendantPlainBase extends Model
 }
 
 final class DescendantPlainChild extends DescendantPlainBase {}
+
+final class DescendantPlainNewQueryChild extends DescendantPlainBase
+{
+    /** @return Builder<static> */
+    #[\Override]
+    public function newQuery()
+    {
+        return parent::newQuery()->where('tenant_id', 1);
+    }
+}
 
 final class DescendantPlainCaller
 {

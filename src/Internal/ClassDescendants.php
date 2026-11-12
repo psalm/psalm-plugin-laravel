@@ -17,8 +17,9 @@ use Psalm\Storage\ClassLikeStorage;
  * scan (vendor code it never loaded, a generated or anonymous class, a runtime subclass) is invisible to it: the
  * result is "no scanned descendant does", never "no descendant does".
  *
- * One pass over every storage per distinct class, memoized for the run. Only the Psalter fixes ask, after
- * `shouldFixIssue()` said yes, so a plain Psalm run never pays for it.
+ * One pass over every storage per distinct class, memoized for the run (a few milliseconds per class on a
+ * large app). Asked by a fixable site that passed the cheap guards, in a plain run too, so the count of issues
+ * Psalm advertises as fixable matches what Psalter does.
  *
  * @internal
  */
@@ -79,6 +80,13 @@ final class ClassDescendants
             }
 
             if (!$storage->populated) {
+                // A PHP internal class Psalm reflected during analysis (`new $cls()` with a string naming one) stays
+                // unpopulated, and `user_defined` is false only for reflected and stubbed storages: it cannot descend
+                // from a userland class, so it must not veto every scan.
+                if (!$storage->user_defined) {
+                    continue;
+                }
+
                 // Its ancestry maps are empty until populated, so it cannot be ruled out.
                 return null;
             }

@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * The object behind `$base->where()` or `$this->where()` can be any scanned subclass, and a subclass that
- * overrides `__call()` is the code the forwarded call reaches: the inserted `newQuery()->` would skip it. The
- * named static call is on a class with that subclass too. All reported, never rewritten.
+ * overrides `__call()` is the code the forwarded call reaches: the inserted `newQuery()->` would skip it. Both
+ * reported, never rewritten.
  */
 class DescendantMagicBase extends Model
 {
@@ -37,10 +37,5 @@ final class DescendantMagicCaller
     public function typed(DescendantMagicBase $base): void
     {
         $base->where('title', 'y')->get();
-    }
-
-    public static function named(): void
-    {
-        DescendantMagicBase::where('title', 'z')->get();
     }
 }

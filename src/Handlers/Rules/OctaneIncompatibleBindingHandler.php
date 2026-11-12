@@ -255,17 +255,17 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         $containerClass = self::laravelContainerReceiver($event, $expr);
         $codebase = $event->getCodebase();
 
+        // The descendant scan is memoized per class, cheap next to Psalm's own work, and run in plain mode too so
+        // the advertised "can be fixed" count matches what Psalter does.
+        $fixable = $containerClass !== null && !self::descendantOverridesScoped($codebase, $containerClass);
+
         $replacements = PsalterFix::fixOrReport(
             $codebase,
             $event->getStatementsSource(),
             $issue,
-            $containerClass !== null
+            $fixable
                 ? [new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement)]
                 : [],
-            // Scans every scanned class: only Psalter, once it would apply the rename, pays for it.
-            $containerClass !== null
-                ? static fn(): bool => !self::descendantOverridesScoped($codebase, $containerClass)
-                : null,
         );
 
         if ($replacements !== null) {

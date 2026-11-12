@@ -95,23 +95,42 @@ use Psalm\Type\Union;
  *    instance's state; `query()` drops it);
  *  - a named static call in a non-static method or closure whose `$this` is, or may be, an instance of the
  *    target model (see {@see ModelCallGuard::mayRunInObjectContextOf()}): PHP runs it as `$this->__call()` there;
- *  - any call in a trait (one shared edit; see {@see PsalterFix::fixOrReport()}), and a call that reads `$this` or a
- *    `self` / `static` / `parent` name (a named static call, or a receiver containing one) in a non-static closure or
- *    arrow function, since the closure can be rebound (see {@see ModelCallGuard::isUnsafeEditSite()}). An instance
- *    call on a captured model reads neither and is fixed in a closure;
- *  - a model whose class chain overrides `__call`, `__callStatic`, `forwardCallTo`, `forwardDecoratedCallTo`, `query`
- *    or `newQuery` (see {@see ModelCallGuard::overridesAny()}), or any scanned subclass of it that does (see
- *    {@see ModelCallGuard::descendantOverridesAny()}; the object behind `$model->where()` can be that subclass): the
- *    insertion would bypass that code. A runtime subclass Psalm never scanned stays a known gap.
+ *  - any call in a trait (one shared edit; see {@see PsalterFix::fixOrReport()});
+ *  - in a closure or arrow function, which `Closure::bind()` / `bindTo()` / `call()` can rebind, a call whose
+ *    receiver contains a `self` / `static` / `parent` name (the class scope can be rebound even in a `static`
+ *    closure), and, in a non-static one, a named static call or a receiver containing `$this` (the object can be
+ *    rebound; see {@see ModelCallGuard::isUnsafeEditSite()}). An instance call on a captured model reads neither and is
+ *    fixed in a closure;
+ *  - a named static call on a model whose class chain overrides `__call`, `__callStatic`, `query` or `forwardCallTo`:
+ *    the insertion skips `__callStatic` / `__call` (`query()` is on the rewritten path only);
+ *  - an instance call on a model whose class chain overrides `__call` or `forwardCallTo`, or on one that has a
+ *    scanned subclass doing so or declaring the called method itself (the object behind `$model->where()` can be
+ *    that subclass; see {@see ModelCallGuard::descendantOverridesAny()}): the insertion skips that code. A runtime
+ *    subclass Psalm never scanned stays a known gap. A named static call reaches only the named class
+ *    (`new static`), so its subclasses are not scanned.
+ *
+ * `newQuery()` is on both paths (`Model::__call()` forwards through `$this->newQuery()`, and `Model::query()` is
+ * `(new static)->newQuery()`), and `forwardDecoratedCallTo()` on neither, so an override of either is no reason to
+ * decline.
  */
 final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisInterface
 {
     /**
-     * The methods an inserted `query()->` / `newQuery()->` would bypass when a model declares them itself.
+     * What `Model::where()` runs and `Model::query()->where()` skips: `__callStatic` (`new static`, then `__call`),
+     * `__call`, `forwardCallTo`, and `query` (which a scope call and the rewrite both use, but with different
+     * entry points).
      *
      * @var list<lowercase-string>
      */
-    private const GUARDED_METHODS = ['__call', '__callstatic', 'query', 'newquery', 'forwardcallto', 'forwarddecoratedcallto'];
+    private const STATIC_CALL_GUARDED = ['__call', '__callstatic', 'query', 'forwardcallto'];
+
+    /**
+     * What `$model->where()` runs and `$model->newQuery()->where()` skips: `__call` and `forwardCallTo`. The called
+     * method's own declaration on a subclass is checked separately.
+     *
+     * @var list<lowercase-string>
+     */
+    private const INSTANCE_CALL_GUARDED = ['__call', 'forwardcallto'];
 
     /** @inheritDoc */
     #[\Override]
@@ -186,22 +205,21 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         //    builds a fresh model and drops that state.
         $isSpecialClass = $expr instanceof StaticCall && $expr->class instanceof Name && $expr->class->isSpecialClassName();
         $replacements = [];
-        $costlyGuard = null;
 
         if (!$expr->isFirstClassCallable() && !$isSpecialClass) {
-            // The call reads `$this` through its class (`Post::where()`, object-context dispatch) or its receiver
-            // (`$this->where()`, `$this->post->where()`): a rebound closure changes either. A captured variable does not.
-            $dependsOnThis = $isStatic || ($expr instanceof MethodCall && self::receiverDependsOnThis($expr->var));
+            // A rebound closure changes what the call reads: `$this` through its class (`Post::where()`,
+            // object-context dispatch) or its receiver (`$this->where()`, `(clone $this)->where()`), and the class
+            // scope through a `self` / `static` / `parent` name in the receiver. A captured variable reads neither.
+            $readsThis = $isStatic || ($expr instanceof MethodCall && self::receiverContains($expr->var, self::isThisVariable(...)));
+            $readsClassScope = $expr instanceof MethodCall && self::receiverContains($expr->var, self::isSpecialClassName(...));
 
-            if (self::rewriteKeepsBehavior($modelClass, $isStatic, $dependsOnThis, $source, $event->getContext(), $codebase)) {
+            if (self::rewriteKeepsBehavior($modelClass, $methodNameLower, $isStatic, $readsThis, $readsClassScope, $source, $event->getContext(), $codebase)) {
                 $nameStart = $expr->name->getStartFilePos();
                 $replacements = [new FileManipulation($nameStart, $nameStart, $isStatic ? 'query()->' : 'newQuery()->')];
-                // Scans every scanned class: only Psalter, once it would apply the fix, pays for it.
-                $costlyGuard = static fn(): bool => !ModelCallGuard::descendantOverridesAny($codebase, $modelClass, self::GUARDED_METHODS);
             }
         }
 
-        $fix = PsalterFix::fixOrReport($codebase, $source, $issue, $replacements, $costlyGuard);
+        $fix = PsalterFix::fixOrReport($codebase, $source, $issue, $replacements);
 
         if ($fix !== null) {
             $event->setFileReplacements($fix);
@@ -215,39 +233,58 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
      * issue is reported and not fixed.
      *
      * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodNameLower
      */
     private static function rewriteKeepsBehavior(
         string $modelClass,
+        string $methodNameLower,
         bool $isStatic,
-        bool $dependsOnThis,
+        bool $readsThis,
+        bool $readsClassScope,
         StatementsSource $source,
         Context $context,
         Codebase $codebase,
     ): bool {
-        if (ModelCallGuard::isUnsafeEditSite($source, $dependsOnThis)) {
+        if (ModelCallGuard::isUnsafeEditSite($source, $readsThis, $readsClassScope)) {
             return false;
         }
 
-        if (ModelCallGuard::overridesAny($codebase, $modelClass, self::GUARDED_METHODS)) {
-            return false;
+        if ($isStatic) {
+            // `Model::where()` builds `new static` of the named class, so no subclass is reachable here: the
+            // object-context case, where `$this` can be one, is the last check.
+            return !ModelCallGuard::overridesAny($codebase, $modelClass, self::STATIC_CALL_GUARDED)
+                && !ModelCallGuard::mayRunInObjectContextOf($codebase, $modelClass, $source, $context);
         }
 
-        return !$isStatic || !ModelCallGuard::mayRunInObjectContextOf($codebase, $modelClass, $source, $context);
+        // The runtime object can be any subclass: its `__call()` (or its own method of that name) is what runs.
+        // The scan is memoized per class, cheap next to Psalm's own work, and run in plain mode too so the
+        // advertised "can be fixed" count matches what Psalter does.
+        return !ModelCallGuard::overridesAny($codebase, $modelClass, self::INSTANCE_CALL_GUARDED)
+            && !ModelCallGuard::descendantOverridesAny($codebase, $modelClass, self::INSTANCE_CALL_GUARDED, $methodNameLower);
     }
 
     /**
-     * Whether the receiver reads the closure's binding anywhere in its subtree: `$this`, or a `self` / `static` /
-     * `parent` name. `Closure::bind()` / `bindTo()` / `call()` can change both the object and the scope, so
-     * `(clone $this)->where()` or `$this->posts()[0]->where()` is as rebindable as `$this->where()`. Positive rule on
-     * purpose: a receiver shape not listed here must not slip through as "independent of `$this`".
+     * Whether any node in the receiver's subtree satisfies $predicate. A walk of the whole subtree, not a chain, on
+     * purpose: `(clone $this)->where()` or `$this->posts()[0]->where()` read the binding as much as `$this->where()`,
+     * and a shape not listed must not slip through as "independent of the binding".
+     *
+     * @param \Closure(Node): bool $predicate
      */
-    private static function receiverDependsOnThis(Expr $receiver): bool
+    private static function receiverContains(Expr $receiver, \Closure $predicate): bool
     {
-        return (new NodeFinder())->findFirst(
-            $receiver,
-            static fn(Node $node): bool => ($node instanceof Variable && $node->name === 'this')
-                || ($node instanceof Name && $node->isSpecialClassName()),
-        ) instanceof \PhpParser\Node;
+        return (new NodeFinder())->findFirst($receiver, $predicate) instanceof Node;
+    }
+
+    /** @psalm-capabilities read-props */
+    private static function isThisVariable(Node $node): bool
+    {
+        return $node instanceof Variable && $node->name === 'this';
+    }
+
+    /** `self`, `static` or `parent`: a name that resolves through the closure's class scope. */
+    private static function isSpecialClassName(Node $node): bool
+    {
+        return $node instanceof Name && $node->isSpecialClassName();
     }
 
     /**

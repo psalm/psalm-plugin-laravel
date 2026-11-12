@@ -58,15 +58,17 @@ final class ModelCallGuard
 
     /**
      * Whether any scanned class that descends from $modelClass overrides one of $methods (same rule as
-     * {@see self::overridesAny()}, applied to each descendant). The runtime object behind a `$model->where()` or a
-     * `$this->where()` can be any subclass, and its `__call()` is the code the forwarded call reaches, while the
-     * rewrite would skip it. Descendants Psalm never scanned stay invisible (documented known gap). Unprovable counts
-     * as overriding.
+     * {@see self::overridesAny()}, applied to each descendant), or declares $calledMethod itself (a declaration other
+     * than the one $modelClass already has, so an inherited `#[Scope]` method does not count). The runtime object
+     * behind a `$model->where()` or a `$this->where()` can be any subclass, and its `__call()` or its own `where()` is
+     * the code that runs, while the rewrite would skip it. Descendants Psalm never scanned stay invisible
+     * (documented known gap). Unprovable counts as overriding.
      *
      * @param class-string<Model> $modelClass
      * @param list<lowercase-string> $methods
+     * @param lowercase-string $calledMethod
      */
-    public static function descendantOverridesAny(Codebase $codebase, string $modelClass, array $methods): bool
+    public static function descendantOverridesAny(Codebase $codebase, string $modelClass, array $methods, string $calledMethod): bool
     {
         $descendants = ClassDescendants::of($codebase, $modelClass);
 
@@ -74,8 +76,20 @@ final class ModelCallGuard
             return true;
         }
 
+        try {
+            $ownDeclaration = $codebase->classlike_storage_provider->get(\strtolower($modelClass))->declaring_method_ids[$calledMethod] ?? null;
+        } catch (\InvalidArgumentException) {
+            return true;
+        }
+
         foreach ($descendants as $descendant) {
             if (self::storageOverridesAny($descendant, $methods)) {
+                return true;
+            }
+
+            $declaring = $descendant->declaring_method_ids[$calledMethod] ?? null;
+
+            if ($declaring !== null && ($ownDeclaration === null || \strcasecmp($declaring->fq_class_name, $ownDeclaration->fq_class_name) !== 0)) {
                 return true;
             }
         }
@@ -152,24 +166,27 @@ final class ModelCallGuard
 
     /**
      * Whether the call's dispatch can be changed by rebinding the closure it sits in. One source edit is shared by
-     * everything that executes that source, so it is withheld where `$this` is not a fixed one: when the call
-     * depends on `$this` (`$dependsOnThis`: a named static call such as `Post::where()`, or a receiver that reads
-     * `$this` or a `self` / `static` / `parent` name), inside a non-static closure or arrow function, which
-     * `Closure::bind()` / `bindTo()` / `call()` can rebind to any object (even one declared in a static method) and
-     * any scope. Only the innermost closure matters: a `static` one cannot be rebound. An instance call on a
-     * captured model (`$post->where()`) reads neither, so rebinding does not change it.
+     * everything that executes that source, so it is withheld where the binding is not a fixed one.
+     * `Closure::bind()` / `bindTo()` / `call()` can rebind the closure to any object (even one declared in a static
+     * method), and even a `static` closure keeps no fixed class scope: `Closure::bind($closure, null, Other::class)`
+     * resolves its `self` / `static` / `parent` to `Other`. So:
+     *  - $readsThis (a named static call such as `Post::where()`, which turns into `$this->__call()` of the rebound
+     *    object, or a receiver containing `$this`) makes a non-static closure or arrow function unsafe;
+     *  - $readsClassScope (a receiver containing a `self` / `static` / `parent` name) makes any closure or arrow
+     *    function unsafe.
+     * Only the innermost closure matters. An instance call on a captured model (`$post->where()`) reads neither.
      *
      * Trait bodies are not decided here: {@see PsalterFix::fixOrReport()} declines every fix inside a trait.
      */
-    public static function isUnsafeEditSite(StatementsSource $source, bool $dependsOnThis): bool
+    public static function isUnsafeEditSite(StatementsSource $source, bool $readsThis, bool $readsClassScope): bool
     {
-        if (!$dependsOnThis) {
+        if (!$readsThis && !$readsClassScope) {
             return false;
         }
 
         for ($current = $source, $depth = 0; $depth < 64; ++$depth) {
             if ($current instanceof ClosureAnalyzer) {
-                return !$current->isStatic();
+                return $readsClassScope || !$current->isStatic();
             }
 
             $parent = $current->getSource();

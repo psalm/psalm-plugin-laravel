@@ -29,9 +29,6 @@ final class PsalterFix
      *        overlap other edits of the same file: Psalm keys a range by `start:end` alone and applies distinct
      *        overlapping ranges as they come. An empty list means "this site must not be fixed": the issue is
      *        reported, and not advertised as fixable.
-     * @param (\Closure(): bool)|null $costlyGuard a proof too expensive for a plain run (a scan of every scanned class),
-     *        asked only once Psalter would apply the fix. False declines the fix: the issue is reported. A plain run
-     *        never calls it, so it still advertises such a site as fixable.
      * @return list<FileManipulation>|null the edits for the caller to hand to `$event->setFileReplacements()`
      *         (the issue is then not reported), or null when the issue was reported instead.
      */
@@ -40,7 +37,6 @@ final class PsalterFix
         StatementsSource $source,
         CodeIssue $issue,
         array $replacements,
-        ?\Closure $costlyGuard = null,
     ): ?array {
         $suppressed = $source->getSuppressedIssues();
 
@@ -53,11 +49,7 @@ final class PsalterFix
         $fixable = !$isShadow && $replacements !== [] && !self::isInTrait($source);
 
         if ($fixable && $codebase->shouldFixIssue($issue, $suppressed)) {
-            if (!$costlyGuard instanceof \Closure || $costlyGuard()) {
-                return $replacements;
-            }
-
-            $fixable = false;
+            return $replacements;
         }
 
         IssueBuffer::accepts($issue, $suppressed, $fixable);

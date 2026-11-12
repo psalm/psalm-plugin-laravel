@@ -52,15 +52,31 @@ final class PsalterFixTest extends TestCase
     private const BLADE_TEMPLATE = 'resources/views/psalter.blade.php';
 
     /**
-     * Cases that stay unchanged because the rule reports nothing there, not because a fix was declined
-     * (a suppressed finding, a real method, a call that is not magic forwarding, `bind()` / `scoped()`).
+     * How many times a plain run reports a case's own issue (the directory name) in each case Psalter leaves
+     * unchanged: one per declined call site, so a site that stops being reported fails the test, and a site that
+     * starts being fixed shows up as a case that is no longer unchanged. Zero is a case where the rule reports
+     * nothing (a suppressed finding, a real method, `bind()`, `scoped()`), not a declined fix. A new unchanged
+     * case adds its own line.
      */
-    private const NOT_REPORTED = [
-        'PsalterApp/ImplicitQueryBuilderCall/RealModelMethod.php',
-        'PsalterApp/ImplicitQueryBuilderCall/Suppressed.php',
-        'PsalterApp/OctaneIncompatibleBinding/Bind.php',
-        'PsalterApp/OctaneIncompatibleBinding/SafeSingleton.php',
-        'PsalterApp/OctaneIncompatibleBinding/Suppressed.php',
+    private const REPORTED_SITES = [
+        'PsalterApp/ImplicitQueryBuilderCall/CloneThisInClosure.php' => 1,
+        'PsalterApp/ImplicitQueryBuilderCall/DescendantDeclaresCalledMethod.php' => 1,
+        'PsalterApp/ImplicitQueryBuilderCall/DescendantOverridesMagicCall.php' => 2,
+        'PsalterApp/ImplicitQueryBuilderCall/FirstClassCallable.php' => 2,
+        'PsalterApp/ImplicitQueryBuilderCall/ForwardCallToOverride.php' => 1,
+        'PsalterApp/ImplicitQueryBuilderCall/MagicDispatchOverride.php' => 4,
+        'PsalterApp/ImplicitQueryBuilderCall/ObjectContextAncestor.php' => 1,
+        'PsalterApp/ImplicitQueryBuilderCall/RealModelMethod.php' => 0,
+        'PsalterApp/ImplicitQueryBuilderCall/StaticClosureClassScope.php' => 2,
+        'PsalterApp/ImplicitQueryBuilderCall/StaticInModel.php' => 3,
+        'PsalterApp/ImplicitQueryBuilderCall/Suppressed.php' => 0,
+        'PsalterApp/ImplicitQueryBuilderCall/TraitHosted.php' => 1,
+        'PsalterApp/OctaneIncompatibleBinding/Bind.php' => 0,
+        'PsalterApp/OctaneIncompatibleBinding/SafeSingleton.php' => 0,
+        'PsalterApp/OctaneIncompatibleBinding/Suppressed.php' => 0,
+        'PsalterApp/OctaneIncompatibleBinding/TraitHosted.php' => 1,
+        'PsalterApp/OctaneIncompatibleBinding/UserContainerSubclass.php' => 1,
+        'PsalterAppContainerOverride/OctaneIncompatibleBinding/BaseTypedContainer.php' => 2,
     ];
 
     /** @var array<string, array{rewritten: array<string, string>, reported: array<string, list<string>>, template: string, shadows: list<string>}> */
@@ -108,18 +124,16 @@ final class PsalterFixTest extends TestCase
     #[DataProvider('unchangedCases')]
     public function a_case_psalter_leaves_unchanged_is_still_reported_by_a_plain_run(string $fixture, string $case): void
     {
+        $id = $fixture . '/' . $case;
+        $this->assertArrayHasKey($id, self::REPORTED_SITES, "Add {$id} to REPORTED_SITES with the number of sites a plain run reports.");
+
         $issue = \dirname($case);
+        $reported = \array_count_values($this->fixtureRun($fixture)['reported']['cases/' . $case] ?? [])[$issue] ?? 0;
 
-        if (\in_array($fixture . '/' . $case, self::NOT_REPORTED, true)) {
-            $this->assertNotContains($issue, $this->fixtureRun($fixture)['reported']['cases/' . $case] ?? [], "Case {$case} is listed as not reported.");
-
-            return;
-        }
-
-        $this->assertContains(
-            $issue,
-            $this->fixtureRun($fixture)['reported']['cases/' . $case] ?? [],
-            "Plain psalm reports no {$issue} in {$case}: the case is unchanged only because the rule went quiet.",
+        $this->assertSame(
+            self::REPORTED_SITES[$id],
+            $reported,
+            "Plain psalm reports {$reported} {$issue} in {$case}: a declined site that is no longer reported passes only because the rule went quiet.",
         );
     }
 
