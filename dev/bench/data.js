@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794472234874,
+  "lastUpdate": 1794474121792,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18335,6 +18335,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1250,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5f584a290c28c6735d7fa732aab1cdb39028fe22",
+          "message": "Drop workarounds for Psalm bugs fixed in 7.3.1 (#2264)\n\n* chore(deps): require psalm ^7.3.1 #0\n\nThe removed workarounds rely on upstream fixes first shipped in 7.3.1.\n\n* refactor(carbon): drop CarbonTraitPseudoMethodHandler #0\n\nPsalm 7.3.1 resolves a real method over a trait @method tag\n(vimeo/psalm#13545), for every trait, not only Carbon's.\n\n* refactor(validation): rely on stub taint source of narrowed reads #0\n\n- Psalm keeps @psalm-taint-source on provider-typed calls\n  (vimeo/psalm#11765), so only validate() (a @method pseudo-method)\n  and magic property reads are still re-sourced\n- validated() taint now follows the value through a variable\n- a nested call loses the rule escape (vimeo/psalm#13604); the two\n  header-escape phpts pin that false positive\n\n* refactor(stubs): drop object-first gates in conditionals #0\n\nA Stringable object no longer matches string or literal subjects\n(vimeo/psalm#12428, vimeo/psalm#12440).\n\n* test: drop fixed upstream XFAIL and argv workaround #0\n\n- named argument binds to the override parameter (vimeo/psalm#13013)\n- Config::loadFromXML() no longer reads $argv (vimeo/psalm#12070)\n\n* test: tag pinned header escape with todo-by #0",
+          "timestamp": "2026-11-12T09:58:31+01:00",
+          "tree_id": "493174f0270c4e35f38cd19251af23c4590c8811",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5f584a290c28c6735d7fa732aab1cdb39028fe22"
+        },
+        "date": 1794474120247,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.43,
+            "range": "± 0.21",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1273,
             "unit": "MB"
           }
         ]
