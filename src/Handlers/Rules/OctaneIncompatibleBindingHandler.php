@@ -23,17 +23,14 @@ use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\Enum_;
 use PhpParser\Node\Stmt\Interface_;
 use PhpParser\Node\Stmt\Trait_;
-use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\FileManipulation;
-use Psalm\LaravelPlugin\Internal\ClassDescendants;
-use Psalm\LaravelPlugin\Internal\ModelCallGuard;
-use Psalm\LaravelPlugin\Internal\PsalterFix;
+use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Blade\ShadowEntry;
+use Psalm\LaravelPlugin\Blade\ShadowRegistry;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
-use Psalm\Type\Atomic\TNamedObject;
-use Psalm\Type\Union;
 
 /**
  * Flags request-scoped service resolutions inside long-lived binding closures
@@ -55,17 +52,10 @@ use Psalm\Type\Union;
  * bindings like `App::singleton(...)` are out of scope) and match remaining
  * calls in O(1) via an isset() lookup on the declaring method id.
  *
- * One binding call gets one issue however many resolutions its closure holds: it sits at the first resolution and
- * its message names them all.
- *
- * Psalter fixes it by renaming the call: `singleton()` becomes `scoped()`, `singletonIf()` becomes `scopedIf()`.
- * The rename is only made when the receiver is exactly one of Laravel's own container classes
- * ({@see self::LARAVEL_CONTAINER_CLASSES}); a subclass may replace `scoped()` with other parameters, and the
- * call's named arguments would then no longer bind, so such a binding is reported and left as written. The same
- * holds when any scanned class that descends from the receiver's type declares `scoped()` or `scopedIf()` itself
- * ({@see self::descendantOverridesScoped()}): the declared type may hold an instance of it at runtime. A subclass
- * Psalm never scanned stays a known gap. A receiver that reads `$this` or a `self` / `static` / `parent` name inside a
- * rebindable closure is reported too ({@see ModelCallGuard::isUnsafeReceiverSite()}).
+ * Psalter fixes a finding by renaming the call: `singleton()` becomes `scoped()`, `singletonIf()` becomes
+ * `scopedIf()`. The declaring-method-id match already limits this to Laravel's own `Container` and its contract (a
+ * subclass that overrides `singleton()` never reports), so the receiver type needs no further gate. A finding in a
+ * Blade shadow is reported, not fixed: an edit there would rewrite the generated shadow, never the template.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -96,26 +86,6 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         'illuminate\\container\\container::singletonif' => true,
         'illuminate\\contracts\\container\\container::singleton' => true,
         'illuminate\\contracts\\container\\container::singletonif' => true,
-    ];
-
-    /**
-     * Receiver classes (lowercased) whose `scoped()` / `scopedIf()` are the framework's own, the only ones the
-     * Psalter rename is proven for. `$this->app` in a service provider is the foundation contract.
-     */
-    private const LARAVEL_CONTAINER_CLASSES = [
-        'illuminate\\foundation\\application' => true,
-        'illuminate\\container\\container' => true,
-        'illuminate\\contracts\\container\\container' => true,
-        'illuminate\\contracts\\foundation\\application' => true,
-    ];
-
-    /**
-     * Classes (lowercased) allowed to declare `scoped()` / `scopedIf()` for the rename to stay proven: the framework's
-     * own. A descendant of the receiver's type declaring either anywhere else may change its parameters.
-     */
-    private const LARAVEL_SCOPED_DECLARERS = [
-        'illuminate\\foundation\\application' => true,
-        'illuminate\\container\\container' => true,
     ];
 
     /**
@@ -235,99 +205,29 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
         $containerParamName = self::getFirstParamName($closure);
 
-        $abstracts = [];
-        $firstNode = null;
+        $codebase = $event->getCodebase();
+        $source = $event->getStatementsSource();
+        $suppressed = $source->getSuppressedIssues();
+        $isShadow = ShadowRegistry::entryFor($source->getFilePath()) instanceof ShadowEntry;
+        $replacement = $methodNameLower === 'singleton' ? 'scoped' : 'scopedIf';
+        $edits = [];
 
         foreach (self::findResolutions($closure, $containerParamName) as [$abstract, $node]) {
-            $abstracts[] = $abstract;
-            $firstNode ??= $node;
-        }
+            $issue = self::buildIssue($event, $methodName, $abstract, $node);
 
-        if ($abstracts === [] || $firstNode === null) {
-            return;
-        }
+            if (!$isShadow && $codebase->shouldFixIssue($issue, $suppressed)) {
+                // Every resolution of one closure yields the same edit; Psalm dedupes by start:end.
+                $edits = [new FileManipulation($expr->name->getStartFilePos(), $expr->name->getEndFilePos() + 1, $replacement)];
 
-        $issue = self::buildIssue($event, $methodName, \array_values(\array_unique($abstracts)), $firstNode);
-
-        $nameNode = $expr->name;
-        $replacement = $methodNameLower === 'singleton' ? 'scoped' : 'scopedIf';
-
-        // The edit is a pure function of the method-name span, so a re-analysis of the same call yields the
-        // identical edit and Psalm dedupes it.
-        $containerClass = self::laravelContainerReceiver($event, $expr);
-        $codebase = $event->getCodebase();
-
-        // A closure can be rebound onto another object or class scope (`Closure::bind()`): a receiver reading `$this` or
-        // `self` / `static` / `parent` then names another container, whose `scoped()` may differ (same rule as
-        // ImplicitQueryBuilderCall). `$this->app` in a provider method, outside any closure, is unaffected.
-        $source = $event->getStatementsSource();
-        $fixable = $containerClass !== null
-            && !ModelCallGuard::isUnsafeReceiverSite($source, $expr->var)
-            // Memoized per class, cheap next to Psalm's own work, and run in plain mode too so the advertised
-            // "can be fixed" count matches what Psalter does.
-            && !self::descendantOverridesScoped($codebase, $containerClass);
-
-        $replacements = PsalterFix::fixOrReport(
-            $codebase,
-            $source,
-            $issue,
-            $fixable
-                ? [new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement)]
-                : [],
-        );
-
-        if ($replacements !== null) {
-            $event->setFileReplacements($replacements);
-        }
-    }
-
-    /**
-     * The receiver's class when it is exactly one of Laravel's own container types, so its own `scoped()` /
-     * `scopedIf()` are the framework's and the renamed call (named arguments included) binds. A subclass, a union or
-     * an unknown type is not proven: the finding is reported and left as written.
-     */
-    private static function laravelContainerReceiver(AfterMethodCallAnalysisEvent $event, MethodCall $expr): ?string
-    {
-        $receiverType = $event->getStatementsSource()->getNodeTypeProvider()->getType($expr->var);
-
-        if (!$receiverType instanceof Union || !$receiverType->isSingle()) {
-            return null;
-        }
-
-        $atomicType = $receiverType->getSingleAtomic();
-
-        return $atomicType instanceof TNamedObject
-            && $atomicType->getIntersectionTypes() === []
-            && isset(self::LARAVEL_CONTAINER_CLASSES[\strtolower($atomicType->value)])
-            ? $atomicType->value
-            : null;
-    }
-
-    /**
-     * Whether a scanned class descending from the receiver's type declares `scoped()` or `scopedIf()` outside the
-     * framework (see {@see self::LARAVEL_SCOPED_DECLARERS}); the declared receiver type can hold an instance of it at
-     * runtime. A trait's declaration counts the same way, since `declaring_method_ids` names the trait. Unprovable
-     * counts as overriding.
-     */
-    private static function descendantOverridesScoped(Codebase $codebase, string $receiverClass): bool
-    {
-        $descendants = ClassDescendants::of($codebase, $receiverClass);
-
-        if ($descendants === null) {
-            return true;
-        }
-
-        foreach ($descendants as $descendant) {
-            foreach (['scoped', 'scopedif'] as $method) {
-                $declaring = $descendant->declaring_method_ids[$method] ?? null;
-
-                if ($declaring !== null && !isset(self::LARAVEL_SCOPED_DECLARERS[\strtolower($declaring->fq_class_name)])) {
-                    return true;
-                }
+                continue;
             }
+
+            IssueBuffer::accepts($issue, $suppressed, !$isShadow);
         }
 
-        return false;
+        if ($edits !== []) {
+            $event->setFileReplacements($edits);
+        }
     }
 
     /**
@@ -638,22 +538,17 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         );
     }
 
-    /**
-     * One issue per binding call, at the first resolution; with several, the message names every abstract.
-     *
-     * @param non-empty-list<string> $abstracts
-     * @psalm-pure
-     */
+    /** @psalm-pure */
     private static function buildIssue(
         AfterMethodCallAnalysisEvent $event,
         string $methodName,
-        array $abstracts,
+        string $abstract,
         Node $node,
     ): OctaneIncompatibleBinding {
         return new OctaneIncompatibleBinding(
             \sprintf(
-                "Request-scoped %s resolved inside %s() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.",
-                "'" . \implode("', '", $abstracts) . "'",
+                "Request-scoped '%s' resolved inside %s() closure. State leaks across Octane requests. Use scoped(), bind(), or resolve at call site.",
+                $abstract,
                 $methodName,
             ),
             new CodeLocation($event->getStatementsSource(), $node),

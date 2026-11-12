@@ -11,12 +11,10 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
-use Psalm\Context;
-use Psalm\FileManipulation;
+use Psalm\Exception\UnpopulatedClasslikeException;
+use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderScopeHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelMethodHandler;
-use Psalm\LaravelPlugin\Internal\ModelCallGuard;
-use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\ImplicitQueryBuilderCall;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
@@ -81,53 +79,9 @@ use Psalm\Type\Union;
  * method was resolved, so it sees magic-forwarded calls that a method-resolution provider hook
  * might never be consulted for. The `instanceof` / `Identifier` / `method_exists` guards reject
  * the vast majority of expressions before any codebase lookup.
- *
- * ## Psalter fix
- *
- * `psalter --issues=ImplicitQueryBuilderCall` inserts `query()->` (static call) or `newQuery()->`
- * (instance call) before the method name, as one edit; `__callStatic` -> `__call` -> `newQuery()` is the
- * path Laravel already takes, so behavior is unchanged. These are reported, not fixed:
- *  - a first-class callable and a `self::` / `static::` / `parent::` call (object context would keep the
- *    instance's state; `query()` drops it);
- *  - a named static call in a non-static method or closure whose `$this` is, or may be, an instance of the
- *    target model (see {@see ModelCallGuard::mayRunInObjectContextOf()}): PHP runs it as `$this->__call()` there;
- *  - any call in a trait (one shared edit; see {@see PsalterFix::fixOrReport()});
- *  - in a closure or arrow function, which `Closure::bind()` / `bindTo()` / `call()` can rebind, a call whose
- *    receiver contains a `self` / `static` / `parent` name (the class scope can be rebound even in a `static`
- *    closure), and, in a non-static one, a named static call or a receiver containing `$this` (the object can be
- *    rebound; see {@see ModelCallGuard::isUnsafeEditSite()}). An instance call on a captured model reads neither and is
- *    fixed in a closure;
- *  - a named static call on a model whose class chain overrides `__call`, `__callStatic`, `query` or `forwardCallTo`:
- *    the insertion skips `__callStatic` / `__call` (`query()` is on the rewritten path only);
- *  - an instance call on a model whose class chain overrides `__call` or `forwardCallTo`, or on one that has a
- *    scanned subclass doing so or declaring the called method itself (the object behind `$model->where()` can be
- *    that subclass; see {@see ModelCallGuard::descendantOverridesAny()}): the insertion skips that code. A runtime
- *    subclass Psalm never scanned stays a known gap. A named static call reaches only the named class
- *    (`new static`), so its subclasses are not scanned.
- *
- * `newQuery()` is on both paths (`Model::__call()` forwards through `$this->newQuery()`, and `Model::query()` is
- * `(new static)->newQuery()`), and `forwardDecoratedCallTo()` on neither, so an override of either is no reason to
- * decline.
  */
 final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisInterface
 {
-    /**
-     * What `Model::where()` runs and `Model::query()->where()` skips: `__callStatic` (`new static`, then `__call`),
-     * `__call`, `forwardCallTo`, and `query` (which a scope call and the rewrite both use, but with different
-     * entry points).
-     *
-     * @var list<lowercase-string>
-     */
-    private const STATIC_CALL_GUARDED = ['__call', '__callstatic', 'query', 'forwardcallto'];
-
-    /**
-     * What `$model->where()` runs and `$model->newQuery()->where()` skips: `__call` and `forwardCallTo`. The called
-     * method's own declaration on a subclass is checked separately.
-     *
-     * @var list<lowercase-string>
-     */
-    private const INSTANCE_CALL_GUARDED = ['__call', 'forwardcallto'];
-
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
@@ -178,85 +132,19 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
             return null;
         }
 
-        $shortName = ModelCallGuard::shortClassName($modelClass);
+        $shortName = self::shortClassName($modelClass);
         $methodName = $expr->name->name;
-        $source = $event->getStatementsSource();
-        $isStatic = $expr instanceof StaticCall;
 
-        // An instance call names no class to call `query()` on, and `$model->newQuery()` keeps the
-        // instance's connection and table, so that is the advice (and the fix) for it.
-        $entryPoint = $isStatic ? "{$shortName}::query()" : '$model->newQuery()';
-
-        $issue = new ImplicitQueryBuilderCall(
-            "{$shortName}::{$methodName}() is forwarded to the query builder through Laravel's "
-            . "__callStatic/__call magic. Use {$entryPoint}->{$methodName}(...) instead.",
-            new CodeLocation($source, $expr),
+        IssueBuffer::accepts(
+            new ImplicitQueryBuilderCall(
+                "{$shortName}::{$methodName}() is forwarded to the query builder through Laravel's "
+                . "__callStatic/__call magic. Use {$shortName}::query()->{$methodName}(...) instead.",
+                new CodeLocation($event->getStatementsSource(), $expr),
+            ),
+            $event->getStatementsSource()->getSuppressedIssues(),
         );
 
-        // Reported, never fixed (an empty edit list):
-        //  - the first-class callable `Model::where(...)` is a callable on the model, not a call, so
-        //    prefixing `query()->` would not be a behavior-preserving rewrite;
-        //  - `self::` / `static::` / `parent::` may run in object context, where the call dispatches to
-        //    `$this->__call()` and keeps the instance's connection and table, while `static::query()`
-        //    builds a fresh model and drops that state.
-        $isSpecialClass = $expr instanceof StaticCall && $expr->class instanceof Name && $expr->class->isSpecialClassName();
-        $replacements = [];
-
-        if (!$expr->isFirstClassCallable() && !$isSpecialClass) {
-            // A rebound closure changes what the call reads: `$this` through its class (`Post::where()`,
-            // object-context dispatch) or its receiver (`$this->where()`, `(clone $this)->where()`), and the class
-            // scope through a `self` / `static` / `parent` name in the receiver. A captured variable reads neither.
-            $readsThis = $isStatic || ($expr instanceof MethodCall && ModelCallGuard::receiverReadsThis($expr->var));
-            $readsClassScope = $expr instanceof MethodCall && ModelCallGuard::receiverReadsClassScope($expr->var);
-
-            if (self::rewriteKeepsBehavior($modelClass, $methodNameLower, $isStatic, $readsThis, $readsClassScope, $source, $event->getContext(), $codebase)) {
-                $nameStart = $expr->name->getStartFilePos();
-                $replacements = [new FileManipulation($nameStart, $nameStart, $isStatic ? 'query()->' : 'newQuery()->')];
-            }
-        }
-
-        $fix = PsalterFix::fixOrReport($codebase, $source, $issue, $replacements);
-
-        if ($fix !== null) {
-            $event->setFileReplacements($fix);
-        }
-
         return null;
-    }
-
-    /**
-     * Whether inserting `query()->` / `newQuery()->` keeps what the forwarded call does. When not, the
-     * issue is reported and not fixed.
-     *
-     * @param class-string<Model> $modelClass
-     * @param lowercase-string $methodNameLower
-     */
-    private static function rewriteKeepsBehavior(
-        string $modelClass,
-        string $methodNameLower,
-        bool $isStatic,
-        bool $readsThis,
-        bool $readsClassScope,
-        StatementsSource $source,
-        Context $context,
-        Codebase $codebase,
-    ): bool {
-        if (ModelCallGuard::isUnsafeEditSite($source, $readsThis, $readsClassScope)) {
-            return false;
-        }
-
-        if ($isStatic) {
-            // `Model::where()` builds `new static` of the named class, so no subclass is reachable here: the
-            // object-context case, where `$this` can be one, is the last check.
-            return !ModelCallGuard::overridesAny($codebase, $modelClass, self::STATIC_CALL_GUARDED)
-                && !ModelCallGuard::mayRunInObjectContextOf($codebase, $modelClass, $source, $context);
-        }
-
-        // The runtime object can be any subclass: its `__call()` (or its own method of that name) is what runs.
-        // The scan is memoized per class, cheap next to Psalm's own work, and run in plain mode too so the
-        // advertised "can be fixed" count matches what Psalter does.
-        return !ModelCallGuard::overridesAny($codebase, $modelClass, self::INSTANCE_CALL_GUARDED)
-            && !ModelCallGuard::descendantOverridesAny($codebase, $modelClass, self::INSTANCE_CALL_GUARDED, $methodNameLower);
     }
 
     /**
@@ -276,7 +164,7 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
 
         $className = self::resolveClassName($expr->class, $source);
 
-        if ($className === null || !ModelCallGuard::isModelSubclass($className, $codebase)) {
+        if ($className === null || !self::isModelSubclass($className, $codebase)) {
             return null;
         }
 
@@ -326,7 +214,7 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         foreach ($receiverType->getAtomicTypes() as $atomicType) {
             // Any non-model atomic (a Builder/Relation/Collection object, null, a scalar) makes
             // the receiver ambiguous — bail rather than guess.
-            if (!$atomicType instanceof TNamedObject || !ModelCallGuard::isModelSubclass($atomicType->value, $codebase)) {
+            if (!$atomicType instanceof TNamedObject || !self::isModelSubclass($atomicType->value, $codebase)) {
                 return null;
             }
 
@@ -339,6 +227,30 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         }
 
         return $modelClass;
+    }
+
+    /**
+     * @psalm-assert-if-true class-string<Model> $className
+     */
+    private static function isModelSubclass(string $className, Codebase $codebase): bool
+    {
+        if ($className === Model::class) {
+            return true;
+        }
+
+        if (!$codebase->classExists($className)) {
+            return false;
+        }
+
+        // classExtends (from_api: true) throws InvalidArgumentException on missing/aliased storage
+        // and UnpopulatedClasslikeException (a sibling LogicException) when storage exists but is
+        // not populated yet. Either way the subclass link can't be proven → treat as not a model.
+        // Mirrors BuilderScopeHandler::isMethodAccessibleFrom; reached on a broad receiver set here.
+        try {
+            return $codebase->classExtends($className, Model::class);
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return false;
+        }
     }
 
     /**
@@ -397,5 +309,13 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         }
 
         return isset($classStorage->declaring_method_ids[$methodNameLower]);
+    }
+
+    /** @psalm-pure */
+    private static function shortClassName(string $fqcn): string
+    {
+        $pos = \strrpos($fqcn, '\\');
+
+        return $pos !== false ? \substr($fqcn, $pos + 1) : $fqcn;
     }
 }

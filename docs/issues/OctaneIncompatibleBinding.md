@@ -8,8 +8,6 @@ nav_order: 7
 
 Emitted when a `singleton()` or `singletonIf()` binding closure resolves a request-scoped Laravel service such as `Request`, `Session`, `Auth`, or `Config`.
 
-A binding is reported once, at its first request-scoped resolution; when the closure resolves several, the message names all of them.
-
 **Auto-enabled when `laravel/octane` is installed.** Projects that don't depend on the package directly can opt in via `<findOctaneIncompatibleBinding value="true" />` in `psalm.xml`. To opt out even when `laravel/octane` is installed, set `<findOctaneIncompatibleBinding value="false" />`. See [Configuration](../config.md#findoctaneincompatiblebinding).
 
 `bind()`, `bindIf()`, `scoped()`, and `scopedIf()` are NOT flagged. `bind()` re-executes the closure on every resolution; `scoped()` instances are flushed between requests under Octane (via `Container::forgetScopedInstances()`), so neither leaks captured state.
@@ -81,8 +79,16 @@ $this->app->singleton(MyService::class, function () {
 ./vendor/bin/psalter --issues=OctaneIncompatibleBinding
 ```
 
-`singleton()` becomes `scoped()` and `singletonIf()` becomes `scopedIf()`; only the method name is rewritten. The rename deliberately changes the binding's lifetime from one instance per worker to one per request; that is the fix, not a side effect.
+`singleton()` becomes `scoped()` and `singletonIf()` becomes `scopedIf()`; only the method name changes:
 
-**Why `scoped()` and not `bind()`.** `scoped()` keeps one instance per request (or per queue job): Octane flushes it between requests through `forgetScopedInstances()`, so nothing leaks, and repeated resolutions within the request still share the instance. `bind()` would rebuild the service on every resolution. Outside Octane, a scoped binding behaves like a singleton for the lifetime of the request.
+```php
+// Before
+$this->app->singleton(MyService::class, fn ($app) => new MyService($app->make(Request::class)));
 
-Psalter renames only calls whose receiver is typed as one of Laravel's own container classes and has no scanned subclass declaring its own `scoped()` / `scopedIf()`, and never inside a trait. A subclass Psalm cannot scan stays a [known gap](index.md#known-gaps). Everything else is reported and left as written: see [When Psalter leaves a finding unfixed](index.md#when-psalter-leaves-a-finding-unfixed).
+// After
+$this->app->scoped(MyService::class, fn ($app) => new MyService($app->make(Request::class)));
+```
+
+The rename changes the binding's lifetime from one instance per worker to one per request, which is the fix. A finding inside a Blade template is reported but not rewritten. Suppressed findings are left alone.
+
+Known gap: a container subclass that overrides only `scoped()` or `scopedIf()` (and not `singleton()`) gets the renamed call, which may not accept the same arguments.

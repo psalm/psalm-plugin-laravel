@@ -1,1 +1,1 @@
-<p>{{ (new \PsalterFixture\Models\Post())->where('title', 'x')->count() }}</p>
+@php app()->singleton('x', fn ($app) => $app->make('request')); @endphp

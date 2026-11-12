@@ -183,7 +183,7 @@ ImplicitQueryBuilderCall on line %d: Customer::active() is forwarded to the quer
 ImplicitQueryBuilderCall on line %d: DirectScopeModel::active() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use DirectScopeModel::query()->active(...) instead.
 ImplicitQueryBuilderCall on line %d: Vehicle::whereElectric() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Vehicle::query()->whereElectric(...) instead.
 ImplicitQueryBuilderCall on line %d: Invoice::wherePaid() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Invoice::query()->wherePaid(...) instead.
-ImplicitQueryBuilderCall on line %d: Customer::where() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use $model->newQuery()->where(...) instead.
-ImplicitQueryBuilderCall on line %d: Customer::find() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use $model->newQuery()->find(...) instead.
-ImplicitQueryBuilderCall on line %d: Vehicle::whereByMake() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use $model->newQuery()->whereByMake(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::where() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->where(...) instead.
+ImplicitQueryBuilderCall on line %d: Customer::find() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->find(...) instead.
+ImplicitQueryBuilderCall on line %d: Vehicle::whereByMake() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Vehicle::query()->whereByMake(...) instead.
 UndefinedMagicMethod on line %d: Magic method App\Models\Customer::undefinedbuildermethod does not exist
