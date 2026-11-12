@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794475060592,
+  "lastUpdate": 1794489373241,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18405,6 +18405,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1272,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "400eb21a104f3aa09ac67c7fbd756dc1acf09ec6",
+          "message": "fix(stubs): keep Stringable on stubbed Carbon and Enumerable types (#2268)\n\nPHP makes a class or interface Stringable when it declares __toString().\nThe CarbonInterface, CarbonPeriod and Enumerable stubs redeclare those types\nwithout __toString(), so Psalm dropped Stringable from them and from every\nimplementor: Carbon in a scalar|Stringable slot reported ImplicitToStringCast,\nand a Collection returned as Stringable reported InvalidReturnStatement.",
+          "timestamp": "2026-11-12T14:13:40+01:00",
+          "tree_id": "7ceb715c1488028daff68a38e1ccb5eb401c0843",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/400eb21a104f3aa09ac67c7fbd756dc1acf09ec6"
+        },
+        "date": 1794489371332,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 22.64,
+            "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1273,
             "unit": "MB"
           }
         ]
