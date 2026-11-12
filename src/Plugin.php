@@ -15,6 +15,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
+use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
@@ -53,6 +54,10 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $output = $this->getProgress($registration);
+        foreach ($pluginConfig->deprecations as $deprecation) {
+            PluginWarning::emit($output, $deprecation);
+        }
+
         $this->loadInitializationHandlers();
         $this->resetInvocationState();
 
