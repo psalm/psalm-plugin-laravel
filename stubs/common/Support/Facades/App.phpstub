@@ -9,6 +9,11 @@ namespace Illuminate\Support\Facades;
  *
  * FacadeStubPrecedenceHandler removes that shadowing pseudo-method after population, so Psalm
  * resolves this native stub signature instead of the vendor annotation.
+ *
+ * Re-declaring the class drops the sealing flag that Laravel's `@method` tags set on the vendor facade,
+ * so it is restated to keep an unknown call (`Facade::definitelyNotAMethod()`) reported.
+ *
+ * @psalm-seal-methods
  */
 class App extends Facade
 {
