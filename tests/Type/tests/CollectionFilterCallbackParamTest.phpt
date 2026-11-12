@@ -421,7 +421,7 @@ ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::fi
 ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
 ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal, int):bool|null, but parent type Closure[pure](CfcpDog):true provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Collection::filter expects callable[impure](Illuminate\Database\Eloquent\Model, int):bool|null, but Closure[pure](CfcpDog):true provided
-MixedArgumentTypeCoercion on line %d: Type mixed should be a subtype of parent
+MixedArgumentTypeCoercion on line %d: Type mixed should be a subtype of CfcpAnimal
 MixedArgumentTypeCoercion on line %d: Type mixed should be a subtype of CollectionFilterCallbackParamTest
 ArgumentTypeCoercion on line %d: Type Illuminate\Database\Eloquent\Model should be a subtype of CfcpModel
 ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Database\Eloquent\Collection::reject expects Illuminate\Database\Eloquent\Model|bool|callable[impure](Illuminate\Database\Eloquent\Model, int):bool, but parent type Closure[pure](CfcpModel):false provided

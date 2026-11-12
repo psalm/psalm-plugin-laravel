@@ -87,11 +87,11 @@ final class AppClass
     }
 }
 
-// Tags declared outside `Carbon\Traits\*` are left alone.
+// The real method wins over a trait tag outside `Carbon\Traits\*` too.
 function non_carbon_trait_tag(AppClass $a): void
 {
     $_value = $a->realMethod();
-    /** @psalm-check-type-exact $_value = non-empty-string */
+    /** @psalm-check-type-exact $_value = string */
 }
 
 // Effective visibility: the appearing class's `use T { m as ... }` map, and the declaring method's own name.

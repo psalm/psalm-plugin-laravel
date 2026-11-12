@@ -7,14 +7,10 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-// @todo-by https://github.com/vimeo/psalm/issues/11765 expect TaintedHtml here
 /**
- * Known limitation: when ValidatedTypeHandler provides a return type,
- * Psalm skips the stub's @psalm-taint-source. Taint is lost through
- * variable assignment. Per "silence over false positives" principle,
- * this is acceptable — we don't report issues we're not certain about.
+ * The stub's @psalm-taint-source on validated() survives ValidatedTypeHandler
+ * narrowing the return type, so the taint follows the value through a variable.
  *
- * Direct usage (echo $request->validated('body')) IS detected.
  * @see TaintedHtmlValidatedString.phpt
  */
 class BodyRequest extends FormRequest
@@ -27,7 +23,9 @@ class BodyRequest extends FormRequest
 
 function renderViaVariable(BodyRequest $request): void {
     $body = $request->validated('body');
-    echo $body; // No taint reported — known limitation
+    echo $body;
 }
 ?>
 --EXPECTF--
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

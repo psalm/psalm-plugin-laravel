@@ -684,12 +684,6 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Facades/DateFacadeHandler.php';
         $registration->registerHooksFromClass(Handlers\Facades\DateFacadeHandler::class);
 
-        // @todo-by https://github.com/vimeo/psalm/issues/13545 remove CarbonTraitPseudoMethodHandler and its registration
-        // Drops `@method` tags Carbon documents on its own traits (`Week::dayOfYear()`) when the class
-        // really declares the method, so the plugin's Carbon getter/setter stubs apply (#2253).
-        require_once __DIR__ . '/Handlers/Carbon/CarbonTraitPseudoMethodHandler.php';
-        $registration->registerHooksFromClass(Handlers\Carbon\CarbonTraitPseudoMethodHandler::class);
-
         // Copies taint sinks from each mapped facade's forwarding target onto the surviving
         // `@method` pseudo-methods, so `Storage::get($userInput)` is a sink like the
         // `Storage::disk()->get($userInput)` chain already is. FacadeStubPrecedenceHandler

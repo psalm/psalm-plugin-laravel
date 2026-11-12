@@ -24,7 +24,6 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      */
     public function items(): array {}
 
-    // @todo-by https://github.com/vimeo/psalm/issues/12440 drop the `TValue is object` wrapper from the getCollection() conditional
     /**
      * paginate()/simplePaginate()/cursorPaginate() on an Eloquent\Builder always hold an
      * Eloquent\Collection at runtime; DB::table(...) rows (stdClass) and manually-constructed
@@ -35,12 +34,7 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      * TValue is a Model, because the constructor/setCollection() never upgrade the wrapped
      * collection class — only Eloquent\Builder's own pagination methods do.
      *
-     * `TValue is Model` is undecidable for a TEMPLATE TValue (`Model::__toString()` exists): both
-     * branches are evaluated and a generic `Page<T>` gets a spurious `Eloquent\Collection<TKey, T&Model>`
-     * (vimeo/psalm#12440). The outer `TValue is object` arm decides it first; a leading
-     * `TValue is string` would also match a Model, which is stringable.
-     *
-     * @psalm-return (TValue is object ? (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>) : \Illuminate\Support\Collection<TKey, TValue>)
+     * @psalm-return (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>)
      */
     public function getCollection(): \Illuminate\Support\Collection {}
 
@@ -86,9 +80,9 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      * explicitly templated stub resolves on every Laravel version. The setter branch is `$this`
      * (as in Laravel 13.18.0+), which resolves to the receiver with its `<TKey, TValue>`.
      *
-     * Known limitation: a possibly-empty unpack (`fragment(...$args)`) binds `TFragment` from the
-     * element type and misses the getter branch; Laravel 13.18+'s native type does the same.
-     * Pinned by PaginatorFragmentUnpackKnownLimitation.phpt.
+     * Known limitation: a possibly-empty `list<string>` unpack (`fragment(...$args)`) misses the
+     * getter branch, as on `Route::domain()` (RouteDomainKnownLimitation.phpt); a sealed
+     * `array{0?: string}` resolves both (PaginatorFragmentUnpackTest.phpt).
      *
      * @template TFragment of string|null
      *
@@ -160,11 +154,10 @@ abstract class AbstractCursorPaginator implements \Illuminate\Contracts\Support\
      */
     public function items(): array {}
 
-    // @todo-by https://github.com/vimeo/psalm/issues/12440 drop the `TValue is object` wrapper from the getCollection() conditional
     /**
      * See AbstractPaginator::getCollection() above for the rationale.
      *
-     * @psalm-return (TValue is object ? (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>) : \Illuminate\Support\Collection<TKey, TValue>)
+     * @psalm-return (TValue is \Illuminate\Database\Eloquent\Model ? \Illuminate\Database\Eloquent\Collection<TKey, TValue> : \Illuminate\Support\Collection<TKey, TValue>)
      */
     public function getCollection(): \Illuminate\Support\Collection {}
 

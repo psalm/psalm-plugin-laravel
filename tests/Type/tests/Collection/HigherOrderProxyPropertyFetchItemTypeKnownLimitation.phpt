@@ -56,18 +56,17 @@ final class HigherOrderProxyPropertyFetchItemTypeKnownLimitation
     }
 
     /**
-     * A nullsafe OUTER fetch (`$c->map?->parent`) is analysed by Psalm on a temporary receiver, so it keeps the
-     * item-level type: ideally `Collection<int, PropFetchLimitItem|null>`.
+     * Not a limitation: a nullsafe OUTER fetch (`$c->map?->parent`) resolves like the plain one.
      *
      * @param Collection<int, PropFetchLimitItem> $p
      */
     public function nullsafeOuterFetch(Collection $p): void
     {
         $_parent = $p->map?->parent;
-        /** @psalm-check-type-exact $_parent = PropFetchLimitItem|null */
+        /** @psalm-check-type-exact $_parent = Collection<int, PropFetchLimitItem|null> */
     }
 }
 ?>
 --EXPECTF--
-RedundantCondition on line %d: Type Illuminate\Support\HigherOrderCollectionProxy<'map', PropFetchLimitItem, Illuminate\Support\Collection<int, PropFetchLimitItem>> for $__tmp_nullsafe__%d is never null
+RedundantCondition on line %d: Type Illuminate\Support\HigherOrderCollectionProxy<'map', PropFetchLimitItem, Illuminate\Support\Collection<int, PropFetchLimitItem>> for $p->map is never null
 TypeDoesNotContainNull on line %d: Illuminate\Support\HigherOrderCollectionProxy<string, PropFetchLimitItem, Illuminate\Support\Collection<int, PropFetchLimitItem>> does not contain null

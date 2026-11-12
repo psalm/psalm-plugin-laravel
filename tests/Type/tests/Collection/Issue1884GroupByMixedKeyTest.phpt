@@ -4,6 +4,10 @@
 use Illuminate\Support\Collection;
 use App\Models\Customer;
 
+// A declared `callable(...): mixed` argument breaks the `TNewKey` / `TGroupKey` bound Laravel gives
+// keyBy() / groupBy(), so Psalm checks it against the bound (vimeo/psalm#13447): PossiblyInvalidArgument.
+// A closure returning mixed is not reported.
+
 /** @extends Collection<string, Customer> */
 final class Issue1884FixedCollection extends Collection {}
 
@@ -121,3 +125,8 @@ function chained_static_receiver_still_answers(Collection $c): void
 }
 ?>
 --EXPECTF--
+PossiblyInvalidArgument on line %d: Argument 1 of Issue1884Reversed::keyBy expects array<array-key, mixed>|callable[impure](int, string):(UnitEnum|array-key)|string, but possibly different type callable[impure](int):mixed provided
+PossiblyInvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::groupBy expects array<array-key, mixed>|callable[impure](App\Models\Customer, int):(Stringable|UnitEnum|array-key)|string, but possibly different type callable[impure](App\Models\Customer):mixed|list<string> provided
+PossiblyInvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::keyBy expects array<array-key, mixed>|callable[impure](App\Models\Customer, array-key):(UnitEnum|array-key)|string, but possibly different type callable[impure](App\Models\Customer):mixed provided
+PossiblyInvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::keyBy expects array<array-key, mixed>|callable[impure](App\Models\Customer, string):(UnitEnum|array-key)|string, but possibly different type callable[impure](App\Models\Customer):mixed provided
+PossiblyInvalidArgument on line %d: Argument 1 of Issue1884Reversed::keyBy expects array<array-key, mixed>|callable[impure](App\Models\Customer, string):(UnitEnum|array-key)|string, but possibly different type callable[impure](App\Models\Customer):mixed provided

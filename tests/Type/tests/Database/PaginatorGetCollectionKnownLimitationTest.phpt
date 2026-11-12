@@ -56,9 +56,9 @@ function string_value_paginator_get_collection_is_plain_support_collection(Lengt
 }
 
 /**
- * A TEMPLATE TValue still leaks the Model branch without the stub's `TValue is object` arm
- * (vimeo/psalm#12440). The `map()` call is what fails then (ImplicitToStringCast against `T&Model`);
- * `@psalm-check-type-exact` accepts the wrapper-less union too, so it only documents the type.
+ * Not a limitation: a TEMPLATE TValue of a string type resolves to the plain collection too.
+ * Psalm before 7.3.1 leaked the Model branch (`T&Model`, vimeo/psalm#12440); the `map()` call
+ * is what failed then (ImplicitToStringCast), as `@psalm-check-type-exact` accepts that union.
  *
  * @template T of string
  * @param LengthAwarePaginator<int, T> $paginator
