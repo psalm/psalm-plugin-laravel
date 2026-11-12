@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794393174335,
+  "lastUpdate": 1794472234874,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18295,6 +18295,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 29.04,
             "range": "± 0.75",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1250,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "212da17ec1b0df6dc9ec7402f412e8336ee8139c",
+          "message": "perf(factories): look up count-keeping methods with isset() instead of in_array() (#2263)\n\nA negated in_array() over the 12-literal list inside || made Psalm's\nanalysis of FactoryCount::keepsCount() exponential: about 45s per\nuncached self-analysis run. A keyed constant with isset() avoids it.\n\nUpstream: vimeo/psalm#13603",
+          "timestamp": "2026-11-12T09:28:14+01:00",
+          "tree_id": "649550a1f7985d395a8b040d2cfee7e0c27524cf",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/212da17ec1b0df6dc9ec7402f412e8336ee8139c"
+        },
+        "date": 1794472233182,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.97,
+            "range": "± 0.37",
             "unit": "s"
           },
           {
