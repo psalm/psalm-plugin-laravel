@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794521956090,
+  "lastUpdate": 1794526240172,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18510,6 +18510,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1272,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "50896671897f610c832ef70f73847779d81db01c",
+          "message": "Let Psalter fix `OctaneIncompatibleBinding` (#2261)\n\n* feat(psalter): make OctaneIncompatibleBinding fixable by Psalter\n\nThe plugin implements Psalm 7.3's PluginFixableIssuesInterface\n(psalm/psalm-plugin-api ^0.4.2). PsalterFix decides per finding whether to\nrewrite or report, and never rewrites a compiled Blade template. Psalter\nrenames singleton()/singletonIf() to scoped()/scopedIf() when the receiver\nis one of Laravel's own container types; a binding is now reported once,\nnaming every request-scoped service its closure resolves.\n\nRefs #2259\n\n* feat(psalter): make ImplicitQueryBuilderCall fixable by Psalter\n\nStatic calls get query()->, instance calls newQuery()->. Calls whose\ndispatch could differ (self/static/parent, object context of a related\nclass, rebindable closures, traits, models overriding __call/__callStatic,\nforwardCallTo() or query hooks) stay reported without a rewrite. The\ninstance-call message now suggests newQuery().\n\nRefs #2259\n\n* refactor: share the model-class helpers between ModelMake and ImplicitQueryBuilderCall\n\nRefs #2259\n\n* fix(psalter): decline fixes that a rebound closure, a trait or a scanned subclass could break\n\n- ImplicitQueryBuilderCall: a receiver containing `$this` or a self/static/parent name anywhere\n  (`(clone $this)->where()`) depends on the closure's binding, not just a `$this` chain.\n- Every fixable issue: a call inside a trait is reported, so an Octane rename in a trait shared with\n  a container that has another `scoped()` signature is no longer rewritten.\n- Both issues: a scanned class descending from the receiver's type that overrides `__call` and the\n  other forwarding entry points (Eloquent) or `scoped`/`scopedIf` (Octane) keeps the call reported.\n  The scan runs only once Psalter would apply the fix.\n- Tests: Blade template and shadow, nullsafe call, descendant and trait cases, and a plain-run check\n  that every unchanged case is still reported. Docs list the unscanned-subclass gaps.\n\n* test(octane): pin one issue per binding that names every request-scoped resolution\n\n* fix(psalter): scope the descendant scan to instance calls and tighten the closure and dispatch guards\n\n- A receiver containing self/static/parent is declined in any closure: Closure::bind() can change\n  the class scope of a static closure too. $this stays a non-static closure concern.\n- An instance call is also declined when a scanned subclass declares the called method itself.\n- Guard lists follow the two paths: a named static call checks __call, __callStatic, query and\n  forwardCallTo; an instance call checks __call and forwardCallTo. newQuery() is on both paths\n  and forwardDecoratedCallTo() on neither, so overriding them no longer declines.\n- Named static calls build new static of the named class, so subclasses are no longer scanned for them.\n- A reflected PHP internal storage left unpopulated by a dynamic new no longer vetoes the scan.\n- The descendant proof is evaluated in plain runs too (memoized), so the advertised fixable count\n  matches Psalter, and the costly-guard parameter is gone.\n- Tests: plain-run check asserts the number of reported sites per unchanged case.\n\n* fix(psalter): decline the Octane rename on a receiver that a rebound closure can change\n\nThe receiver predicate ImplicitQueryBuilderCall uses ($this, self/static/parent inside a closure) now\nlives in ModelCallGuard and guards the Octane rename too. Docs list two accepted known gaps:\nrebound class scope reaching a non-public method, and a trait method re-imported with another\nvisibility.\n\n* refactor(psalter): limit the autofix to OctaneIncompatibleBinding #2259\n\n* docs(octane): link the Psalter docs instead of repeating its usage #2259",
+          "timestamp": "2026-11-13T00:27:22+01:00",
+          "tree_id": "805b98d851df9a550a4b6932e13de4eb1c20ad6f",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/50896671897f610c832ef70f73847779d81db01c"
+        },
+        "date": 1794526237933,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.41,
+            "range": "± 0.07",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1273,
             "unit": "MB"
           }
         ]
