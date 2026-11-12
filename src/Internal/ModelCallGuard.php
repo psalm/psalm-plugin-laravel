@@ -9,8 +9,8 @@ use Psalm\Codebase;
 use Psalm\Context;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\ClosureAnalyzer;
-use Psalm\Internal\Analyzer\TraitAnalyzer;
 use Psalm\StatementsSource;
+use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type\Atomic\TNamedObject;
 
 /**
@@ -53,6 +53,43 @@ final class ModelCallGuard
             return true;
         }
 
+        return self::storageOverridesAny($classStorage, $methods);
+    }
+
+    /**
+     * Whether any scanned class that descends from $modelClass overrides one of $methods (same rule as
+     * {@see self::overridesAny()}, applied to each descendant). The runtime object behind a `$model->where()` or a
+     * `$this->where()` can be any subclass, and its `__call()` is the code the forwarded call reaches, while the
+     * rewrite would skip it. Descendants Psalm never scanned stay invisible (documented known gap). Unprovable counts
+     * as overriding.
+     *
+     * @param class-string<Model> $modelClass
+     * @param list<lowercase-string> $methods
+     */
+    public static function descendantOverridesAny(Codebase $codebase, string $modelClass, array $methods): bool
+    {
+        $descendants = ClassDescendants::of($codebase, $modelClass);
+
+        if ($descendants === null) {
+            return true;
+        }
+
+        foreach ($descendants as $descendant) {
+            if (self::storageOverridesAny($descendant, $methods)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<lowercase-string> $methods
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function storageOverridesAny(ClassLikeStorage $classStorage, array $methods): bool
+    {
         foreach ($methods as $method) {
             $declaring = $classStorage->declaring_method_ids[$method] ?? null;
 
@@ -114,31 +151,25 @@ final class ModelCallGuard
     }
 
     /**
-     * Whether an edit at this call site may not hold for every run of the code. One source edit is shared by
-     * everything that executes that source, so it is withheld where the context is not a fixed one:
-     *  - inside a trait, whose body is analyzed once per consuming class but edited once, so a consumer that
-     *    proves it safe would rewrite the source for the consumers that don't;
-     *  - when the call's dispatch depends on `$this` (`$dependsOnThis`: a named static call such as `Post::where()`),
-     *    inside a non-static closure or arrow function, which `Closure::bind()` / `bindTo()` / `call()` can rebind
-     *    to any object (even one declared in a static method), turning the call into `$this->__call()` of that
-     *    object. Only the innermost closure matters: a `static` one cannot be rebound. An instance call on a
-     *    captured model (`$post->where()`) does not read `$this`, so rebinding does not change it.
+     * Whether the call's dispatch can be changed by rebinding the closure it sits in. One source edit is shared by
+     * everything that executes that source, so it is withheld where `$this` is not a fixed one: when the call
+     * depends on `$this` (`$dependsOnThis`: a named static call such as `Post::where()`, or a receiver that reads
+     * `$this` or a `self` / `static` / `parent` name), inside a non-static closure or arrow function, which
+     * `Closure::bind()` / `bindTo()` / `call()` can rebind to any object (even one declared in a static method) and
+     * any scope. Only the innermost closure matters: a `static` one cannot be rebound. An instance call on a
+     * captured model (`$post->where()`) reads neither, so rebinding does not change it.
+     *
+     * Trait bodies are not decided here: {@see PsalterFix::fixOrReport()} declines every fix inside a trait.
      */
     public static function isUnsafeEditSite(StatementsSource $source, bool $dependsOnThis): bool
     {
-        $closureSeen = false;
+        if (!$dependsOnThis) {
+            return false;
+        }
 
         for ($current = $source, $depth = 0; $depth < 64; ++$depth) {
-            if ($current instanceof TraitAnalyzer) {
-                return true;
-            }
-
-            if ($dependsOnThis && !$closureSeen && $current instanceof ClosureAnalyzer) {
-                if (!$current->isStatic()) {
-                    return true;
-                }
-
-                $closureSeen = true;
+            if ($current instanceof ClosureAnalyzer) {
+                return !$current->isStatic();
             }
 
             $parent = $current->getSource();

@@ -60,7 +60,7 @@ One insertion per flagged call, right before the method name; the rest of the so
 
 The path is the one Laravel already takes: `__callStatic` -> `__call` -> `newQuery()`, and `query()` is `(new static)->newQuery()`. The instance form uses `newQuery()` rather than `query()` so the query keeps the instance's connection and table.
 
-Psalter rewrites only the calls it can show take that route and reports the rest: see [When Psalter leaves a finding unfixed](index.md#when-psalter-leaves-a-finding-unfixed).
+Psalter rewrites only the calls it can show take that route, including when a scanned subclass of the model overrides `__call()`, and reports the rest. A subclass Psalm cannot scan and `Model::__call()`'s `through<Relation>()` dispatch stay [known gaps](index.md#known-gaps). The cases left unfixed are listed under [When Psalter leaves a finding unfixed](index.md#when-psalter-leaves-a-finding-unfixed).
 
 One difference remains where the rewrite is made, and it is the same one you get by applying the advice by hand: the rewrite creates the query builder before the arguments are evaluated, while the magic call creates it after. The two differ only when an argument expression itself changes the default connection, or other global state the builder reads, as in `User::where('id', switchDefaultConnection())`.
 

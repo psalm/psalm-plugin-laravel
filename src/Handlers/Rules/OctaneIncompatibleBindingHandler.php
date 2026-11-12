@@ -23,8 +23,10 @@ use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\Enum_;
 use PhpParser\Node\Stmt\Interface_;
 use PhpParser\Node\Stmt\Trait_;
+use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\FileManipulation;
+use Psalm\LaravelPlugin\Internal\ClassDescendants;
 use Psalm\LaravelPlugin\Internal\PsalterFix;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
@@ -58,7 +60,10 @@ use Psalm\Type\Union;
  * Psalter fixes it by renaming the call: `singleton()` becomes `scoped()`, `singletonIf()` becomes `scopedIf()`.
  * The rename is only made when the receiver is exactly one of Laravel's own container classes
  * ({@see self::LARAVEL_CONTAINER_CLASSES}); a subclass may replace `scoped()` with other parameters, and the
- * call's named arguments would then no longer bind, so such a binding is reported and left as written.
+ * call's named arguments would then no longer bind, so such a binding is reported and left as written. The same
+ * holds when any scanned class that descends from the receiver's type declares `scoped()` or `scopedIf()` itself
+ * ({@see self::descendantOverridesScoped()}): the declared type may hold an instance of it at runtime. A subclass
+ * Psalm never scanned stays a known gap.
  *
  * @see https://laravel.com/docs/octane#dependency-injection-and-octane
  * @see https://github.com/larastan/larastan/blob/3.x/src/Rules/OctaneCompatibilityRule.php
@@ -100,6 +105,15 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         'illuminate\\container\\container' => true,
         'illuminate\\contracts\\container\\container' => true,
         'illuminate\\contracts\\foundation\\application' => true,
+    ];
+
+    /**
+     * Classes (lowercased) allowed to declare `scoped()` / `scopedIf()` for the rename to stay proven: the framework's
+     * own. A descendant of the receiver's type declaring either anywhere else may change its parameters.
+     */
+    private const LARAVEL_SCOPED_DECLARERS = [
+        'illuminate\\foundation\\application' => true,
+        'illuminate\\container\\container' => true,
     ];
 
     /**
@@ -238,13 +252,20 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
         // The edit is a pure function of the method-name span, so a re-analysis of the same call yields the
         // identical edit and Psalm dedupes it.
+        $containerClass = self::laravelContainerReceiver($event, $expr);
+        $codebase = $event->getCodebase();
+
         $replacements = PsalterFix::fixOrReport(
-            $event->getCodebase(),
+            $codebase,
             $event->getStatementsSource(),
             $issue,
-            self::isLaravelContainerReceiver($event, $expr)
+            $containerClass !== null
                 ? [new FileManipulation($nameNode->getStartFilePos(), $nameNode->getEndFilePos() + 1, $replacement)]
                 : [],
+            // Scans every scanned class: only Psalter, once it would apply the rename, pays for it.
+            $containerClass !== null
+                ? static fn(): bool => !self::descendantOverridesScoped($codebase, $containerClass)
+                : null,
         );
 
         if ($replacements !== null) {
@@ -253,23 +274,52 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
     }
 
     /**
-     * Whether the receiver is exactly one of Laravel's own container types, so its `scoped()` / `scopedIf()` are
-     * the framework's and the renamed call (named arguments included) binds. A subclass, a union or an unknown
-     * type is not proven: the finding is reported and left as written.
+     * The receiver's class when it is exactly one of Laravel's own container types, so its own `scoped()` /
+     * `scopedIf()` are the framework's and the renamed call (named arguments included) binds. A subclass, a union or
+     * an unknown type is not proven: the finding is reported and left as written.
      */
-    private static function isLaravelContainerReceiver(AfterMethodCallAnalysisEvent $event, MethodCall $expr): bool
+    private static function laravelContainerReceiver(AfterMethodCallAnalysisEvent $event, MethodCall $expr): ?string
     {
         $receiverType = $event->getStatementsSource()->getNodeTypeProvider()->getType($expr->var);
 
         if (!$receiverType instanceof Union || !$receiverType->isSingle()) {
-            return false;
+            return null;
         }
 
         $atomicType = $receiverType->getSingleAtomic();
 
         return $atomicType instanceof TNamedObject
             && $atomicType->getIntersectionTypes() === []
-            && isset(self::LARAVEL_CONTAINER_CLASSES[\strtolower($atomicType->value)]);
+            && isset(self::LARAVEL_CONTAINER_CLASSES[\strtolower($atomicType->value)])
+            ? $atomicType->value
+            : null;
+    }
+
+    /**
+     * Whether a scanned class descending from the receiver's type declares `scoped()` or `scopedIf()` outside the
+     * framework (see {@see self::LARAVEL_SCOPED_DECLARERS}); the declared receiver type can hold an instance of it at
+     * runtime. A trait's declaration counts the same way, since `declaring_method_ids` names the trait. Unprovable
+     * counts as overriding.
+     */
+    private static function descendantOverridesScoped(Codebase $codebase, string $receiverClass): bool
+    {
+        $descendants = ClassDescendants::of($codebase, $receiverClass);
+
+        if ($descendants === null) {
+            return true;
+        }
+
+        foreach ($descendants as $descendant) {
+            foreach (['scoped', 'scopedif'] as $method) {
+                $declaring = $descendant->declaring_method_ids[$method] ?? null;
+
+                if ($declaring !== null && !isset(self::LARAVEL_SCOPED_DECLARERS[\strtolower($declaring->fq_class_name)])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

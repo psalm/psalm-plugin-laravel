@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+>
+    <projectFiles>
+        <directory name="cases" />
+    </projectFiles>
+    <plugins>
+        <pluginClass class="Psalm\LaravelPlugin\Plugin">
+            <!-- Declares every fixable issue: both are opt-in/auto, and a case file may exercise any of them. -->
+            <reportImplicitQueryBuilderCalls value="true" />
+            <findOctaneIncompatibleBinding value="true" />
+        </pluginClass>
+    </plugins>
+</psalm>

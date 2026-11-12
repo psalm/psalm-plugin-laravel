@@ -5,16 +5,14 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
 use Illuminate\Database\Eloquent\Model;
+use PhpParser\Node;
 use PhpParser\Node\Expr;
-use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\MethodCall;
-use PhpParser\Node\Expr\NullsafeMethodCall;
-use PhpParser\Node\Expr\NullsafePropertyFetch;
-use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use PhpParser\NodeFinder;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Context;
@@ -97,14 +95,24 @@ use Psalm\Type\Union;
  *    instance's state; `query()` drops it);
  *  - a named static call in a non-static method or closure whose `$this` is, or may be, an instance of the
  *    target model (see {@see ModelCallGuard::mayRunInObjectContextOf()}): PHP runs it as `$this->__call()` there;
- *  - any call in a trait (one shared edit), and a named static call in a non-static closure or arrow function (its
- *    `$this` can be rebound; see {@see ModelCallGuard::isUnsafeEditSite()}). An instance call on a captured model
- *    does not read `$this` and is fixed in a closure;
- *  - a model whose class chain overrides `__call`, `__callStatic`, `forwardCallTo`, `query` or `newQuery` (see
- *    {@see ModelCallGuard::overridesAny()}): the insertion would bypass that code.
+ *  - any call in a trait (one shared edit; see {@see PsalterFix::fixOrReport()}), and a call that reads `$this` or a
+ *    `self` / `static` / `parent` name (a named static call, or a receiver containing one) in a non-static closure or
+ *    arrow function, since the closure can be rebound (see {@see ModelCallGuard::isUnsafeEditSite()}). An instance
+ *    call on a captured model reads neither and is fixed in a closure;
+ *  - a model whose class chain overrides `__call`, `__callStatic`, `forwardCallTo`, `forwardDecoratedCallTo`, `query`
+ *    or `newQuery` (see {@see ModelCallGuard::overridesAny()}), or any scanned subclass of it that does (see
+ *    {@see ModelCallGuard::descendantOverridesAny()}; the object behind `$model->where()` can be that subclass): the
+ *    insertion would bypass that code. A runtime subclass Psalm never scanned stays a known gap.
  */
 final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisInterface
 {
+    /**
+     * The methods an inserted `query()->` / `newQuery()->` would bypass when a model declares them itself.
+     *
+     * @var list<lowercase-string>
+     */
+    private const GUARDED_METHODS = ['__call', '__callstatic', 'query', 'newquery', 'forwardcallto', 'forwarddecoratedcallto'];
+
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
@@ -178,6 +186,7 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
         //    builds a fresh model and drops that state.
         $isSpecialClass = $expr instanceof StaticCall && $expr->class instanceof Name && $expr->class->isSpecialClassName();
         $replacements = [];
+        $costlyGuard = null;
 
         if (!$expr->isFirstClassCallable() && !$isSpecialClass) {
             // The call reads `$this` through its class (`Post::where()`, object-context dispatch) or its receiver
@@ -187,10 +196,12 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
             if (self::rewriteKeepsBehavior($modelClass, $isStatic, $dependsOnThis, $source, $event->getContext(), $codebase)) {
                 $nameStart = $expr->name->getStartFilePos();
                 $replacements = [new FileManipulation($nameStart, $nameStart, $isStatic ? 'query()->' : 'newQuery()->')];
+                // Scans every scanned class: only Psalter, once it would apply the fix, pays for it.
+                $costlyGuard = static fn(): bool => !ModelCallGuard::descendantOverridesAny($codebase, $modelClass, self::GUARDED_METHODS);
             }
         }
 
-        $fix = PsalterFix::fixOrReport($codebase, $source, $issue, $replacements);
+        $fix = PsalterFix::fixOrReport($codebase, $source, $issue, $replacements, $costlyGuard);
 
         if ($fix !== null) {
             $event->setFileReplacements($fix);
@@ -217,7 +228,7 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
             return false;
         }
 
-        if (ModelCallGuard::overridesAny($codebase, $modelClass, ['__call', '__callstatic', 'query', 'newquery', 'forwardcallto', 'forwarddecoratedcallto'])) {
+        if (ModelCallGuard::overridesAny($codebase, $modelClass, self::GUARDED_METHODS)) {
             return false;
         }
 
@@ -225,31 +236,18 @@ final class ImplicitQueryBuilderCallHandler implements AfterExpressionAnalysisIn
     }
 
     /**
-     * Whether the receiver expression is `$this` or a property, method-call or array-dimension chain rooted at it.
-     *
-     * @psalm-capabilities read-props
+     * Whether the receiver reads the closure's binding anywhere in its subtree: `$this`, or a `self` / `static` /
+     * `parent` name. `Closure::bind()` / `bindTo()` / `call()` can change both the object and the scope, so
+     * `(clone $this)->where()` or `$this->posts()[0]->where()` is as rebindable as `$this->where()`. Positive rule on
+     * purpose: a receiver shape not listed here must not slip through as "independent of `$this`".
      */
     private static function receiverDependsOnThis(Expr $receiver): bool
     {
-        while (true) {
-            if ($receiver instanceof Variable) {
-                return $receiver->name === 'this';
-            }
-
-            if (
-                $receiver instanceof PropertyFetch
-                || $receiver instanceof NullsafePropertyFetch
-                || $receiver instanceof MethodCall
-                || $receiver instanceof NullsafeMethodCall
-                || $receiver instanceof ArrayDimFetch
-            ) {
-                $receiver = $receiver->var;
-
-                continue;
-            }
-
-            return false;
-        }
+        return (new NodeFinder())->findFirst(
+            $receiver,
+            static fn(Node $node): bool => ($node instanceof Variable && $node->name === 'this')
+                || ($node instanceof Name && $node->isSpecialClassName()),
+        ) instanceof \PhpParser\Node;
     }
 
     /**

@@ -272,6 +272,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         Handlers\Validation\ValidationRuleAnalyzer::reset();
         Handlers\Views\MissingViewHandler::reset();
         Handlers\Views\ViewContractHandler::reset();
+        Internal\ClassDescendants::reset();
         Internal\PathCaseCanonicalizer::reset();
         Internal\ProxyMethodReturnTypeProvider::reset();
         Blade\Annotate\AnnotationCollector::reset();

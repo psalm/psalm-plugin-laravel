@@ -85,4 +85,4 @@ $this->app->singleton(MyService::class, function () {
 
 **Why `scoped()` and not `bind()`.** `scoped()` keeps one instance per request (or per queue job): Octane flushes it between requests through `forgetScopedInstances()`, so nothing leaks, and repeated resolutions within the request still share the instance. `bind()` would rebuild the service on every resolution. Outside Octane, a scoped binding behaves like a singleton for the lifetime of the request.
 
-Psalter only renames calls on Laravel's own container classes; see [When Psalter leaves a finding unfixed](index.md#when-psalter-leaves-a-finding-unfixed).
+Psalter renames only calls whose receiver is typed as one of Laravel's own container classes and has no scanned subclass declaring its own `scoped()` / `scopedIf()`, and never inside a trait. A subclass Psalm cannot scan stays a [known gap](index.md#known-gaps). Everything else is reported and left as written: see [When Psalter leaves a finding unfixed](index.md#when-psalter-leaves-a-finding-unfixed).

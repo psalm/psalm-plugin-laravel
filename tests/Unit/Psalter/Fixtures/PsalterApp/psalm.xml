@@ -14,6 +14,8 @@
             <!-- Declares every fixable issue: both are opt-in/auto, and a case file may exercise any of them. -->
             <reportImplicitQueryBuilderCalls value="true" />
             <findOctaneIncompatibleBinding value="true" />
+            <!-- A Blade call is reported on the template and never rewritten: see PsalterFixTest. -->
+            <blade cacheDir=".cache/blade-shadows" />
         </pluginClass>
     </plugins>
 </psalm>
