@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794518472305,
+  "lastUpdate": 1794521956090,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18470,6 +18470,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.74,
             "range": "± 0.56",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1272,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "98b2cddb15a42133b4181c707d4670f229672675",
+          "message": "Show plugin warnings under `--no-progress` and stop aborting on the deprecated cache path env var (#2274)\n\n* fix(diagnostics): print plugin disabled/degraded warnings under --no-progress #1636\n\nVoidProgress drops every Progress::warning(), so the init-failure and degraded-boot notices were invisible in quiet CI runs. One PluginWarning helper also writes them to STDERR under VoidProgress and replaces the three hand-rolled copies in BladeBootstrapper and ModelMetadataRegistryBuilder.\n\n* fix(config): warn instead of aborting on the deprecated cache path env var #1635\n\nPsalm's ErrorHandler turns the E_USER_DEPRECATED notice into a RuntimeException that aborts the run. PluginConfig now collects the deprecation and Plugin prints it through PluginWarning once Progress exists; the env path keeps working.\n\n* test(config): assert the deprecated cache path env var warns once on STDERR #1635\n\n* fix(diagnostics): skip the STDERR fallback when STDERR is closed #1636\n\nfwrite() on a closed stream throws a TypeError that @ does not silence. Also pin that a regular progress prints a warning exactly once.\n\n* fix(diagnostics): keep feature-skip warnings visible under --no-progress #1636\n\nRoute the init-time 'check will be skipped' and degraded-mode warnings (MissingTranslation, MissingView, UnconfiguredFilesystemDisk, NoEnvOutsideConfig, unbound migrator, skipped Blade templates) through PluginWarning.",
+          "timestamp": "2026-11-12T23:15:58+01:00",
+          "tree_id": "4508b39e558d4c273afaa76b53f44c5cd8c21618",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/98b2cddb15a42133b4181c707d4670f229672675"
+        },
+        "date": 1794521950822,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 31.28,
+            "range": "± 0.18",
             "unit": "s"
           },
           {
