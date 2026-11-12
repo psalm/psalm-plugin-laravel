@@ -6,7 +6,6 @@ namespace Tests\Psalm\LaravelPlugin\Unit;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\ColumnFallback;
@@ -188,17 +187,35 @@ final class PluginConfigTest extends TestCase
     }
 
     #[Test]
-    #[IgnoreDeprecations]
     public function cache_path_comes_from_the_env_var_trimmed_or_else_the_temp_dir(): void
     {
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-custom/');
         $this->assertSame('/tmp/psalm-test-custom', PluginConfig::fromXml(null)->cachePath);
 
         \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
-        $this->assertStringStartsWith(
-            \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-',
-            PluginConfig::fromXml(null)->cachePath,
-        );
+        $config = PluginConfig::fromXml(null);
+        $this->assertStringStartsWith(\sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-', $config->cachePath);
+        $this->assertSame([], $config->deprecations);
+    }
+
+    /** #1635: Psalm's ErrorHandler turns any PHP notice into a RuntimeException that aborts the run. */
+    #[Test]
+    public function the_deprecated_cache_path_env_var_is_reported_without_raising_a_php_notice(): void
+    {
+        \putenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH=/tmp/psalm-test-custom');
+        \set_error_handler(static function (int $code, string $message): never {
+            throw new \RuntimeException('PHP Error: ' . $message, $code);
+        });
+
+        try {
+            $config = PluginConfig::fromXml(null);
+        } finally {
+            \restore_error_handler();
+        }
+
+        $this->assertSame('/tmp/psalm-test-custom', $config->cachePath);
+        $this->assertCount(1, $config->deprecations);
+        $this->assertStringContainsString('PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated', $config->deprecations[0]);
     }
 
     #[Test]

@@ -17,6 +17,11 @@ namespace Illuminate\Support\Facades;
  * not stdClass objects. Each @psalm-return keys off whether $fetchUsing is the empty-array
  * default; a non-empty literal degrades to mixed, and a non-literal array unions both branches
  * (Psalm can't prove emptiness statically), matching what the runtime can actually produce.
+ *
+ * Re-declaring the class drops the sealing flag that Laravel's `@method` tags set on the vendor facade,
+ * so it is restated to keep an unknown call (`Facade::definitelyNotAMethod()`) reported.
+ *
+ * @psalm-seal-methods
  */
 class DB extends Facade
 {

@@ -20,6 +20,7 @@ final readonly class PluginConfig
 
     /**
      * @param list<string> $configDirectories
+     * @param list<string> $deprecations
      *
      * @psalm-mutation-free
      */
@@ -58,6 +59,11 @@ final readonly class PluginConfig
         public string $bladeCacheDir,
         public bool $experimental,
         public bool $failOnInternalError,
+        /**
+         * Warnings for deprecated settings, printed by the plugin once a Progress exists. Never
+         * `trigger_error()`: Psalm's ErrorHandler turns any notice into an exception that aborts the run.
+         */
+        public array $deprecations,
     ) {}
 
     /**
@@ -98,7 +104,8 @@ final readonly class PluginConfig
         $resolveConfigReturnTypes = self::xmlBoolAttr($config?->resolveConfigReturnTypes, 'resolveConfigReturnTypes', true);
         $configDirectories = self::xmlNameList($config, 'configDirectory');
         $xmlBladeEnabled = self::xmlBladeEnabled($config);
-        $cachePath = self::resolveCachePath();
+        $deprecations = [];
+        $cachePath = self::resolveCachePath($deprecations);
 
         return new self(
             modelPropertiesColumnFallback: ColumnFallback::tryFrom($overrides->string('modelProperties.columnFallback') ?? '') ?? $columnFallback,
@@ -118,6 +125,7 @@ final readonly class PluginConfig
             bladeCacheDir: self::resolveBladeCacheDir($config, $cachePath),
             experimental: $experimental,
             failOnInternalError: $overrides->bool('failOnInternalError') ?? $failOnInternalError,
+            deprecations: $deprecations,
         );
     }
 
@@ -307,18 +315,16 @@ final readonly class PluginConfig
         return $cachePath . \DIRECTORY_SEPARATOR . 'blade';
     }
 
-    private static function resolveCachePath(): string
+    /** @param list<string> $deprecations */
+    private static function resolveCachePath(array &$deprecations): string
     {
         // Deprecated env var override — still works, but users should rely on
         // the automatic Psalm cache directory instead
         $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
 
         if (\is_string($env) && $env !== '') {
-            \trigger_error(
-                'PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
-                . "The plugin now uses Psalm's cache directory automatically.",
-                \E_USER_DEPRECATED,
-            );
+            $deprecations[] = 'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
+                . "The plugin now uses Psalm's cache directory automatically.";
             return \rtrim($env, \DIRECTORY_SEPARATOR);
         }
 

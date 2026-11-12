@@ -99,6 +99,8 @@ final class IssueUrlGenerator
             '- experimental: ' . self::formatBool($pluginConfig->experimental),
             '- failOnInternalError: ' . self::formatBool($pluginConfig->failOnInternalError),
             '- configDirectories: ' . self::formatConfigDirectories($pluginConfig->configDirectories),
+            // A count, not the messages: the full text would bloat the length-capped issue URL.
+            '- deprecations: ' . \count($pluginConfig->deprecations),
         ];
     }
 
