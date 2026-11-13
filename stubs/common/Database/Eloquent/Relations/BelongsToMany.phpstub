@@ -45,7 +45,7 @@ class BelongsToMany extends Relation
      * @template T
      * @psalm-param T $id
      * @param  int|non-empty-string|array<int|non-empty-string>|\Illuminate\Contracts\Support\Arrayable<int|non-empty-string>  $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}> : TRelatedModel&object{pivot: TPivotModel})
      */
     public function findOrNew($id, $columns = ['*']) {}
@@ -79,14 +79,14 @@ class BelongsToMany extends Relation
      * @template T
      * @psalm-param T $id
      * @param  mixed  $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>|null : (TRelatedModel&object{pivot: TPivotModel})|null)
      */
     public function find($id, $columns = ['*']) {}
 
     /**
      * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|array<array-key, int|string>  $ids
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>
      */
     public function findMany($ids, $columns = ['*']) {}
@@ -94,7 +94,7 @@ class BelongsToMany extends Relation
     /**
      * @template T
      * @psalm-param T $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}> : TRelatedModel&object{pivot: TPivotModel})
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -102,7 +102,7 @@ class BelongsToMany extends Relation
     public function findOrFail($id, $columns = ['*']) {}
 
     /**
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return (TRelatedModel&object{pivot: TPivotModel})|null
      */
     public function first($columns = ['*']) {}
@@ -110,7 +110,7 @@ class BelongsToMany extends Relation
     /**
      * Execute the query and get the first result or throw an exception.
      *
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return TRelatedModel&object{pivot: TPivotModel}
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -134,6 +134,7 @@ class BelongsToMany extends Relation
 
     /**
      * Set the columns on the pivot table to retrieve.
+     * Deliberately `string` only: `aliasedPivotColumns()` concatenates each column into `pivot_<column>`, and an Expression has no `__toString`.
      *
      * @param  array<array-key, string>|string  $columns
      * @return $this
@@ -186,11 +187,11 @@ class BelongsToMany extends Relation
      *
      * Unlike `Builder::firstOr()`, the relation routes columns through
      * `shouldSelect(array $columns)`, which hard-rejects bare strings at
-     * runtime — so this stub permits only `list<non-empty-string>`.
+     * runtime — so this stub permits only a list of column names or Expressions.
      *
      * @template TValue
      *
-     * @param  list<non-empty-string>|(\Closure(): TValue)  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>|(\Closure(): TValue)  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @return (TRelatedModel&object{pivot: TPivotModel})|TValue
      */
@@ -215,7 +216,7 @@ class BelongsToMany extends Relation
      * @template TValue
      *
      * @param  T  $id
-     * @param  list<non-empty-string>|\Closure  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>|\Closure  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TRelatedModel&object{pivot: TPivotModel}>|TValue : (TRelatedModel&object{pivot: TPivotModel})|TValue)
      */

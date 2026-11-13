@@ -307,17 +307,15 @@ final class AppFacadeRegistrationHandler implements AfterClassLikeVisitInterface
      * Forwarding needs two runtime facts, both read from what PHP dispatches because Psalm's storage
      * can disagree with it:
      * - The root's effective `__call` is not Macroable's, which throws `BadMethodCallException`
-     *   for anything but a registered macro. Storage cannot say which: `ClassLikeNodeScanner` ignores
-     *   `insteadof` precedence (vimeo/psalm#12113) and keeps the first-listed trait, and a class-level
-     *   stub can redeclare `__call` on a root that uses Macroable at runtime. The reflected file and
-     *   start line decide, because `ReflectionMethod::getDeclaringClass()` names the using class
-     *   for trait methods.
+     *   for anything but a registered macro. Storage cannot say which: a class-level stub can redeclare
+     *   `__call` on a root that uses Macroable at runtime, and storage then names the stub's class. The
+     *   reflected file and start line decide, because `ReflectionMethod::getDeclaringClass()` names the
+     *   using class for trait methods.
      * - The facade's effective `__callStatic` is Laravel's `Facade::__callStatic`, the only
      *   dispatcher that reaches the root's `__call`. `use Macroable` on the facade or an own
      *   `__callStatic` replaces it and throws first, even if it would forward.
      * A root without Psalm class storage or without a declared `__call` is never proven to
      * forward, and a root that never resolved does not reach here, so their facades stay sealed.
-     * This is a plugin-side guard, not a fix of the Psalm provenance defect.
      *
      * Runs after population, so facade subclasses that already inherited the seal keep it.
      * Class aliases share this storage object, so they are covered by the same mutation.

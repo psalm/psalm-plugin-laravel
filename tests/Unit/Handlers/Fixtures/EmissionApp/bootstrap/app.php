@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
 
 // A real bootstrap/app.php (branch 1 of ApplicationProvider::doGetApp()), not the Testbench
 // package-mode fallback (branch 3). Only this boot path reads this directory's database/migrations
@@ -26,5 +27,9 @@ Builder::macro('whereTagId', static fn(string $tag): string => $tag);
 // direct model forms; Query\Builder macros never change the Eloquent wrapper's return value.
 Relation::macro('whereFilterType', static fn(string $type): string => $type);
 QueryBuilder::macro('whereOwnerId', static fn(int $id): string => (string) $id);
+
+// RequestValidateThrows: replaces Laravel's `validateWithBag` macro once the framework registered it. The
+// replacement carries no ValidationException guarantee, so MacroHandler must not attach the framework throws.
+$app->booted(static fn() => Request::macro('validateWithBag', static fn(string $errorBag, array $rules): array => []));
 
 return $app;

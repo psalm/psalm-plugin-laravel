@@ -9,6 +9,7 @@ use Carbon\Constants\UnitValue;
 use DateTimeInterface;
 use DateTimeZone;
 use JsonSerializable;
+use Stringable;
 
 /**
  * Narrow Carbon's dual-purpose getter/setter methods to conditional return
@@ -23,8 +24,10 @@ use JsonSerializable;
  * so the full `extends` clause is copied verbatim from
  * vendor/nesbot/carbon/src/Carbon/CarbonInterface.php:858. Methods not
  * redeclared here continue to come from reflection of the real interface.
+ * `Stringable` is listed explicitly: the real interface gets it implicitly from
+ * declaring `__toString()`, which this stub does not redeclare.
  */
-interface CarbonInterface extends DateTimeInterface, JsonSerializable, DiffOptions, Format, TranslationOptions, UnitValue
+interface CarbonInterface extends DateTimeInterface, JsonSerializable, DiffOptions, Format, TranslationOptions, UnitValue, Stringable
 {
     /**
      * @param WeekDay|int|null $value new value for weekday if using as setter

@@ -6,16 +6,9 @@
  *   - `null` (default) returns the ISO weekday (1=Monday..7=Sunday).
  *   - any other value returns a new `static` instance set to that weekday.
  *
- * The getter assertion is intentionally the non-exact `int` rather than
- * `int<1, 7>`, because the inferred getter type is version-dependent:
- *   - nesbot/carbon < 3.12: the plugin's pre-3.12 stub narrows it to `int<1, 7>`.
- *   - nesbot/carbon >= 3.12: Carbon's own `@return ($value is null ? int : static)`
- *     drives inference (the plugin skips its redeclaration to dodge a Psalm
- *     conditional-merge bug, see #1059), so the getter is the wider `int`.
- * `int<1, 7>` is a subtype of `int`, so one non-exact check passes on both.
- *
- * The setter assertions stay exact: returning `static` (not the getter's int) is
- * the behaviour that regressed on carbon >= 3.12, so it is the load-bearing guard.
+ * The stubs under `stubs/integrations/carbon/` narrow the getters (`int<1, 7>`, `int<0, 6>`) and
+ * keep the setters `static` on every supported Carbon version (the setter used to collapse to the
+ * getter branch, #1059; `tz('UTC')` is the case that mattered on Carbon 3.10 and 3.11).
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/922
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1059
@@ -25,12 +18,21 @@ use Carbon\Carbon;
 use Carbon\WeekDay;
 
 $_dow = Carbon::now()->isoWeekday();
-/** @psalm-check-type $_dow = int */
+/** @psalm-check-type-exact $_dow = int<1, 7> */
 
 $_mondayInt = Carbon::now()->isoWeekday(1);
 /** @psalm-check-type-exact $_mondayInt = \Carbon\Carbon&static */
 
 $_mondayEnum = Carbon::now()->isoWeekday(WeekDay::Monday);
 /** @psalm-check-type-exact $_mondayEnum = \Carbon\Carbon&static */
+
+$_weekday = Carbon::now()->weekday();
+/** @psalm-check-type-exact $_weekday = int<0, 6> */
+
+$_zone = Carbon::now()->tz();
+/** @psalm-check-type-exact $_zone = string */
+
+$_utc = Carbon::now()->tz('UTC');
+/** @psalm-check-type-exact $_utc = \Carbon\Carbon&static */
 ?>
 --EXPECTF--

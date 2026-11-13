@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Support;
 use Illuminate\Support\Traits\Conditionable;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\Variable;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
@@ -32,7 +33,8 @@ use Psalm\Type\Union;
  * The stub alone already types the common case: a callback returning void / null / the
  * receiver type collapses to `$this` via Laravel's `$callback($this, $value) ?? $this`.
  * This handler adds only the remaining gap — a callback returning a genuinely different
- * type (e.g. `when($v, fn(): int => ...)`) — producing `<receiver>&static | <callback-return>`.
+ * type (e.g. `when($v, fn(): int => ...)`) — producing `<receiver> | <callback-return>`, with the receiver
+ * late static only when it is (`$this`, a `static` value).
  * The `$default` callback runs on the other branch (`$default($this, $value) ?? $this`), so its
  * return joins the union too. Both are bound by name or position.
  *
@@ -126,12 +128,17 @@ final class ConditionableWhenHandler implements MethodReturnTypeProviderInterfac
             return null;
         }
 
-        $receiverStatic = [];
+        // `$this` binds late static only on a late static receiver; a plain one keeps its own class. Literal `$this`
+        // stays late static also when `@psalm-if-this-is` refines it, which Psalm types without the flag.
+        $isThis = $stmt->var instanceof Variable && $stmt->var->name === 'this';
+        $receiverAtomics = [];
         foreach ($receiver->getAtomicTypes() as $atomic) {
-            $receiverStatic[] = $atomic instanceof TNamedObject ? $atomic->setIsStatic(true) : $atomic;
+            $receiverAtomics[] = $atomic instanceof TNamedObject && ($isThis || $atomic->is_static)
+                ? $atomic->setIsStatic(true, true)
+                : $atomic;
         }
 
-        return new Union([...$receiverStatic, ...$extra]);
+        return new Union([...$receiverAtomics, ...$extra]);
     }
 
     /**

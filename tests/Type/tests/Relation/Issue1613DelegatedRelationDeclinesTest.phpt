@@ -1,9 +1,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
-use App\Models\MechanicSpecialization;
 use App\Models\Shop;
-use App\Models\Supplier;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -17,9 +15,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * class (`->one()`, declared as the new class, as a `Relation` supertype or as a union), an earlier
  * conditional return (in the delegating body, in the delegated helper, or between two factory
  * calls), a chain call that may swap the relation (`when()`) or leave it (`getRelated()`), a
- * helper with no parseable relation body, a delegation cycle, and a trait method picked with
- * `insteadof` on the model, between nested traits, or inside a composed trait (Psalm records the
- * losing trait's body).
+ * helper with no parseable relation body, and a delegation cycle.
  */
 
 function issue1613_non_relation_return_stays(Shop $shop): int
@@ -67,27 +63,6 @@ function issue1613_when_chain_declines(Shop $shop): HasMany
 function issue1613_get_related_chain_declines(Shop $shop): HasMany
 {
     $relation = $shop->workOrderRevisions();
-    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
-    return $relation;
-}
-
-function issue1613_insteadof_trait_declines(Shop $shop): HasMany
-{
-    $relation = $shop->revisions();
-    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
-    return $relation;
-}
-
-function issue1613_nested_insteadof_trait_declines(Supplier $supplier): HasMany
-{
-    $relation = $supplier->revisions();
-    /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
-    return $relation;
-}
-
-function issue1613_insteadof_inside_middle_trait_declines(MechanicSpecialization $specialization): HasMany
-{
-    $relation = $specialization->revisions();
     /** @psalm-check-type-exact $relation = HasMany<Model, Model> */
     return $relation;
 }

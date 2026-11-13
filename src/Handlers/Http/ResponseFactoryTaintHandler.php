@@ -33,6 +33,7 @@ use Psalm\Issue\TaintedHtml;
 use Psalm\Plugin\EventHandler\BeforeAddIssueInterface;
 use Psalm\Plugin\EventHandler\Event\BeforeAddIssueEvent;
 
+// @todo-by https://github.com/vimeo/psalm/issues/11924 replace the issue-emission exemption with RemoveTaints once it carries dispatch context
 /**
  * Suppresses the `TaintedHtml` finding on a `ResponseFactory::make()` or `Illuminate\Http\Response`
  * constructor call when the call's headers prove the browser downloads the response, or that the
@@ -68,7 +69,7 @@ final class ResponseFactoryTaintHandler implements BeforeAddIssueInterface
     /**
      * Journey-tail labels that mark the response factory's html content sink.
      *
-     * Derived empirically on Psalm 7.0.0-beta19 by dumping `TaintedInput::$journey` tails for the
+     * Derived empirically (the taint phpts for every route below pass on Psalm 7.2.1) by dumping `TaintedInput::$journey` tails for the
      * concrete, contract, facade, root-alias, `response()` helper, and `Illuminate\Http\Response`
      * constructor call routes. Two properties of that dump shape this list:
      *

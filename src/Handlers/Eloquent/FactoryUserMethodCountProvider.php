@@ -153,13 +153,13 @@ final class FactoryUserMethodCountProvider implements AfterCodebasePopulatedInte
                 }
 
                 // Only the factory atomic's count changes: members the declared `F&Marker&static` intersects stay.
-                $type = new TGenericObject(
+                $type = (new TGenericObject(
                     $this->receiver->value,
                     $this->receiver->type_params,
                     false,
                     $this->receiver->is_static,
                     $this->receiver->extra_types + $type->extra_types,
-                );
+                ))->setIsStatic($this->receiver->is_static, $this->receiver->is_static_resolved);
                 $this->replaced = true;
 
                 return self::DONT_TRAVERSE_CHILDREN;

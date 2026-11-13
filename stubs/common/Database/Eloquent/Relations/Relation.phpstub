@@ -90,7 +90,7 @@ abstract class Relation implements BuilderContract
     /**
      * Execute the query as a "select" statement.
      *
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return \Illuminate\Database\Eloquent\Collection<int, TRelatedModel>
      */
     public function get($columns = ['*'])
@@ -117,7 +117,7 @@ abstract class Relation implements BuilderContract
      * so they keep the four-argument override — passing $total there errors at runtime.
      *
      * @param  int|null|(\Closure(int): int)  $perPage
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @param  (\Closure(): int)|int|null  $total
@@ -129,7 +129,7 @@ abstract class Relation implements BuilderContract
 
     /**
      * @param  int|null  $perPage
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @return \Illuminate\Pagination\Paginator<int, TRelatedModel>
@@ -138,7 +138,7 @@ abstract class Relation implements BuilderContract
 
     /**
      * @param  int|null  $perPage
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @param  string  $cursorName
      * @param  \Illuminate\Pagination\Cursor|string|null  $cursor
      * @return \Illuminate\Pagination\CursorPaginator<int, TRelatedModel>
@@ -163,7 +163,7 @@ abstract class Relation implements BuilderContract
      *
      * Psalm note: ideally the type should be inferred from $this->query
      *
-     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  string|\Illuminate\Contracts\Database\Query\Expression  $column
      * @return $this
      */
     public function latest($column = null) {}
@@ -173,7 +173,7 @@ abstract class Relation implements BuilderContract
      *
      * Psalm note: ideally the type should be inferred from $this->query
      *
-     * @param  string|\Illuminate\Database\Query\Expression  $column
+     * @param  string|\Illuminate\Contracts\Database\Query\Expression  $column
      * @return $this
      */
     public function oldest($column = null) {}
@@ -216,7 +216,7 @@ abstract class Relation implements BuilderContract
      * the @mixin Builder<TRelatedModel> chain. The handler skips these via
      * isInDeclaringMethodIds, so the stub types are used directly.
      *
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return TRelatedModel|null
      */
     public function first($columns = ['*']) {}
@@ -224,7 +224,7 @@ abstract class Relation implements BuilderContract
     /**
      * Execute the query and get the first result or throw an exception.
      *
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -234,7 +234,7 @@ abstract class Relation implements BuilderContract
     /**
      * Execute the query and get the first result if it's the sole matching record.
      *
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return TRelatedModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException

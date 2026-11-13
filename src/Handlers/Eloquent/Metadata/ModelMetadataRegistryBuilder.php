@@ -20,7 +20,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaColumn;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
-use Psalm\Progress\VoidProgress;
+use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
@@ -109,17 +109,11 @@ final class ModelMetadataRegistryBuilder
             // Safety net: warm-up must never crash the plugin. Log and skip this model — but a
             // dropped model silently disables every registry-backed handler and rule for it
             // (BuilderScopeHandler, ModelPropertyAccessorHandler, UnknownModelAttribute, ...), so
-            // the failure must reach the user. Progress::warning() writes to STDERR by default, but
-            // VoidProgress (selected by --no-progress, a common quiet-CI flag) makes write() a total
-            // no-op, silently swallowing the warning rather than merely hiding a progress bar. Write
-            // directly to STDERR in that case so the failure is never fully invisible.
-            $message = "Laravel plugin: ModelMetadataRegistry warm-up failed for '{$modelFqcn}': {$throwable->getMessage()} at {$throwable->getFile()}:{$throwable->getLine()}";
-
-            $codebase->progress->warning($message);
-
-            if ($codebase->progress instanceof VoidProgress) {
-                \fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
-            }
+            // the failure must reach the user, --no-progress included.
+            PluginWarning::emit(
+                $codebase->progress,
+                "Laravel plugin: ModelMetadataRegistry warm-up failed for '{$modelFqcn}': {$throwable->getMessage()} at {$throwable->getFile()}:{$throwable->getLine()}",
+            );
 
             return;
         }
@@ -768,11 +762,7 @@ final class ModelMetadataRegistryBuilder
             $message .= '; withheld sections: ' . \implode(', ', $withheld);
         }
 
-        $codebase->progress->warning($message);
-
-        if ($codebase->progress instanceof VoidProgress) {
-            \fwrite(\STDERR, 'Warning: ' . $message . \PHP_EOL);
-        }
+        PluginWarning::emit($codebase->progress, $message);
     }
 
     /**

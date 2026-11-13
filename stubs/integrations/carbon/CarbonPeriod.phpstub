@@ -33,11 +33,12 @@ use JsonSerializable;
  * Class redeclaration wipes `class_implements` (see "Stub merging" in docs/contributing/README.md), so
  * the `extends` / `implements` / `use` clauses are copied verbatim from
  * Carbon source. Methods not redeclared here continue to come from
- * reflection of the real class.
+ * reflection of the real class. `\Stringable` is listed explicitly: the real
+ * class gets it implicitly from declaring `__toString()`, which this stub does not redeclare.
  *
  * @implements \IteratorAggregate<int, CarbonInterface>
  */
-class CarbonPeriod extends DatePeriodBase implements Countable, JsonSerializable, UnitValue, \IteratorAggregate
+class CarbonPeriod extends DatePeriodBase implements Countable, JsonSerializable, UnitValue, \IteratorAggregate, \Stringable
 {
     use LocalFactory;
     use IntervalRounding;

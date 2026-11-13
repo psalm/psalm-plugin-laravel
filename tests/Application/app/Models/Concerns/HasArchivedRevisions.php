@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Declares revisions() like HasRevisions, so a model composing both must pick one with
- * `insteadof` (#1613): the parser cannot tell which body wins and must decline.
+ * `insteadof` (#1613): the parser follows the pick and reads the winning body.
  *
  * @psalm-require-extends \Illuminate\Database\Eloquent\Model
  */

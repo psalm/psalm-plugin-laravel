@@ -185,7 +185,7 @@ function test_when_callback_returns_null(): void
 function test_when_callback_returns_int(): void
 {
     $_result = (new Stringable('hello'))->when(true, static function (Stringable $_s): int { return random_int(0, 10); });
-    /** @psalm-check-type-exact $_result = Stringable&static|int<0, 10> */
+    /** @psalm-check-type-exact $_result = Stringable|int<0, 10> */
 }
 
 /**

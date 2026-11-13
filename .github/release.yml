@@ -4,14 +4,28 @@ changelog:
     labels:
       - 'release:skip-changelog'
   categories:
+    - title: Removed
+      labels:
+        - 'release:removed'
+    - title: Deprecations
+      labels:
+        - 'release:deprecation'
     - title: Features
       labels:
         - 'release:feature'
     - title: Fixes
       labels:
         - 'release:fix'
+    - title: Docs
+      labels:
+        - 'release:docs'
     - title: Internal changes
       labels:
         - 'release:internal'
+        - 'chore'
+    - title: Typos
+      labels:
         - 'release:typo'
-        - 'release:docs'
+    - title: Other changes
+      labels:
+        - '*'

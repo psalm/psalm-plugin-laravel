@@ -11,6 +11,8 @@ use Illuminate\Foundation\Http\FormRequest;
  * PHP method names are case-insensitive. The validation return-type handler
  * already receives lowercase method names from Psalm, but the v4.14 taint
  * resolver originally inspected the source spelling and missed this shape.
+ * The `email` rule's header escape must apply to the header sink; the HTML
+ * sink still reports.
  */
 final class UppercaseInputEmailRequest extends FormRequest
 {

@@ -5,6 +5,7 @@ namespace Laravel\Ai\Responses;
 use ArrayAccess;
 use Countable;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Http\Client\Response as HttpResponse;
 use Illuminate\Support\Collection;
 use IteratorAggregate;
 use JsonSerializable;
@@ -18,6 +19,11 @@ use Traversable;
  * not honor a source annotation on the public `$answers` property, so every
  * accessor that exposes the answer payload is annotated instead, matching the
  * method-level source coverage for `TextResponse`.
+ *
+ * `$raw`, `withRawResponse()` and `__serialize()` come from the `HasRawResponse`
+ * trait that laravel/ai 1.4.0 added. They are restated instead of mirroring the
+ * `use` clause, which would name a missing trait on 1.0.0 to 1.3.x. `$raw` needs
+ * no source of its own: the HTTP client `Response` stub sources its accessors.
  */
 class ClassificationResponse implements Arrayable, ArrayAccess, Countable, IteratorAggregate, JsonSerializable
 {
@@ -26,6 +32,22 @@ class ClassificationResponse implements Arrayable, ArrayAccess, Countable, Itera
         public readonly TextUsage $usage,
         public readonly Meta $meta,
     ) {}
+
+    public ?HttpResponse $raw = null;
+
+    /**
+     * @since 1.4.0
+     */
+    public function withRawResponse(?HttpResponse $response): self {}
+
+    /**
+     * Returns the answers, like `toArray()`.
+     *
+     * @since 1.4.0
+     *
+     * @psalm-taint-source input
+     */
+    public function __serialize(): array {}
 
     /**
      * @psalm-taint-source input

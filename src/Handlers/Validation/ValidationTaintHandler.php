@@ -23,12 +23,11 @@ use Psalm\Type\TaintKind;
  * (keyed accessor, `ValidatedInput` accessor, magic property #1016, tracked
  * inline-validate variable) flows through that one path — no per-syntax branch.
  *
- *   1. addTaints re-introduces the source dropped by a type override
- *      ({@see ValidatedTypeHandler} / {@see FormRequestPropertyHandler}). For
- *      `$req->email` (undeclared, rule guarantees presence),
- *      FormRequestPropertyHandler's `doesPropertyExist()` claims it before
- *      Psalm ever reaches `Request::__get`, so that stub's own source can't
- *      apply; the re-source is the only thing tainting the read.
+ *   1. addTaints sources the reads no stub source covers: `$req->validate()`
+ *      (a `@method` pseudo-method) and `$req->email` (undeclared, rule
+ *      guarantees presence), which FormRequestPropertyHandler's
+ *      `doesPropertyExist()` claims before Psalm ever reaches
+ *      `Request::__get`, so that stub's own source can't apply.
  *   2. removeTaints applies the rule's per-field escape (e.g. `email` → safe
  *      for header/cookie).
  *
@@ -42,7 +41,6 @@ use Psalm\Type\TaintKind;
  * server/header/file) — a rule key need not describe them; and cast accessors
  * (integer/float/…) — not taint sources.
  *
- * Upstream: stub source dropped on override — https://github.com/vimeo/psalm/issues/11765.
  * Architecture follows {@see \Psalm\Internal\Provider\AddRemoveTaints\HtmlFunctionTainter}.
  */
 final class ValidationTaintHandler implements
@@ -64,11 +62,10 @@ final class ValidationTaintHandler implements
     private static array $addTaintsSourcedPropertyFetchIds = [];
 
     /**
-     * Re-source the taint a validated read carries, when the stub source was
-     * dropped by a type override, or never reached at all because
-     * FormRequestPropertyHandler's `doesPropertyExist()` claims an undeclared,
-     * presence-guaranteed property before Psalm gets to `Request::__get`
-     * (e.g. `$req->email`).
+     * Source a validated read no stub source covers: the `validate()`
+     * pseudo-method, or an undeclared, presence-guaranteed property that
+     * FormRequestPropertyHandler's `doesPropertyExist()` claims before Psalm
+     * gets to `Request::__get` (e.g. `$req->email`).
      */
     #[\Override]
     public static function addTaints(AddRemoveTaintsEvent $event): int

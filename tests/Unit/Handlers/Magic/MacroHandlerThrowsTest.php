@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Psalm\LaravelPlugin\Unit\Handlers\Magic;
 
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Providers\FoundationServiceProvider;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -24,19 +27,60 @@ use Psalm\Type;
  *
  * The asserted shape (`throws[FQCN] => true`) matches what Psalm's own
  * `FunctionLikeDocblockScanner::analyzeStorageDocblock()` writes when parsing
- * `@throws` annotations on user code. Caller-side propagation is a Psalm-side
- * concern (it doesn't currently run for pseudo-methods); this test pins the
- * plugin contract regardless of that gap.
+ * `@throws` annotations on user code. Caller-side propagation is covered by
+ * EmissionAppTest::an_unhandled_request_validate_reports_the_validation_exception.
  */
 #[CoversClass(MacroHandler::class)]
 final class MacroHandlerThrowsTest extends TestCase
 {
+    /** @var array<string, mixed> */
+    private array $previousMacros = [];
+
+    #[\Override]
+    protected function setUp(): void
+    {
+        /** @var array<string, mixed> $macros */
+        $macros = (new \ReflectionProperty(Request::class, 'macros'))->getValue();
+        $this->previousMacros = $macros;
+    }
+
+    #[\Override]
+    protected function tearDown(): void
+    {
+        (new \ReflectionProperty(Request::class, 'macros'))->setValue(null, $this->previousMacros);
+    }
+
     #[Test]
     public function validate_macro_records_validation_exception_in_throws(): void
     {
-        $storage = $this->buildStorage(\Illuminate\Http\Request::class, 'validate');
+        $this->registerFrameworkValidateMacros();
+        $storage = $this->buildStorage(Request::class, 'validate');
 
         $this->assertSame([ValidationException::class => true], $storage->throws);
+    }
+
+    #[Test]
+    public function a_replacement_validate_macro_records_no_throws(): void
+    {
+        // An app or package replacing Laravel's macro has no ValidationException guarantee.
+        $this->registerFrameworkValidateMacros();
+        Request::macro('validate', static fn(array $rules): array => []);
+
+        $this->assertSame([], $this->buildStorage(Request::class, 'validate')->throws);
+    }
+
+    #[Test]
+    public function another_framework_macro_closure_registered_as_validate_records_no_throws(): void
+    {
+        // The other FoundationServiceProvider closures live in the same file as the validation ones.
+        $provider = new FoundationServiceProvider(new Application());
+        $provider->registerRequestSignatureValidation();
+
+        $macros = (new \ReflectionProperty(Request::class, 'macros'))->getValue();
+        $this->assertInstanceOf(\Closure::class, $macros['hasValidRelativeSignature']);
+        Request::macro('validate', $macros['hasValidRelativeSignature']);
+
+        $this->assertSame([], $this->buildStorage(Request::class, 'validate')->throws);
     }
 
     #[Test]
@@ -45,12 +89,15 @@ final class MacroHandlerThrowsTest extends TestCase
         // Pins the class-scoping invariant: a user (or third-party package)
         // registering `Stringable::macro('validate', ...)` must not inherit
         // the `Request::validate` throw set just because the names collide.
-        // The propagation gap masks this today, but the docblock on
-        // `MacroHandler::FRAMEWORK_THROWS` commits to the scope being correct
-        // for when Psalm closes that gap.
         $storage = $this->buildStorage(\Illuminate\Support\Stringable::class, 'validate');
 
         $this->assertSame([], $storage->throws);
+    }
+
+    private function registerFrameworkValidateMacros(): void
+    {
+        $provider = new FoundationServiceProvider(new Application());
+        (new \ReflectionMethod($provider, 'registerRequestValidation'))->invoke($provider);
     }
 
     /**

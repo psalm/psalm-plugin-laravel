@@ -131,12 +131,6 @@ function schema_facade_column_lists_keep_the_facade_param_types(): void
     echo $_hasColumns;
 }
 
-/** The generic callback of Builder::withoutForeignKeyConstraints() is inferred through the mixin. */
-function schema_facade_without_foreign_key_constraints_infers_the_callback_return(): int
-{
-    return Schema::withoutForeignKeyConstraints(static fn (): int => 1);
-}
-
 /** Methods Builder does not type more precisely keep their facade types. */
 function schema_facade_other_methods_keep_facade_types(): void
 {

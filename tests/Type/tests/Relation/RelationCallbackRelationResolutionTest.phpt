@@ -158,11 +158,11 @@ function test_ancestor_related_model_declines_on_delegation(): void
     });
 }
 
-/** Two composed traits declare `revisions()` (`insteadof`): the parser declines, so the callback keeps the stub. */
-function test_ambiguous_trait_relation_declines(): void
+/** Two composed traits declare `revisions()`: the one `insteadof` picks (HasArchivedRevisions, a DamageReport relation) types the callback. */
+function test_insteadof_trait_relation_resolves_the_picked_body(): void
 {
     Supplier::query()->whereHas('revisions', function ($q): void {
-        /** @psalm-check-type-exact $q = mixed */
+        /** @psalm-check-type-exact $q = Illuminate\Database\Eloquent\Builder<App\Models\DamageReport> */
         $q->where('id', 1);
     });
 }
@@ -199,8 +199,6 @@ function test_eager_load_without_a_parsed_relation_type_declines(): void
 }
 ?>
 --EXPECTF--
-MissingClosureParamType on line %d: Parameter $q has no provided type
-MixedMethodCall on line %d: Cannot determine the type of $q when calling method where
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method where
 MissingClosureParamType on line %d: Parameter $q has no provided type

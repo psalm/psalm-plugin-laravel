@@ -13,6 +13,7 @@ use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Bootstrap\ConfigRepositoryProvider;
 use Psalm\LaravelPlugin\Internal\Ast\StaticStringResolver;
 use Psalm\LaravelPlugin\Internal\ClosestName;
+use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\LaravelPlugin\Issues\UnconfiguredFilesystemDisk;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
@@ -145,7 +146,8 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
         try {
             $disks = self::namesWithDriver(ConfigRepositoryProvider::get()->get('filesystems.disks'));
         } catch (\Throwable $throwable) {
-            $output->warning(
+            PluginWarning::emit(
+                $output,
                 'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but reading filesystems.disks '
                 . "threw: {$throwable->getMessage()}. The UnconfiguredFilesystemDisk check will be skipped.",
             );
@@ -154,7 +156,8 @@ final class StorageHandler implements MethodReturnTypeProviderInterface, MethodP
         }
 
         if ($disks === []) {
-            $output->warning(
+            PluginWarning::emit(
+                $output,
                 'Laravel plugin: findUnconfiguredFilesystemDisks is enabled but filesystems.disks has no '
                 . 'entry with a driver. The UnconfiguredFilesystemDisk check will be skipped.',
             );

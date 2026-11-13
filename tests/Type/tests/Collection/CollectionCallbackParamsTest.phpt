@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
 
+/** @extends Collection<int, Customer> */
+final class CallbackParamsSubclassList extends Collection {}
+
 /**
  * Laravel hands `$this` to the callbacks of tap(), pipe() and the whenEmpty() family, and a plain
  * Collection chunk to chunkWhile(). Untyped closure params resolve to the receiver with its generics;
@@ -92,6 +95,22 @@ final class CollectionCallbackParamsTest
         $_n = $customers->whenNotEmpty(fn ($_c) => null)->count();
         $_n = $customers->unlessEmpty(fn ($_c) => null)->count();
         $_n = $customers->unlessNotEmpty(fn ($_c) => null)->count();
+    }
+
+    /**
+     * Since Psalm 7.3 (vimeo/psalm#13494) Laravel's `callable($this)` resolves `static` in the callee
+     * scope, so tap() and pipe() reach a subclass without the stub. The whenEmpty() family does not:
+     * see CollectionCallbackParamsSubclassKnownLimitation.phpt.
+     */
+    public function subclass(CallbackParamsSubclassList $customers): void
+    {
+        $customers->tap(function ($_c): void {
+            /** @psalm-check-type-exact $_c = CallbackParamsSubclassList */
+        });
+        $customers->tap(fn (CallbackParamsSubclassList $c): int => $c->count());
+
+        $_count = $customers->pipe(fn ($c) => $c->count());
+        /** @psalm-check-type-exact $_count = int<0, max> */
     }
 
     /**

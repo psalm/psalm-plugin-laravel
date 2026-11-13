@@ -16,7 +16,7 @@ Security scanning runs automatically alongside type analysis, no extra configura
 | XSS             | A03:2021 | `Response::make()` with unescaped content                     |
 | XSS (Blade templates) | A03:2021 | Opt-in with `<blade />`: unescaped `{!! $userInput !!}` output, view data and class-component properties. See [Blade coverage](blade.md#security-coverage) |
 | Header Injection | A03:2021 | `Response::make()`, `response()`, and `new Response()` with user-controlled header values; mail sender/recipient addresses (`Mailable` `from()`, `to()`, `cc()`, `bcc()`, `replyTo()`; `MailMessage` `from()`, `cc()`, `bcc()`, `replyTo()`) |
-| SSRF            | A10:2021 | `Http::get()`, `Http::post()` with user-controlled URLs       |
+| SSRF            | A10:2021 | `Http::get()`, `head()`, `post()`, `put()`, `patch()`, `delete()`, `send()` and `query()` (Laravel 13.19+) with user-controlled URLs, on the facade and on `PendingRequest` |
 | File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()` with user-controlled URLs      |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
@@ -115,7 +115,7 @@ flagged location is the comparison itself. The message text is the generic
 `Detected tainted user secret leaking` rather than a CWE-208-specific one, because
 Psalm hardcodes taint messages per kind ([vimeo/psalm#11762](https://github.com/vimeo/psalm/issues/11762)).
 Treat any such finding from this plugin as a timing issue and fix it with
-`hash_equals()`.
+`hash_equals()`. <!-- @todo-by https://github.com/vimeo/psalm/issues/11762 drop the generic-message caveat once plugins can set taint issue messages -->
 
 ## LLM integration
 
@@ -211,13 +211,13 @@ Each is an upstream limitation rather than a judgement that the flow is safe, so
 * **Return-value sinks.** `Tool::description()` and `Agent::instructions()` are not covered: Psalm's `@psalm-taint-sink` matches parameter names only. Tracked in [#484](https://github.com/psalm/psalm-plugin-laravel/issues/484).
 * **Prompt macros.** Prompt taint is not tracked through the `AiServiceProvider` macros `Str::summarize()`, `Stringable::summarize()`, `Stringable::toAudio()`, `Str::decide()`, `Stringable::decide()`, `Collection::decide()` and `Collection::rerank()`: a macro is a `Macroable` pseudo-method with no per-method docblock on which to attach an `llm_prompt` sink, so `Str::summarize($request->input('d'))` and `collect($items)->rerank('name', $query)` report nothing even when the argument is tainted. Call the underlying `Classification::of()`, `Audio::of()`, `Reranking::of()` (`PendingReranking::rerank()` is sunk when called directly) or an agent's `prompt()` where the input is untrusted.
 * **Citation collection reads.** `StreamableAgentResponse::$citations` is a registered source, but reads through its `Collection` lose the taint, because Psalm drops the taint edge there.
-* **Array-access reads.** `$response['field']` and `$request['task']` are not covered on any class: Psalm drops the taint edge when it resolves the `[]` sugar, which affects every `ArrayAccess`-based taint source and is left for an upstream fix ([vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912)). It is worth knowing about, because `Tools\AgentTool` uses exactly that shape to pass a task to a sub-agent. Prefer `Tools\Request::str()` / `string()` / `array()`, or an explicit `offsetGet()` call, all of which are covered.
+* **Array-access reads.** `$response['field']` and `$request['task']` are not covered on any class: Psalm drops the taint edge when it resolves the `[]` sugar, which affects every `ArrayAccess`-based taint source and is left for an upstream fix ([vimeo/psalm#11912](https://github.com/vimeo/psalm/issues/11912)). It is worth knowing about, because `Tools\AgentTool` uses exactly that shape to pass a task to a sub-agent. Prefer `Tools\Request::str()` / `string()` / `array()`, or an explicit `offsetGet()` call, all of which are covered. <!-- @todo-by https://github.com/vimeo/psalm/issues/11912 drop this gap once ArrayAccess taint edges survive the [] sugar -->
 
 Reading a single element back out of an array-typed source is covered. Both the `$structured` property and the `toArray()` return keep the taint through `$payload['body']`, so a sink reached that way reports like any other flow.
 
 ## Other detection limits
 
-**Named arguments captured by a variadic.** Two Psalm bugs ([vimeo/psalm#12251](https://github.com/vimeo/psalm/issues/12251), [#12252](https://github.com/vimeo/psalm/issues/12252)) misattribute a named argument bound to a variadic parameter. The plugin drops the taint of such an argument when the callee resolves exactly to a concrete method or function, so a genuine sink in the variadic's body or behind a re-spread (`handle(...$args)`) is not reported. Every other named-argument call keeps Psalm's detection, with one gap in Psalm itself since 7.0.0-rc28 ([vimeo/psalm#12760](https://github.com/vimeo/psalm/pull/12760)): when a parent's variadic captures the argument (`Base::go(string ...$rest)` called as `$base->go(sink: $x)`), a sink on an override's parameter of that name (`Child::go(string $sink)`) is not reported.
+**Named arguments captured by a variadic.** A Psalm bug ([vimeo/psalm#12252](https://github.com/vimeo/psalm/issues/12252)) maps an unpacked argument onto every parameter, so `run(page: $x)` is reported against the first parameter of a `handle(...$args)` it re-spreads into. The plugin drops the taint of a named argument bound to a variadic parameter when the callee resolves exactly to a concrete method or function, so a genuine sink in the variadic's body or behind a re-spread (`handle(...$args)`) is not reported. Every other named-argument call keeps Psalm's detection.
 
 ## How it compares
 

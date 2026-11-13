@@ -96,24 +96,43 @@ final class CustomTypeDetector
     /**
      * Resolve custom builder from #[UseEloquentBuilder] attribute.
      *
+     * Mirrors Model::resolveClassAttribute(): the class itself, then its directly used traits,
+     * then each parent class in turn, nearest first. A child of an abstract base model that
+     * carries the attribute therefore inherits the custom builder.
+     *
      * @return class-string|null
      */
     private static function resolveBuilderFromAttribute(\ReflectionClass $reflection, Codebase $codebase): ?string
     {
-        $attributes = $reflection->getAttributes(UseEloquentBuilder::class);
-        if ($attributes === []) {
-            return null;
-        }
+        $current = $reflection;
 
-        try {
-            return $attributes[0]->newInstance()->builderClass;
-        } catch (\Error $error) {
-            $codebase->progress->debug(
-                "Laravel plugin: #[UseEloquentBuilder] on '{$reflection->getName()}' failed to instantiate: {$error->getMessage()}\n",
-            );
+        do {
+            $attributes = $current->getAttributes(UseEloquentBuilder::class);
 
-            return null;
-        }
+            foreach ($current->getTraits() as $trait) {
+                if ($attributes !== []) {
+                    break;
+                }
+
+                $attributes = $trait->getAttributes(UseEloquentBuilder::class);
+            }
+
+            if ($attributes !== []) {
+                try {
+                    return $attributes[0]->newInstance()->builderClass;
+                } catch (\Error $error) {
+                    $codebase->progress->debug(
+                        "Laravel plugin: #[UseEloquentBuilder] on '{$current->getName()}' failed to instantiate: {$error->getMessage()}\n",
+                    );
+
+                    return null;
+                }
+            }
+
+            $current = $current->getParentClass();
+        } while ($current !== false);
+
+        return null;
     }
 
     /**
@@ -144,7 +163,14 @@ final class CustomTypeDetector
             return null;
         }
 
-        return $returnType->getName();
+        $builderClass = $returnType->getName();
+
+        // getName() yields the keyword for a `self`/`static`/`parent` return type, which is not a class-string.
+        if (\in_array($builderClass, ['self', 'static', 'parent'], true)) {
+            return null;
+        }
+
+        return $builderClass;
     }
 
     /**
@@ -315,6 +341,11 @@ final class CustomTypeDetector
         }
 
         $typeName = $returnType->getName();
+
+        // getName() yields the keyword for a `self`/`static`/`parent` return type, which is not a class-string.
+        if (\in_array($typeName, ['self', 'static', 'parent'], true)) {
+            return null;
+        }
 
         // Skip if it just returns the base EloquentCollection — not a custom collection.
         if ($typeName === EloquentCollection::class) {

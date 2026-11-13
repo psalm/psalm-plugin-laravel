@@ -121,7 +121,8 @@ jobs:
       #
       # stdout is kept for the coverage check below, and the annotations still reach the runner
       # through tee. `shell: bash` is load-bearing: it adds pipefail, which the default `bash -e`
-      # lacks, and without it a red Psalm run would exit with tee's status 0.
+      # lacks, and without it a red Psalm run would exit with tee's status 0. stderr is kept too,
+      # for the slow-file check: Psalm's progress output, warnings included, goes there.
       - name: Run Psalm
         shell: bash
         run: >-
@@ -130,6 +131,7 @@ jobs:
           --scan-threads="$PSALM_SCAN_THREADS"
           --output-format=github
           ${{ github.event_name == 'push' && '--shepherd' || '' }}
+          2> >(tee "$RUNNER_TEMP/psalm.err" >&2)
           | tee "$RUNNER_TEMP/psalm.out"
 
       # Split from the restore rather than one combined actions/cache step: a combined step
@@ -167,4 +169,21 @@ jobs:
           fi
           actual=$(grep -m1 '^Psalm was .*infer types' "$RUNNER_TEMP/psalm.out" || echo 'no summary line')
           printf '%s\n' "::error title=Type coverage below 100%::${actual}. Fix patterns: docs/contributing/type-coverage.md. To list the files with mixed expressions: composer psalm -- --no-progress --no-suggestions --stats 2>&1 | grep -E 'mixed\)' | grep -vE '\b0 mixed'"
+          exit 1
+
+      # Psalm warns when one file takes longer than longScanWarning (10s by default) in a
+      # multi-process run, and exits 0 anyway. Such a file is usually an exponential blowup
+      # in Psalm's analysis of one statement (vimeo/psalm#13603: ~45s for one negated in_array()),
+      # which every later run then pays for. The slowest file here takes under 2s locally, so the
+      # default leaves room for slower runners. Runs even after a red Psalm step; with a warm
+      # cache only changed files are analysed, which is where a new slow file comes from.
+      - name: Check for slow files
+        if: ${{ !cancelled() }}
+        run: |
+          [ -f "$RUNNER_TEMP/psalm.err" ] || exit 0
+          slow=$(grep -oE '[A-Za-z0-9_./-]+\.php is taking over [0-9.]+s to process' "$RUNNER_TEMP/psalm.err" || true)
+          [ -z "$slow" ] && exit 0
+          while IFS= read -r line; do
+            printf '%s\n' "::error file=${line%% *},title=Slow Psalm analysis::${line}. Find the statement with: vendor/bin/psalm --no-cache --threads=1 --debug-by-line ${line%% *}"
+          done <<< "$slow"
           exit 1

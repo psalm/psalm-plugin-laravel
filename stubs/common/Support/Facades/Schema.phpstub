@@ -25,7 +25,11 @@ namespace Illuminate\Support\Facades;
  * runtime) stay accepted. `defaultStringLength(non-negative-int)` is deliberately NOT restated: a
  * negative length is not validated by the method itself and fails later, when the DDL for a string column is built.
  *
+ * Re-declaring the class drops the sealing flag that Laravel's `@method` tags set on the vendor facade,
+ * so it is restated to keep an unknown call (`Facade::definitelyNotAMethod()`) reported.
+ *
  * @mixin \Illuminate\Database\Schema\Builder
+ * @psalm-seal-methods
  */
 class Schema extends Facade
 {

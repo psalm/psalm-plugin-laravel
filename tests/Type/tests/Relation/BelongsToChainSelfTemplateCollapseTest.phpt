@@ -14,8 +14,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * Root cause: stubs/common/Database/Eloquent/Concerns/HasRelationships.phpstub declared
  * belongsTo(): BelongsTo<TRelatedModel, $this>, and on the Psalm 7 beta of the time the
- * chained intermediate type degraded to mixed. On 7.0.0-rc1 `$this` and `static` resolve
- * identically there (both `Order&static` on a non-final model).
+ * chained intermediate type degraded to mixed. Psalm 7.2 resolves `$this` and `static`
+ * identically here (both `Order&static` on a non-final model).
  *
  * The fix has two halves (see the stub-authoring rules in AGENTS.md and Relation.phpstub):
  *  1. belongsTo() returns BelongsTo<TRelatedModel, static> (static IS substituted on chaining).

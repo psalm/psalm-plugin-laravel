@@ -77,6 +77,11 @@ foreach ($registry['apps'] as $app) {
     if (!is_string($name) || preg_match($safe, $name) !== 1 || in_array($name, $reserved, true) || isset($apps[$name])) {
         $fail('invalid or duplicate app name: ' . var_export($name, true));
     }
+    // delta-app.sh fetches only the pinned commit, by SHA, which a server accepts only in full.
+    $ref = $app['ref'] ?? null;
+    if (!is_string($ref) || preg_match('/^[0-9a-f]{40}$/', $ref) !== 1) {
+        $fail("app {$name} ref must be a full 40-character commit SHA: " . var_export($ref, true));
+    }
     $tags = (array) ($app['groups'] ?? []);
     foreach ($tags as $tag) {
         if (!is_string($tag) || !isset($groups[$tag])) {
@@ -92,13 +97,19 @@ foreach ($registry['apps'] as $app) {
 }
 
 /** @param list<string> $runFlags */
-$emit = static function (string $status, array $names = [], string $label = '', string $reply = '', array $runFlags = []) use ($apps): never {
+$emit = static function (string $status, array $names = [], string $label = '', string $reply = '', array $runFlags = []) use ($apps, $members): never {
+    // `large` apps start first: matrix jobs queue behind the org's concurrent-job limit, and a slow app that
+    // gets a runner last sets the run's wall time. The report keeps the selection order (apps_csv).
+    $large = array_flip($members['large'] ?? []);
+    $matrixNames = $names;
+    usort($matrixNames, static fn(string $a, string $b): int => isset($large[$b]) <=> isset($large[$a]));
+
     echo json_encode([
         'status' => $status,
         'apps_csv' => implode(',', $names),
         'label' => $label,
         'flags' => implode(' ', $runFlags),
-        'matrix' => ['include' => array_map(static fn(string $n): array => $apps[$n], $names)],
+        'matrix' => ['include' => array_map(static fn(string $n): array => $apps[$n], $matrixNames)],
         'reply' => $reply,
     ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "\n";
     exit(0);

@@ -58,6 +58,16 @@ class Builder implements BuilderContract
     public function getModel() {}
 
     /**
+     * Re-declared because Psalm resolves `$this` in a callable parameter of the generic `BuildsQueries`
+     * trait without the using class's template arguments, i.e. `callable(Builder<Model>)`, and rejects
+     * every callback typed with the concrete model (`callable(static)` resolves the same way).
+     *
+     * @param  callable(\Illuminate\Database\Eloquent\Builder<TModel>): mixed  $callback
+     * @return $this
+     */
+    public function tap($callback) {}
+
+    /**
      * @param  array<string, mixed>  $attributes
      * @return TModel
      */
@@ -104,7 +114,7 @@ class Builder implements BuilderContract
     public function where($column, $operator = null, $value = null, $boolean = 'and') {}
 
     /**
-     * @param  string  $column
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @param  \DateTimeInterface|string|null  $operator
      * @param  \DateTimeInterface|string|null  $value
      * @param  string  $boolean
@@ -113,7 +123,7 @@ class Builder implements BuilderContract
     public function whereDate($column, $operator, $value = null, $boolean = 'and') {}
 
     /**
-     * @param  \Closure|array|string  $column
+     * @param  \Closure|array|string|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return $this
@@ -282,13 +292,13 @@ class Builder implements BuilderContract
     public function whereDoesntHave($relation, \Closure $callback = null) {}
 
     /**
-     * @param  string  $column
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @return $this
      */
     public function latest($column = null) {}
 
     /**
-     * @param  string  $column
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @return $this
      */
     public function oldest($column = null) {}
@@ -311,7 +321,7 @@ class Builder implements BuilderContract
     /**
      * @template T
      * @param  T $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel|null)
      *
      * @psalm-taint-escape sql
@@ -322,7 +332,7 @@ class Builder implements BuilderContract
 
     /**
      * @param  \Illuminate\Contracts\Support\Arrayable|array  $ids
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return \Illuminate\Database\Eloquent\Collection<int, TModel>
      *
      * @psalm-taint-escape sql
@@ -334,7 +344,7 @@ class Builder implements BuilderContract
     /**
      * @template T
      * @param  T $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel)
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -348,7 +358,7 @@ class Builder implements BuilderContract
     /**
      * @template T
      * @param  T  $id
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @psalm-return (T is (array|\Illuminate\Contracts\Support\Arrayable) ? \Illuminate\Database\Eloquent\Collection<int, TModel> : TModel)
      *
      * @psalm-taint-escape sql
@@ -363,7 +373,7 @@ class Builder implements BuilderContract
     public function first($columns = ['*']) {}
 
     /**
-     * @param  array<array-key, string>  $columns
+     * @param  array<array-key, string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return TModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -384,7 +394,7 @@ class Builder implements BuilderContract
      *
      * @template TValue
      *
-     * @param  list<non-empty-string>|non-empty-string|(\Closure(): TValue)  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>|non-empty-string|(\Closure(): TValue)  $columns
      * @param  (\Closure(): TValue)|null  $callback
      * @return TModel|TValue
      */
@@ -419,7 +429,7 @@ class Builder implements BuilderContract
     public function firstWhere($column, $operator = null, $value = null, $boolean = 'and') {}
 
     /**
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return TModel
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -435,7 +445,7 @@ class Builder implements BuilderContract
     public function updateOrCreate(array $attributes, array $values = []) {}
 
     /**
-     * @param  string  $column
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @return mixed
      */
     public function value($column) {}
@@ -447,7 +457,7 @@ class Builder implements BuilderContract
     public function get($columns = ['*']) {}
 
     /**
-     * @param  list<non-empty-string>  $columns
+     * @param  list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return array<array-key, TModel>
      */
     public function getModels($columns = ['*']) {}
@@ -524,7 +534,7 @@ class Builder implements BuilderContract
     protected function enforceOrderBy() {}
 
     /**
-     * @param  string  $column
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @param  string|null  $key
      * @return \Illuminate\Support\Collection<array-key, mixed>
      */
@@ -539,7 +549,7 @@ class Builder implements BuilderContract
      * code typed on the contract still accepts the result.
      *
      * @param  int|null|(\Closure(int): int)  $perPage
-     * @param  non-empty-string|list<non-empty-string>  $columns
+     * @param  non-empty-string|list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @param  (\Closure(): int)|int|null  $total
@@ -551,7 +561,7 @@ class Builder implements BuilderContract
 
     /**
      * @param  int|null  $perPage
-     * @param  non-empty-string|list<non-empty-string>  $columns
+     * @param  non-empty-string|list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @param  string  $pageName
      * @param  int|null  $page
      * @return \Illuminate\Pagination\Paginator<int, TModel>
@@ -610,6 +620,9 @@ class Builder implements BuilderContract
     public function update(array $values) {}
 
     /**
+     * Laravel documents `Expression|string`, but `toBase()->increment()` builds `incrementEach([$column => $amount])`,
+     * which throws a TypeError for an Expression, so the stub deliberately keeps `string`.
+     *
      * @param  string  $column
      * @param  float|int  $amount
      * @param  array  $extra
@@ -707,7 +720,7 @@ class Builder implements BuilderContract
     public function setModel(Model $model) {}
 
     /**
-     * @param  string  $columns
+     * @param  \Illuminate\Contracts\Database\Query\Expression|string  $columns
      * @return int<0, max>
      */
     public function count($columns = '*') {}

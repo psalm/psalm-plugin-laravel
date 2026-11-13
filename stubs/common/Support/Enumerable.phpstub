@@ -8,8 +8,11 @@ namespace Illuminate\Support;
  *
  * @extends \IteratorAggregate<TKey, TValue>
  * @extends \Illuminate\Contracts\Support\Arrayable<TKey, TValue>
+ *
+ * `\Stringable` is listed explicitly: the real interface gets it implicitly from
+ * declaring `__toString()`, which this stub does not redeclare.
  */
-interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminate\Contracts\Support\Jsonable, \Countable, \IteratorAggregate, \JsonSerializable
+interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminate\Contracts\Support\Jsonable, \Countable, \IteratorAggregate, \JsonSerializable, \Stringable
 {
     /**
      * Get one or a specified number of items randomly from the collection.

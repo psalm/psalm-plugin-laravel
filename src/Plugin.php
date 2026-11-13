@@ -15,20 +15,35 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider;
 use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
 use Psalm\LaravelPlugin\Internal\InternalErrorReporter;
 use Psalm\LaravelPlugin\Internal\LaravelAiIntegration;
+use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\LaravelPlugin\Internal\PromptInjectionIssuePolicy;
+use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\LaravelPlugin\Stubs\AliasStubProvider;
 use Psalm\LaravelPlugin\Stubs\CarbonStubProvider;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\LaravelPlugin\Stubs\StubFileFinder;
 use Psalm\Plugin\PluginEntryPointInterface;
+use Psalm\Plugin\PluginFixableIssuesInterface;
 use Psalm\Plugin\RegistrationInterface;
 
 /**
  * @psalm-api
  * @internal
  */
-final class Plugin implements PluginEntryPointInterface
+final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInterface
 {
+    /**
+     * Psalter asks before `__invoke()`, so this is a constant list that never reads config or boots Laravel.
+     *
+     * @psalm-pure
+     * @inheritDoc
+     */
+    #[\Override]
+    public function getFixableIssues(?\SimpleXMLElement $config = null): array
+    {
+        return [OctaneIncompatibleBinding::class];
+    }
+
     /** @inheritDoc */
     #[\Override]
     public function __invoke(RegistrationInterface $registration, ?\SimpleXMLElement $config = null): void
@@ -54,6 +69,10 @@ final class Plugin implements PluginEntryPointInterface
         }
 
         $output = $this->getProgress($registration);
+        foreach ($pluginConfig->deprecations as $deprecation) {
+            PluginWarning::emit($output, $deprecation);
+        }
+
         $this->loadInitializationHandlers();
         $this->resetInvocationState();
 
@@ -134,6 +153,7 @@ final class Plugin implements PluginEntryPointInterface
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
 
+            // @todo-by https://github.com/vimeo/psalm/pull/12313 only the 6.x PR exists; once it lands, check whether the bound-class queue can move back into registerStubs()
             // Last: make()ing every binding runs provider and binding closures, so it must follow every other
             // init step, and it stays outside registerStubs() so the classes are queued as ordinary vendor scans.
             if ($registration instanceof \Psalm\PluginRegistrationSocket) {
@@ -291,10 +311,10 @@ final class Plugin implements PluginEntryPointInterface
         $this->queueStubbedClassesForScanning($registration, [...$stubs, ...$carbonStubs]);
     }
 
+    // @todo-by https://github.com/vimeo/psalm/issues/12075 remove queueStubbedClassesForScanning(), Psalm then merges stubs order-independently
     /**
-     * Workaround for #1616 / vimeo/psalm#12075 (reproduces on Psalm 6 and 7); remove once Psalm
-     * merges stubs order-independently. Scanning a stub records it as the file of every class it
-     * declares, after which Scanner::queueClassLikeForScanning() never queues the class's vendor
+     * Workaround for #1616 (reproduces on Psalm 6 and 7). Scanning a stub records it as the file of
+     * every class it declares, after which Scanner::queueClassLikeForScanning() never queues the class's vendor
      * file. A stubbed class that nothing queues during the main scan (e.g. reached only through
      * `app('events')` narrowing) then holds only its stubbed members, and with `__call` every
      * other method silently resolves to `mixed`.
@@ -362,7 +382,7 @@ final class Plugin implements PluginEntryPointInterface
         bool $bladeActive,
         ?Blade\Annotate\AnnotateRequest $annotate,
     ): void {
-        // Global stop-gap for vimeo/psalm#12251 and #12252 (named arguments bound to a variadic).
+        // Global stop-gap for vimeo/psalm#12252 (named arguments bound to a variadic).
         // Not domain-specific like the other taint handlers below, so it is registered
         // first rather than filed under any one Laravel feature directory.
         require_once __DIR__ . '/Handlers/Taint/NamedArgumentTaintHandler.php';
@@ -935,7 +955,8 @@ final class Plugin implements PluginEntryPointInterface
             // Only warn when the user explicitly opted into missing translation detection —
             // without it, they just lose the bonus type narrowing, which isn't worth a warning
             if ($reportMissing) {
-                $output->warning(
+                PluginWarning::emit(
+                    $output,
                     'Laravel plugin: findMissingTranslations is enabled but the translator service is not bound. '
                     . 'The MissingTranslation check will be skipped.',
                 );
@@ -948,7 +969,8 @@ final class Plugin implements PluginEntryPointInterface
 
         if (!$translator instanceof \Illuminate\Translation\Translator) {
             if ($reportMissing) {
-                $output->warning(
+                PluginWarning::emit(
+                    $output,
                     'Laravel plugin: findMissingTranslations is enabled but the translator is not an instance of '
                     . 'Illuminate\Translation\Translator. The MissingTranslation check will be skipped.',
                 );
@@ -998,7 +1020,8 @@ final class Plugin implements PluginEntryPointInterface
 
         if (!$finder instanceof \Illuminate\View\FileViewFinder) {
             if ($report) {
-                $output->warning(
+                PluginWarning::emit(
+                    $output,
                     'Laravel plugin: findMissingViews is enabled but '
                     . ($problem ?? 'the view finder is not an instance of Illuminate\View\FileViewFinder.')
                     . ' The MissingView check will be skipped.',

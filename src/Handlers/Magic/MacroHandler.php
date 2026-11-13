@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Magic;
 
+use Illuminate\Foundation\Providers\FoundationServiceProvider;
 use Illuminate\Validation\ValidationException;
+use Psalm\Codebase;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
@@ -146,53 +148,28 @@ use Psalm\Storage\MethodStorage;
 final class MacroHandler implements AfterCodebasePopulatedInterface
 {
     /**
-     * Hardcoded `@throws` map for framework-registered macros whose closure body
-     * is known to raise a specific exception. Two-level lookup: declaring class
-     * (as the case-preserving FQCN) → macro name (lowercased per
-     * {@see MacroDefinition::$methodName}'s contract) → exception FQCN.
+     * `@throws` map for framework-registered macros whose closure body is known to raise a specific
+     * exception. Two-level lookup: declaring class (as the case-preserving FQCN) → macro name
+     * (lowercased per {@see MacroDefinition::$methodName}'s contract) → exception FQCN.
      *
-     * The class-level scoping is load-bearing. A user registering an unrelated
-     * `validate` macro on a different Macroable host (e.g.
-     * `Stringable::macro('validate', ...)`) must NOT receive
-     * `ValidationException` in the synthesised throws set. Today the upstream
-     * propagation gap (below) masks the false positive, but the moment that
-     * gap closes, an unscoped map would surface `MissingThrowsDocblock` on
-     * innocent third-party macros that happen to share a name. Larastan's
-     * single-key map gets away with it because Larastan's pseudo-method
-     * synthesis is structured differently; the safer shape here is per-class.
+     * The class-level scoping is load-bearing. A user registering an unrelated `validate` macro on a
+     * different Macroable host (e.g. `Stringable::macro('validate', ...)`) must NOT receive
+     * `ValidationException` in the synthesised throws set, or an unscoped map would surface
+     * `MissingThrowsDocblock` on innocent third-party macros that happen to share a name.
      *
-     * Currently covers the two `Request` macros registered by
-     * `Illuminate\Foundation\Providers\FoundationServiceProvider::registerRequestValidation()`,
-     * both of which throw `ValidationException` (the parent's `@throws`
-     * docblock declares this).
+     * Covers the two `Request` macros registered by
+     * `Illuminate\Foundation\Providers\FoundationServiceProvider::registerRequestValidation()`, both of
+     * which throw `ValidationException`. With `checkForThrowsDocblock="true"` an uncaught
+     * `$request->validate(...)` therefore reports `MissingThrowsDocblock`, like a real method with a
+     * `@throws` tag: Psalm merges a pseudo-method's `MethodStorage::$throws` into the caller's possibly
+     * thrown exceptions on the magic-call dispatch path (vimeo/psalm#11842, fixed in 7.2.0). The map is
+     * applied by {@see self::buildMethodStorage()} for injected pseudo-methods and by
+     * {@see self::attachFrameworkThrows()} for the `@method` tags Laravel already declares.
      *
-     * **Effective scope today.** Setting `MethodStorage::$throws` documents the
-     * pseudo-method's throw set correctly, but Psalm 7 does NOT propagate it
-     * to the caller's `Context::$possibly_thrown_exceptions`:
-     * `Context::mergeFunctionExceptions()` is called only from
-     * `CallAnalyzer::checkMethodArgs()` (gated on `declaring_method_ids`, which
-     * pseudo-methods are not in) and `FunctionCallReturnTypeFetcher` (function
-     * calls only). The pseudo-method dispatch path
-     * (`MissingMethodCallHandler::handleMagicMethod` /
-     * `handleMissingOrMagicMethod`, and the static-call path through
-     * `AtomicStaticCallAnalyzer::findPseudoMethodAndClassStorages`) never
-     * consults `$throws`. Until Psalm wires throws propagation through that
-     * dispatch path, `MissingThrowsDocblock` will not fire on callers of
-     * `$request->validate(...)`. Tracked upstream at
-     * {@link https://github.com/vimeo/psalm/issues/11842}.
-     *
-     * Keeping the map populated regardless: the synthesised storage stays
-     * faithful to the actual runtime behaviour, and the moment Psalm closes
-     * the propagation gap this plugin's users gain `MissingThrowsDocblock`
-     * coverage with no further change here.
-     *
-     * **Adding new entries.** Cross-reference the closure body in Laravel's
-     * source. If the exception class is not already referenced from analysed
-     * code or stubs (`ValidationException` always is, via the existing
-     * validation paths), consider whether Psalm's scanner needs to be told
-     * about it — `FunctionLikeDocblockScanner` queues `@throws` classes for
-     * scanning; we do not, since the map is curated from already-reachable
-     * framework classes.
+     * **Adding new entries.** Cross-reference the closure body in Laravel's source. If the exception
+     * class is not already referenced from analysed code or stubs (`ValidationException` always is, via
+     * the existing validation paths), consider whether Psalm's scanner needs to be told about it:
+     * `FunctionLikeDocblockScanner` queues `@throws` classes for scanning, and this map does not.
      *
      * @var array<class-string, array<lowercase-string, class-string<\Throwable>>>
      */
@@ -268,6 +245,73 @@ final class MacroHandler implements AfterCodebasePopulatedInterface
                 self::injectPseudoMethod($storage, $def);
             }
         }
+
+        self::attachFrameworkThrows($codebase);
+    }
+
+    /**
+     * Put {@see self::FRAMEWORK_THROWS} on the pseudo-methods that already exist for those macros.
+     *
+     * Laravel declares `Request::validate()` / `validateWithBag()` as class-level `@method` tags, and
+     * {@see self::injectPseudoMethod()} never overwrites an existing pseudo-method, so the map would
+     * otherwise only reach macros without such a tag. A `@method` tag has no `@throws` slot, hence the
+     * storage write. Psalm's `Populator` shares each `MethodStorage` object with the descendants, so one
+     * write covers `FormRequest` and user request classes. Only macros the booted app really registers
+     * are touched.
+     */
+    private static function attachFrameworkThrows(Codebase $codebase): void
+    {
+        foreach (self::FRAMEWORK_THROWS as $class => $throwsByMethod) {
+            try {
+                $storage = $codebase->classlike_storage_provider->get($class);
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            foreach ($throwsByMethod as $methodName => $exception) {
+                $pseudoMethod = $storage->pseudo_methods[$methodName] ?? null;
+
+                if ($pseudoMethod instanceof MethodStorage && self::isFrameworkMacro($class, $methodName)) {
+                    $pseudoMethod->throws[$exception] = true;
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether the macro registered under this name is the one Laravel's `FoundationServiceProvider` installs.
+     * An app or package replacing it (`Request::macro('validate', ...)`) has no `ValidationException`
+     * guarantee, so the framework throws must not follow it. A macro that is not registered is not Laravel's.
+     * The closure must start inside `FoundationServiceProvider::registerRequestValidation()`: its other macro
+     * closures (`hasValidRelativeSignature`, ...) live in the same file but do not throw.
+     *
+     * Known gap: a Request subclass that redeclares its own `static $macros` and registers a non-throwing
+     * `validate` still gets the framework throws, because Psalm shares the pseudo-method storage down the
+     * hierarchy.
+     *
+     * @param class-string $class
+     * @param lowercase-string $methodName
+     */
+    private static function isFrameworkMacro(string $class, string $methodName): bool
+    {
+        try {
+            /** @var array<string, object|string|array<array-key, mixed>> $registered */
+            $registered = (new \ReflectionProperty($class, 'macros'))->getValue();
+            $macro = \array_change_key_case($registered, \CASE_LOWER)[$methodName] ?? null;
+
+            if (!$macro instanceof \Closure) {
+                return false;
+            }
+
+            $closure = new \ReflectionFunction($macro);
+            $registrar = new \ReflectionMethod(FoundationServiceProvider::class, 'registerRequestValidation');
+
+            return $closure->getFileName() === $registrar->getFileName()
+                && $closure->getStartLine() >= $registrar->getStartLine()
+                && $closure->getStartLine() <= $registrar->getEndLine();
+        } catch (\ReflectionException) {
+            return false;
+        }
     }
 
     /**
@@ -307,9 +351,6 @@ final class MacroHandler implements AfterCodebasePopulatedInterface
         }
     }
 
-    /**
-     * @psalm-capabilities read-props
-     */
     private static function buildMethodStorage(MacroDefinition $def, bool $isStatic): MethodStorage
     {
         $methodStorage = new MethodStorage();
@@ -329,12 +370,10 @@ final class MacroHandler implements AfterCodebasePopulatedInterface
         $methodStorage->signature_return_type = $def->signatureReturnType;
         $methodStorage->stubbed = true;
 
-        // Apply the framework throws map (see {@see self::FRAMEWORK_THROWS} for
-        // shape, scope, and the upstream propagation gap that makes this a
-        // future-effective wiring rather than an immediately observable one).
-        $throwsForClass = self::FRAMEWORK_THROWS[$def->declaringClass] ?? null;
-        if ($throwsForClass !== null && isset($throwsForClass[$def->methodName])) {
-            $methodStorage->throws[$throwsForClass[$def->methodName]] = true;
+        // Apply the framework throws map (see {@see self::FRAMEWORK_THROWS} for shape and scope).
+        $exception = self::FRAMEWORK_THROWS[$def->declaringClass][$def->methodName] ?? null;
+        if ($exception !== null && self::isFrameworkMacro($def->declaringClass, $def->methodName)) {
+            $methodStorage->throws[$exception] = true;
         }
 
         return $methodStorage;

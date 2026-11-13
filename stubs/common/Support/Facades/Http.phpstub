@@ -1,0 +1,39 @@
+<?php
+
+namespace Illuminate\Support\Facades;
+
+/**
+ * The facade root `Http\Client\Factory` forwards every method it does not declare (through `__call`)
+ * to a fresh, sync `PendingRequest`. The `@mixin` makes Psalm analyse `Http::get($url)` as that
+ * PendingRequest instance call: a static call consults a mixin target's real method before the
+ * facade's generated `@method` tags (decisions.md, the `Schema` facade). So the facade shares the
+ * PendingRequest stub's return types, params and `ssrf` sinks, `Http::async()` narrows to
+ * AsyncPendingRequest, and a verb added to the PendingRequest stub needs no edit here.
+ *
+ * Real methods outrank the mixin. Factory's own methods win at runtime over `__call`, so the one
+ * whose PendingRequest namesake has a different signature is restated with the facade tag below.
+ * The Macroable statics (`macro`, `mixin`, `hasMacro`, `flushMacros`) share one signature on both.
+ *
+ * Caveats: the mixin must stay non-generic (`@mixin PendingRequest<bool>` makes Psalm resolve `$this` to
+ * the facade). Psalm forwards on a receiver without template arguments, so a fluent result is
+ * `PendingRequest&static` and a typed callback of `tap(Http::withHeaders(...), ...)` reports a false
+ * ArgumentTypeCoercion (HttpFacadeTapKnownLimitation.phpt).
+ *
+ * The stub docblock replaces the sealing flag Laravel's `@method` tags set on the vendor class, so the
+ * seal is restated to keep an unknown call (`Http::definitelyNotAMethod()`) reported.
+ *
+ * @mixin \Illuminate\Http\Client\PendingRequest
+ * @psalm-seal-methods
+ */
+class Http extends Facade
+{
+    /**
+     * Allow stray, unfaked requests entirely, or optionally allow only specific URLs.
+     *
+     * Factory's method: PendingRequest's namesake requires `$only` and returns the pending request.
+     *
+     * @param  array|null  $only
+     * @return \Illuminate\Http\Client\Factory
+     */
+    public static function allowStrayRequests($only = null) {}
+}

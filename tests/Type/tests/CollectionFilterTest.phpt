@@ -17,21 +17,21 @@ final class CollectionFilterTest
     public function filterRemovesNull(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string> */
     }
 
     /** @param Collection<int, string|false> $collection */
     public function filterRemovesFalse(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string> */
     }
 
     /** @param Collection<int, string|null|false> $collection */
     public function filterRemovesNullAndFalse(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string> */
     }
 
     /**
@@ -41,21 +41,21 @@ final class CollectionFilterTest
     public function filterWithNullCheckCallbackNarrows(Collection $collection): void
     {
         $_result = $collection->filter(fn (string|null $item) => $item !== null);
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /** @param Collection<int, Countable> $items */
     public function filterWithInstanceofCallbackNarrows(Collection $items): void
     {
         $_result = $items->filter(static fn (Countable $x): bool => $x instanceof Stringable);
-        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable> */
     }
 
     /** @param LazyCollection<int, Countable> $items */
     public function lazyCollectionFilterWithInstanceofCallbackNarrows(LazyCollection $items): void
     {
         $_result = $items->filter(static fn (Countable $x): bool => $x instanceof Stringable);
-        /** @psalm-check-type-exact $_result = LazyCollection<int, Countable&Stringable>&static */
+        /** @psalm-check-type-exact $_result = LazyCollection<int, Countable&Stringable> */
     }
 
     /**
@@ -94,7 +94,7 @@ final class CollectionFilterTest
     public function lazyCollectionFilterRemovesNull(LazyCollection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = LazyCollection<int, non-falsy-string>&static */
+        /** @psalm-check-type-exact $_filtered = LazyCollection<int, non-falsy-string> */
     }
 
     /**
@@ -104,7 +104,7 @@ final class CollectionFilterTest
     public function filterNarrowsStringToNonEmpty(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string> */
     }
 
     /**
@@ -114,7 +114,7 @@ final class CollectionFilterTest
     public function filterNarrowsArrayToNonEmpty(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-array<string, int>>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-array<string, int>> */
     }
 
     /**
@@ -124,7 +124,7 @@ final class CollectionFilterTest
     public function filterPreservesNonEmptyString(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-string> */
     }
 
     /**
@@ -134,7 +134,7 @@ final class CollectionFilterTest
     public function filterDoesNotNarrowInt(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, int>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, int> */
     }
 
     /**
@@ -156,7 +156,7 @@ final class CollectionFilterTest
     public function filterWithExplicitNullNarrows(Collection $collection): void
     {
         $_filtered = $collection->filter(null);
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string> */
     }
 
     /**
@@ -166,7 +166,7 @@ final class CollectionFilterTest
     public function filterDoesNotNarrowFloat(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, float>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, float> */
     }
 
     /**
