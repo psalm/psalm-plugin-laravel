@@ -43,6 +43,11 @@ final class CollectHandler implements FunctionReturnTypeProviderInterface
             return null;
         }
 
+        // `collect(...$args)`: the first element of $args is the input, not $args itself.
+        if ($args[0]->unpack) {
+            return null;
+        }
+
         $source = $event->getStatementsSource();
         $argType = $source->getNodeTypeProvider()->getType($args[0]->value);
 
