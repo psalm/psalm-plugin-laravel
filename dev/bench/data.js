@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794526240172,
+  "lastUpdate": 1794529113996,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18545,6 +18545,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1273,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f9b54e015ff81be1240bfdc7bf3b4f95e45c3218",
+          "message": "fix(facades): map facades a custom app.aliases omits #0 (#2275)\n\nAn app that sets its own `app.aliases` list instead of extending\nFacade::defaultAliases() left Laravel's facades out of the map, so\nmacros never reached them. #2270 re-sealed the Route facade, turning\n`Route::localized()` macro calls into UndefinedMagicMethod.\n\nRefs #2270",
+          "timestamp": "2026-11-13T01:15:12+01:00",
+          "tree_id": "efb3742b4cff84aec385af0e79d0438c5e807bbc",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f9b54e015ff81be1240bfdc7bf3b4f95e45c3218"
+        },
+        "date": 1794529112110,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.2,
+            "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1272,
             "unit": "MB"
           }
         ]
