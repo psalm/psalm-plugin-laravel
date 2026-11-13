@@ -19,6 +19,12 @@ final class SuppressHandler implements AfterClassLikeVisitInterface, AfterCodeba
 {
     /** @var array<string, list<string>> */
     private const CLASS_LEVEL_BY_PARENT_CLASS = [
+        // Livewire components are never constructed with arguments: typed properties are set in
+        // mount() or restored from the snapshot. Volt components extend Livewire\Component, so this
+        // entry covers them too. See psalm/psalm-plugin-laravel#2161.
+        'MissingConstructor' => [
+            'Livewire\Component',
+        ],
         'PropertyNotSetInConstructor' => [
             'Illuminate\Console\Command',
             'Illuminate\Foundation\Http\FormRequest',
