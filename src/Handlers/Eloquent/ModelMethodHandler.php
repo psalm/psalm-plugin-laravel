@@ -745,7 +745,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
             return self::registerGlobalScopesReturnType($event, $called_fq_classlike_name, $codebase);
         }
 
-        if (isset(self::INSTANCE_QUERY_CONSTRUCTION_METHODS[$methodName])) {
+        if (isset(self::INSTANCE_QUERY_CONSTRUCTION_METHODS[$methodName]) && self::hasConcreteModelReceiver($event)) {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
             // For models without a custom builder, defer to the stub's
@@ -763,7 +763,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         // Model::query(), and Model::with() which is `static::query()->with(...)` (issue #1678)
-        if ($methodName === 'query' || ($methodName === 'with' && self::hasConcreteModelReceiver($event))) {
+        if (($methodName === 'query' || $methodName === 'with') && self::hasConcreteModelReceiver($event)) {
             $builderClass = self::getBuilderClassForModel($called_fq_classlike_name);
 
             // For models without a custom builder, defer to the stub's
@@ -806,7 +806,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Whether the call's receiver is a literally named class (`Vehicle::with()`, `static::with()`)
+     * Whether the call's receiver is a literally named class (`Vehicle::query()`, `static::with()`)
      * or an expression typed as plain object / literal class-string. Template-typed receivers
      * (`T $model`, `class-string<T>`) and class-string<Model> values decline: rebuilding the
      * builder from the bound class would replace the template (or a possible subclass) with the
