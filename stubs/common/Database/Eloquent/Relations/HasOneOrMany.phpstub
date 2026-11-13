@@ -82,4 +82,14 @@ abstract class HasOneOrMany extends Relation
      * @return TRelatedModel
      */
     public function createOrFirst(array $attributes = [], \Closure|array $values = []) {}
+
+    /**
+     * Declared here because the forwarded Builder::each() is checked against `Builder<Model>`, which rejects a
+     * callback typed with the concrete related model.
+     *
+     * @param  callable(TRelatedModel, int): mixed  $callback
+     * @param  int  $count
+     * @return bool
+     */
+    public function each(callable $callback, $count = 1000) {}
 }
