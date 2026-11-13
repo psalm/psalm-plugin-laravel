@@ -443,6 +443,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Eloquent/ModelToArrayShapeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderNativeStaticReturnTypeHandler.php';
+        require_once __DIR__ . '/Handlers/Eloquent/BuilderFluentReturnHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
         // even when migrations are disabled (the @property branch still applies).
@@ -471,6 +472,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         // Types `Model::freshTimestamp()` (`Date::now()` at runtime) as the app's configured date class.
         require_once __DIR__ . '/Handlers/Eloquent/FreshTimestampHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\FreshTimestampHandler::class);
+        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderFluentReturnHandler::class);
         // Types the closure-literal callback of whereHas()/has()/withWhereHas()/whereHasMorph()/... per call site.
         require_once __DIR__ . '/Handlers/Eloquent/RelationCallbackParamsHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\RelationCallbackParamsHandler::class);
