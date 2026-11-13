@@ -80,7 +80,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  (callable(TValue, TKey): bool)|null  $callback
      * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
-     * @return ($default is \Closure ? TFirstDefaultFromClosure : (TFirstDefault | TValue))
+     * @return ($default is \Closure ? TFirstDefaultFromClosure|TValue : (TFirstDefault | TValue))
      *
      * @psalm-flow ($default) -> return
      * @psalm-taint-specialize
@@ -95,7 +95,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  TKey|null  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
-     * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
+     * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
      *
      * @psalm-flow ($default) -> return
      * @psalm-taint-specialize
