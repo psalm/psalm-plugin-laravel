@@ -103,4 +103,40 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
      */
     public function get($key, $default = null);
+
+    /**
+     * Compared against only, never stored, so the input is not bound to TKey/TValue.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
+     * @return static
+     */
+    public function diff($items);
+
+    /**
+     * Compared against only, never stored, so the input is not bound to TKey/TValue.
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<array-key, mixed>|iterable<array-key, mixed>  $items
+     * @return static
+     */
+    public function intersect($items);
+
+    /**
+     * The result holds entries of both collections, so it widens to the union of the key and value types.
+     *
+     * @template TUnionKey of array-key
+     * @template TUnionValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TUnionKey, TUnionValue>|iterable<TUnionKey, TUnionValue>  $items
+     * @return static<TKey|TUnionKey, TValue|TUnionValue>
+     */
+    public function union($items);
+
+    /**
+     * @template TReplaceKey of array-key
+     * @template TReplaceValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TReplaceKey, TReplaceValue>|iterable<TReplaceKey, TReplaceValue>  $items
+     * @return static<TKey|TReplaceKey, TValue|TReplaceValue>
+     */
+    public function replace($items);
 }
