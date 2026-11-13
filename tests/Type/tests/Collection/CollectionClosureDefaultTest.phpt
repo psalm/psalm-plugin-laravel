@@ -17,6 +17,29 @@ use Illuminate\Support\LazyCollection;
 final class CollectionClosureDefaultTest
 {
     /** @param Collection<int, int> $items */
+    public function first(Collection $items): void
+    {
+        $_scalar = $items->first(null, 'none');
+        /** @psalm-check-type-exact $_scalar = 'none'|int */
+
+        $_closure = $items->first(null, static fn (): string => 'none');
+        /** @psalm-check-type-exact $_closure = 'none'|int */
+
+        $_filtered = $items->first(static fn (int $i): bool => $i > 1, static fn (): null => null);
+        /** @psalm-check-type-exact $_filtered = int|null */
+    }
+
+    /** @param Collection<string, int> $items */
+    public function get(Collection $items): void
+    {
+        $_scalar = $items->get('a', 'none');
+        /** @psalm-check-type-exact $_scalar = 'none'|int */
+
+        $_closure = $items->get('a', static fn (): string => 'none');
+        /** @psalm-check-type-exact $_closure = 'none'|int */
+    }
+
+    /** @param Collection<int, int> $items */
     public function last(Collection $items): void
     {
         $_noDefault = $items->last();
@@ -46,7 +69,7 @@ final class CollectionClosureDefaultTest
      * @param LazyCollection<int, int> $lazy
      * @param Enumerable<int, int> $enumerable
      */
-    public function get(LazyCollection $lazy, Enumerable $enumerable): void
+    public function lazyAndEnumerableGet(LazyCollection $lazy, Enumerable $enumerable): void
     {
         $_lazyScalar = $lazy->get(1, 'none');
         /** @psalm-check-type-exact $_lazyScalar = 'none'|int */
@@ -65,6 +88,9 @@ final class CollectionClosureDefaultTest
     /** @param EloquentCollection<int, Customer> $customers */
     public function eloquentCollection(EloquentCollection $customers): void
     {
+        $_first = $customers->first(null, static fn (): string => 'none');
+        /** @psalm-check-type-exact $_first = 'none'|Customer */
+
         $_last = $customers->last(null, static fn (): string => 'none');
         /** @psalm-check-type-exact $_last = 'none'|Customer */
 

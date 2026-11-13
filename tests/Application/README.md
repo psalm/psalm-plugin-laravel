@@ -116,6 +116,7 @@ These models test specific Psalm plugin features (PK types, traits) and are not 
 | `Secret`            | Extends abstract UUID model + custom collection via `newCollection()` |
 | `Shop`              | Non-generic relationship resolution testing (#497)                    |
 | `InheritedBuilderModel` / `InheritedBuilderChild` | Non-final base with generic `InheritedModelBuilder` (via `newEloquentBuilder()`), SoftDeletes, and a legacy scope; the final child inherits the builder (so one builder maps to two models), overrides the scope with an extra optional parameter, and alone declares `scopeChildOnly()` (#1620) |
+| `AbstractAttributeBuilderModel` / `AttributeInheritedBuilderChild` | Abstract base carrying `#[UseEloquentBuilder(AttributeInheritedBuilder::class)]`; the final child declares nothing and inherits the builder through the class hierarchy, as Laravel's `resolveClassAttribute()` does (#2109) |
 
 ### Contributing
 
