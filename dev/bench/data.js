@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794561255380,
+  "lastUpdate": 1794564888372,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18615,6 +18615,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1273,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "332ceaec1d6db0d0871ac72533b8a3ad5f718b80",
+          "message": "fix(diagnostics): suppress MissingConstructor on Livewire components (#2276)",
+          "timestamp": "2026-11-13T10:54:26+01:00",
+          "tree_id": "12d1413a3df6fcce551c2fdd5ee9c3f9b9472724",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/332ceaec1d6db0d0871ac72533b8a3ad5f718b80"
+        },
+        "date": 1794564886774,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.83,
+            "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1272,
             "unit": "MB"
           }
         ]
