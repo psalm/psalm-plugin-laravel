@@ -581,6 +581,10 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         $registration->registerHooksFromClass(Handlers\Collections\CollectionReindexAllHandler::class);
         require_once __DIR__ . '/Handlers/Collections/HigherOrderCollectionProxyHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\HigherOrderCollectionProxyHandler::class);
+        // A bare collection parameter (`Collection`, `Eloquent\Collection`, ...) accepts any instantiation. See #1885.
+        require_once __DIR__ . '/Handlers/Collections/BareCollectionParamRewriter.php';
+        require_once __DIR__ . '/Handlers/Collections/BareCollectionParamHandler.php';
+        $registration->registerHooksFromClass(Handlers\Collections\BareCollectionParamHandler::class);
 
         require_once __DIR__ . '/Handlers/Support/ConditionableWhenHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ConditionableWhenHandler::class);
