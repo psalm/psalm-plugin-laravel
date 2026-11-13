@@ -133,6 +133,7 @@ final class IndirectMethodReferencesTest extends TestCase
             'Conventions\SendReportJob',              // queued bus job: handle, failed, hook members
             'Conventions\JobHandleDependency',        // handle() parameter
             'Conventions\PrivateConstructorJob',      // dispatch() runs `new static` in class scope: a private ctor is fine
+            'Conventions\PrivateConstructorEvent::__construct', // events dispatch() runs `new static` in class scope: a private ctor is fine
             'Conventions\QueuedListener::',           // ShouldQueue alone roots handle(), so the private property it reads is alive
         ] as $marker) {
             $this->assertStringNotContainsString($marker, $deadCode, "Expected {$marker} to be referenced indirectly.");
@@ -150,6 +151,7 @@ final class IndirectMethodReferencesTest extends TestCase
             'Models\User::ordinaryUnused',                       // plain model method
             'Conventions\NotAPipe::handle',                      // $next has no native Closure type: not a pipe
             'NotAPipe::$tries',                                  // hook-named property, but the class is not queued
+            'PrivateConstructorEvent::handle',                   // an event is not a bus job: handle() is no entry point
             'NonUniqueQueuedJob::uniqueId',                      // uniqueness hooks are read only for ShouldBeUnique
             'QueuedListenerEvent::__construct',                  // ShouldQueue-only handle() parameters are not injected
         ] as $marker) {
