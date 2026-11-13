@@ -26,10 +26,10 @@
         "php": "^8.2",
         "ext-simplexml": "*",
         "nikic/php-parser": "^5.0",
-        "psalm/psalm-plugin-api": "^0.4.2",
+        "psalm/psalm-plugin-api": "^0.4.3",
         "sebastian/diff": "^4.0 || ^5.0 || ^6.0 || ^7.0 || ^8.0 || ^9.0",
         "symfony/console": "^6.4 || ^7.0 || ^8.0",
-        "vimeo/psalm": "^7.3.2@stable"
+        "vimeo/psalm": "^7.5.0@stable"
     },
     "bin": [
         "bin/psalm-laravel"
