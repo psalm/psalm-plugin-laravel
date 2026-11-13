@@ -11,23 +11,22 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Type\Atomic\TNamedObject;
 
 /**
- * Restores the `@mixin Query\Builder` that Psalm drops on user Eloquent\Builder subclasses
+ * Keeps `@mixin Query\Builder` as the highest-priority mixin of user Eloquent\Builder subclasses
  * which declare their own `@mixin` (typically `@mixin <Model>`).
  *
  * Eloquent\Builder forwards Query\Builder methods (whereNotNull, orWhereNull, orderBy, ...)
- * through a stub `@mixin \Illuminate\Database\Query\Builder`. A subclass normally inherits that
- * mixin, so those methods resolve on, e.g., a plain VehicleBuilder. But when the subclass adds
- * its own `@mixin Model` (a common pattern to expose model attributes/scopes on builder
- * instances), Psalm does NOT merge the child's mixins with the parent's — its populator
- * REPLACES the inherited list with the child's own (Populator::populateDataFromParentClass,
- * the `if (!$storage->namedMixins)` guard). The inherited `@mixin Query\Builder` is lost, so
- * forwarded methods surface as false UndefinedMethod on the builder (and, once resolution
- * descends through `@mixin Model`, on the model itself).
+ * through a stub `@mixin \Illuminate\Database\Query\Builder`. When a subclass adds its own
+ * `@mixin Model` (a common pattern to expose model attributes/scopes on builder instances), that
+ * model also claims the Query\Builder methods: the plugin's per-model existence provider confirms
+ * them for the model's own `__call` forwarding. Psalm's mixin lookup is last-match-wins, so if
+ * the model mixin sits above Query\Builder, `$builder->whereNotNull()` resolves through the model
+ * and fails (UndefinedMethod on the model). Before Psalm 7.5 the populator also dropped the
+ * inherited mixin entirely (vimeo/psalm#13671). Since 7.5 it merges the inherited mixin below
+ * the child's own ones, which is the order that loses here.
  *
- * Upstream layer: the non-merging behavior is a vimeo/psalm limitation, not a Laravel one — a
- * child's own `@mixin` should extend, not shadow, the inherited mixins. Until that is fixed,
- * we compensate at the plugin level by re-appending Query\Builder to the subclass's named
- * mixins so native mixin resolution (existence, params, return types, visibility) works again.
+ * So Query\Builder is (re)placed last in the subclass's named mixins, letting native mixin
+ * resolution (existence, params, return types, visibility) answer the forwarded methods while
+ * model members not on Query\Builder still resolve through the model mixin.
  *
  * Not to be confused with {@see ModelBuilderMixinHandler}, which works the inverse direction —
  * a Model's `@mixin Builder<static>` — and at analysis time rather than after population.
@@ -49,20 +48,22 @@ final class BuilderSubclassQueryMixinHandler implements AfterCodebasePopulatedIn
                 continue;
             }
 
-            // Query\Builder already reachable as a named mixin → nothing was shadowed.
-            // This is the no-own-`@mixin` case: Psalm inherited the parent's
-            // `@mixin Query\Builder`, so namedMixins already carries it. Skip — and avoid
-            // appending a duplicate.
-            foreach ($storage->namedMixins as $mixin) {
-                if (\strtolower($mixin->value) === $queryBuilderLower) {
-                    continue 2;
-                }
+            $mixins = $storage->namedMixins;
+            $last = \end($mixins);
+
+            // No own `@mixin` (the inherited list is just Query\Builder), or Query\Builder already wins.
+            if ($last instanceof TNamedObject && \strtolower($last->value) === $queryBuilderLower) {
+                continue;
             }
 
-            // The subclass shadowed the inherited mixin with its own. Re-add Query\Builder.
-            // from_docblock mirrors a scanner-parsed `@mixin` tag — this restores the stub
-            // `@mixin Query\Builder` the subclass would otherwise have inherited.
-            $storage->namedMixins[] = new TNamedObject(QueryBuilder::class, from_docblock: true);
+            $storage->namedMixins = [
+                ...\array_values(\array_filter(
+                    $mixins,
+                    static fn(TNamedObject $mixin): bool => \strtolower($mixin->value) !== $queryBuilderLower,
+                )),
+                // from_docblock mirrors a scanner-parsed `@mixin` tag, like the stub's own.
+                new TNamedObject(QueryBuilder::class, from_docblock: true),
+            ];
 
             // handleRegularMixins() only iterates namedMixins when mixin_declaring_fqcln is set.
             // The scanner already sets it on any class that declares its own `@mixin` (and the
