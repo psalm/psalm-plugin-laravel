@@ -122,12 +122,27 @@ fast_copy() {
     cp -a "$src" "$dst"
 }
 
-# Psalm every app installs, on both sides. Fixed rather than read from the
-# plugin composer.json so base and head analyze with the same Psalm.
+# Psalm every app installs, on both sides: the higher of the base and head plugins' `vimeo/psalm`
+# floors, as one exact version, so base and head analyze with the same Psalm.
 # Exact version: a range would drift to newer Psalm releases between base and head runs (or across
 # cached vendors), and an exact tag also keeps dev-master out under the apps' `minimum-stability: dev`.
-# Must satisfy the `vimeo/psalm` constraint in the plugin's composer.json on both sides, or every app install fails.
-PSALM_PIN="7.3.1"
+# Derived, not hardcoded: a hardcoded pin below a raised floor fails every app install.
+PSALM_PIN=$(php -r '
+    $pin = "";
+    foreach (array_slice($argv, 1) as $dir) {
+        $d = json_decode(file_get_contents($dir . "/composer.json"), true, 512, JSON_THROW_ON_ERROR);
+        // First alternative of e.g. "^7.3.2@stable || ^8": its floor is the lowest version it accepts.
+        $floor = preg_replace(["/@\w+/", "/^[\s^~>=v]+/", "/\s.*$/"], "", explode("|", (string) ($d["require"]["vimeo/psalm"] ?? ""))[0]);
+        if (preg_match("/^\d+(\.\d+){0,2}$/", $floor) !== 1) {
+            fwrite(STDERR, "cannot derive a vimeo/psalm floor from {$dir}/composer.json\n");
+            exit(1);
+        }
+        if ($pin === "" || version_compare($floor, $pin, ">")) {
+            $pin = $floor;
+        }
+    }
+    echo $pin;
+' "$PLUGIN_BASE" "$PLUGIN_HEAD")
 
 # md5 of the plugin's dependency-affecting composer.json sections. Only `require`
 # and `autoload` change what gets installed into the app's vendor; if they match
