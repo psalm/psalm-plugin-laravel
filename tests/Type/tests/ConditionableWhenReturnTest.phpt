@@ -13,17 +13,17 @@ final class ConditionableWhenReturnTest
     public function defaultReturnJoins(Collection $c, bool $flag): void
     {
         $_when = $c->when($flag, fn ($_x) => null, fn ($_x) => 'fallback');
-        /** @psalm-check-type-exact $_when = Collection<int, int>&static|'fallback' */
+        /** @psalm-check-type-exact $_when = Collection<int, int>|'fallback' */
 
         $_unless = $c->unless($flag, fn ($_x): int => 1, fn ($_x) => 'fallback');
-        /** @psalm-check-type-exact $_unless = Collection<int, int>&static|'fallback'|1 */
+        /** @psalm-check-type-exact $_unless = Collection<int, int>|'fallback'|1 */
     }
 
     /** @param Collection<int, int> $c */
     public function namedCallbackBinds(Collection $c, bool $flag): void
     {
         $_named = $c->when($flag, default: fn ($_x) => 7, callback: fn ($_x) => 'yes');
-        /** @psalm-check-type-exact $_named = Collection<int, int>&static|'yes'|7 */
+        /** @psalm-check-type-exact $_named = Collection<int, int>|'yes'|7 */
     }
 
     /** @param Collection<int, int> $c */

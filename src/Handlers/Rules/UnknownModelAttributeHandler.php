@@ -143,7 +143,6 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
      * lineage (including a trait) redeclaring one outside {@see self::TRUSTED_MODEL_DECLARERS} can admit
      * a virtual key that is no column (a custom-fields trait widening `isFillable()`), so the model's
      * attribute set no longer bounds what is assignable. `setAttribute()`-only overrides are not scanned.
-     * Caveat: Psalm's declaring-method map is wrong under trait `insteadof` (vimeo/psalm#12113), so such models may be misjudged.
      *
      * @var list<lowercase-string>
      */

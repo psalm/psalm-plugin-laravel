@@ -1,0 +1,30 @@
+<?php
+
+namespace Illuminate\Http\Client;
+
+/**
+ * `query()` (HTTP QUERY) exists from Laravel 13.19.0 (laravel/framework#60663).
+ */
+class PendingRequest
+{
+    /**
+     * Issue a QUERY request to the given URL.
+     *
+     * @param  string  $url
+     * @param  array<array-key, mixed>|\JsonSerializable|\Illuminate\Contracts\Support\Arrayable<array-key, mixed>|object|null  $data
+     * @return \Illuminate\Http\Client\Response
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function query(string $url, $data = []) {}
+}
+
+class AsyncPendingRequest extends PendingRequest
+{
+    /**
+     * @return \Illuminate\Http\Client\Promises\LazyPromise
+     *
+     * @psalm-taint-sink ssrf $url
+     */
+    public function query(string $url, $data = []) {}
+}

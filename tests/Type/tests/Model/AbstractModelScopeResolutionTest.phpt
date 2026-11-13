@@ -70,13 +70,11 @@ function forwarded_query_builder_method_on_abstract_typed_instance(AbstractDocum
 
 /**
  * A #[Scope]-attributed method (ComparesRank::outranks, protected) is now RECOGNIZED on an
- * abstract-typed receiver — its return type resolves to Builder<AbstractDocument>. The
- * TooFewArguments below is the documented protected-#[Scope]-on-instance limitation (pinned in
- * Builder/ProtectedScopeSurfacesTest): at runtime PHP forwards the inaccessible call to
- * newQuery()->outranks() with an injected $query, but Psalm checks the real
- * outranks(Builder $query, self $model) signature and reports the missing $query. The point here
- * is parity — the abstract-typed receiver behaves exactly like the concrete child below; before
- * the fix it was UndefinedMagicMethod instead.
+ * abstract-typed receiver — its return type resolves to Builder<AbstractDocument>. At runtime PHP
+ * forwards the inaccessible protected call to newQuery()->outranks() with an injected $query, and
+ * Psalm 7.2 models that forward (no TooFewArguments for the missing $query). The point here is
+ * parity: the abstract-typed receiver behaves exactly like the concrete child below; before the
+ * fix it was UndefinedMagicMethod instead.
  */
 function attributed_scope_on_abstract_typed_instance(AbstractDocument $document): void
 {
@@ -84,7 +82,7 @@ function attributed_scope_on_abstract_typed_instance(AbstractDocument $document)
     /** @psalm-check-type-exact $_result = Builder<AbstractDocument> */
 }
 
-/** Concrete-child parity for the #[Scope] case: identical TooFewArguments, Builder<Contract>. */
+/** Concrete-child parity for the #[Scope] case: Builder<Contract>. */
 function attributed_scope_on_concrete_child_instance(Contract $contract): void
 {
     $_result = $contract->outranks($contract);
@@ -127,5 +125,3 @@ function inherited_accessor_resolves_via_camelcase(Contract $contract): void
 }
 ?>
 --EXPECTF--
-TooFewArguments on line %d: Too few arguments for method App\Models\Concerns\ComparesRank::outranks saw 1
-TooFewArguments on line %d: Too few arguments for method App\Models\Concerns\ComparesRank::outranks saw 1

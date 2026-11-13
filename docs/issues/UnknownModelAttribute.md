@@ -73,4 +73,3 @@ The rule is on by default and reported at error levels 1 to 4 (like Psalm's `Und
 
 - Relations inherited from a parent class or a trait are not part of a model's own recognized set, so a key naming such an inherited relation may be flagged. Declare it with a `@property` annotation on the model to resolve this.
 - A model that widens mass assignment only through `setAttribute()` (a `__set`-style override that accepts extra keys) is not detected and is still checked against its recognized attributes. Suppress the issue at that call site.
-- The model scan reads Psalm's declaring-method map, which is wrong under trait `insteadof` conflicts ([vimeo/psalm#12113](https://github.com/vimeo/psalm/issues/12113): the first-listed trait's method always wins). A model that selects a custom trait's `isFillable()` / `fillableFromArray()` through `insteadof` may still be checked, and one that selects Laravel's may be skipped.

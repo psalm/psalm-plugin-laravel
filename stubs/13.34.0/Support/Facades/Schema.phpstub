@@ -12,6 +12,11 @@ namespace Illuminate\Support\Facades;
  * Facade-only on purpose: the Builder instance (`$schema->getColumn()`, `Schema::connection()->getColumn()`)
  * keeps Laravel's docblock. FacadeStubPrecedenceHandler drops the shadowed pseudo-method. The class
  * header is copied verbatim (hard rule 2); the common stub's other methods and `@mixin` survive.
+ *
+ * Re-declaring the class drops the sealing flag that Laravel's `@method` tags set on the vendor facade,
+ * so it is restated to keep an unknown call (`Facade::definitelyNotAMethod()`) reported.
+ *
+ * @psalm-seal-methods
  */
 class Schema extends Facade
 {

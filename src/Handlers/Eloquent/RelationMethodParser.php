@@ -50,7 +50,8 @@ use Psalm\Type\Union;
  * - Chained methods: return $this->belongsTo(Vault::class)->withDefault()
  * - No declared return type: public function image() { return $this->morphOne(Image::class, 'imageable'); }
  * - Trait-hosted methods: the body is read from the trait, `self::class` / `static::class` bind to
- *   the composing class; declines when composed traits (nested ones included) declare the name twice (#1613)
+ *   the composing class; a trait picked with `insteadof`, at any nesting depth, supplies the body (Psalm's
+ *   declaring-method map follows the pick) (#1613)
  * - Several returns (early returns in `if` / loops): only when every one resolves to the same relation;
  *   null exits (`return;` / `return null;`) are skipped and mark the result `nullable`
  * - Delegation to another relation method, dispatched as PHP does (receiver override; private
@@ -677,13 +678,6 @@ final class RelationMethodParser
             $appearingStorage = $codebase->classlike_storage_provider->get($appearing->fq_class_name);
             $isTrait = $codebase->classlike_storage_provider->get($declaring->fq_class_name)->is_trait;
 
-            // Psalm records the declaring trait method ignoring `insteadof` (vimeo/psalm#12113:
-            // ClassLikeNodeScanner::handleTraitUse() applies only `as` adaptations), so it may name the
-            // losing body. Decline when two composed traits, at any nesting depth, declare it.
-            if ($isTrait && self::countTraitOwners($codebase, $appearingStorage->used_traits, $declaring->method_name) > 1) {
-                return null;
-            }
-
             $returnType = $storage->return_type ?? $storage->signature_return_type;
             $visibility = $appearingStorage->trait_visibility_map[$methodId->method_name] ?? $storage->visibility;
 
@@ -697,38 +691,6 @@ final class RelationMethodParser
         } catch (\InvalidArgumentException|\UnexpectedValueException|UnpopulatedClasslikeException) {
             return null;
         }
-    }
-
-    /**
-     * How many traits reached from $usedTraits declare $methodName in their own body. A trait's
-     * own method overrides the ones it composes, so the walk stops there; a trait reached twice
-     * counts once.
-     *
-     * @param array<array-key, string> $usedTraits
-     * @param lowercase-string $methodName
-     * @psalm-capabilities read-props
-     */
-    private static function countTraitOwners(Codebase $codebase, array $usedTraits, string $methodName): int
-    {
-        $owners = 0;
-        $visited = [];
-        $queue = \array_values($usedTraits);
-        while (($traitName = \array_pop($queue)) !== null) {
-            $key = \strtolower($traitName);
-            if (isset($visited[$key])) {
-                continue;
-            }
-
-            $visited[$key] = true;
-            $storage = $codebase->classlike_storage_provider->get($traitName);
-            if (isset($storage->methods[$methodName])) {
-                ++$owners;
-            } else {
-                \array_push($queue, ...\array_values($storage->used_traits));
-            }
-        }
-
-        return $owners;
     }
 
     /**

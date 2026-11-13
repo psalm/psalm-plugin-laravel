@@ -84,11 +84,11 @@ final class EloquentModelMethods
      * the declaring storage (via {@see self::appearingMethods()} or `getDeclaringMethodId()`), not the
      * inheriting class's entry.
      *
-     * A private `#[Scope]` is never a usable scope on any supported Laravel (12-13): 13.8+ rejects it in
-     * Model::isScopeMethodWithAttribute (`! isPrivate() && ...`), and on 12.27-13.7 callNamedScope
-     * dispatches from the base Model's `$this`, where a subclass's private method is unreachable, so it
-     * routes back through __call and recurses. Either way it cannot dispatch, so report it as "not a
-     * scope" rather than treating it as a real (dead) one.
+     * A private `#[Scope]` is never a usable scope on any supported Laravel (12-13): 12.59+ and 13.8+
+     * reject it in Model::isScopeMethodWithAttribute (`! isPrivate() && ...`), and on 12.27-12.58 and
+     * 13.0-13.7 callNamedScope dispatches from the base Model's `$this`, where a subclass's private
+     * method is unreachable, so it routes back through __call and recurses. Either way it cannot
+     * dispatch, so report it as "not a scope" rather than treating it as a real (dead) one.
      *
      * @psalm-mutation-free
      */

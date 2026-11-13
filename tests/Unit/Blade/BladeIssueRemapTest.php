@@ -1370,10 +1370,14 @@ final class BladeIssueRemapTest extends TestCase
      * A template-assigned local is not view data: declaring it `@var mixed` ahead of its own
      * assignment makes Psalm drop the `$hasAction` <-> `$action !== null` correlation after the
      * next `if`, so the guarded `$action->attributes` read reported PossiblyNullPropertyFetch.
+     *
+     * @todo-by https://github.com/vimeo/psalm/issues/13487 remove the skip (Psalm 7.2.0 reports the guarded read again)
      */
     #[Test]
     public function a_template_assigned_flag_keeps_guarding_the_nullable_it_was_derived_from(): void
     {
+        $this->markTestSkipped('Psalm 7.2.0 regression: vimeo/psalm#13487');
+
         $issues = $this->analyze('psalm.xml');
         $template = 'resources/views/assigned-flag-guard.blade.php';
 

@@ -20,8 +20,7 @@ use Illuminate\Validation\Rule;
  * `$request->validate([...])` tests in `SafeInlineValidateWildcardArrayRule*`.
  *
  * TaintedSSRF still fires: a valid email's domain may still resolve to an
- * internal host. The sink call is reported once, as expected since Psalm
- * 7.0.0-beta21 (earlier betas duplicated it via #1359).
+ * internal host. The sink call is reported once.
  */
 final class WildcardEmailRequest extends FormRequest
 {

@@ -4,6 +4,10 @@
 use Illuminate\Support\Collection;
 use App\Models\Customer;
 
+// A declared `callable(...): mixed` argument breaks the `TNewKey` / `TGroupKey` bound Laravel gives
+// keyBy() / groupBy(), so Psalm checks it against the bound (vimeo/psalm#13447): PossiblyInvalidArgument.
+// A closure returning mixed is not reported.
+
 /** @extends Collection<string, Customer> */
 final class Issue1884FixedCollection extends Collection {}
 
@@ -49,24 +53,24 @@ function mixed_group_by_key_resolves_to_array_key(Collection $c): void
         ->sortByDesc(fn (int $n) => $n);
 
     $_grouped = $c->groupBy(fn ($r): mixed => $r->unknown_prop ?? 'unknown');
-    /** @psalm-check-type-exact $_grouped = Collection<array-key, Collection<int, Customer>&static>&static */
+    /** @psalm-check-type-exact $_grouped = Collection<array-key, Collection<int, Customer>> */
 
     $_preserved = $c->groupBy(fn ($r) => $r->unknown_prop ?? 'unknown', true);
-    /** @psalm-check-type-exact $_preserved = Collection<array-key, Collection<int, Customer>&static>&static */
+    /** @psalm-check-type-exact $_preserved = Collection<array-key, Collection<int, Customer>> */
 }
 
 /** @param Collection<string, Customer> $c */
 function mixed_group_by_preserve_keys(Collection $c): void
 {
     $_preserved = $c->groupBy(fn ($r) => $r->unknown_prop ?? 'unknown', true);
-    /** @psalm-check-type-exact $_preserved = Collection<array-key, Collection<string, Customer>&static>&static */
+    /** @psalm-check-type-exact $_preserved = Collection<array-key, Collection<string, Customer>> */
 }
 
 /** @param Collection<int, Customer> $c */
 function mixed_key_by_key_resolves_to_array_key(Collection $c): void
 {
     $_keyed = $c->keyBy(fn ($r): mixed => $r->unknown_prop ?? 'unknown');
-    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer>&static */
+    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer> */
 }
 
 /** @param Collection<int, Customer> $c */
@@ -110,7 +114,7 @@ function intersection_receiver_defers(Collection $c, callable $by): void
 function receiver_union_and_chained_static_still_answer($c): void
 {
     $_keyed = $c->keyBy(fn ($r) => $r->unknown_prop ?? 'unknown');
-    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer>&static|\Illuminate\Database\Eloquent\Collection<array-key, Customer>&static */
+    /** @psalm-check-type-exact $_keyed = Collection<array-key, Customer>|\Illuminate\Database\Eloquent\Collection<array-key, Customer> */
 }
 
 /** @param Collection<int, Customer> $c */
@@ -121,3 +125,8 @@ function chained_static_receiver_still_answers(Collection $c): void
 }
 ?>
 --EXPECTF--
+PossiblyInvalidArgument on line %d: Argument 1 of Issue1884Reversed::keyBy expects array<array-key, mixed>|callable[impure](int, string):(UnitEnum|array-key)|string, but possibly different type callable[impure](int):mixed provided
+PossiblyInvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::groupBy expects array<array-key, mixed>|callable[impure](App\Models\Customer, int):(Stringable|UnitEnum|array-key)|string, but possibly different type callable[impure](App\Models\Customer):mixed|list<string> provided
+PossiblyInvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::keyBy expects array<array-key, mixed>|callable[impure](App\Models\Customer, array-key):(UnitEnum|array-key)|string, but possibly different type callable[impure](App\Models\Customer):mixed provided
+PossiblyInvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::keyBy expects array<array-key, mixed>|callable[impure](App\Models\Customer, string):(UnitEnum|array-key)|string, but possibly different type callable[impure](App\Models\Customer):mixed provided
+PossiblyInvalidArgument on line %d: Argument 1 of Issue1884Reversed::keyBy expects array<array-key, mixed>|callable[impure](App\Models\Customer, string):(UnitEnum|array-key)|string, but possibly different type callable[impure](App\Models\Customer):mixed provided

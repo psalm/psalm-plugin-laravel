@@ -12,37 +12,37 @@ use App\Models\Customer;
 function group_by_on_support_collection(Collection $items): void
 {
     $_default = $items->groupBy('foreign_id');
-    /** @psalm-check-type-exact $_default = Collection<int, Collection<int, CollectionGroupingModel>&static>&static */
+    /** @psalm-check-type-exact $_default = Collection<int, Collection<int, CollectionGroupingModel>> */
 
     $_preserved = $items->groupBy('foreign_id', true);
-    /** @psalm-check-type-exact $_preserved = Collection<int, Collection<string, CollectionGroupingModel>&static>&static */
+    /** @psalm-check-type-exact $_preserved = Collection<int, Collection<string, CollectionGroupingModel>> */
 
     $_false = $items->groupBy('foreign_id', false);
-    /** @psalm-check-type-exact $_false = Collection<int, Collection<int, CollectionGroupingModel>&static>&static */
+    /** @psalm-check-type-exact $_false = Collection<int, Collection<int, CollectionGroupingModel>> */
 
     $preserveKeys = \rand(0, 1) === 1;
     $_dynamic = $items->groupBy('foreign_id', $preserveKeys);
-    /** @psalm-check-type-exact $_dynamic = Collection<int, Collection<int|string, CollectionGroupingModel>&static>&static */
+    /** @psalm-check-type-exact $_dynamic = Collection<int, Collection<int|string, CollectionGroupingModel>> */
 
     $_bool = $items->groupBy('active');
-    /** @psalm-check-type-exact $_bool = Collection<int, Collection<int, CollectionGroupingModel>&static>&static */
+    /** @psalm-check-type-exact $_bool = Collection<int, Collection<int, CollectionGroupingModel>> */
 
     $_enum = $items->groupBy('kind');
-    /** @psalm-check-type-exact $_enum = Collection<int, Collection<int, CollectionGroupingModel>&static>&static */
+    /** @psalm-check-type-exact $_enum = Collection<int, Collection<int, CollectionGroupingModel>> */
 }
 
 /** @param EloquentCollection<int, CollectionGroupingModel> $items */
 function key_by_on_eloquent_collection(EloquentCollection $items): void
 {
     $_int = $items->keyBy('foreign_id');
-    /** @psalm-check-type-exact $_int = EloquentCollection<int, CollectionGroupingModel>&static */
+    /** @psalm-check-type-exact $_int = EloquentCollection<int, CollectionGroupingModel> */
 
     $_bool = $items->keyBy('active');
-    /** @psalm-check-type-exact $_bool = EloquentCollection<int, CollectionGroupingModel>&static */
+    /** @psalm-check-type-exact $_bool = EloquentCollection<int, CollectionGroupingModel> */
 
     // Laravel resolves an enum key through enum_value(), so an int-backed column narrows like groupBy().
     $_enum = $items->keyBy('kind');
-    /** @psalm-check-type-exact $_enum = EloquentCollection<int, CollectionGroupingModel>&static */
+    /** @psalm-check-type-exact $_enum = EloquentCollection<int, CollectionGroupingModel> */
 
     // A string-backed enum would key by string, which the handler does not model, so it declines.
     $_stringEnum = $items->keyBy('label');
@@ -52,14 +52,14 @@ function key_by_on_eloquent_collection(EloquentCollection $items): void
 function group_by_on_eloquent_collection(): void
 {
     $_result = CollectionGroupingModel::all()->groupBy('foreign_id');
-    /** @psalm-check-type-exact $_result = EloquentCollection<int, EloquentCollection<int, CollectionGroupingModel>&static>&static */
+    /** @psalm-check-type-exact $_result = EloquentCollection<int, EloquentCollection<int, CollectionGroupingModel>> */
 
     // EloquentCollection constrains TValue to Model even though groupBy() necessarily
     // nests collections. The one InvalidTemplateParam below is Laravel's known contract
     // conflict (#1229); this chained shape guards against accidentally emitting it twice.
     CollectionGroupingModel::with([])->get()->groupBy('foreign_id')->each(
         static function ($_group, $_foreignId): void {
-            /** @psalm-check-type-exact $_group = EloquentCollection<int, CollectionGroupingModel>&static */
+            /** @psalm-check-type-exact $_group = EloquentCollection<int, CollectionGroupingModel> */
             /** @psalm-check-type-exact $_foreignId = int */
         },
     );
@@ -68,7 +68,7 @@ function group_by_on_eloquent_collection(): void
 function key_by_on_custom_collection(CollectionGroupingCollection $items): void
 {
     $_result = $items->keyBy('foreign_id');
-    /** @psalm-check-type-exact $_result = CollectionGroupingCollection<int, CollectionGroupingModel>&static */
+    /** @psalm-check-type-exact $_result = CollectionGroupingCollection<int, CollectionGroupingModel> */
 }
 
 /** @param Collection<int, CollectionGroupingModel|Customer> $items */
@@ -90,4 +90,4 @@ function ambiguous_custom_collection_pluck_defers(AmbiguousCollectionGroupingCol
 }
 ?>
 --EXPECTF--
-InvalidTemplateParam on line %d: Extended template param TModel of Illuminate\Database\Eloquent\Collection<int, Illuminate\Database\Eloquent\Collection<int, App\Models\CollectionGroupingModel>&static>&static expects type Illuminate\Database\Eloquent\Model, type Illuminate\Database\Eloquent\Collection<int, App\Models\CollectionGroupingModel>&static given
+InvalidTemplateParam on line %d: Extended template param TModel of Illuminate\Database\Eloquent\Collection<int, Illuminate\Database\Eloquent\Collection<int, App\Models\CollectionGroupingModel>>&static expects type Illuminate\Database\Eloquent\Model, type Illuminate\Database\Eloquent\Collection<int, App\Models\CollectionGroupingModel> given

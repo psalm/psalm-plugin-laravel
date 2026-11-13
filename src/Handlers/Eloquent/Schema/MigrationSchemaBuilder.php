@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 use Illuminate\Foundation\Application;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\Progress\Progress;
 
 /**
@@ -217,7 +218,7 @@ final class MigrationSchemaBuilder
         $defaultDirectory = $this->app->databasePath('migrations');
 
         if (!$this->app->bound('migrator')) {
-            $progress->warning($this->migratorUnavailableWarning());
+            PluginWarning::emit($progress, $this->migratorUnavailableWarning());
 
             return [$defaultDirectory];
         }

@@ -77,9 +77,9 @@ final class ValidatedFieldReadResolver
     }
 
     /**
-     * Method-call front door. One call may be both a source (narrowed return
-     * type dropped the stub source) and an escape (literal key selects a rule).
-     * The caller class is resolved once and shared by both facets.
+     * Method-call front door. One call may be both a source (`validate()`, a
+     * pseudo-method with no stub source) and an escape (literal key selects a
+     * rule). The caller class is resolved once for the escape.
      */
     private static function fromMethodCall(AddRemoveTaintsEvent $event, MethodCall $expr, string $method): ?ValidatedFieldRead
     {
@@ -88,12 +88,12 @@ final class ValidatedFieldReadResolver
             return null;
         }
 
-        $formRequest = self::resolveCallerClass($event, \Illuminate\Foundation\Http\FormRequest::class);
-        $validatedInput = $formRequest === null ? self::extractFormRequestFromValidatedInput($event) : null;
-
-        $source = self::methodSourcesInput($event, $expr, $method, $formRequest, $validatedInput)
+        $source = $method === 'validate' && self::resolveCallerClass($event, \Illuminate\Http\Request::class) !== null
             ? $event->getCodebase()->getInputTaints()
             : 0;
+
+        $formRequest = self::resolveCallerClass($event, \Illuminate\Foundation\Http\FormRequest::class);
+        $validatedInput = $formRequest === null ? self::extractFormRequestFromValidatedInput($event) : null;
         $escape = self::methodEscape($event, $expr, $method, $formRequest, $validatedInput);
 
         if ($source === 0 && $escape === 0) {
@@ -101,32 +101,6 @@ final class ValidatedFieldReadResolver
         }
 
         return new ValidatedFieldRead($source, $escape);
-    }
-
-    /**
-     * Source side: the read carries user input whose stub source was dropped by
-     * a type override. validate() lives on Request; validated/safe/input narrow
-     * on a FormRequest; input() also narrows on ValidatedInput<FormRequest>.
-     *
-     * @param class-string|null $formRequest
-     * @param class-string|null $validatedInput
-     */
-    private static function methodSourcesInput(
-        AddRemoveTaintsEvent $event,
-        MethodCall $expr,
-        string $method,
-        ?string $formRequest,
-        ?string $validatedInput,
-    ): bool {
-        if ($method === 'validate') {
-            return self::resolveCallerClass($event, \Illuminate\Http\Request::class) !== null;
-        }
-
-        if ($formRequest !== null && \in_array($method, ['validated', 'safe', 'input'], true)) {
-            return true;
-        }
-
-        return $method === 'input' && $validatedInput !== null && $expr->getArgs() !== [];
     }
 
     /**
@@ -214,7 +188,7 @@ final class ValidatedFieldReadResolver
 
     /**
      * Magic-property front door (#1016): `$req->email`. Always a source — the
-     * provider-supplied type bypasses `__get`, so no stub source fires (#11765)
+     * provider-claimed property never reaches `__get`, so no stub source fires
      * — plus the rule's escape. Ownership gated by
      * {@see FormRequestPropertyHandler::resolveRuleForProperty}.
      */

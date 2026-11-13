@@ -80,7 +80,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  (callable(TValue, TKey): bool)|null  $callback
      * @param  TFirstDefault|(\Closure(): TFirstDefaultFromClosure)  $default
-     * @return ($default is \Closure ? TFirstDefaultFromClosure : (TFirstDefault | TValue))
+     * @return ($default is \Closure ? TFirstDefaultFromClosure|TValue : (TFirstDefault | TValue))
      *
      * @psalm-flow ($default) -> return
      * @psalm-taint-specialize
@@ -95,7 +95,7 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      *
      * @param  TKey|null  $key
      * @param  TGetDefault|(\Closure(): TGetClosureReturn)  $default
-     * @return ($default is \Closure ? TGetClosureReturn : (TGetDefault | TValue))
+     * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
      *
      * @psalm-flow ($default) -> return
      * @psalm-taint-specialize
@@ -350,19 +350,17 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      */
     public function count(): int {}
 
+    // @todo-by https://github.com/vimeo/psalm/issues/9994 assert last() and count() on both branches (including if-true `0 $this->count()`)
     /**
      * Determine if the collection is empty or not.
      *
-     * Only first() is asserted, once per branch: https://github.com/vimeo/psalm/issues/9994 drops the if-false
-     * assertions of a method with several method-call assertions, and omitting the if-true half would let
+     * Only first() is asserted, once per branch: Psalm drops the if-false assertions of a method with
+     * several method-call assertions, and omitting the if-true half would let
      * Laravel's `@phpstan-assert-if-true null $this->last()` merge in.
      *
-     * The if-false type is conditional because https://github.com/vimeo/psalm/issues/11533 makes template-expanded
-     * assertions keep only the first union member, so a plain `TValue` would drop null from a nullable TValue
-     * (`int|null` became `int`). A possibly-null TValue resolves to `mixed` (no narrowing).
-     * A nullable TValue whose non-null part is an array, class-string or literal still loses null (see the known-limit phpt).
-     * Once #9994 and #11533 ship, restore `TValue` plus first()/last()/count() on both branches
-     * (including if-true `0 $this->count()`).
+     * The if-false type is conditional because Psalm also applies the negated if-true `null` to the else branch,
+     * so a plain `TValue` would drop null from a nullable TValue (`int|null` became `int`). A possibly-null
+     * TValue resolves to `mixed` (no narrowing).
      * Known limits: tests/Type/tests/Collection/CollectionEmptinessAssertionsKnownLimitation.phpt.
      *
      * @psalm-mutation-free
@@ -375,8 +373,11 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
     /**
      * Determine if the collection is not empty.
      *
-     * Not asserted on first()/last(): https://github.com/vimeo/psalm/issues/11533 (template-expanded if-true
-     * assertions keep only the first union member), so `Collection<int, A|B>` would narrow first() to `A`.
+     * Only count() is asserted. first()/last() are not: for a receiver union such as
+     * `Collection<int, string>|Collection<int, int>` Psalm applies only the last alternative's expanded
+     * `TValue` assertion, so first() would collapse to `int` (a plain generic class reproduces it, see
+     * tests/Type/tests/Collection/CollectionEmptinessAssertionsKnownLimitation.phpt). `positive-int` has no
+     * template, so it holds for every alternative.
      *
      * @psalm-mutation-free
      * @psalm-assert-if-true positive-int $this->count()
@@ -432,11 +433,13 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      */
     public function chunkWhile(callable $callback) {}
 
+    // @todo-by https://github.com/vimeo/psalm/issues/12158 let these overrides reach subclasses and drop the Eloquent Collection tap()/pipe() redeclarations
     /**
      * Laravel's `callable($this)` gives an untyped closure param the unresolved `static` (the
      * enclosing class inside a class body), so every untyped closure was rejected. The callbacks
      * below name the class with its templates instead. These stubs reach `Collection` itself only:
-     * a subclass keeps the `EnumeratesValues` declaration (vimeo/psalm#12158).
+     * a subclass keeps the `EnumeratesValues` declaration, so its `whenEmpty()`
+     * family params stay `mixed`; `tap()`/`pipe()` params resolve to the subclass since Psalm 7.3.
      *
      * @param  callable(\Illuminate\Support\Collection<TKey, TValue>): mixed  $callback
      * @return $this

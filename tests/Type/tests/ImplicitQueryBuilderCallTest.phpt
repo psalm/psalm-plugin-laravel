@@ -57,9 +57,8 @@ function static_legacy_scope_is_flagged(): void
 }
 
 /**
- * A protected modern #[Scope] invoked by its forwarded bare name is flagged. The static form of
- * a modern scope also raises InvalidStaticInvocation (an upstream Psalm limitation, see #1042 /
- * vimeo/psalm#11876); both diagnostics agree the direct call should move to query()->active().
+ * A protected modern #[Scope] invoked by its forwarded bare name is flagged: PHP routes the inaccessible
+ * method to __callStatic, so the direct call should move to query()->active() (#1042).
  */
 function static_modern_scope_is_flagged(): void
 {
@@ -182,7 +181,6 @@ ImplicitQueryBuilderCall on line %d: Customer::first() is forwarded to the query
 ImplicitQueryBuilderCall on line %d: Customer::whereIn() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->whereIn(...) instead.
 ImplicitQueryBuilderCall on line %d: Customer::active() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->active(...) instead.
 ImplicitQueryBuilderCall on line %d: DirectScopeModel::active() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use DirectScopeModel::query()->active(...) instead.
-InvalidStaticInvocation on line %d: Method App\Models\DirectScopeModel::active is not static, but is called statically
 ImplicitQueryBuilderCall on line %d: Vehicle::whereElectric() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Vehicle::query()->whereElectric(...) instead.
 ImplicitQueryBuilderCall on line %d: Invoice::wherePaid() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Invoice::query()->wherePaid(...) instead.
 ImplicitQueryBuilderCall on line %d: Customer::where() is forwarded to the query builder through Laravel's __callStatic/__call magic. Use Customer::query()->where(...) instead.

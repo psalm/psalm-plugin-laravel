@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
+use Illuminate\Database\Schema\Builder;
 use Psalm\LaravelPlugin\Internal\AtomicFileWriter;
 use Psalm\LaravelPlugin\Internal\PluginBuildId;
 
@@ -117,6 +118,9 @@ final class MigrationCache
         // Include the plugin build so schema parsing changes in new releases
         // and dev commits automatically invalidate the cache
         $data .= '|V:' . PluginBuildId::current();
+
+        // morphs() columns depend on a provider-set static, not on any migration file
+        $data .= '|K:' . Builder::$defaultMorphKeyType;
 
         return \hash('xxh128', $data);
     }

@@ -324,6 +324,22 @@ final class EmissionAppTest extends TestCase
     }
 
     #[Test]
+    public function an_unhandled_request_validate_reports_the_validation_exception(): void
+    {
+        // Laravel declares Request::validate()/validateWithBag() as `@method` tags backed by macros that throw
+        // ValidationException. MacroHandler puts that throw on the pseudo-methods, so under
+        // checkForThrowsDocblock only the two calls (Request and FormRequest) with neither @throws nor try/catch report it. validateWithBag()
+        // is replaced by the fixture's provider, and a replacement carries no framework guarantee.
+        $findings = $this->scenarioFindings('RequestValidateThrows', 'MissingThrowsDocblock');
+
+        $this->assertSame(
+            \array_fill(0, 2, 'Illuminate\\Validation\\ValidationException is thrown but not caught - please either catch or add a @throws annotation'),
+            $this->messages($findings),
+        );
+        $this->assertSame(['app/RequestValidateThrows/Callers.php'], \array_values(\array_unique(\array_column($findings, 'file_name'))));
+    }
+
+    #[Test]
     public function a_warm_up_failure_reaches_stderr_under_no_progress(): void
     {
         // `--no-progress` selects Psalm's VoidProgress, which turns Progress::write()/warning() into a

@@ -68,7 +68,7 @@ final class CollectionWhereCallbackTest
     public function whereStripsNullViaIdentityArrow(Collection $items): void
     {
         $_result = $items->where(fn (?CollectionWhereCallbackTestAccount $value) => $value);
-        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount> */
     }
 
     /**
@@ -80,7 +80,7 @@ final class CollectionWhereCallbackTest
         $_result = $items->where(function (?CollectionWhereCallbackTestAccount $value) {
             return $value;
         });
-        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount> */
     }
 
     /**
@@ -91,7 +91,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIdentityClosureNarrowsString(Collection $items): void
     {
         $_result = $items->where(fn (string|false|null $value) => $value);
-        /** @psalm-check-type-exact $_result = Collection<int, non-falsy-string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, non-falsy-string> */
     }
 
     /**
@@ -126,7 +126,7 @@ final class CollectionWhereCallbackTest
     public function lazyCollectionWhereWithIdentityClosureNarrows(LazyCollection $items): void
     {
         $_result = $items->where(fn (?CollectionWhereCallbackTestAccount $value) => $value);
-        /** @psalm-check-type-exact $_result = LazyCollection<int, CollectionWhereCallbackTestAccount>&static */
+        /** @psalm-check-type-exact $_result = LazyCollection<int, CollectionWhereCallbackTestAccount> */
     }
 
     /**
@@ -137,7 +137,7 @@ final class CollectionWhereCallbackTest
     public function whereWithStaticIdentityArrowNarrows(Collection $items): void
     {
         $_result = $items->where(static fn (?CollectionWhereCallbackTestAccount $value) => $value);
-        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount> */
     }
 
     /**
@@ -195,7 +195,7 @@ final class CollectionWhereCallbackTest
     public function whereWithInstanceofNarrows(Collection $items): void
     {
         $_result = $items->where(fn (CollectionWhereCallbackTestAccount|CollectionWhereCallbackTestUser|null $value) => $value instanceof CollectionWhereCallbackTestAccount);
-        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount> */
     }
 
     /**
@@ -205,7 +205,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIsStringNarrows(Collection $items): void
     {
         $_result = $items->where(fn (string|int|null $value) => is_string($value));
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /**
@@ -215,7 +215,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIsIntNarrows(Collection $items): void
     {
         $_result = $items->where(fn (string|int|null $value) => is_int($value));
-        /** @psalm-check-type-exact $_result = Collection<int, int>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, int> */
     }
 
     /**
@@ -225,7 +225,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIsObjectNarrows(Collection $items): void
     {
         $_result = $items->where(fn (CollectionWhereCallbackTestAccount|string|null $value) => is_object($value));
-        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, CollectionWhereCallbackTestAccount> */
     }
 
     /**
@@ -235,7 +235,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIsNullNarrows(Collection $items): void
     {
         $_result = $items->where(fn (?string $value) => is_null($value));
-        /** @psalm-check-type-exact $_result = Collection<int, null>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, null> */
     }
 
     /**
@@ -245,7 +245,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIsArrayNarrows(Collection $items): void
     {
         $_result = $items->where(fn (string|array|null $value) => is_array($value));
-        /** @psalm-check-type-exact $_result = Collection<int, array<string, int>>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, array<string, int>> */
     }
 
     /**
@@ -255,7 +255,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIsBoolNarrows(Collection $items): void
     {
         $_result = $items->where(fn (?bool $value) => is_bool($value));
-        /** @psalm-check-type-exact $_result = Collection<int, bool>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, bool> */
     }
 
     /**
@@ -265,7 +265,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIsStringOnMixedNarrows(Collection $items): void
     {
         $_result = $items->where(fn (mixed $value) => is_string($value));
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /**
@@ -288,21 +288,21 @@ final class CollectionWhereCallbackTest
         $_result = $items->where(function (string|int|null $value): bool {
             return is_string($value);
         });
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /** @param Collection<int, Countable> $items */
     public function whereWithIsSubclassOfOnObjectNarrows(Collection $items): void
     {
         $_result = $items->where(fn (Countable $value) => is_subclass_of($value, Stringable::class));
-        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable> */
     }
 
     /** @param Collection<int, class-string<Countable>> $items */
     public function whereWithIsSubclassOfOnClassStringNarrows(Collection $items): void
     {
         $_result = $items->where(fn (string $value) => is_subclass_of($value, Stringable::class));
-        /** @psalm-check-type-exact $_result = Collection<int, class-string<Countable&Stringable>>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, class-string<Countable&Stringable>> */
     }
 
     /**
@@ -312,7 +312,7 @@ final class CollectionWhereCallbackTest
     public function whereWithIsSubclassOfOnStringNarrows(Collection $items): void
     {
         $_result = $items->where(fn (string $value) => is_subclass_of($value, Stringable::class));
-        /** @psalm-check-type-exact $_result = Collection<int, class-string<Stringable>>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, class-string<Stringable>> */
     }
 
     /**
@@ -322,21 +322,21 @@ final class CollectionWhereCallbackTest
     public function whereWithIsADropsStrings(Collection $items): void
     {
         $_result = $items->where(fn (Countable|string $value) => is_a($value, Stringable::class));
-        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable> */
     }
 
     /** @param Collection<int, Countable|string> $items */
     public function whereWithIsAAllowStringNarrows(Collection $items): void
     {
         $_result = $items->where(fn (Countable|string $value) => is_a($value, Stringable::class, true));
-        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable|class-string<Stringable>>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, Countable&Stringable|class-string<Stringable>> */
     }
 
     /** @param Collection<int, mixed> $items */
     public function whereWithIsAOnMixedNarrows(Collection $items): void
     {
         $_result = $items->where(fn (mixed $value) => is_a($value, Stringable::class));
-        /** @psalm-check-type-exact $_result = Collection<int, Stringable>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, Stringable> */
     }
 
     /**
@@ -353,28 +353,28 @@ final class CollectionWhereCallbackTest
     public function whereWithNegatedIsNullNarrows(Collection $items): void
     {
         $_result = $items->where(fn (?string $value) => !is_null($value));
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /** @param Collection<int, string|null> $items */
     public function whereWithYodaNotNullNarrows(Collection $items): void
     {
         $_result = $items->where(fn (?string $value) => null !== $value);
-        /** @psalm-check-type-exact $_result = Collection<int, string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, string> */
     }
 
     /** @param Collection<int, string|int|array<string, int>|null> $items */
     public function whereWithIsScalarNarrows(Collection $items): void
     {
         $_result = $items->where(fn (string|int|array|null $value) => is_scalar($value));
-        /** @psalm-check-type-exact $_result = Collection<int, int|string>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, int|string> */
     }
 
     /** @param Collection<int, string|array<string, int>|null> $items */
     public function whereWithIsIterableNarrows(Collection $items): void
     {
         $_result = $items->where(fn (string|array|null $value) => is_iterable($value));
-        /** @psalm-check-type-exact $_result = Collection<int, array<string, int>>&static */
+        /** @psalm-check-type-exact $_result = Collection<int, array<string, int>> */
     }
 
     /**

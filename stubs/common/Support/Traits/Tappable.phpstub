@@ -6,8 +6,7 @@ namespace Illuminate\Support\Traits;
  * Laravel's real signature types `$callback` as `(callable($this): mixed)|null`; we keep it a
  * plain `callable|null`. The typed form makes Psalm return the union of both branches for typed
  * closures and first-class callables, and an untyped closure param inferred from `$this` stays a
- * literal `static`. `$this` and `static` in the return infer identically here (probed on rc1 for
- * Stringable, Response, paginators, Router and userland hosts), so the signature mirrors Laravel.
+ * literal `static`. `$this` and `static` in the return infer identically here, so the signature mirrors Laravel.
  */
 trait Tappable
 {

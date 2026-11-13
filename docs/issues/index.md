@@ -16,7 +16,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnconfiguredFilesystemDisk](UnconfiguredFilesystemDisk.md) — `Storage::disk()`/`drive()` references a disk name not present in `filesystems.disks` (reported at error levels 1 to 4)
 - [SerializedQueuedModel](SerializedQueuedModel.md) — a queued class holds an Eloquent model in a property without reaching `SerializesModels`, so the whole model is written into the queue payload (reported at error levels 1 to 4)
 - [ModelMakeDiscouraged](ModelMakeDiscouraged.md) — `Model::make()` used instead of `new Model()`
-- [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed)
+- [OctaneIncompatibleBinding](OctaneIncompatibleBinding.md) — `singleton()` closure resolves a request-scoped service such as Request, Session, or Auth (auto-enabled when `laravel/octane` is installed, **fixable**)
 - [PublicModelScope](PublicModelScope.md) — `public` `#[Scope]` Eloquent query scope, whose static call is a runtime fatal (reported at error levels 1 to 4)
 - [PublicModelAccessor](PublicModelAccessor.md) — `public` legacy `getXxxAttribute()` / `setXxxAttribute()` accessor or mutator, a pure convention nit (reported at error level 1)
 - [ImplicitQueryBuilderCall](ImplicitQueryBuilderCall.md) — a query builder or local scope method called directly on a model instead of through an explicit `query()` entry point (opt-in)
@@ -28,5 +28,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [BladeCompileError](BladeCompileError.md): a template failed to compile and was excluded from analysis (needs Blade analysis)
 - [UnusedViewData](UnusedViewData.md): a `view()` call site passes a data key that neither the rendered template nor anything it includes reads or declares (needs Blade analysis)
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
+
+Issues marked **fixable** can be fixed automatically with [Psalter](https://psalm.dev/docs/manipulating_code/fixing/) while their rule is active.
 
 Each issue page explains what it detects, why it matters, and how to fix it.

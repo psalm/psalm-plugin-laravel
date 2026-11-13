@@ -177,9 +177,10 @@ class Collection extends BaseCollection implements QueueableCollection
      */
     public function modelKeys() {}
 
+    // @todo-by https://github.com/vimeo/psalm/issues/12158 drop this tap() redeclaration, the Support Collection stub then reaches subclasses
     /**
      * Re-declared here because a stub override on `Support\Collection` does not reach subclasses of
-     * it for trait methods (vimeo/psalm#12158); see `Illuminate\Support\Collection::tap()` in the
+     * it for trait methods; see `Illuminate\Support\Collection::tap()` in the
      * Support Collection stub.
      *
      * @param  callable(\Illuminate\Database\Eloquent\Collection<TKey, TModel>): mixed  $callback

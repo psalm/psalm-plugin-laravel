@@ -16,7 +16,7 @@ class Builder implements BuilderContract
     /**
      * Execute a query for a single record by ID.
      *
-     * @param  non-empty-string|list<non-empty-string>  $columns
+     * @param  non-empty-string|\Illuminate\Contracts\Database\Query\Expression|list<non-empty-string|\Illuminate\Contracts\Database\Query\Expression>  $columns
      * @return \stdClass|null
      *
      * @psalm-taint-escape sql
@@ -95,7 +95,7 @@ class Builder implements BuilderContract
     /**
      * Add a basic where clause to the query.
      *
-     * @param  \Closure|string|array  $column
+     * @param  \Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
      * @param  string  $boolean
@@ -667,7 +667,7 @@ class Builder implements BuilderContract
     /**
      * Execute the query as a "select" statement.
      *
-     * @param  array|string  $columns
+     * @param  array|string|\Illuminate\Contracts\Database\Query\Expression  $columns
      * @return \Illuminate\Support\Collection<int, \stdClass>
      */
     public function get($columns = ['*']) {}

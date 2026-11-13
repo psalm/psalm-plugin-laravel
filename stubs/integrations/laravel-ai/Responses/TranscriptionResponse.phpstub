@@ -2,6 +2,7 @@
 
 namespace Laravel\Ai\Responses;
 
+use Illuminate\Http\Client\Response as HttpResponse;
 use Illuminate\Support\Collection;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TranscriptionSegment;
@@ -21,6 +22,11 @@ use Laravel\Ai\Responses\Data\TranscriptionUsage;
  * `$segments`, `$usage` and `$meta` resolvable even if the class is ever reached
  * only through a return type, in which case the stub becomes its sole definition.
  *
+ * `$raw`, `withRawResponse()` and `__serialize()` come from the `HasRawResponse`
+ * trait that laravel/ai 1.4.0 added. They are restated instead of mirroring the
+ * `use` clause, which would name a missing trait on 1.0.0 to 1.3.x. `$raw` needs
+ * no source of its own: the HTTP client `Response` stub sources its accessors.
+ *
  * @psalm-api
  */
 class TranscriptionResponse implements \Stringable
@@ -34,6 +40,8 @@ class TranscriptionResponse implements \Stringable
 
     public Meta $meta;
 
+    public ?HttpResponse $raw = null;
+
     /**
      * @param Collection<int, TranscriptionSegment> $segments
      */
@@ -43,4 +51,18 @@ class TranscriptionResponse implements \Stringable
      * @psalm-taint-source input
      */
     public function __toString(): string {}
+
+    /**
+     * @since 1.4.0
+     */
+    public function withRawResponse(?HttpResponse $response): self {}
+
+    /**
+     * Returns `$text` among the object's properties.
+     *
+     * @since 1.4.0
+     *
+     * @psalm-taint-source input
+     */
+    public function __serialize(): array {}
 }

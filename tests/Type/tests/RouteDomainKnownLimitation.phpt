@@ -4,8 +4,9 @@
 use Illuminate\Routing\Route;
 
 /**
- * KNOWN LIMITATION: a possibly-empty unpack binds `TDomain` from the element type and misses the getter
- * branch. Same as `fragment()`; Laravel 13.18+'s native conditional behaves identically.
+ * KNOWN LIMITATION: a possibly-empty list unpack binds `TDomain` from the element type and misses the getter
+ * branch (a sealed `array{0?: string}` resolves both, see PaginatorFragmentUnpackTest.phpt); Laravel 13.18+'s
+ * native conditional behaves identically.
  *
  * @param list<string> $args
  */

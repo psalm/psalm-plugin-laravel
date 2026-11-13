@@ -14,7 +14,7 @@ namespace TaintedNamedArgumentFixedParamReports {
     /** @psalm-taint-source input */
     function tainted(): string { return 'attacker'; }
 
-    // Psalm 7.0.0-rc1 keys a named argument by the DECLARED index of its parameter, so none of
+    // Psalm keys a named argument by the DECLARED index of its parameter, so none of
     // these callees has a variadic to strip: each shape must report at `$label` (or `$a`) only,
     // never at the parameter declared at the written offset. One sink per shape keeps emission
     // locations distinct.

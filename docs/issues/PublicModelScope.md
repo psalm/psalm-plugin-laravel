@@ -10,7 +10,7 @@ A `public` `#[Scope]`-attributed Eloquent query scope. Laravel's convention is `
 
 ## Why it matters
 
-A `public` `#[Scope]` is a runtime hazard, not just a convention slip. A static call such as `Post::published()` fatals, because PHP resolves the accessible non-static method before `__callStatic` can forward it to the query builder (see #634 and vimeo/psalm#11876). Keeping it `protected` leaves the static call routed to the builder.
+A `public` `#[Scope]` is a runtime hazard, not just a convention slip. A static call such as `Post::published()` fatals, because PHP resolves the accessible non-static method before `__callStatic` can forward it to the query builder (see #634). Keeping it `protected` leaves the static call routed to the builder. Psalm reports the public form as `InvalidStaticInvocation`; the protected form is analysed as the forwarded scope call and resolves to the model's builder.
 
 Reported as an error at project error levels 1 to 4, the range most analysis-serious codebases use; downgraded at looser levels (5 to 8). A scope whose visibility is forced by a contract (an interface method, a parent override, or an abstract trait method) is not reported, since it cannot be narrowed.
 

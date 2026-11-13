@@ -26,14 +26,15 @@ use Psalm\Storage\FunctionLikeParameter;
 use Psalm\Storage\MethodStorage;
 use Psalm\Type\Atomic\TNamedObject;
 
+// @todo-by https://github.com/vimeo/psalm/issues/12252 delete this handler and its registration in Plugin.php
 /**
  * Strips taint from a named-argument value that Psalm binds to the callee's variadic parameter.
  *
- * Two Psalm 7.0.0-rc1 bugs misreport such an argument: an unpacked argument is mapped onto every
+ * Psalm 7.2 still misreports such an argument through an unpacked argument: it is mapped onto every
  * parameter ignoring string keys (vimeo/psalm#12252, the `run(...$args)` -> `handle(...$args)`
- * shape, #1395), and `getParameterOffset()` keys a variadic by its written offset, colliding with
- * the fixed parameter declared there (vimeo/psalm#12251). Every other named argument is already
- * attributed correctly (vimeo/psalm#11923 is fixed) and is left to Psalm.
+ * shape, #1395). The strip cannot tell a re-spreading callee apart, so it covers every named
+ * argument bound to a variadic. Every other named argument is already attributed correctly
+ * (vimeo/psalm#11923 and #12251 are fixed) and is left to Psalm.
  *
  * The strip is only applied when the callee is resolved and the dispatch is exact (so an
  * abstract or interface method is never stripped), and never inside a trait body: see
@@ -42,8 +43,6 @@ use Psalm\Type\Atomic\TNamedObject;
  * Accepted trade: the strip drops the argument's whole input flow ({@see \Psalm\Codebase::getInputTaints()}), so a
  * genuine sink in the variadic's body or behind the re-spread is lost versus plain Psalm (pinned
  * by `TaintedNamedArgumentVariadicKnownLimitation.phpt`; rationale in decisions.md).
- *
- * Retirement: delete once both vimeo/psalm#12251 and #12252 are fixed.
  */
 final class NamedArgumentTaintHandler implements BeforeExpressionAnalysisInterface, RemoveTaintsInterface
 {

@@ -10,13 +10,10 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\Config;
 use Psalm\LaravelPlugin\Internal\ExperimentalIssuePolicy;
-use Tests\Psalm\LaravelPlugin\Unit\Concerns\LoadsPsalmConfigFromXml;
 
 #[CoversClass(ExperimentalIssuePolicy::class)]
 final class ExperimentalIssuePolicyTest extends TestCase
 {
-    use LoadsPsalmConfigFromXml;
-
     private const EXPERIMENTAL_ISSUES = [
         'UndefinedModelRelation',
         'MissingViewData',
@@ -108,7 +105,7 @@ final class ExperimentalIssuePolicyTest extends TestCase
 
     private function loadConfig(string $body = ''): Config
     {
-        return self::loadPsalmConfigFromXml(
+        return Config::loadFromXML(
             \dirname(__DIR__, 3),
             '<?xml version="1.0"?><psalm xmlns="https://getpsalm.org/schema/config">' . $body . '</psalm>',
         );

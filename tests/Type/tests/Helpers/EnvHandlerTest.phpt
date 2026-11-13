@@ -71,5 +71,66 @@ function env_nullable_int_default(?int $default): void
     $_result = env('FOO', $default);
     /** @psalm-check-type-exact $_result = string|null */
 }
+
+function env_closure_default(): void
+{
+    $_result = env('FOO', fn(): int => 1);
+    /** @psalm-check-type-exact $_result = string|1 */
+}
+
+function env_closure_nullable_default(): void
+{
+    $_result = env('FOO', fn(): ?int => null);
+    /** @psalm-check-type-exact $_result = string|null */
+}
+
+function env_mixed_closure_default(mixed $value): void
+{
+    $_result = env('FOO', fn(): mixed => $value);
+    /** @psalm-check-type-exact $_result = string|null */
+}
+
+function env_closure_returning_closure_default(): void
+{
+    $_result = env('FOO', fn(): \Closure => fn(): int => 1);
+    /** @psalm-check-type-exact $_result = Closure[pure]():1|string */
+}
+
+function env_void_closure_default(): void
+{
+    $_result = env('FOO', function (): void {});
+    /** @psalm-check-type-exact $_result = string|null */
+}
+
+function env_untyped_empty_closure_default(): void
+{
+    $_result = env('FOO', function () {});
+    /** @psalm-check-type-exact $_result = string|null */
+}
+
+function env_throwing_closure_default(): void
+{
+    $_result = env('FOO', fn() => throw new \Exception());
+    /** @psalm-check-type-exact $_result = string */
+}
+
+function env_never_closure_default(): void
+{
+    $_result = env('FOO', fn(): never => throw new \Exception());
+    /** @psalm-check-type-exact $_result = string */
+}
+
+function env_int_or_never_closure_default(int|\Closure $default): void
+{
+    /** @var int|(\Closure(): never) $default */
+    $_result = env('FOO', $default);
+    /** @psalm-check-type-exact $_result = string|int */
+}
+
+function env_callable_string_default_is_not_invoked(): void
+{
+    $_result = env('FOO', 'strlen');
+    /** @psalm-check-type-exact $_result = string */
+}
 ?>
 --EXPECTF--
