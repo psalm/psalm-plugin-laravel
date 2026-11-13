@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794529113996,
+  "lastUpdate": 1794561255380,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18580,6 +18580,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1272,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c16074705e90263a814a3f598281706d6c36a720",
+          "message": "fix: adapt to Psalm 7.3.2 (#2292)",
+          "timestamp": "2026-11-13T10:11:30+01:00",
+          "tree_id": "cc9bac77d4775068707a557c6029b476b4498bc9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c16074705e90263a814a3f598281706d6c36a720"
+        },
+        "date": 1794561253726,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.1,
+            "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1273,
             "unit": "MB"
           }
         ]
