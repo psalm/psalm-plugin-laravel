@@ -443,6 +443,38 @@ function test_with_keeps_template_without_custom_builder(\App\Models\Customer $c
     /** @psalm-check-type-exact $_result = Builder<\App\Models\Customer>&static */
 }
 
+/**
+ * A template-typed receiver must keep its template for query() too (issue #1685).
+ *
+ * @template T of \App\Models\CovariantNonFinalCustomBuilderModel
+ * @param class-string<T> $class
+ * @return Builder<T>
+ */
+function test_query_keeps_template_via_class_string(string $class): Builder
+{
+    return $class::query();
+}
+
+/**
+ * @template T of \App\Models\CovariantNonFinalCustomBuilderModel
+ * @param T $model
+ * @return Builder<T>
+ */
+function test_new_query_keeps_template_via_instance(\App\Models\CovariantNonFinalCustomBuilderModel $model): Builder
+{
+    return $model->newQuery();
+}
+
+/** A literally named receiver still resolves to the custom builder. */
+function test_query_and_new_query_on_concrete_receiver_keep_custom_builder(Vehicle $vehicle): void
+{
+    $_query = Vehicle::query();
+    /** @psalm-check-type-exact $_query = VehicleBuilder<Vehicle> */
+
+    $_newQuery = $vehicle->newQuery();
+    /** @psalm-check-type-exact $_newQuery = VehicleBuilder<Vehicle> */
+}
+
 // -----------------------------------------------------------------------
 // static $builder property pattern (all Laravel versions)
 // Mechanic model sets protected static string $builder = MechanicBuilder::class.

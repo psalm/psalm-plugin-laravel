@@ -58,6 +58,16 @@ class Builder implements BuilderContract
     public function getModel() {}
 
     /**
+     * Re-declared because Psalm resolves `$this` in a callable parameter of the generic `BuildsQueries`
+     * trait without the using class's template arguments, i.e. `callable(Builder<Model>)`, and rejects
+     * every callback typed with the concrete model (`callable(static)` resolves the same way).
+     *
+     * @param  callable(\Illuminate\Database\Eloquent\Builder<TModel>): mixed  $callback
+     * @return $this
+     */
+    public function tap($callback) {}
+
+    /**
      * @param  array<string, mixed>  $attributes
      * @return TModel
      */
