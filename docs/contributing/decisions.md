@@ -778,6 +778,14 @@ The strip cannot be limited to that shape: telling a re-spreading callee apart n
 
 **Rejected (draft PR #1579):** strip only when the written offset collides with a fixed parameter. It keeps the genuine finding but reopens the reported #1395 false positive, which sits at the variadic's own offset.
 
+### CLI-only files: migrations by content, console routes by path (#2298)
+
+**Decision:** `CliOnlyConsoleCodeHandler` marks a file's top-level code CLI-only (`BeforeFileAnalysisEvent::markFileAsCliOnly()`, vimeo/psalm#13643) when the file returns an anonymous `Migration` subclass, or when it is the booted app's `routes/console.php`.
+
+**Why:** a migration file is defined by what the migrator `require`s from it, not by where it sits. The content rule covers `database/migrations`, `loadMigrationsFrom()` paths, `--path` tenant folders and module layouts without reading `Migrator::paths()`, and it needs no booted migrator. A console routes file has no such marker. Detecting `Artisan::command()` calls instead would also mark a `routes/web.php` that registers a command, and would hide that file's `TaintedHtml`. So the console file is matched by path.
+
+**Accepted limitation:** a console routes file with another name passed to `withRouting(commands: ...)` is not recognized.
+
 ### SuppressHandler: suppress known false positives from Laravel conventions
 
 **Decision:** The plugin programmatically suppresses Psalm issues that are false positives caused by Laravel conventions (e.g. `PropertyNotSetInConstructor` for Command classes, `UnusedClass` for service providers). Suppressions are declared as data in `SuppressHandler` constants, keyed by parent class, trait, interface, or FQCN.

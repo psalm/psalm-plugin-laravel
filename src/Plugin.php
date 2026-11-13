@@ -148,6 +148,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
                 && $this->initBladeAnalysis($pluginConfig, $output, $annotate);
 
             $this->initNoEnvOutsideConfigHandler($pluginConfig, $output);
+            Handlers\Console\CliOnlyConsoleCodeHandler::init(ApplicationProvider::getApp());
 
             $this->registerHandlers($registration, $pluginConfig, $bladeActive, $annotate);
             $this->registerStubs($registration, $pluginConfig, $output);
@@ -183,6 +184,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Auth/AuthConfigAnalyzer.php';
         require_once __DIR__ . '/Handlers/Auth/GuardClassResolver.php';
         require_once __DIR__ . '/Handlers/Console/CommandDefinitionAnalyzer.php';
+        require_once __DIR__ . '/Handlers/Console/CliOnlyConsoleCodeHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/Metadata/ModelMetadataRegistry.php';
         require_once __DIR__ . '/Handlers/Eloquent/Metadata/ModelMetadataRegistryBuilder.php';
         require_once __DIR__ . '/Handlers/Eloquent/CustomBuilderMethodHandler.php';
@@ -237,6 +239,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         Handlers\Auth\RequestHandler::reset();
         Handlers\Config\ConfigKeyResolver::reset();
         Handlers\Console\CommandDefinitionAnalyzer::reset();
+        Handlers\Console\CliOnlyConsoleCodeHandler::reset();
         Handlers\Eloquent\CustomBuilderMethodHandler::reset();
         Handlers\Eloquent\CustomCollectionHandler::reset();
         Handlers\Eloquent\FactoryModelBindingHandler::reset();
