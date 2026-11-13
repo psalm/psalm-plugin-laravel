@@ -75,14 +75,14 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
     {
         $codebase = $event->getCodebase();
 
-        // Cheap property read: runs per expression, so the suppression-aware
-        // tracksTaintFlow() check waits until a comparison actually matches.
-        if (!$codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
+        $source = $event->getStatementsSource();
+
+        // False without taint analysis and where TaintedInput is suppressed, matching core sinks.
+        if (!$codebase->tracksTaintFlow($source)) {
             return null;
         }
 
         $expr = $event->getExpr();
-        $source = $event->getStatementsSource();
 
         // BinaryOp gate first: this method runs for every expression, so the cheap check
         // skips the FuncCall branch for the BinaryOp majority and the narrower instanceofs
@@ -204,11 +204,6 @@ final class TimingUnsafeComparisonHandler implements AfterExpressionAnalysisInte
         ?Union $rightType,
     ): void {
         if (self::isLiteralOperand($leftExpr) || self::isLiteralOperand($rightExpr)) {
-            return;
-        }
-
-        // False where TaintedInput is suppressed, matching core sinks.
-        if (!$codebase->tracksTaintFlow($source)) {
             return;
         }
 
