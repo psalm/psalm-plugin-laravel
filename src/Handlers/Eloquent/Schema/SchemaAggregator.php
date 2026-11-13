@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\Schema;
 use PhpParser;
 use PhpParser\NodeFinder;
@@ -722,9 +723,22 @@ final class SchemaAggregator
                 case 'dropsoftdeletesdatetime':
                 case 'dropsoftdeletes':
                 case 'dropifexists':
-                case 'dropcolumn':
                 case 'drop':
                     $table->dropColumn($column_name);
+                    break;
+
+                case 'dropcolumn':
+                    // Blueprint::dropColumn() reads func_get_args(), so every string argument is dropped.
+                    foreach ($first_method_call->args as $drop_arg) {
+                        $drop_name = $drop_arg instanceof PhpParser\Node\Arg
+                            ? $this->resolveStringArgument($drop_arg->value)
+                            : null;
+
+                        if ($drop_name !== null) {
+                            $table->dropColumn($drop_name);
+                        }
+                    }
+
                     break;
 
                 case 'after':
@@ -756,6 +770,7 @@ final class SchemaAggregator
                 case 'index':
                 case 'foreign':
                 case 'dropspatialindex':
+                case 'dropvectorindex':
                     // Table-level property methods — these don't create columns.
                     // Without this, $table->engine('InnoDB') would register 'InnoDB' as a column.
                 case 'engine':
@@ -774,15 +789,26 @@ final class SchemaAggregator
                     break;
 
                 case 'numericmorphs':
-                case 'morphs': // @todo support UUID and ULID types
                     $table->setColumn(new SchemaColumn($column_name . '_type', 'string', $nullable));
                     $table->setColumn(new SchemaColumn($column_name . '_id', 'int', $nullable, unsigned: true));
                     break;
 
                 case 'nullablenumericmorphs':
-                case 'nullablemorphs': // @todo support UUID and ULID types
                     $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
                     $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true, unsigned: true));
+                    break;
+
+                case 'morphs':
+                case 'nullablemorphs':
+                    // Blueprint::morphs() branches on the key type a service provider set via
+                    // Schema::morphUsingUuids()/morphUsingUlids(); the booted app has already run it.
+                    $morph_nullable = $nullable || $first_method_name_lc === 'nullablemorphs';
+                    $table->setColumn(new SchemaColumn($column_name . '_type', 'string', $morph_nullable));
+                    $table->setColumn(
+                        Builder::$defaultMorphKeyType === 'int'
+                            ? new SchemaColumn($column_name . '_id', 'int', $morph_nullable, unsigned: true)
+                            : new SchemaColumn($column_name . '_id', 'string', $morph_nullable),
+                    );
                     break;
 
                 case 'uuidmorphs':

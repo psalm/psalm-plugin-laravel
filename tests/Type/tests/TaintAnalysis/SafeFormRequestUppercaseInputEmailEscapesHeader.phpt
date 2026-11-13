@@ -11,11 +11,8 @@ use Illuminate\Foundation\Http\FormRequest;
  * PHP method names are case-insensitive. The validation return-type handler
  * already receives lowercase method names from Psalm, but the v4.14 taint
  * resolver originally inspected the source spelling and missed this shape.
- *
- * The header sink is pinned at the current false positive: Psalm drops the
- * `email` rule's escape for a call nested in a concatenation.
- *
- * @todo-by https://github.com/vimeo/psalm/issues/13604 drop the TaintedHeader expectation
+ * The `email` rule's header escape must apply to the header sink; the HTML
+ * sink still reports.
  */
 final class UppercaseInputEmailRequest extends FormRequest
 {
@@ -41,6 +38,5 @@ function dispatch(UppercaseInputEmailRequest $request): void {
 }
 ?>
 --EXPECTF--
-TaintedHeader on line %d: Detected tainted header
 TaintedHtml on line %d: Detected tainted HTML
 TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
