@@ -9,6 +9,10 @@ name: Psalm delta
 # `/psalm-delta [group|app|--flag ...]` (grammar: bin/ci/delta-select-apps.php,
 # groups + allowed flags: bin/ci/test-apps.yml); `help`/unknown tokens get a
 # reply and start no run. Flags go to `psalm-laravel analyze` on both sides.
+# Manual run: Actions > Psalm delta > Run workflow, with the PR number and the same
+# tokens as after `/psalm-delta`. Dispatch needs write access, the equivalent of the
+# comment author gate. The harness is the ref the run is dispatched from (4.x by
+# default), so a harness change can be tried from its branch before merging.
 #
 # Architecture:
 #   prepare — resolve the app selection + refs, emit the filtered app matrix
@@ -23,7 +27,7 @@ name: Psalm delta
 # native pull_request run: (1) the MEMBER/OWNER/COLLABORATOR author check means a
 # maintainer types `/psalm-delta` after reading the diff, (2) contents:read +
 # persist-credentials:false — no write token, no git creds reach the code. The
-# harness (runner/registry/comparator) is always default-branch, so base/head_sha
+# harness (runner/registry/comparator) is always the workflow's ref (the default branch for comments), so base/head_sha
 # are only the versions MEASURED, not how. The one cross-run vector — a fork
 # poisoning the shared app cache trusted runs restore — is closed by making the
 # cache restore-only on forks (prepare emits is_fork; delta saves only when
@@ -35,14 +39,26 @@ name: Psalm delta
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to measure
+        required: true
+        type: number
+      args:
+        description: Tokens as after `/psalm-delta` (groups, app names, --flags); empty = default group
+        required: false
+        type: string
+        default: ''
 
-# Only an authorised run comment shares the per-PR 'run' key (a re-trigger
+# Only an authorised run comment or a manual dispatch shares the per-PR 'run' key (a re-trigger
 # supersedes the old run); others, `/psalm-delta help` included, get a unique key.
 # Accepted: a typo or oddly spaced `help` still cancels an in-flight run.
 concurrency:
   group: >-
-    psalm-delta-${{ github.event.issue.number }}-${{ (
-    (github.event.comment.body == '/psalm-delta'
+    psalm-delta-${{ github.event.issue.number || inputs.pr }}-${{ (
+    github.event_name == 'workflow_dispatch'
+    || (github.event.comment.body == '/psalm-delta'
     || startsWith(github.event.comment.body, '/psalm-delta ')
     || startsWith(github.event.comment.body, format('/psalm-delta{0}', fromJSON('"\n"')))
     || startsWith(github.event.comment.body, format('/psalm-delta{0}', fromJSON('"\r"'))))
@@ -60,12 +76,13 @@ jobs:
   prepare:
     name: Prepare (selection + refs + matrix)
     if: >-
-      github.event.issue.pull_request
+      github.event_name == 'workflow_dispatch'
+      || (github.event.issue.pull_request
       && (github.event.comment.body == '/psalm-delta'
       || startsWith(github.event.comment.body, '/psalm-delta ')
       || startsWith(github.event.comment.body, format('/psalm-delta{0}', fromJSON('"\n"')))
       || startsWith(github.event.comment.body, format('/psalm-delta{0}', fromJSON('"\r"'))))
-      && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association)
+      && contains(fromJSON('["MEMBER","OWNER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -92,10 +109,10 @@ jobs:
         with:
           egress-policy: audit
 
-      # HARNESS = default branch (trusted), NOT base/head_sha (only the versions
+      # HARNESS = the workflow's own ref (trusted), NOT base/head_sha (only the versions
       # MEASURED). Sourcing tooling from them would freeze it at the PR's branch
       # point, so harness fixes never reach in-flight PRs. issue_comment runs from
-      # the default branch, so a ref-less checkout is 4.x HEAD.
+      # the default branch, so a ref-less checkout is 4.x HEAD; a dispatch uses its ref.
       - name: Checkout harness (default branch, for the registry)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -103,7 +120,7 @@ jobs:
 
       - name: Resolve app selection
         env:
-          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_BODY: ${{ github.event_name == 'workflow_dispatch' && format('/psalm-delta {0}', inputs.args) || github.event.comment.body }}
         run: |
           yq -o=json bin/ci/test-apps.yml | php bin/ci/delta-select-apps.php > selection.json
           jq -r '.reply' selection.json > reply.md
@@ -126,18 +143,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.issue.number }}
+          PR_NUMBER: ${{ github.event.issue.number || inputs.pr }}
           COMMENT_ID: ${{ github.event.comment.id }}
           STATUS: ${{ steps.select.outputs.status }}
         run: |
           gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@reply.md --silent
-          if [ "$STATUS" = error ]; then
+          if [ "$STATUS" = error ] && [ -n "$COMMENT_ID" ]; then
             gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
               -f content=confused --silent || echo "reaction failed (non-fatal)"
           fi
 
       - name: React to comment (processing)
-        if: steps.select.outputs.run == 'true'
+        if: steps.select.outputs.run == 'true' && github.event_name == 'issue_comment'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -151,12 +168,14 @@ jobs:
         if: steps.select.outputs.run == 'true'
         id: refs
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ github.event.issue.number || inputs.pr }}
         with:
           script: |
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.issue.number,
+              pull_number: Number(process.env.PR_NUMBER),
             });
             // Fork heads are ALLOWED but flagged, not refused: the delta job that
             // runs this code is unprivileged (contents:read, no creds/secrets,
@@ -223,7 +242,7 @@ jobs:
           path: plugin-pr
           persist-credentials: false
 
-      # Measurement harness: default branch, not base/head. PR head can't alter
+      # Measurement harness: the workflow's ref (default branch for comments), not base/head. PR head can't alter
       # it; harness fixes reach in-flight PRs immediately.
       - name: Checkout harness (default branch)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -432,7 +451,7 @@ jobs:
       # Flip :eyes: (set in prepare) to :rocket:. Runs even if report failed, so
       # the comment never sticks on :eyes:. Cosmetic, never abort.
       - name: React to comment (done)
-        if: always()
+        if: always() && github.event_name == 'issue_comment'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
