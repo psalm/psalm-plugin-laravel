@@ -484,12 +484,12 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
         yield $node;
 
         foreach ($node->getSubNodeNames() as $name) {
-            // PhpParser subnodes are typed as `Node | array<Node> | scalar | null`
-            // (and rarely `array<scalar>` for things like Property::$names). The
-            // walker only acts on Node and array-of-Node branches; the runtime
-            // `instanceof Node` checks below filter out any stray non-Node entries
-            // in array subnodes, so the simplified annotation is safe.
-            /** @psalm-var Node|array<array-key, Node>|scalar|null $sub */
+            // PhpParser subnodes are `Node | array<Node> | scalar | null`, but the array
+            // branch can hold `null` at runtime (e.g. `list(, $b)` items, `use` lists) even
+            // though PhpParser docblocks the entries as plain `Node`. Declare `Node|null`
+            // entries so the `instanceof Node` filter below stays meaningful, and omit
+            // the rare `array<scalar>` shape (Property::$names) which that filter drops anyway.
+            /** @psalm-var Node|array<array-key, Node|null>|scalar|null $sub */
             $sub = $node->$name;
 
             if (self::isScopeBoundary($sub)) {
