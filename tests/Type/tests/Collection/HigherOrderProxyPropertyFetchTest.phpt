@@ -125,7 +125,7 @@ final class HigherOrderProxyPropertyFetchTest
     public function issueRepro(array $customers): void
     {
         $_ids = collect($customers)->map->id->all();
-        /** @psalm-check-type-exact $_ids = array<int<0, max>, string> */
+        /** @psalm-check-type-exact $_ids = array<int, string> */
         Customer::query()->whereIn('id', collect($customers)->map->id->all())->get();
     }
 

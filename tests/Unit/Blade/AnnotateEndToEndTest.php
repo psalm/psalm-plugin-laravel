@@ -102,8 +102,8 @@ final class AnnotateEndToEndTest extends TestCase
         // a `static` Collection and a plain one disagree about the same name.
         yield 'a collection without the late-static marker' => ['collections', $declare(
             " * @var array<int<1, max>, \\Illuminate\\Support\\Collection<int, string>> \$byRole\n"
-            . " * @var class-string<\\Illuminate\\Support\\Collection<int<0, 1>, string>> \$kind\n"
-            . " * @var \\Illuminate\\Support\\Collection<int<0, 1>, string> \$missing\n",
+            . " * @var class-string<\\Illuminate\\Support\\Collection<int, string>> \$kind\n"
+            . " * @var \\Illuminate\\Support\\Collection<int, string> \$missing\n",
             self::TEMPLATES['collections'],
         )];
 
