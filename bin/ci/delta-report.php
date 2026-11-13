@@ -9,15 +9,17 @@ declare(strict_types=1);
  * Reads issues.json + perf.json files produced by delta-app.sh out of an
  * OUTPUT_DIR, matches base/head pairs per app, and prints:
  *
- *   * a heading, "<icon> Issues: <increased|decreased|unchanged> · Performance:
- *     <regressed|improved|unchanged>"
+ *   * a heading, "<icon> Types: <increased|decreased|unchanged> · Taint: +N −M ·
+ *     Performance: <regressed|improved|unchanged>" (the Taint part only when taint
+ *     issues moved, plus a Dead code part when that column is shown and moved)
  *   * one table row per selected app (crashed or not run apps included): wall time,
  *     peak memory, head issue count with +added/−removed/changed badges, weighted
- *     issues, type coverage; a Total row over the apps compared on both sides
+ *     type issues, taint issues, dead-code issues (only when a run reported any),
+ *     type coverage; a Total row over the apps compared on both sides
  *   * a legend, then one collapsible block per app with anything beyond the table
- *     (weighted breakdown by error level, issue-type table, order-dependent
- *     exclusions; with --details also the changed, added and removed entries and
- *     crash text)
+ *     (weighted breakdown by error level, taint and dead-code moves, issue-type
+ *     table, order-dependent exclusions; with --details also the changed, added
+ *     and removed entries and crash text)
  *   * a footer with the head and base commits and an optional workflow run link
  *
  * Icons: ✅ both sides produced a report, ❌ head has none while base does (the PR
@@ -168,27 +170,43 @@ const COVERAGE_NOISE_FLOOR = 0.005; // percentage points; also the smallest move
 const ICON_ORDER = ['❌' => 0, '💥' => 1, '✅' => 2];
 const LEVEL_BUCKETS = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8', 'always', 'feature'];
 
+// Taint and dead-code issues are reported beside the weighted type issues, not inside them.
+// Taint is every `Tainted*` type; dead code is the closed list below (all need --find-dead-code).
+const DEAD_CODE_TYPES = [
+    'UnusedClass', 'UnusedMethod', 'UnusedProperty', 'UnusedParam', 'UnusedConstructor', 'UnusedReturnValue',
+    'UnusedClosureParam', 'UnusedDocblockParam', 'UnusedForeachValue', 'UnusedVariable', 'UnevaluatedCode',
+    'PossiblyUnusedMethod', 'PossiblyUnusedParam', 'PossiblyUnusedProperty', 'PossiblyUnusedReturnValue',
+    'UnnecessaryVarAnnotation', 'UnusedPsalmSuppress',
+];
+
 const TABLE_LEGEND = "<details><summary>How to read this table</summary>\n\n"
     . "- **Wall**: head seconds. A badge is colored only for a move of at least 3 s and 10 %, "
     . "as shared runners are noisy: slower is red, faster is green, anything smaller is gray.\n"
     . "- **Memory**: peak RSS of the largest process in Psalm's process tree, workers included. "
     . "Red above +5 %, green below −5 %, gray between. A dash means a side has no figure.\n"
-    . '- **Issues**: head count, then $\color{red}{\textsf{+added}}$ $\color{green}{\textsf{-removed}}$ '
+    . '- **Issues**: head count over all categories, then $\color{red}{\textsf{+added}}$ $\color{green}{\textsf{-removed}}$ '
     . 'against base, and $\color{orange}{\textsf{N changed}}$ for issues at the same place and type with a new message '
     . "(not counted in added or removed).\n"
-    . '- **Weighted**: issues weighted by error level (levels 1–8 as is, always-errors 10, feature-specific 0), '
-    . "order-dependent types excluded. A rise is not necessarily a regression.\n"
+    . '- **Weighted (types)**: type issues weighted by error level (levels 1–8 as is, always-errors 10, strictness checks 1), '
+    . "order-dependent types excluded. Taint and dead-code issues are not weighed. A rise is not necessarily a regression.\n"
+    . '- **Taint**: head count of `Tainted*` issues, then $\color{orange}{\textsf{+added}}$ $\color{orange}{\textsf{-removed}}$ against base. '
+    . "Both are orange as either direction needs review: more can be new detection or false positives, "
+    . "fewer can be fixed false positives or lost detection.\n"
+    . "- **Dead code**: head count of unused-code issues, shown only when a run reported some (`--find-dead-code`). "
+    . "More is red, fewer is green.\n"
     . "- **Coverage**: inferred type coverage. A badge appears only for a move of at least 0.005 points, "
     . "smaller moves are parallel-analysis jitter.\n"
     . "- **Total**: sum over the apps compared on both sides (coverage is not summed). Badge thresholds and the heading words "
     . "apply per app, not to the total, so the Total row can be colored differently from the heading.\n"
     . '- **Colors**: $\color{red}{\textsf{red}}$ worse or more issues, '
     . '$\color{green}{\textsf{green}}$ better or fewer issues, '
+    . '$\color{orange}{\textsf{orange}}$ needs review, '
     . '$\color{gray}{\textsf{gray}}$ noise.' . "\n"
     . "- **Icons**: ✅ both sides produced a report · ❌ head produced none while base did · "
     . "💥 not comparable (base crashed, both crashed, or not run). A crash on both sides is not caused by this PR.\n"
     . '- **Performance** (heading): *regressed* if a head run crashed or a wall or memory badge is red, '
-    . "else *improved* if one is green, else *unchanged*. **Issues** (heading): direction of the total weighted change. "
+    . "else *improved* if one is green, else *unchanged*. **Types** (heading): direction of the total weighted change. "
+    . "**Taint** and **Dead code** (heading): added and removed counts, present only when non-zero. "
     . "Informational, never fails the PR.\n\n"
     . '</details>';
 
@@ -427,6 +445,8 @@ $entries = static function (array $counts): array {
  *     baseBuckets: array<string, int>,
  *     headBuckets: array<string, int>,
  *     weight: array{int, int},
+ *     taint: array{base: int, head: int, added: int, removed: int},
+ *     deadcode: array{base: int, head: int, added: int, removed: int},
  *     movements: list<array{type: string, level: int|null, base: int, head: int, added: int, removed: int, changed: int, delta: int}>,
  *     volatile: list<string>,
  * }> $rows
@@ -537,6 +557,17 @@ foreach ($apps as $app) {
         }
     }
 
+    $baseByCategory = categoryCounts($baseTypes);
+    $headByCategory = categoryCounts($headTypes);
+    $addedByCategory = categoryCounts($addedByType);
+    $removedByCategory = categoryCounts($removedByType);
+    $categoryMoves = static fn(string $category): array => [
+        'base' => $baseByCategory[$category] ?? 0,
+        'head' => $headByCategory[$category] ?? 0,
+        'added' => $addedByCategory[$category] ?? 0,
+        'removed' => $removedByCategory[$category] ?? 0,
+    ];
+
     $rows[$app] = [
         'app' => $app,
         'added' => array_sum($added),
@@ -548,6 +579,8 @@ foreach ($apps as $app) {
         'baseBuckets' => $baseBuckets,
         'headBuckets' => $headBuckets,
         'weight' => [weightedSum($baseBuckets), weightedSum($headBuckets)],
+        'taint' => $categoryMoves('taint'),
+        'deadcode' => $categoryMoves('deadcode'),
         'movements' => $movements,
         'volatile' => $volatile,
     ];
@@ -565,10 +598,37 @@ function levelBucket(int $level): string
     };
 }
 
+/** `taint`, `deadcode` or `types` (everything else, strictness checks included). */
+function issueCategory(string $type): string
+{
+    return match (true) {
+        str_starts_with($type, 'Tainted') => 'taint',
+        in_array($type, DEAD_CODE_TYPES, true) => 'deadcode',
+        default => 'types',
+    };
+}
+
 /**
- * Issue counts per level bucket; a type without a level is not bucketed.
+ * Issue counts per category, e.g. [taint => 3]; a category without issues is absent.
  *
- * @param array<string, int> $types
+ * @param array<array-key, int> $perType counts keyed by issue type
+ * @return array<string, int>
+ */
+function categoryCounts(array $perType): array
+{
+    $counts = [];
+    foreach ($perType as $type => $n) {
+        $category = issueCategory((string) $type);
+        $counts[$category] = ($counts[$category] ?? 0) + $n;
+    }
+
+    return $counts;
+}
+
+/**
+ * Type-issue counts per level bucket; taint, dead-code and level-less types are not bucketed.
+ *
+ * @param array<array-key, int> $types
  * @param array<string, int> $levels
  * @return array<string, int>
  */
@@ -576,7 +636,7 @@ function bucketCounts(array $types, array $levels): array
 {
     $counts = [];
     foreach ($types as $type => $n) {
-        if (isset($levels[$type])) {
+        if (isset($levels[$type]) && issueCategory((string) $type) === 'types') {
             $bucket = levelBucket($levels[$type]);
             $counts[$bucket] = ($counts[$bucket] ?? 0) + $n;
         }
@@ -586,7 +646,7 @@ function bucketCounts(array $types, array $levels): array
 }
 
 /**
- * Weighted issue count: its level for L1…L8, 10 for `always`, 0 for `feature`.
+ * Weighted type-issue count: its level for L1…L8, 10 for `always`, 1 for `feature` (the remaining strictness checks).
  *
  * @param array<string, int> $counts
  */
@@ -596,7 +656,7 @@ function weightedSum(array $counts): int
     foreach ($counts as $bucket => $n) {
         $sum += $n * match ($bucket) {
             'always' => 10,
-            'feature' => 0,
+            'feature' => 1,
             default => (int) substr($bucket, 1),
         };
     }
@@ -690,13 +750,13 @@ function countBadge(int $delta): string
         : ' ' . colored(($delta > 0 ? '+' : '-') . fmtInt(abs($delta)), $delta > 0 ? 'red' : 'green');
 }
 
-/** " +9 -3", a side that did not move in gray; '' when nothing was added or removed. */
-function addedRemovedBadge(int $added, int $removed): string
+/** " +9 -3" in the given colors, a side that did not move in gray; '' when nothing was added or removed. */
+function addedRemovedBadge(int $added, int $removed, string $addedColor = 'red', string $removedColor = 'green'): string
 {
     return $added === 0 && $removed === 0
         ? ''
-        : ' ' . colored("+{$added}", $added > 0 ? 'red' : 'gray') . ' '
-            . colored("-{$removed}", $removed > 0 ? 'green' : 'gray');
+        : ' ' . colored("+{$added}", $added > 0 ? $addedColor : 'gray') . ' '
+            . colored("-{$removed}", $removed > 0 ? $removedColor : 'gray');
 }
 
 /**
@@ -741,6 +801,26 @@ function issuesCell(array $p): string
         . ($r['changed'] === [] ? '' : ' ' . colored(count($r['changed']) . ' changed', 'orange'));
 }
 
+/**
+ * Head count of taint or dead-code issues with its +added/−removed badge. Taint is orange both ways: more can be a
+ * new detection or a false positive, fewer a fixed false positive or a lost detection.
+ *
+ * @param array<string, mixed> $p
+ */
+function categoryCell(array $p, string $category): string
+{
+    $r = $p['row'];
+    if ($r === null) {
+        return '–';
+    }
+
+    $m = $r[$category];
+
+    return fmtInt($m['head']) . ($category === 'taint'
+        ? addedRemovedBadge($m['added'], $m['removed'], 'orange', 'orange')
+        : addedRemovedBadge($m['added'], $m['removed']));
+}
+
 /** @param array<string, mixed> $p */
 function weightedCell(array $p): string
 {
@@ -754,7 +834,7 @@ function weightedCell(array $p): string
  *
  * @param list<array<string, mixed>> $projects
  */
-function totalRow(array $projects): ?string
+function totalRow(array $projects, bool $deadCode): ?string
 {
     $sum = ['wall' => [0.0, 0.0, 0], 'mem' => [0.0, 0.0, 0]];
     $head = $added = $removed = $changed = 0;
@@ -786,15 +866,20 @@ function totalRow(array $projects): ?string
 
     [$wallBase, $wallHead, $wallN] = $sum['wall'];
     [$memBase, $memHead, $memN] = $sum['mem'];
+    $taint = categoryTotals($projects, 'taint');
+    $dead = categoryTotals($projects, 'deadcode');
 
-    return sprintf(
-        "| **Total** | %s | %s | %s | %s | – |\n",
+    return '| ' . implode(' | ', [
+        '**Total**',
         $wallN === 0 ? '–' : sprintf('%.1f', $wallHead) . pctBadge(pctDelta($wallBase, $wallHead), wallColor($wallBase, $wallHead)),
         $memN === 0 ? '–' : fmtInt((int) round($memHead)) . pctBadge(pctDelta($memBase, $memHead), memoryColor($memBase, $memHead)),
         fmtInt($head) . addedRemovedBadge($added, $removed)
             . ($changed === 0 ? '' : ' ' . colored("{$changed} changed", 'orange')),
         fmtInt($weight[1]) . countBadge($weight[1] - $weight[0]),
-    );
+        fmtInt($taint['head']) . addedRemovedBadge($taint['added'], $taint['removed'], 'orange', 'orange'),
+        ...($deadCode ? [fmtInt($dead['head']) . addedRemovedBadge($dead['added'], $dead['removed'])] : []),
+        '–',
+    ]) . " |\n";
 }
 
 /**
@@ -844,11 +929,11 @@ function performanceWord(array $projects): string
 }
 
 /**
- * Direction of the total weighted change over the compared apps.
+ * Direction of the total weighted type-issue change over the compared apps.
  *
  * @param list<array<string, mixed>> $projects
  */
-function issuesWord(array $projects): string
+function typesWord(array $projects): string
 {
     $compared = array_filter($projects, static fn(array $p): bool => $p['row'] !== null);
     if ($compared === []) {
@@ -858,6 +943,56 @@ function issuesWord(array $projects): string
     $sum = array_sum(array_map(static fn(array $p): int => $p['row']['weight'][1] - $p['row']['weight'][0], $compared));
 
     return $sum > 0 ? 'increased' : ($sum < 0 ? 'decreased' : 'unchanged');
+}
+
+/**
+ * Taint or dead-code counts summed over the apps compared on both sides.
+ *
+ * @param list<array<string, mixed>> $projects
+ * @return array{base: int, head: int, added: int, removed: int}
+ */
+function categoryTotals(array $projects, string $category): array
+{
+    $sum = ['base' => 0, 'head' => 0, 'added' => 0, 'removed' => 0];
+    foreach ($projects as $p) {
+        if ($p['row'] !== null) {
+            foreach ($sum as $key => $n) {
+                $sum[$key] = $n + $p['row'][$category][$key];
+            }
+        }
+    }
+
+    return $sum;
+}
+
+/**
+ * Dead code is only reported when the run used --find-dead-code, so the column needs some unused-code issue on a side.
+ *
+ * @param list<array<string, mixed>> $projects
+ */
+function deadCodeShown(array $projects): bool
+{
+    $total = categoryTotals($projects, 'deadcode');
+
+    return $total['base'] + $total['head'] > 0;
+}
+
+/**
+ * " · Taint: +132 −0" and " · Dead code: +2 −5", each only when something was added or removed.
+ *
+ * @param list<array<string, mixed>> $projects
+ */
+function categoryHeading(array $projects, bool $deadCode): string
+{
+    $heading = '';
+    foreach (['taint' => 'Taint', 'deadcode' => 'Dead code'] as $category => $label) {
+        $total = categoryTotals($projects, $category);
+        if (($category === 'taint' || $deadCode) && ($total['added'] > 0 || $total['removed'] > 0)) {
+            $heading .= sprintf(' · %s: +%s −%s', $label, fmtInt($total['added']), fmtInt($total['removed']));
+        }
+    }
+
+    return $heading;
 }
 
 /**
@@ -920,6 +1055,13 @@ function detailsBody(array $p, bool $details, bool $entries): string
                 ? '='
                 : fmtSigned($head - $base) . ($base === 0 ? '' : ', ' . fmtPct(pctDelta((float) $base, (float) $head), 2));
             $parts[] = sprintf('**Weighted** %s → %s (%s): %s', fmtInt($base), fmtInt($head), $change, $levels);
+        }
+
+        foreach (['taint' => 'Taint', 'deadcode' => 'Dead code'] as $category => $label) {
+            $m = $r[$category];
+            if ($m['added'] > 0 || $m['removed'] > 0) {
+                $parts[] = sprintf('**%s** %s → %s (+%s −%s)', $label, fmtInt($m['base']), fmtInt($m['head']), fmtInt($m['added']), fmtInt($m['removed']));
+            }
         }
 
         if ($r['movements'] !== []) {
@@ -1094,7 +1236,14 @@ $headingIcon = in_array('❌', $icons, true) ? '❌' : (in_array('💥', $icons,
 // Stable: selection order within a group.
 usort($projects, static fn(array $a, array $b): int => ICON_ORDER[$a['icon']] <=> ICON_ORDER[$b['icon']]);
 
-$out = sprintf("## %s Issues: %s · Performance: %s\n\n", $headingIcon, issuesWord($projects), performanceWord($projects));
+$deadCode = deadCodeShown($projects);
+$out = sprintf(
+    "## %s Types: %s%s · Performance: %s\n\n",
+    $headingIcon,
+    typesWord($projects),
+    categoryHeading($projects, $deadCode),
+    performanceWord($projects),
+);
 if ($selection !== '') {
     $out .= sprintf("Apps: %s → %d\n\n", $selection, count($apps));
 }
@@ -1103,21 +1252,22 @@ if ($flags !== '') {
     $out .= sprintf("Flags (both sides): `%s`\n\n", $flags);
 }
 
-$out .= "| App | Wall (s) | Memory (MB) | Issues | Weighted | Coverage (%) |\n|:--|--:|--:|--:|--:|--:|\n";
+$header = ['App', 'Wall (s)', 'Memory (MB)', 'Issues', 'Weighted (types)', 'Taint', ...($deadCode ? ['Dead code'] : []), 'Coverage (%)'];
+$out .= '| ' . implode(' | ', $header) . " |\n|:--" . str_repeat('|--:', count($header) - 1) . "|\n";
 foreach ($projects as $p) {
-    $out .= sprintf(
-        "| %s %s | %s | %s | %s | %s | %s |\n",
-        $p['icon'],
-        tableCell($p['app']),
+    $out .= '| ' . implode(' | ', [
+        "{$p['icon']} " . tableCell($p['app']),
         perfCell($p, 'wall'),
         perfCell($p, 'mem'),
         issuesCell($p),
         weightedCell($p),
+        categoryCell($p, 'taint'),
+        ...($deadCode ? [categoryCell($p, 'deadcode')] : []),
         perfCell($p, 'cov'),
-    );
+    ]) . " |\n";
 }
 
-$out .= (totalRow($projects) ?? '') . "\n" . TABLE_LEGEND . "\n\n";
+$out .= (totalRow($projects, $deadCode) ?? '') . "\n" . TABLE_LEGEND . "\n\n";
 
 $shaOf = static fn(string $sha, string $ref, string $label): string => $sha !== '' ? substr($sha, 0, 12) : ($ref !== '' ? $ref : $label);
 $footer = sprintf(
