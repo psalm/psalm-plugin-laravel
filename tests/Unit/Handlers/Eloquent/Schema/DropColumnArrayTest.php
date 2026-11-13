@@ -34,4 +34,36 @@ final class DropColumnArrayTest extends AbstractSchemaAggregatorTestCase
         $this->assertArrayNotHasKey('old_status', $table->columns);
         $this->assertArrayNotHasKey('temp_flag', $table->columns);
     }
+
+    #[Test]
+    public function drop_column_with_variadic_arguments_removes_every_listed_column(): void
+    {
+        $schemaAggregator = $this->instantiateSchemaAggregator(
+            __DIR__ . '/migrations/drop_column_variadic',
+        );
+
+        $this->assertArrayHasKey('articles', $schemaAggregator->tables);
+
+        $table = $schemaAggregator->tables['articles'];
+
+        self::assertTableHasNotNullableColumnOfType('title', 'string', $table);
+        self::assertTableHasNotNullableColumnOfType('kept', 'string', $table);
+
+        foreach (['slug', 'legacy_a', 'legacy_b', 'legacy_c'] as $dropped) {
+            $this->assertArrayNotHasKey($dropped, $table->columns);
+        }
+    }
+
+    #[Test]
+    public function drop_vector_index_does_not_register_a_phantom_column(): void
+    {
+        $schemaAggregator = $this->instantiateSchemaAggregator(
+            __DIR__ . '/migrations/drop_column_variadic',
+        );
+
+        $this->assertArrayNotHasKey(
+            'articles_embedding_vector_index',
+            $schemaAggregator->tables['articles']->columns,
+        );
+    }
 }
