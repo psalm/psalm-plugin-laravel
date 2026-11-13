@@ -26,7 +26,9 @@ use Psalm\LaravelPlugin\Issues\UnusedViewData;
  *    feed it ({@see MissingViewData}, {@see InvalidViewData}), including the data Laravel and
  *    Livewire add at render time and the `@include` family;
  *  - a data key no template in the include chain reads or declares is reported
- *    ({@see UnusedViewData}; its cases live in `app/UnusedData`).
+ *    ({@see UnusedViewData}; its cases live in `app/UnusedData`);
+ *  - a raw `@var` declaration nothing in the include chain reads is no missing variable (cases in
+ *    `app/StaleDeclaration`).
  *
  * One run serves every case: the fixture holds a file per behavior and each case asserts only the
  * issues of the files it owns. A view name or file basename must therefore stay unique across the
@@ -1210,5 +1212,41 @@ final class ViewContractValidationTest extends TestCase
         $issues = $this->unusedIssues();
 
         $this->assertSame([], $this->forFile($issues, 'Suppressed.php'), \var_export($issues, true));
+    }
+
+    /**
+     * kanka's `settings/boosters/create.blade.php` shape: `$boost` is declared and never read, so the
+     * call sites omitting it owe nothing.
+     */
+    #[Test]
+    public function a_declaration_nothing_reads_is_not_a_missing_variable(): void
+    {
+        $issues = $this->contractIssues();
+
+        $this->assertSame([], $this->forFile($issues, 'StaleVar.php'), \var_export($issues, true));
+    }
+
+    /** `$note` is read by the `@include`d partial, which inherits the scope: live, so the omission stays a missing variable. */
+    #[Test]
+    public function a_declaration_read_only_in_an_included_partial_is_live(): void
+    {
+        $this->assertReportsOnly($this->contractIssues(), 'ReadInPartial.php', 'note');
+    }
+
+    /**
+     * Every gate that makes the read set a lower bound proves nothing stale, so the call site keeps
+     * its MissingViewData (the `@props($names)` template is exempt from the presence check whatever
+     * is read).
+     */
+    #[Test]
+    public function an_unprovable_read_set_keeps_the_missing_variable(): void
+    {
+        $issues = $this->contractIssues();
+
+        foreach (['GateVariableVariable', 'GateExtract', 'GateDynamicInclude', 'GateCustomDirective', 'GateIncludeChain'] as $case) {
+            $this->assertReportsOnly($issues, $case . '.php', 'label');
+        }
+
+        $this->assertSame([], $this->forFile($issues, 'GateProps.php'), \var_export($issues, true));
     }
 }

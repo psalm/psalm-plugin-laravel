@@ -679,6 +679,20 @@ final class ContractParser
     }
 
     /**
+     * Names the read set never carries: `$this`, the `__`-prefixed internals Blade compiles into every
+     * template, and Blade's own ambient names. A declaration of one is still a contract var (`$this`
+     * typed for a Livewire view, `$__label`), so a check that compares declarations with reads must skip them.
+     *
+     * @psalm-pure
+     */
+    public static function readSetOmits(string $name): bool
+    {
+        return $name === 'this'
+            || \str_starts_with($name, '__')
+            || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name]);
+    }
+
+    /**
      * @param array<string, true> $names
      *
      * @return list<string>
@@ -690,14 +704,9 @@ final class ContractParser
         $filtered = [];
 
         foreach (\array_keys($names) as $name) {
-            if ($name === 'this'
-                || \str_starts_with($name, '__')
-                || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])
-            ) {
-                continue;
+            if (!self::readSetOmits($name)) {
+                $filtered[] = $name;
             }
-
-            $filtered[] = $name;
         }
 
         \sort($filtered);
