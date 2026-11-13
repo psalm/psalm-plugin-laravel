@@ -38,6 +38,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TNumeric;
 use Psalm\Type\Atomic\TNumericString;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -646,7 +647,8 @@ final class FactoryCount
     }
 
     /**
-     * Every atomic is Model or a Model subclass. Lineage from Psalm's storage ({@see ClassLineage}):
+     * Every atomic is Model or a Model subclass, or a template param bounded by one (the `TModel` of a generic
+     * factory subclass, `@extends Factory<TModel>`). Lineage from Psalm's storage ({@see ClassLineage}):
      * PHPT fixture models declared inline are scanned but not autoloadable.
      *
      * @psalm-mutation-free
@@ -658,6 +660,14 @@ final class FactoryCount
         }
 
         foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TTemplateParam) {
+                if (!self::isModelType($atomic->as, $codebase)) {
+                    return false;
+                }
+
+                continue;
+            }
+
             if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 return false;
             }
