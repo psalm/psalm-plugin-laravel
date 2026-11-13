@@ -332,11 +332,13 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         }
 
         // Dynamic keys (variables, sprintf, concatenation) or missing literal keys:
-        // return string to avoid PossiblyInvalidCast noise from string|array union
+        // return string to avoid PossiblyInvalidCast noise from string|array union.
+        // A `mixed` key (typically an element of an untyped config or row array) is a
+        // translation key in practice; the stub fallback would add `array|null`.
         $firstArgType = $source->getNodeTypeProvider()->getType($keyArg->value);
 
         if ($firstArgType instanceof \Psalm\Type\Union) {
-            if ($firstArgType->isString()) {
+            if ($firstArgType->isString() || $firstArgType->isMixed()) {
                 return Type::getString();
             }
 
