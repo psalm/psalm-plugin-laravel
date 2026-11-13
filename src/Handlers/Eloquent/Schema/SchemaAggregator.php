@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\Schema;
 use PhpParser;
 use PhpParser\NodeFinder;
@@ -774,15 +775,26 @@ final class SchemaAggregator
                     break;
 
                 case 'numericmorphs':
-                case 'morphs': // @todo support UUID and ULID types
                     $table->setColumn(new SchemaColumn($column_name . '_type', 'string', $nullable));
                     $table->setColumn(new SchemaColumn($column_name . '_id', 'int', $nullable, unsigned: true));
                     break;
 
                 case 'nullablenumericmorphs':
-                case 'nullablemorphs': // @todo support UUID and ULID types
                     $table->setColumn(new SchemaColumn($column_name . '_type', 'string', true));
                     $table->setColumn(new SchemaColumn($column_name . '_id', 'int', true, unsigned: true));
+                    break;
+
+                case 'morphs':
+                case 'nullablemorphs':
+                    // Blueprint::morphs() branches on the key type a service provider set via
+                    // Schema::morphUsingUuids()/morphUsingUlids(); the booted app has already run it.
+                    $morph_nullable = $nullable || $first_method_name_lc === 'nullablemorphs';
+                    $table->setColumn(new SchemaColumn($column_name . '_type', 'string', $morph_nullable));
+                    $table->setColumn(
+                        Builder::$defaultMorphKeyType === 'int'
+                            ? new SchemaColumn($column_name . '_id', 'int', $morph_nullable, unsigned: true)
+                            : new SchemaColumn($column_name . '_id', 'string', $morph_nullable),
+                    );
                     break;
 
                 case 'uuidmorphs':
