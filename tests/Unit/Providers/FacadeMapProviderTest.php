@@ -103,4 +103,30 @@ final class FacadeMapProviderTest extends TestCase
             $this->assertContains($expectedFacade, FacadeMapProvider::getFacadeClasses($concrete), $concrete);
         }
     }
+
+    /**
+     * An app may replace `app.aliases` with its own short list instead of extending `Facade::defaultAliases()`, so
+     * the alias loader no longer names Laravel's facades. They are still called by FQCN, and `Route::macro()` macros
+     * must keep reaching `Illuminate\Support\Facades\Route`. The unregistered alias name must stay out of the map.
+     */
+    #[Test]
+    public function init_maps_first_party_facades_missing_from_the_alias_loader(): void
+    {
+        ApplicationProvider::bootApp();
+
+        $aliasLoader = AliasLoader::getInstance();
+        $originalAliases = $aliasLoader->getAliases();
+        $aliasLoader->setAliases(['Vite' => \Illuminate\Support\Facades\Vite::class]);
+
+        try {
+            FacadeMapProvider::init(new VoidProgress());
+        } finally {
+            $aliasLoader->setAliases($originalAliases);
+        }
+
+        $this->assertSame(
+            [\Illuminate\Support\Facades\Route::class],
+            FacadeMapProvider::getFacadeClasses(\Illuminate\Routing\Router::class),
+        );
+    }
 }

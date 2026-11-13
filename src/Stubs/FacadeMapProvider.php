@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\Facade;
  *
  * Seeded at plugin init from two sources:
  *
- *  1. The booted app's `AliasLoader` + `Facade::getFacadeRoot()` — every facade
+ *  1. The booted app's `AliasLoader` (plus `Facade::defaultAliases()` entries an app-defined
+ *     `app.aliases` list omits) + `Facade::getFacadeRoot()` — every facade
  *     resolves to its *direct* root and the entry lands under that root's FQCN.
  *  2. A hardcoded multi-target edge set ({@see self::MULTI_TARGET_FACADES}) for
  *     the facades whose `getFacadeRoot()` returns a *manager* that forwards
@@ -110,7 +111,24 @@ final class FacadeMapProvider
         /** @var array<string, class-string> $aliases */
         $aliases = AliasLoader::getInstance()->getAliases();
 
+        /** @var list<array{class-string, ?string}> $facades facade class, root alias name when registered */
+        $facades = [];
         foreach ($aliases as $alias => $facadeClass) {
+            $facades[] = [$facadeClass, \str_contains($alias, '\\') ? null : $alias];
+        }
+
+        // An app that sets its own `app.aliases` list instead of extending `Facade::defaultAliases()` drops
+        // Laravel's facades from the alias loader, yet still calls them by FQCN (`Route::macro()` macros,
+        // `View::make()`). Map those under the FQCN only: no `class_alias()` exists for the unregistered name.
+        /** @psalm-var array<string, class-string> $defaultAliases */
+        $defaultAliases = Facade::defaultAliases()->all();
+        foreach ($defaultAliases as $defaultFacade) {
+            if (!\in_array($defaultFacade, $aliases, true)) {
+                $facades[] = [$defaultFacade, null];
+            }
+        }
+
+        foreach ($facades as [$facadeClass, $alias]) {
             try {
                 // is_subclass_of() invokes the autoloader for unknown classes.
                 // For entries in AliasLoader's registry, that routes back through
@@ -163,7 +181,7 @@ final class FacadeMapProvider
             // Root aliases (e.g., 'View') are generated as stub classes that extend
             // the facade FQCN. Psalm treats them as separate classes, so handlers
             // must register for both.
-            if (!\str_contains($alias, '\\')) {
+            if ($alias !== null) {
                 /** @var class-string $alias */
                 self::$serviceToFacades[$key][] = $alias;
             }
