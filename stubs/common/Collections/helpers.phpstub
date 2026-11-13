@@ -104,5 +104,8 @@ function last($array) {}
  * @param  mixed|(Closure(): TClosureReturn)  $value
  * @param  mixed  ...$args
  * @return (TValue is Closure ? TClosureReturn : TValue)
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($value, $value()) -> return
  */
 function value($value, ...$args) {}

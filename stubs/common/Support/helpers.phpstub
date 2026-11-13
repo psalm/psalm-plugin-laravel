@@ -213,6 +213,9 @@ function optional($value = null, callable $callback = null) {}
  * @psalm-return TValue
  *
  * @throws \Throwable
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($callback()) -> return
  */
 function retry($times, callable $callback, $sleepMilliseconds = 0, $when = null) {}
 
@@ -334,6 +337,9 @@ function transform($value, callable $callback, $default = null) {}
  * @param  TValue  $value
  * @param  (callable(TValue): TReturn)|null  $callback
  * @return ($callback is null ? TValue : TReturn)
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($value, $callback()) -> return
  */
 function with($value, ?callable $callback = null) {}
 
@@ -344,5 +350,8 @@ function with($value, ?callable $callback = null) {}
  *
  * @param  callable(): TReturnType  $callback
  * @return TReturnType
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($callback()) -> return
  */
 function once(callable $callback) {}
