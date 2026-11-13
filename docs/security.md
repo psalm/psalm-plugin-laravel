@@ -28,6 +28,8 @@ Security scanning runs automatically alongside type analysis, no extra configura
 
 `UploadedFile::clientExtension()` is deliberately not a taint source. The client chooses the MIME lookup key, but Symfony returns a value from the application's configured MIME registry. This avoids false positives for generated upload filenames; applications that populate that registry from untrusted data must model that boundary separately.
 
+Closure-returning helpers pass the closure's taint to their return value, so `echo Cache::remember('k', 60, fn () => (string) $request->input('x'))` is reported like a direct echo of the input. Covered: `value()`, `rescue()`, `retry()`, `once()`, `with()`, `Cache::remember()`, `rememberForever()`, `sear()`, `flexible()` and `DB::transaction()` (also on a connection). Not covered: the same methods called on a `Cache\Repository` instance (`cache()->remember()`), `transform()`, and `Context::remember()`.
+
 Artisan commands, migrations and seeders print to a terminal, not an HTML page, so their `echo`/`print`/`printf()`/`var_dump()` output is not reported as `TaintedHtml` or `TaintedTextWithQuotes` (Psalm 7's `@psalm-cli-only`, applied to every subclass of `Illuminate\Console\Command`, `Illuminate\Database\Migrations\Migration` and `Illuminate\Database\Seeder`). Values stay tainted for every other sink, and printed secrets are still reported. Not covered: trait methods, closure commands in `routes/console.php`, and scheduled closures. Known gap: a command run through `Artisan::call()` during an HTTP request writes raw `echo` output into the response.
 
 ## HTML and JSON escaping
