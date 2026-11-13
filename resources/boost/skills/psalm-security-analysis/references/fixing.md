@@ -159,7 +159,7 @@ throw new $safeClass();
 
 > Note: even with `class_exists()`, without a type check any instantiatable class can be constructed. `is_subclass_of()` is the correct guard. The `@var` reattaches the `class-string<T>` type that `strval()` would otherwise widen to plain `string` (which would trip `InvalidStringClass` on `new $safeClass()`).
 >
-> Lighter alternative: once `is_subclass_of` proves the type, drop the `@var` + `strval` ceremony and put `/** @psalm-suppress TaintedInput -- restricted to Throwable subclasses by guard above */` on the method docblock. Same safety guarantee, fewer moving parts. Pick whichever reads cleaner in context.
+> Lighter alternative: once `is_subclass_of` proves the type, drop the `@var` + `strval` ceremony and record a `psalm-baseline.xml` entry for that one finding. `@psalm-suppress TaintedInput` on the method docblock also works, but it is the last resort: it stops taint tracking for the whole method (see "Last resort" below).
 
 ## Cross-function taint flows
 
@@ -184,7 +184,11 @@ class ReportService {
 
 ## Suppressing false positives
 
-Two mechanisms. `@psalm-taint-escape <kind>` is preferred (it documents *which* taint was sanitized, which is what reviewers care about). `@psalm-suppress TaintedInput` is the fallback when escape would require more code (extracting variables, splitting chains, preserving `class-string<T>`).
+Fix or escape first, then baseline, and suppress last. In order:
+
+1. Fix the flow, or sanitize it with `@psalm-taint-escape <kind>`. This is preferred: it documents *which* taint was sanitized, which is what reviewers care about.
+2. If escaping would require a refactor (extracting variables, splitting chains, preserving `class-string<T>`), record a `psalm-baseline.xml` entry for that single finding. It keeps every other flow in the method visible. Check first that the project does not forbid `<Tainted*>` baseline entries in CI.
+3. `@psalm-suppress TaintedInput` is the last resort. It is not a per-finding suppression: Psalm stops tracking taint in the whole function or statement it annotates, so every taint kind in that scope disappears, including unrelated flows that only pass through it on the way to a sink elsewhere (an SSRF or SQL flow in the same method goes unreported too).
 
 **Important pitfall with `@psalm-suppress`**: only the generic source-side name `TaintedInput` works. The specific sink names (`TaintedHeader`, `TaintedSSRF`, `TaintedSql`, `TaintedFile`, `TaintedCallable`, etc.) are silently ignored (the code compiles, Psalm keeps reporting, and you waste an hour wondering why). If you reach for `@psalm-suppress`, it must be `TaintedInput` exactly. Rationale goes on the same line after `--`: `/** @psalm-suppress TaintedInput -- admin-only; URL validated by signed route */`.
 
@@ -252,38 +256,42 @@ return (new MailMessage())
 
 For methods that take multiple tainted values (`->from($email, $name)`), extract each separately, each with its own escape annotation.
 
-If the chain has three or more tainted inputs flowing into different headers, the extraction noise outweighs the documentation benefit. Drop a single `/** @psalm-suppress TaintedInput -- model-stored email/name; not request input */` on the `buildMail` method docblock and keep the original chain untouched.
+If the chain has three or more tainted inputs flowing into different headers and extraction is impractical, record a baseline entry per finding. As a last resort, put a single `/** @psalm-suppress TaintedInput -- model-stored email/name; not request input */` on the `buildMail` method docblock, knowing that it stops taint tracking for the entire method.
 
 ### Re-assignments don't re-taint
 
 When the same variable is assigned twice in a method (e.g., `$redirectUrl` set once before validation, again after), each assignment needs its own `@psalm-taint-escape` block. Psalm tracks taint per-assignment-site, not per-variable.
 
-### Fallback: `@psalm-suppress TaintedInput`
+### Second choice: baseline entry
 
-When escape would force a refactor (split a chain, extract from a `match`/ternary expression, introduce a typed local just to satisfy the cast), reach for `@psalm-suppress TaintedInput` instead. It works on method docblocks **and** inline above the offending statement, with no cast and no variable extraction.
+When escape would force a refactor (split a chain, extract from a `match`/ternary expression, introduce a typed local just to satisfy the cast), add the finding to `psalm-baseline.xml` (`--set-baseline` for a new file, `--update-baseline` to extend it). The entry covers that finding only, and no other flow in the method loses coverage. Keep the rationale in a code comment next to the sink, since the baseline carries none.
+
+### Last resort: `@psalm-suppress TaintedInput`
+
+Use it only when neither an escape nor a baseline entry is workable. It works on method docblocks **and** inline above the offending statement, with no cast and no variable extraction, but it blinds taint analysis for everything in that scope. Keep the annotated scope as small as possible: prefer an inline annotation on one statement over a method docblock.
 
 ```php
 // admin-only controller; redirect_url is a navigation convenience
-/** @psalm-suppress TaintedInput -- admin-only; redirect_url is a navigation convenience */
 public function store(Request $request, Dispatcher $dispatcher): RedirectResponse
 {
+    /** @psalm-suppress TaintedInput -- admin-only; redirect_url is a navigation convenience */
     return $request->input('redirect_url')
         ? redirect()->to($request->input('redirect_url'))
         : redirect()->back();
 }
 ```
 
-### Decision table: escape vs suppress
+### Decision table: escape vs baseline vs suppress
 
 | Situation | Use |
 |---|---|
 | Clear `$x = strval(source); sink($x);` with no surrounding chain | `@psalm-taint-escape <kind>` (kind documents what was sanitized) |
-| Mail builder chain `(new MailMessage)->cc(...)->subject(...)` | `@psalm-suppress TaintedInput` on method docblock (no need to extract every header) |
-| Single-expression `__invoke`/match/ternary that ends in the sink | `@psalm-suppress TaintedInput` on method docblock |
-| `class-string<T>` flowing into `new $fqcn()` (would need `strval()` + `@var` to escape) | `@psalm-suppress TaintedInput` if the type is already proven by `is_subclass_of` |
+| Mail builder chain `(new MailMessage)->cc(...)->subject(...)` | extract each value with `@psalm-taint-escape header`; if impractical, a baseline entry per finding |
+| Single-expression `__invoke`/match/ternary that ends in the sink | baseline entry (a method-wide `@psalm-suppress TaintedInput` hides every other flow in it) |
+| `class-string<T>` flowing into `new $fqcn()` (would need `strval()` + `@var` to escape) | baseline entry if the type is already proven by `is_subclass_of`; escape with `strval()` + `@var` otherwise |
 | Multiple distinct kinds reaching distinct sinks in the same method | escape per assignment (keeps each kind narrow) |
 
-Always include `--` rationale after `TaintedInput` so the reason survives in the diff.
+Whenever `@psalm-suppress TaintedInput` is used, include a `--` rationale after it so the reason survives in the diff.
 
 ## Common false positives
 

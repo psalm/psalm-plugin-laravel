@@ -8,12 +8,14 @@ description: >
   Requires psalm-plugin-laravel installed.
 metadata:
   author: alies-dev
-  version: '1.1'
+  version: '1.2'
 ---
 
 # Psalm Security Analysis for Laravel
 
 This skill covers the run → triage → report workflow. For fixing confirmed findings and writing suppression/escape annotations, load `references/fixing.md`.
+
+Running Psalm with this plugin executes project code: it boots the app, runs service providers and resolves every container binding. Permission to run Psalm therefore amounts to permission to run `artisan`. Do not run it on an untrusted checkout outside a sandbox.
 
 ## Running the analysis
 
@@ -95,7 +97,7 @@ Then read the caller to see how arguments are passed, whether they originate fro
 Group findings by type (SQL injection, open redirect, SSRF, etc.) and severity. For each:
 
 - Confirmed real: document file, line, input source, sink, fix. For fix patterns by issue type, see `references/fixing.md`.
-- False positive: document why (allowlist protection, admin-only, model-generated value, etc.) and either escape inline with `@psalm-taint-escape <kind>` (preferred) or `@psalm-suppress TaintedInput -- reason` (fallback). Full decision guide, syntax pitfalls, and common FP patterns in `references/fixing.md`.
+- False positive: document why (allowlist protection, admin-only, model-generated value, etc.). Fix or escape first: escape inline with `@psalm-taint-escape <kind>`. If that needs a refactor, record a baseline entry for the single finding. Use `@psalm-suppress TaintedInput -- reason` last, because it stops taint tracking for the whole annotated scope. Full decision guide, syntax pitfalls, and common FP patterns in `references/fixing.md`.
 
 ## How taint analysis works
 
@@ -147,7 +149,7 @@ Open redirect in an auth flow (post-login redirect) is always HIGH. It enables p
 
 ## Baseline policy
 
-Do **not** add taint findings to `psalm-baseline.xml`. Many projects enforce this in CI:
+Fix or escape taint findings first. When neither is practical, a `psalm-baseline.xml` entry hides one finding and keeps every other flow visible, unlike `@psalm-suppress TaintedInput`. Some projects forbid `<Tainted*>` baseline entries and enforce it in CI. Check for such a rule before baselining:
 
 ```yaml
 - name: Ensure psalm-baseline.xml does not hide taint findings
@@ -158,7 +160,7 @@ Do **not** add taint findings to `psalm-baseline.xml`. Many projects enforce thi
     fi
 ```
 
-After fixing taint issues, scrub leftover `<Tainted*>` entries from the baseline. They will fail this check even though no taint flow remains.
+After fixing taint issues, scrub leftover `<Tainted*>` entries from the baseline. Where such a check exists, they fail it even though no taint flow remains.
 
 ## Additional resources
 

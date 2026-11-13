@@ -54,6 +54,10 @@ Two things not to add, both of which look like speedups and are not:
 * **An OPcache or JIT `ini-values` block.** The one that circulates (originally from the `ghcr.io/psalm/psalm` image) does nothing: Psalm restarts PHP through `PsalmRestarter`, which re-injects its own value for every `opcache.*` setting that block passes, and JIT stays off unless you pass `--force-jit`. Forcing it on measured slower.
 * **`git-restore-mtime-action`.** Earlier versions of this page suggested pairing it with the cache, on the grounds that `git checkout` resets mtimes. Psalm validates its caches against a content hash of each file, so your project's source mtimes never enter into it. The one component that did key on `filemtime()` of project files was this plugin's migration schema cache, fixed in [#1346](https://github.com/psalm/psalm-plugin-laravel/pull/1346). A full-history checkout plus an mtime restore costs roughly 70s on a repository with real history and buys nothing.
 
+## Security
+
+A Psalm run with this plugin executes project code (it boots the app and resolves every container binding), so the checked-out pull request controls what runs in the job. Keep the trigger on `pull_request`, never on `pull_request_target` or `workflow_run` with the pull request head checked out and secrets available, and never restore a Psalm cache written by an untrusted run. The template saves the cache from the default branch only for that reason, and its `permissions: {}`, `persist-credentials: false` and blocking egress policy limit what a hostile checkout can reach. See the [trust model](security.md#trust-model-analysis-runs-your-code).
+
 ## Troubleshooting
 
 **Psalm runs out of memory.** Raise the PHP memory limit on the Psalm step:

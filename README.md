@@ -142,10 +142,10 @@ This is not a just a classic static read of your code: config is loaded, facade 
 It also ships hand-crafted stubs for taint analysis and special cases.
 
 For Eloquent model metadata (casts, appended attributes, relations), the plugin goes a step further and instantiates each model class, constructor-less, via reflection, replaying its trait and attribute initializers to read the runtime-computed fields.
-This never needs a database connection: the model is never booted and no query runs. Column names and types instead come from parsing SQL schema dumps (`php artisan schema:dump`) and PHP migration files.
+This step needs no database connection: the model is never booted and no query runs. Column names and types instead come from parsing SQL schema dumps (`php artisan schema:dump`) and PHP migration files.
 
-What that does and does not execute: booting the framework runs your service providers, exactly as any `php artisan` command does, so the plugin needs the same trust level you already give artisan.
-It never handles an HTTP request, never boots a model, never opens a database connection, and never runs a query.
+What that does and does not execute: a run executes your project's PHP, it does not only read it. Booting the framework runs `bootstrap/app.php`, your config files and your service providers, and the plugin then resolves every registered container binding, so binding closures and constructors run too. The plugin itself never handles an HTTP request and never runs a query, but the project code it executes is free to open connections, call the network or write files.
+Treat `vendor/bin/psalm` like `php artisan` or `phpunit`: do not run it on an untrusted checkout outside a sandbox, whether in CI or from an AI agent. See the [trust model](docs/security.md#trust-model-analysis-runs-your-code).
 
 </details>
 
