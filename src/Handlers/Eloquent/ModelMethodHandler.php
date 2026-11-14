@@ -649,9 +649,13 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         //
         // A PUBLIC real method declared on the concrete model (own, trait, or parent) is dispatched by
         // PHP before __callStatic/__call, so it is never a dynamic where; an inaccessible one is not.
+        // A macro or `@method` on the model's Eloquent builder is not one either: Builder::__call runs
+        // macros before forwarding to Query\Builder's dynamicWhere. Declining lets Psalm resolve it
+        // through the model's `@mixin Builder<static>`, which a confirmed existence would skip.
         if (
             DynamicWhereResolver::isEnabled()
             && !self::hasPublicMethod($codebase, $modelClass, $methodName)
+            && !self::builderDeclaresPseudoMethod($codebase, $modelClass, $methodName)
             && DynamicWhereResolver::methodMatchesColumns($codebase, $modelClass, $methodName)
         ) {
             return self::$unresolvedCache[$key] = true;
@@ -668,6 +672,28 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
     private static function hasPublicMethod(Codebase $codebase, string $modelClass, string $methodName): bool
     {
         return self::effectiveVisibility($codebase, $modelClass, $methodName) === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+    }
+
+    /**
+     * Whether the model's Eloquent builder (its custom builder, or the base Builder) carries the
+     * method as a pseudo-method: a registered macro (MacroHandler) or a builder `@method` tag.
+     *
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodName
+     */
+    private static function builderDeclaresPseudoMethod(Codebase $codebase, string $modelClass, string $methodName): bool
+    {
+        foreach (\array_unique([self::getBuilderClassForModel($modelClass), Builder::class]) as $builderClass) {
+            try {
+                if (isset($codebase->classlike_storage_provider->get($builderClass)->pseudo_methods[$methodName])) {
+                    return true;
+                }
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+        }
+
+        return false;
     }
 
     /**
