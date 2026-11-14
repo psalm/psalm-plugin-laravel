@@ -19,7 +19,6 @@ There are 2 main ways how it does it:
 - [Custom Issues](issues/index.md): Laravel-aware checks the plugin adds on top of Psalm's built-ins
 - [Security (Taint) Checks](security.md): what the security analysis detects
 - [Blade Template Analysis](blade.md): opt-in analysis of `.blade.php` templates
-- [Laravel IDE Helper](ide-helper.md): using laravel-ide-helper's generated files alongside the plugin
 - [Upgrading to v4](upgrade-v4.md): migration guide from v3
 - Contribution:
     - [Overview](contributing/README.md): how the plugin works, getting started, adding stubs and handlers
