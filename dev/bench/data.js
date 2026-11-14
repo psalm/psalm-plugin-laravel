@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794651696287,
+  "lastUpdate": 1794658952693,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18680,6 +18680,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 26.93,
             "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8ca596540deba60a7f5349adddaf0006b7373d0",
+          "message": "Stop analyzing Blade templates as plain PHP on Psalm 7.4+ (#2305)\n\n* fix(blade): make templates reportable after Psalm builds its scan lists\n\nPsalm 7.4+ derives its scan and analysis lists from ProjectAnalyzer::$project_files after\nplugins initialize, so a template written there at boot was analyzed as plain PHP and every\nfinding in a raw <?php block was reported twice. Record the templates at boot and write them\nat AfterCodebasePopulated instead, where BladeCompileError is reported too (#2303).\n\n* test(blade): use a function the boot never declared as the project-file control\n\nFrom Psalm 7.4 every function the boot declared counts as predefined for every file, so a\nproject file calling demo_helper() no longer reports UndefinedFunction. Call the version-gated\ndemo_never_declared() instead and reword the docblocks and docs that said boot-declared helpers\nare undefined to project code (#2304).\n\n* fix(blade): keep scan-time shadow diagnostics reportable on the template\n\nPsalm reports some issues (DuplicateFunction) while scanning a shadow, before\nAfterCodebasePopulated writes the templates into the project-file list, so the remapped issue\nwas dropped by the reportability gate. Apply the recorded write idempotently from the remap too,\nand fix wording that still described a boot-time write or a single registration gate.\n\n* refactor(blade): keep the project-file read at full type coverage\n\n* fix(blade): prove the project-file write works at boot and warn when it fails later\n\ncanInject() only read the property, so a readonly one passed the probe and the deferred write\nthen failed silently at AfterCodebasePopulated, dropping every template issue. The probe now\nwrites the current value back, and a failed deferred write emits a warning.\n\n* refactor(blade): name the registrar calls for what they now do\n\nrecordReportableTemplates() and recordCompileFailure() only probe and record. Recording a compile\nfailure now records its path too, rather than relying on call order.\n\n* test(blade): cover the deferred write failing, compile-failure-only boots and docblock-typed helpers\n\nAdd a readonly case to the injector probe, an end-to-end run where every template fails to compile,\na docblock-only helper type that reflection cannot supply, and move the scan-time DuplicateFunction\ncase into a fixture of its own.\n\n* docs(blade): state where Psalm builds the project-file list and when the templates are written\n\nFix the comments that said the list is built in the constructor, that read the Psalm 7.4 predefined\nfunction snapshot as covering every run, and that described the Threads pipeline before the deferred\nwrite. Keep the why of the deferral in TemplateReportability and link to it elsewhere.\n\n* docs(blade): correct three lifecycle comments",
+          "timestamp": "2026-11-14T13:19:16+01:00",
+          "tree_id": "70bc597b0a46accba07a426a05db48ec3cf69083",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d8ca596540deba60a7f5349adddaf0006b7373d0"
+        },
+        "date": 1794658950387,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.6,
+            "range": "± 0.46",
             "unit": "s"
           },
           {
