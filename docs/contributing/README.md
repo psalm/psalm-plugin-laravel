@@ -35,7 +35,7 @@ flowchart TD
     "]
 
     I["Psalm scans all project files"] -.->|afterCodebasePopulated| J["ModelRegistrationHandler"]
-    I -.->|afterCodebasePopulated| K["Eloquent Builder subclass fix-ups:\nBuilderSubclassQueryMixinHandler (restores dropped Query Builder @mixin)\nBuilderNativeStaticReturnTypeHandler (native ': static' return becomes docblock 'static')"]
+    I -.->|afterCodebasePopulated| K["Eloquent Builder subclass fix-ups:\nBuilderSubclassQueryMixinHandler (keeps the Query Builder @mixin last, above an own @mixin Model)\nBuilderNativeStaticReturnTypeHandler (native ': static' return becomes docblock 'static')"]
     I -.->|afterCodebasePopulated| RCP["RelationCallbackParamsHandler (registers a params provider per Eloquent Builder subclass, #1676)"]
     I -.->|afterCodebasePopulated| FMB["FactoryModelBindingHandler (injects @extends Factory&lt;TModel&gt; on bare factory subclasses, #780, then synthesizes a TCount template on every user factory subclass that keeps Laravel count semantics, so the count rides the concrete class, and marks it in the shared FactoryCount service, #2188)"]
     I -.->|afterCodebasePopulated| FUM["FactoryUserMethodCountProvider (registered after FactoryModelBindingHandler, so it sees the marks: attaches the user-method count answers to every marked class, #2188)"]
