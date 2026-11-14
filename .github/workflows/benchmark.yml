@@ -111,8 +111,12 @@ jobs:
           # leaves Monica's locked framework below the conflict floor and the solve fails.
           # Psalm is pinned to the plugin's floor (first alternative of the vimeo/psalm
           # constraint) rather than the newest tag, so the trend moves only on commits here.
+          # Until the floor is tagged, `^floor` resolves it from the dev-master branch alias.
           PSALM_FLOOR=$(jq -er '.require["vimeo/psalm"] | split("||")[0] | gsub("^[\\s^~>=]+|\\s+$"; "")' \
             "$GITHUB_WORKSPACE/composer.json")
+          if [ "$(git ls-remote --tags https://github.com/vimeo/psalm "refs/tags/$PSALM_FLOOR" | wc -l)" -eq 0 ]; then
+            PSALM_FLOOR="^$PSALM_FLOOR"
+          fi
           COMPOSER_MEMORY_LIMIT=-1 composer update psalm/plugin-laravel laravel/framework \
             --with="vimeo/psalm:$PSALM_FLOOR" \
             --no-interaction --no-progress --with-all-dependencies
