@@ -7,6 +7,28 @@ nav_order: 6
 
 Security scanning runs automatically alongside type analysis, no extra configuration needed.
 
+## Trust model: analysis runs your code
+
+Analysis is not a read-only scan. A run with this plugin executes much of the analyzed repository's PHP, so whoever controls the checked-out tree controls what `vendor/bin/psalm` runs. Treat it like `php artisan` or `phpunit`.
+
+What runs:
+
+* Psalm itself: the project's Composer autoloader (including `autoload.files`), the `autoloader` file and the plugin classes listed in `psalm.xml`.
+* The app bootstrap: `bootstrap/app.php`, `.env`, every `config/*.php`, and `register()` and `boot()` of app and package providers (every discovered vendor provider when the Testbench fallback boots a package).
+* Container resolution: `make()` is called for every registered binding, so each binding closure and constructor runs once. `php artisan` does not do this.
+* Eloquent metadata: each model is instantiated without its constructor, trait `initialize*()` methods run, and userland `getCasts()` and `getTable()` overrides are called.
+* Translation files (`lang/**/*.php`) for literal keys, and with `<blade />` the app's `Blade::directive()`, `Blade::if()` and precompiler callbacks. Psalm's cache is read back with `unserialize()` and the Blade manifest with `include`, so the cache directory is trusted input too.
+
+The plugin never handles an HTTP request, runs middleware or controllers, or sends a query, and migrations and schema dumps are parsed, not run. The project code above can still do anything, including opening a database connection, calling the network and writing files.
+
+Recommendations:
+
+* Never run it on an untrusted checkout outside a sandbox. Apply the same rule you apply to running that repository's tests.
+* AI agents: do not auto-approve `vendor/bin/psalm` for branches the agent did not write. Permission to run Psalm amounts to permission to run `artisan`. Run it sandboxed, without secrets or network access.
+* CI: trigger on `pull_request`, never on `pull_request_target` or `workflow_run` with the pull request head checked out and secrets available. The bundled workflow template's `permissions: {}`, `persist-credentials: false` and blocking `egress-policy` limit what a hostile checkout can reach.
+* Never restore a Psalm or plugin cache written by an untrusted run. The bundled template saves the cache from the default branch only, which is a security property and not just a cache budget choice.
+* Keep real secrets out of the `.env` that CI analysis loads. The plugin types config values by shape and never copies a value into an issue message or report, but the project code that reads the environment still runs.
+
 ## What it detects
 
 | Vulnerability   | OWASP    | Examples                                                      |
@@ -218,6 +240,8 @@ Reading a single element back out of an array-typed source is covered. Both the 
 ## Other detection limits
 
 **Named arguments captured by a variadic.** A Psalm bug ([vimeo/psalm#12252](https://github.com/vimeo/psalm/issues/12252)) maps an unpacked argument onto every parameter, so `run(page: $x)` is reported against the first parameter of a `handle(...$args)` it re-spreads into. The plugin drops the taint of a named argument bound to a variadic parameter when the callee resolves exactly to a concrete method or function, so a genuine sink in the variadic's body or behind a re-spread (`handle(...$args)`) is not reported. Every other named-argument call keeps Psalm's detection.
+
+**The `email` validation rule on older Laravel versions.** Before Laravel 12.60.0 (12.x) and 13.10.0 (13.x), the `email` rule does not reject CRLF (CVE-2026-48019), so the `header` and `cookie` taint it escapes is not safe on those versions.
 
 ## How it compares
 
