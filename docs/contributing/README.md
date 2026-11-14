@@ -44,6 +44,7 @@ flowchart TD
     I -.->|afterCodebasePopulated| FTF["FacadeTaintForwardingHandler (copies taint sinks from a facade's forwarding target onto its @method pseudo-methods)"]
     I -.->|afterCodebasePopulated| RCS["RedeclaredClassSealHandler (restores the sealAllMethods default on stub-re-declared classes with a throwing __call)"]
     I -.->|afterCodebasePopulated| CLI["CliOnlyConsoleCodeHandler (sets Psalm's cli_only on every Command, Migration and Seeder subclass; at beforeAnalyzeFile it also marks migration files and routes/console.php CLI-only, #2298)"]
+    I -.->|afterCodebasePopulated| BCF["Blade CompileFailureReporter (only if a template failed to compile: reports BladeCompileError once Psalm knows the files passed on the command line, which it does not at plugin boot)"]
     I -.->|afterCodebasePopulated| CAS["ClassAliasStorageHandler (registers each alias target's class storage under the alias name, so raw-name lookups such as Alias::Case cannot crash Psalm, #2128)"]
     J --- models["
         Discover Model subclasses

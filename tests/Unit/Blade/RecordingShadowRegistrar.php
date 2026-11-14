@@ -63,7 +63,7 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     public function queueFilesForScanning(array $paths): void {}
 
     #[\Override]
-    public function reportCompileFailure(string $templatePath, string $source, string $message): void
+    public function recordCompileFailure(string $templatePath, string $source, string $message): void
     {
         $this->compileFailures[] = [$templatePath, $source, $message];
     }

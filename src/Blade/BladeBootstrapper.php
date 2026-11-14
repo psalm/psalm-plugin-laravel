@@ -164,11 +164,12 @@ final class BladeBootstrapper
 
         if ($shadows === []) {
             // Nothing joins the analysis and no template fact is published, but a compile failure
-            // still gets its issue: an app whose every template fails would otherwise go silent
-            // under --no-progress.
+            // still gets its issue (recorded here, reported once Psalm knows the files passed on the
+            // command line): an app whose every template fails would otherwise go silent under
+            // --no-progress.
             if ($this->compileFailures !== []) {
                 $this->registrar->makeTemplatesReportable(\array_keys($this->compileFailures));
-                $this->reportCompileFailures();
+                $this->recordCompileFailures();
             }
 
             $this->reportFailures($failures, $this->compileFailures);
@@ -248,15 +249,15 @@ final class BladeBootstrapper
 
         $this->publishTemplateFacts();
         ContractRegistry::registerComposerSources($composerSources);
-        $this->reportCompileFailures();
+        $this->recordCompileFailures();
 
         return true;
     }
 
-    private function reportCompileFailures(): void
+    private function recordCompileFailures(): void
     {
         foreach ($this->compileFailures as $templatePath => [$source, $message]) {
-            $this->registrar->reportCompileFailure($templatePath, $source, $message);
+            $this->registrar->recordCompileFailure($templatePath, $source, $message);
         }
     }
 

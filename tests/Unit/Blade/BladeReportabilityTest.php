@@ -56,6 +56,22 @@ final class BladeReportabilityTest extends TestCase
     }
 
     /**
+     * With `hideAllErrorsExceptPassedFiles`, a run on one explicit file reports that file only. Psalm
+     * fills the list of passed files AFTER plugins initialize, and treats an empty list as "no filter",
+     * so a `BladeCompileError` emitted at boot would leak an unrelated template into the report.
+     */
+    #[Test]
+    public function a_single_file_run_with_hidden_errors_does_not_report_an_unrelated_templates_compile_failure(): void
+    {
+        $issues = $this->fixtureIssues(
+            __DIR__ . '/Fixtures/BladeCompileFailureOnly',
+            ['-c', 'psalm-hide.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json', 'app/Marker.php'],
+        );
+
+        $this->assertSame([], $issues, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
+    }
+
+    /**
      * @param list<array<string, mixed>> $issues
      *
      * @return list<array{0: string, 1: int}> type and line of every issue reported on the template

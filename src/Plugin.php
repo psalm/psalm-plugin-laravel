@@ -283,6 +283,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         Blade\ContractRegistry::reset();
         Blade\ComponentViewRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
+        Blade\CompileFailureReporter::reset();
         Blade\ShadowRegistry::reset();
         Blade\ViewReferenceRegistry::reset();
     }
@@ -848,6 +849,13 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         // that returns a bool, so a drop here spares the remap the cost of rebuilding the issue.
         require_once __DIR__ . '/Handlers/Collections/EmptyCollectionLookupIssueHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\EmptyCollectionLookupIssueHandler::class);
+
+        // Reports the templates the compiler threw on. Registered only when the boot recorded a failure,
+        // which can happen when it activated nothing (every template failed), so not behind $bladeActive.
+        if (Blade\CompileFailureReporter::hasFailures()) {
+            require_once __DIR__ . '/Blade/CompileFailureReporter.php';
+            $registration->registerHooksFromClass(Blade\CompileFailureReporter::class);
+        }
 
         // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
         // nothing the shadow analysis finds is visible without it. Registered LAST of the

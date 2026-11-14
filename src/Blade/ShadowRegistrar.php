@@ -72,13 +72,14 @@ interface ShadowRegistrar
     public function queueFilesForScanning(array $paths): void;
 
     /**
-     * Reports a template the compiler threw on, at its line 1, as `BladeCompileError`. Only called
-     * after {@see self::makeTemplatesReportable()} covered it.
+     * Records a template the compiler threw on, to be reported at its line 1 as `BladeCompileError`
+     * once Psalm knows the files passed on the command line (see {@see CompileFailureReporter}).
+     * Only called after {@see self::makeTemplatesReportable()} covered it.
      *
      * @param string $source  the template source the compiler was given
      * @param string $message the compiler's cause, on one line
      *
      * @psalm-impure
      */
-    public function reportCompileFailure(string $templatePath, string $source, string $message): void;
+    public function recordCompileFailure(string $templatePath, string $source, string $message): void;
 }
