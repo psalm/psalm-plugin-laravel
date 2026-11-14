@@ -78,7 +78,7 @@ final class GenericHelperModel extends Model {}
 
 final class LeafHelper
 {
-    public function first(): string
+    public function leafOnly(): string
     {
         return 'leaf';
     }
@@ -172,8 +172,8 @@ function generic_helper_mixin(): void
 
 function transitive_helper_mixin(): void
 {
-    $_first = (new TransitiveHelperModel())->first();
-    /** @psalm-check-type-exact $_first = string */
+    $_leaf = (new TransitiveHelperModel())->leafOnly();
+    /** @psalm-check-type-exact $_leaf = string */
 
     $_where = TransitiveHelperModel::where('id', 1);
     /** @psalm-check-type-exact $_where = Builder<TransitiveHelperModel> */
