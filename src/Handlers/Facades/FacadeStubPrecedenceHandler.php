@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Handlers\Facades;
 
 use Psalm\Codebase;
+use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -12,9 +13,9 @@ use Psalm\Storage\MethodStorage;
 
 // @todo-by https://github.com/vimeo/psalm/issues/3937 remove this handler and its registration in Plugin.php
 /**
- * Lets plugin-owned real methods on first-party facade stubs outrank Laravel's generated
- * `@method` catalogue by removing only the conflicting pseudo-static entries after Psalm's
- * populator has finished copying them into the facade hierarchy.
+ * Lets plugin-owned real methods on first-party facade stubs, and the real methods of a facade stub's
+ * `@mixin` target, outrank Laravel's generated `@method` catalogue by removing only the conflicting
+ * pseudo-static entries after Psalm's populator has finished copying them into the facade hierarchy.
  *
  * Scoped to plugin-owned `stubs/<layer>/Support/Facades/` methods. Application facades outside those
  * first-party facade hierarchies keep their declared `@method` intent. Descendants of a
@@ -84,6 +85,18 @@ final class FacadeStubPrecedenceHandler implements AfterCodebasePopulatedInterfa
 
                 $methodsToRemove[\strtolower($storage->name)][$methodName] = true;
             }
+
+            // Psalm ranks a class's own `@method` above its `@mixin` (as PHPStan does), so a generated
+            // `@method static` would shadow the stub mixin target's real method, which carries the exact
+            // types and taint sinks (`@mixin PendingRequest`, `@mixin Schema\Builder`). Laravel's facades
+            // declare no `@mixin`, so every named mixin here comes from a plugin stub.
+            foreach ($storage->namedMixins as $mixin) {
+                foreach (\array_keys($storage->pseudo_static_methods) as $methodName) {
+                    if (self::isPublicRealMethod($codebase, $mixin->value, $methodName)) {
+                        $methodsToRemove[\strtolower($storage->name)][$methodName] = true;
+                    }
+                }
+            }
         }
 
         return $methodsToRemove;
@@ -94,6 +107,19 @@ final class FacadeStubPrecedenceHandler implements AfterCodebasePopulatedInterfa
     {
         return \str_starts_with($storage->name, self::FACADE_NAMESPACE)
             && isset($storage->parent_classes[self::FACADE_BASE_LOWER]);
+    }
+
+    /** @psalm-capabilities read-props */
+    private static function isPublicRealMethod(Codebase $codebase, string $className, string $methodName): bool
+    {
+        try {
+            $declaringId = $codebase->classlike_storage_provider->get($className)->declaring_method_ids[$methodName] ?? null;
+
+            return $declaringId !== null
+                && $codebase->methods->getStorage($declaringId)->visibility === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return false;
+        }
     }
 
     /** @psalm-mutation-free */

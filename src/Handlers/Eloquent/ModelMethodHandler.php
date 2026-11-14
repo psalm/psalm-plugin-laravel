@@ -53,8 +53,8 @@ use Psalm\Type\Union;
  * deferred to the stubs at
  * `stubs/common/Database/Eloquent/Model.phpstub` whose `static`/`$this` annotations preserve
  * model-specific template binding through Psalm's type expansion (see #799).
- * `__callStatic` is similarly proxied for methods resolvable through the single-hop mixin
- * chain.
+ * `__callStatic` is similarly proxied for the Query\Builder methods confirmed by
+ * {@see self::doesMethodExist()}.
  *
  * Builder-instance handlers (trait methods and scopes on custom builders) are in
  * {@see CustomBuilderMethodHandler}.
@@ -301,7 +301,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      *
      * We only handle:
      * 1. Query\Builder methods not explicitly on Eloquent\Builder (e.g., whereIn, orderBy)
-     *    These can't be reached through the double mixin: Model → Builder → Query\Builder.
+     *    Psalm reaches them through Model → Builder → Query\Builder too, but with Query\Builder's
+     *    own types; Eloquent\Builder::__call returns the Eloquent builder, which the fake call keeps.
      * 2. Scope methods (legacy scopeX or #[Scope] attribute)
      *
      * Registered as a closure per concrete Model class by {@see ModelRegistrationHandler}.
@@ -603,10 +604,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         // Methods on Query\Builder that are NOT on Eloquent\Builder (e.g., whereIn,
-        // orderBy). At runtime these are forwarded via Builder::__call → forwardCallTo.
-        // Psalm's single-level mixin resolution can't reach them through the double hop:
-        // Model → Builder → Query\Builder. Confirm existence so Psalm doesn't emit
-        // UndefinedMagicMethod.
+        // orderBy). At runtime these are forwarded via Builder::__call → forwardCallTo,
+        // which returns the Eloquent builder. Psalm's mixin chain Model → Builder →
+        // Query\Builder would type them with Query\Builder's own returns, so confirm
+        // existence here and let the forwarded fake call type them.
         if ($codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))) {
             return self::$unresolvedCache[$key] = true;
         }

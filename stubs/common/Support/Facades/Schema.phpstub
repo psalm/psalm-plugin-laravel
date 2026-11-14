@@ -13,8 +13,8 @@ namespace Illuminate\Support\Facades;
  * coerces any stringable object via __toString.
  *
  * Every other Schema\Builder method resolves through the `@mixin` below, not the facade's generated
- * `@method` tags: Psalm consults a mixin target's real method before the facade's pseudo-static
- * entries, so the introspection methods get the types of the Builder stub
+ * `@method` tags: Psalm ranks those tags above the mixin, so FacadeStubPrecedenceHandler drops each tag a
+ * Builder real method shadows, and the introspection methods get the types of the Builder stub
  * (stubs/common/Database/Schema/Builder.phpstub), which corrects Laravel's docblocks where they contradict
  * the driver processors, instead of the tags' bare `array`. `Schema::connection()->...` instance calls
  * share those types.

@@ -82,6 +82,12 @@ final class LeafHelper
     {
         return 'leaf';
     }
+
+    /** Clashes with Builder::first(); the model's own mixin chain is looked up before the inherited Builder. */
+    public function first(): string
+    {
+        return 'leaf';
+    }
 }
 
 /** @mixin LeafHelper */
@@ -174,6 +180,9 @@ function transitive_helper_mixin(): void
 {
     $_leaf = (new TransitiveHelperModel())->leafOnly();
     /** @psalm-check-type-exact $_leaf = string */
+
+    $_first = (new TransitiveHelperModel())->first();
+    /** @psalm-check-type-exact $_first = string */
 
     $_where = TransitiveHelperModel::where('id', 1);
     /** @psalm-check-type-exact $_where = Builder<TransitiveHelperModel> */

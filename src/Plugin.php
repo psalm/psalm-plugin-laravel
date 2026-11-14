@@ -444,7 +444,6 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Eloquent/ModelPropertyAccessorHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelAttributeSubsetHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/ModelToArrayShapeHandler.php';
-        require_once __DIR__ . '/Handlers/Eloquent/BuilderSubclassQueryMixinHandler.php';
         require_once __DIR__ . '/Handlers/Eloquent/BuilderNativeStaticReturnTypeHandler.php';
         // ModelPropertyHandler is loaded unconditionally because BuilderAggregateHandler
         // calls ModelPropertyHandler::resolveColumnType() to narrow aggregate returns
@@ -469,7 +468,6 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
             $registration->registerHooksFromClass(Handlers\References\IndirectMethodReferenceHandler::class);
         }
 
-        $registration->registerHooksFromClass(Handlers\Eloquent\BuilderSubclassQueryMixinHandler::class);
         $registration->registerHooksFromClass(Handlers\Eloquent\BuilderNativeStaticReturnTypeHandler::class);
         // Types `Model::freshTimestamp()` (`Date::now()` at runtime) as the app's configured date class.
         require_once __DIR__ . '/Handlers/Eloquent/FreshTimestampHandler.php';

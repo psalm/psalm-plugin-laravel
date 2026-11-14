@@ -9,10 +9,9 @@ use App\Models\Appointment;
  * (here AppointmentBuilder `@mixin Appointment`) must still resolve Query\Builder-forwarded
  * methods (whereNotNull, orWhereNull, orderBy, ...).
  *
- * The subclass's own `@mixin Appointment` also claims Query\Builder methods (the plugin confirms
- * them for the model's `__call` forwarding), and Psalm's mixin lookup is last-match-wins. Psalm
- * before 7.5 dropped the inherited `@mixin Query\Builder`; 7.5 merges it below the own mixin
- * (vimeo/psalm#13671). BuilderSubclassQueryMixinHandler keeps Query\Builder last either way.
+ * Psalm looks a member up in the class's own mixins, then in its parent's: the inherited
+ * `@mixin Query\Builder` of Eloquent\Builder is still found after the subclass's own
+ * `@mixin Appointment`, which only adds model members (vimeo/psalm#13671, vimeo/psalm#13694).
  *
  * The receiver-typed-as-builder form below is the analysis equivalent of the `$this->...`
  * calls inside AppointmentBuilder's own methods — the receiver type is identical.
