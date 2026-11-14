@@ -9,9 +9,11 @@ use Illuminate\Routing\Redirector;
 use Illuminate\Routing\UrlGenerator;
 use PhpParser\Node\Arg;
 use Psalm\CodeLocation;
+use Psalm\Config;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
 use Psalm\LaravelPlugin\Internal\Ast\StaticStringResolver;
+use Psalm\LaravelPlugin\Internal\RouteNameDefinitionScanner;
 use Psalm\LaravelPlugin\Issues\UnregisteredRouteName;
 use Psalm\LaravelPlugin\Stubs\FacadeMapProvider;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
@@ -40,9 +42,14 @@ use Psalm\Type\Union;
  * empty table (a package/library project, or a route cache without named routes), or an app that
  * registers a missing-named-route resolver, which `UrlGenerator::route()` consults before throwing.
  *
+ * A name absent from the booted table is still skipped when the project's sources spell it out as
+ * `->name('x')` or `'as' => 'x'` ({@see RouteNameDefinitionScanner}): it is defined, just registered
+ * under a runtime condition the boot did not meet (a feature flag, a provider returning early).
+ *
  * Known limitations: `Route::has()` guards are not tracked; a resolver registered after boot is
- * invisible; conditionally-registered routes and a stale route cache can produce false
- * positives; Blade templates are out of scope.
+ * invisible; a name composed from a group prefix (`Route::name('a.')->group(... ->name('b'))`)
+ * is never spelled out, so it is still reported when its group is not registered; a stale route
+ * cache can produce false positives; Blade templates are out of scope.
  *
  * @see https://laravel.com/docs/routing#named-routes
  */
@@ -63,11 +70,15 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
     /** @var array<string, true> Registered route names, from the booted app's router */
     private static array $names = [];
 
+    /** @var array<string, true> Names the project's sources define literally, registered or not */
+    private static array $definedNames = [];
+
     private static bool $enabled = false;
 
     public static function reset(): void
     {
         self::$names = [];
+        self::$definedNames = [];
         self::$enabled = false;
     }
 
@@ -77,8 +88,12 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
      * The Testbench fallback is excluded even though its table is non-empty on Laravel 12
      * (the skeleton's local disk registers `storage.local*`), so an emptiness check alone
      * would arm the rule and flag every route name a package uses.
+     *
+     * The source scan runs only once the rule is armed, so a declined boot pays nothing.
+     *
+     * @param Config|null $psalmConfig honours `<ignoreFiles>` when scanning; null scans everything outside vendor
      */
-    public static function init(Application $app): void
+    public static function init(Application $app, ?Config $psalmConfig = null): void
     {
         if (!ApplicationProvider::isProjectBootTrusted()) {
             return;
@@ -95,6 +110,10 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
         }
 
         self::$names = $names;
+        self::$definedNames = RouteNameDefinitionScanner::scan(
+            $app->basePath(),
+            $psalmConfig instanceof \Psalm\Config ? static fn(string $path): bool => $psalmConfig->mustBeIgnored($path) : null,
+        );
         self::$enabled = true;
     }
 
@@ -218,7 +237,7 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
      */
     private static function checkRouteExists(string $routeName, CodeLocation $codeLocation, array $suppressedIssues): void
     {
-        if (!self::$enabled || isset(self::$names[$routeName])) {
+        if (!self::$enabled || isset(self::$names[$routeName]) || isset(self::$definedNames[$routeName])) {
             return;
         }
 

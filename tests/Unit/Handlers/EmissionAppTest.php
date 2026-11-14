@@ -287,13 +287,40 @@ final class EmissionAppTest extends TestCase
         // 8 positional (route(), to_route(), URL::route/signedRoute/temporarySignedRoute, Redirect::route(),
         // redirect()->route(), url()->route() on the Contracts\UrlGenerator url() returns with no path)
         // + 3 named-argument (route(absolute:, name:) with the name at offset 1, to_route(route:),
-        // redirect()->route(route:)) + 2 non-literal names (string-backed enum case, class constant).
-        // An exact count proves both full receiver coverage and that the clean, spread and dynamic
-        // shapes do not over-fire.
-        $this->assertCount(13, $findings, "Expected exactly 13 UnregisteredRouteName findings, got:\n{$joined}");
+        // redirect()->route(route:)) + 2 non-literal names (string-backed enum case, class constant)
+        // + 1 group-prefix composed name (known limitation, see the next test).
+        // An exact count proves both full receiver coverage and that the clean, spread, dynamic and
+        // conditionally-defined shapes do not over-fire.
+        $this->assertCount(14, $findings, "Expected exactly 14 UnregisteredRouteName findings, got:\n{$joined}");
         $this->assertStringNotContainsString("'dashboard'", $joined);
         $this->assertStringNotContainsString("'posts.show'", $joined);
-        $this->assertSame(\array_fill(0, 13, 'error'), \array_column($findings, 'severity'));
+        $this->assertSame(\array_fill(0, 14, 'error'), \array_column($findings, 'severity'));
+    }
+
+    #[Test]
+    public function unregistered_route_name_skips_names_defined_in_source_but_not_registered_by_the_boot(): void
+    {
+        $joined = \implode("\n", $this->messages($this->scenarioFindings('UnregisteredRouteName', 'UnregisteredRouteName')));
+
+        // routes/web.php defines these under a false `if` (`->name()` and `'as' =>` forms), and
+        // routes/unloaded.php is never loaded; none is in the booted route table.
+        $this->assertStringNotContainsString("'feature.disabled'", $joined);
+        $this->assertStringNotContainsString("'feature.as_form'", $joined);
+        $this->assertStringNotContainsString("'feature.unloaded'", $joined);
+        // A name with no literal definition anywhere is still reported.
+        $this->assertStringContainsString("Route name 'dashboard-legacy' is not registered", $joined);
+    }
+
+    /**
+     * Known limitation: the definition scan sees only literal names. `Route::name('barcode.')->group(...)`
+     * composes 'barcode.index' at runtime, so that name is still reported when the group is not registered.
+     */
+    #[Test]
+    public function unregistered_route_name_composed_from_a_group_prefix_is_a_known_limitation(): void
+    {
+        $joined = \implode("\n", $this->messages($this->scenarioFindings('UnregisteredRouteName', 'UnregisteredRouteName')));
+
+        $this->assertStringContainsString("Route name 'barcode.index' is not registered", $joined);
     }
 
     #[Test]

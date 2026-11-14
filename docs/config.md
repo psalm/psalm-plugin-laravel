@@ -196,7 +196,7 @@ See [UnconfiguredFilesystemDisk](issues/UnconfiguredFilesystemDisk.md) for detai
 
 When enabled, the plugin flags a route name passed to `route()`, `to_route()`, `URL::route()`/`signedRoute()`/`temporarySignedRoute()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` that is not registered in the booted application. A name counts when it is a string literal, a string-backed enum case, or a class constant typed as one string literal (`self::` included); dynamic names are skipped, and named arguments are resolved by parameter name.
 
-The check stays off, silently, when the route table cannot be trusted: the Testbench package fallback boot or a swallowed bootstrap error, an application with no named routes, or an application that registers a missing-named-route resolver. Once enabled it reports at Psalm's normal `error` level.
+The check stays off, silently, when the route table cannot be trusted: the Testbench package fallback boot or a swallowed bootstrap error, an application with no named routes, or an application that registers a missing-named-route resolver. A name that is absent from the booted routes but written as a literal `->name('...')` or `'as' => '...'` in the project's PHP files (a route behind a disabled feature flag, or in a file the boot never loads) is skipped. Once enabled it reports at Psalm's normal `error` level.
 
 See [UnregisteredRouteName](issues/UnregisteredRouteName.md) for details and known false-positive sources.
 
