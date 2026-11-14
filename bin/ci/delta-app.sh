@@ -146,6 +146,7 @@ PSALM_PIN=$(php -r '
 
 # Until that floor is tagged no exact version resolves, so fall back to `^floor`, which Composer
 # satisfies from the dev-master branch alias; the tag is pinned exactly again once it exists.
+# @todo-by 2026-11-15 Psalm 7.6.0 is released: delete the git ls-remote check below that falls back to ^floor, and pin the exact floor again
 if [[ -z "$(git ls-remote --tags https://github.com/vimeo/psalm "refs/tags/$PSALM_PIN")" ]]; then
     PSALM_PIN="^$PSALM_PIN"
 fi

@@ -23,6 +23,7 @@ ENV COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_MEMORY_LIMIT=-1 COMPOSER_NO_AUDIT=1 COMP
 #   `psalm/plugin-laravel: ^4.17.4` requirement.
 # - vimeo/psalm at the plugin's floor: the trend then moves only on commits here, not on Psalm tags. While the
 #   floor has no tag yet, `^floor` resolves it from the dev-master branch alias; the exact tag is pinned once it exists.
+# @todo-by 2026-11-15 Psalm 7.6.0 is released: delete the `git ls-remote` check in the RUN below that falls back to ^floor, and pin the exact floor again
 RUN composer update laravel-lang/http-statuses --no-progress \
     && composer config repositories.plugin '{"type": "path", "url": "/plugin", "options": {"symlink": true, "versions": {"psalm/plugin-laravel": "4.x-dev"}}}' \
     && composer config minimum-stability dev \

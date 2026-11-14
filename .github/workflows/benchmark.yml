@@ -112,6 +112,7 @@ jobs:
           # Psalm is pinned to the plugin's floor (first alternative of the vimeo/psalm
           # constraint) rather than the newest tag, so the trend moves only on commits here.
           # Until the floor is tagged, `^floor` resolves it from the dev-master branch alias.
+          # @todo-by 2026-11-15 Psalm 7.6.0 is released: delete the git ls-remote check below that falls back to ^floor, and pin the exact floor again
           PSALM_FLOOR=$(jq -er '.require["vimeo/psalm"] | split("||")[0] | gsub("^[\\s^~>=]+|\\s+$"; "")' \
             "$GITHUB_WORKSPACE/composer.json")
           if [ "$(git ls-remote --tags https://github.com/vimeo/psalm "refs/tags/$PSALM_FLOOR" | wc -l)" -eq 0 ]; then
