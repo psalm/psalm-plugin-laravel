@@ -91,6 +91,116 @@ class Collection extends BaseCollection implements QueueableCollection
      */
     public function mapWithKeys(callable $callback) {}
 
+    /*
+     * The overrides below re-declare Support\Collection methods whose `static<K, V>` return can hold
+     * values that are not models, which fails the `TModel of Model` bound of this class
+     * (InvalidTemplateParam, #1699). The outer collection widens to Support\Collection, a supertype
+     * of the runtime Eloquent\Collection. Inner collections of models name the Eloquent class
+     * explicitly: a `static` nested inside another class's generic is re-bound to the OUTER
+     * collection on later calls (`->first()`, `->get()`), which brings the bound error back.
+     *
+     * A user subclass keeps the inherited Support\Collection declaration: Psalm does not pass a stub
+     * re-declaration of an inherited method on to subclasses (vimeo/psalm#12158).
+     */
+
+    /**
+     * Chunk the collection into chunks of the given size.
+     *
+     * @param  int  $size
+     * @param  bool  $preserveKeys
+     * @return ($preserveKeys is true ? \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Collection<TKey, TModel>> : \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Collection<int, TModel>>)
+     */
+    public function chunk($size, $preserveKeys = true) {}
+
+    /**
+     * Split a collection into a certain number of groups.
+     *
+     * @param  int  $numberOfGroups
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Collection<TKey, TModel>>
+     */
+    public function split($numberOfGroups) {}
+
+    /**
+     * Split a collection into a certain number of groups, and fill the first groups completely.
+     *
+     * @param  int  $numberOfGroups
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Collection<TKey, TModel>>
+     */
+    public function splitIn($numberOfGroups) {}
+
+    /**
+     * Create chunks representing a "sliding window" view of the items in the collection.
+     *
+     * @param  int  $size
+     * @param  int  $step
+     * @return \Illuminate\Support\Collection<int, \Illuminate\Database\Eloquent\Collection<TKey, TModel>>
+     */
+    public function sliding($size = 2, $step = 1) {}
+
+    /**
+     * Run a grouping map over the items.
+     *
+     * @template TMapToGroupsKey of array-key
+     * @template TMapToGroupsValue
+     *
+     * @param  callable(TModel, TKey): array<TMapToGroupsKey, TMapToGroupsValue>  $callback
+     * @return \Illuminate\Support\Collection<TMapToGroupsKey, \Illuminate\Support\Collection<int, TMapToGroupsValue>>
+     */
+    public function mapToGroups(callable $callback) {}
+
+    /**
+     * Run a dictionary map over the items.
+     *
+     * @template TMapToDictionaryKey of array-key
+     * @template TMapToDictionaryValue
+     *
+     * @param  callable(TModel, TKey): array<TMapToDictionaryKey, TMapToDictionaryValue>  $callback
+     * @return \Illuminate\Support\Collection<TMapToDictionaryKey, array<int, TMapToDictionaryValue>>
+     */
+    public function mapToDictionary(callable $callback) {}
+
+    /**
+     * Run a map over each nested chunk of items.
+     *
+     * @template TMapSpreadValue
+     *
+     * @param  callable(mixed...): TMapSpreadValue  $callback
+     * @return \Illuminate\Support\Collection<TKey, TMapSpreadValue>
+     */
+    public function mapSpread(callable $callback) {}
+
+    /**
+     * Map the values into a new class.
+     *
+     * @template TMapIntoValue
+     *
+     * @param  class-string<TMapIntoValue>  $class
+     * @return \Illuminate\Support\Collection<TKey, TMapIntoValue>
+     */
+    public function mapInto($class) {}
+
+    /**
+     * Map a collection and flatten the result by a single level.
+     *
+     * @template TFlatMapKey of array-key
+     * @template TFlatMapValue
+     *
+     * @param  callable(TModel, TKey): (\Illuminate\Support\Collection<TFlatMapKey, TFlatMapValue>|array<TFlatMapKey, TFlatMapValue>)  $callback
+     * @return \Illuminate\Support\Collection<TFlatMapKey, TFlatMapValue>
+     */
+    public function flatMap(callable $callback) {}
+
+    /**
+     * Cross join with the given lists, returning all possible permutations.
+     *
+     * @template TCrossJoinKey
+     * @template TCrossJoinValue
+     *
+     * @param  \Illuminate\Contracts\Support\Arrayable<TCrossJoinKey, TCrossJoinValue>|iterable<TCrossJoinKey, TCrossJoinValue>  ...$lists
+     * @return \Illuminate\Support\Collection<int, array<int, TModel|TCrossJoinValue>>
+     */
+    public function crossJoin(...$lists) {}
+
     /**
      * Load a set of relationships onto the collection.
      *
