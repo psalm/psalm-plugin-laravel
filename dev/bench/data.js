@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794659783261,
+  "lastUpdate": 1794691138416,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18755,6 +18755,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8960a5a8d73bb8d4cb0c15fcfa6a960c9fd96d0d",
+          "message": "Run on Psalm dev-master until 7.6.0 ships, and keep factory model binding with inherited property types (#2309)\n\n* ci: install Psalm dev-master until 7.6.0 is released\n\n4.x requires vimeo/psalm ^7.6.0, which has no tag yet, so every install failed under the default\nminimum-stability. Drop @stable from the requirement: the root has minimum-stability dev and\nprefer-stable, so it resolves dev-master (branch alias 7.x-dev) now and the stable 7.6.x later.\n\nPins that hard-coded a stable Psalm would fail the same way:\n- tests.yml (Symfony Console 6.4 job) requires vimeo/psalm:^7.6@dev in its stable-only project. Switch\n  it back to a stable constraint after 7.6.0 is released.\n- benchmark.yml and delta-app.sh pin the floor exactly; when the floor has no tag yet they fall back to\n  ^floor, and pin the exact tag again on their own once it exists.\n\n* fix(factory): read the $model default before the type Psalm 7.6 inherits\n\nPsalm 7.6 gives a redeclared untyped property the parent's @var type, so Factory::$model on a\nsubclass now has class-string<TModel> as its type, which holds no literal class and hid the default\nkept in suggested_type. A bare factory with a $model default lost its TModel binding.\n\n* test(factory): expect the contradicting $model default to be reported on Psalm 7.6\n\nWith an explicit @extends Factory<Pylon>, $model inherits class-string<Pylon> from Factory, so the\nfixture's deliberately conflicting default Beacon::class is now an InvalidPropertyAssignmentValue.\n\n* test(builder): skip the protected scope case until vimeo/psalm#13769\n\nSince Psalm 7.6 (#13727) a protected method on a class with __call() and a @mixin is resolved on the\nmixin, so the Eloquent\\Builder scope providers never answer enforceOrderBy(). Move that case into its\nown fixture marked XFAIL, with the desired output unchanged, so the rest of ScopeHandoffLeakTest keeps\nrunning. The XFAIL turns into a failure once Psalm fixes it.\n\n* ci(benchmark): fall back to ^floor while the Psalm floor is untagged\n\nThe image pinned the plugin's exact vimeo/psalm floor, which has no tag yet, so its composer update\nconflicted. When refs/tags/<floor> is absent, use ^floor (resolved from the dev-master branch alias);\nthe exact tag is pinned again once it exists.\n\n* chore: add todo-by reminders to undo the Psalm dev-master pins after 7.6.0",
+          "timestamp": "2026-11-14T22:16:26+01:00",
+          "tree_id": "4600fc6f57a5e464ede42d0d19157bac7980fcef",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/8960a5a8d73bb8d4cb0c15fcfa6a960c9fd96d0d"
+        },
+        "date": 1794691136952,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.15,
+            "range": "± 0.27",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1230,
             "unit": "MB"
           }
         ]
