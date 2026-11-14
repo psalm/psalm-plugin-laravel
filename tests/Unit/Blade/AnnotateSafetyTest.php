@@ -89,7 +89,7 @@ final class AnnotateSafetyTest extends TestCase
         foreach ($decoded as $issue) {
             $this->assertIsArray($issue);
 
-            if (\in_array($issue['type'], ['MissingViewData', 'InvalidViewData', 'UnusedViewData'], true)) {
+            if (\in_array($issue['type'], ['MissingViewData', 'InvalidViewData', 'PossiblyInvalidViewData', 'UnusedViewData'], true)) {
                 $types[] = (string) $issue['type'];
             }
         }

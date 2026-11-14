@@ -8,6 +8,7 @@ use Psalm\Config;
 use Psalm\Issue\PluginIssue;
 use Psalm\LaravelPlugin\Issues\InvalidViewData;
 use Psalm\LaravelPlugin\Issues\MissingViewData;
+use Psalm\LaravelPlugin\Issues\PossiblyInvalidViewData;
 use Psalm\LaravelPlugin\Issues\UndefinedModelRelation;
 use Psalm\LaravelPlugin\Issues\UnusedViewData;
 
@@ -25,6 +26,7 @@ final class ExperimentalIssuePolicy
         UndefinedModelRelation::class,
         MissingViewData::class,
         InvalidViewData::class,
+        PossiblyInvalidViewData::class,
         UnusedViewData::class,
     ];
 

@@ -18,6 +18,7 @@ final class ExperimentalIssuePolicyTest extends TestCase
         'UndefinedModelRelation',
         'MissingViewData',
         'InvalidViewData',
+        'PossiblyInvalidViewData',
         'UnusedViewData',
     ];
 
