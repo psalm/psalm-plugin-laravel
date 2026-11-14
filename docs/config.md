@@ -84,7 +84,7 @@ Three call-site rules mirror `Arr::get` runtime behavior:
 
 - key absent → generalised default
 - key present, value not null → reflected value (default ignored)
-- key present, value is null → stored null (default ignored, even when supplied)
+- key present, value is null → `mixed` (default ignored, even when supplied). A null leaf is typically an `env()` value unset on the analysing machine, so it is not typed `null`
 
 Closure values stored in config reflect to `\Closure`. Closure defaults resolve to their declared return type (typed closures); untyped closures contribute `mixed` without dropping other union members.
 

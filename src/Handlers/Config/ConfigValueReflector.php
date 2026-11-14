@@ -22,7 +22,7 @@ use Psalm\Type\Union;
  * shallow array building a megabyte-scale type string before the depth cap
  * fires. Beyond any cap, degrade to `array<array-key, mixed>`.
  *
- * Resources and unknown values fall back to `mixed`.
+ * Null leaves, resources and unknown values fall back to `mixed`.
  *
  * @internal
  */
@@ -53,8 +53,10 @@ final class ConfigValueReflector
         int $depth,
         int &$remainingBudget,
     ): Union {
+        // A null leaf is usually an unset `env()` default (`'key' => env('X')`), so its type depends on the
+        // analysing machine's environment. `mixed` keeps guards like `is_string($v)` from becoming contradictions.
         if ($value === null) {
-            return Type::getNull();
+            return Type::getMixed();
         }
 
         if (\is_bool($value)) {
