@@ -35,6 +35,7 @@ final class BladeShadowPruneTest extends TestCase
         'app/Greeter.php',
         // bootstrap/app.php require_once's the `<x-chip>` class component (#1701) unconditionally too.
         'app/View/Components/Chip.php',
+        'app/Providers/ClosureDirectiveStubProvider.php',
         'app/Providers/LivewireStubProvider.php',
         'app/Providers/PrefixedTagStubProvider.php',
         // bootstrap/app.php require_once's both of these unconditionally (#1505's
