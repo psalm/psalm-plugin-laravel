@@ -78,6 +78,8 @@ final class TemplateReportability implements AfterCodebasePopulatedInterface
      * Safe while Psalm is still scanning: it copied the list before `scanFiles()`, so a later write
      * enqueues nothing.
      *
+     * @todo-by https://github.com/vimeo/psalm/issues/13718 make the templates reportable at boot through the new Psalm API, delete apply() and the project-file write, and keep this handler only for BladeCompileError reporting (or move that back into the boot)
+     *
      * @return bool false when the write failed
      */
     public static function apply(): bool

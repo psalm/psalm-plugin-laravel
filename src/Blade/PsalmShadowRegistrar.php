@@ -34,6 +34,7 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     #[\Override]
     public function recordReportableTemplates(array $templatePaths): bool
     {
+        // @todo-by https://github.com/vimeo/psalm/issues/13718 drop this writability probe and the "not writable" degrade branch in BladeBootstrapper::run()
         if (!ProjectFileInjector::canInject($this->projectAnalyzer)) {
             return false;
         }
