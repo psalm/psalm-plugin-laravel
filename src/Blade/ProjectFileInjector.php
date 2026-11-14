@@ -85,12 +85,23 @@ final class ProjectFileInjector
                 return null;
             }
 
-            /** @psalm-var mixed $projectFiles */
-            $projectFiles = $property->getValue($projectAnalyzer);
+            $projectFiles = self::asArray($property->getValue($projectAnalyzer));
         } catch (\Throwable) {
             return null;
         }
 
-        return \is_array($projectFiles) ? [$property, $projectFiles] : null;
+        return $projectFiles === null ? null : [$property, $projectFiles];
+    }
+
+    /**
+     * A helper rather than a local, so no `mixed` variable is left behind (type-coverage.md, pattern 6).
+     *
+     * @return array<array-key, mixed>|null
+     *
+     * @psalm-pure
+     */
+    private static function asArray(mixed $value): ?array
+    {
+        return \is_array($value) ? $value : null;
     }
 }
