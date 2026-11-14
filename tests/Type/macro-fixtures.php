@@ -179,6 +179,27 @@ Builder::macro('testBuilderMacro', static fn(): string => 'builder macro OK');
     static fn(string $to): string => "queued:{$to}",
 );
 
+// `DB::myMacro()` runs on the default Connection through `DatabaseManager::__call`; `Schema::myMacro()` runs on the
+// driver builder, whose `$macros` store is declared on the shared `Schema\Builder` (#2269).
+\Illuminate\Database\Connection::macro(
+    'testDbConnectionFacadeMacro',
+    static fn(string $table): int => \strlen($table),
+);
+\Illuminate\Database\Schema\Builder::macro(
+    'testSchemaFacadeMacro',
+    static fn(string $table): bool => $table !== '',
+);
+// Single-target facades sealed in #2233: the root class itself is Macroable, so these lock in that the seal
+// keeps resolving registered macros.
+\Illuminate\Events\Dispatcher::macro(
+    'testEventFacadeMacro',
+    static fn(string $name): string => $name,
+);
+\Illuminate\Foundation\Application::macro(
+    'testAppFacadeMacro',
+    static fn(string $name): int => \strlen($name),
+);
+
 // laravel/ai is optional (not a root dependency): its stubs seal Tools\Request, so a registered macro
 // must still resolve (PromptInjection/ToolRequestSealedMethods.phpt).
 if (\class_exists(\Laravel\Ai\Tools\Request::class)) {
