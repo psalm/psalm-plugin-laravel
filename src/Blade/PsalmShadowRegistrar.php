@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
-use Psalm\CodeLocation\Raw;
 use Psalm\Config;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
-use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Issues\BladeCompileError;
 
 /**
  * Registers Blade shadows with the running Psalm analysis.
@@ -21,7 +18,9 @@ use Psalm\LaravelPlugin\Issues\BladeCompileError;
  *    and making the shadow reportable in `ProjectAnalyzer` would make `TaintFlowGraph` skip every
  *    flow whose source sits in it.
  *  - the TEMPLATE is reportable but never analyzed: it is not PHP. Only the project-file write
- *    applies to it, which is what lets a later remap put an issue on the `.blade.php` path.
+ *    applies to it, which is what lets a later remap put an issue on the `.blade.php` path. That
+ *    write is deferred to {@see TemplateReportability}: Psalm 7.4+ builds its scan lists from the
+ *    same property after plugins initialize, so an earlier write would scan the template as PHP.
  *
  * @internal
  */
@@ -36,7 +35,13 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     #[\Override]
     public function markTemplatesReportable(array $templatePaths): bool
     {
-        return ProjectFileInjector::inject($this->projectAnalyzer, $templatePaths);
+        if (!ProjectFileInjector::canInject($this->projectAnalyzer)) {
+            return false;
+        }
+
+        TemplateReportability::record($templatePaths);
+
+        return true;
     }
 
     /**
@@ -93,16 +98,7 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     #[\Override]
     public function reportCompileFailure(string $templatePath, string $source, string $message): void
     {
-        $name = $this->projectAnalyzer->getCodebase()->config->shortenFileName($templatePath);
-        $location = TemplateLocation::atLine($templatePath, $name, $source, 1)
-            ?? new Raw($source, $templatePath, $name, 0, 0);
-
-        // Nothing to suppress from: the template never compiled, so `<issueHandlers>` is the only
-        // way to silence it.
-        IssueBuffer::accepts(
-            new BladeCompileError("Template not analyzed: {$message}", $location),
-            [],
-        );
+        TemplateReportability::recordCompileFailure($templatePath, $source, $message);
     }
 
     /**

@@ -81,4 +81,44 @@ final class ProjectFileInjectorTest extends TestCase
         $this->assertFalse(ProjectFileInjector::inject($target, ['/views/a.blade.php']));
         $this->assertNull($target->read());
     }
+
+    /** The boot's degrade gate: probes without writing, and agrees with inject() on every shape. */
+    #[Test]
+    public function the_probe_agrees_with_inject_and_writes_nothing(): void
+    {
+        $writable = new class {
+            /** @var array<string, string> */
+            private array $project_files = [];
+
+            /** @return array<string, string> */
+            public function read(): array
+            {
+                return $this->project_files;
+            }
+        };
+        $notAnArray = new class {
+            private ?string $project_files = null;
+
+            public function read(): ?string
+            {
+                return $this->project_files;
+            }
+        };
+        $uninitialized = new class {
+            /** @var array<string, string> */
+            private array $project_files;
+
+            /** @return array<string, string> */
+            public function read(): array
+            {
+                return $this->project_files ?? [];
+            }
+        };
+
+        $this->assertTrue(ProjectFileInjector::canInject($writable));
+        $this->assertSame([], $writable->read());
+        $this->assertFalse(ProjectFileInjector::canInject(new class {}));
+        $this->assertFalse(ProjectFileInjector::canInject($notAnArray));
+        $this->assertFalse(ProjectFileInjector::canInject($uninitialized));
+    }
 }

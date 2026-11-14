@@ -13,13 +13,16 @@ namespace Psalm\LaravelPlugin\Blade;
 interface ShadowRegistrar
 {
     /**
-     * Makes issues located in these Blade templates reportable.
+     * Makes issues located in these Blade templates reportable, once Psalm has built its scan lists:
+     * the write itself is deferred to `AfterCodebasePopulated`, because Psalm 7.4+ derives those lists
+     * from the same project-file property after plugins initialize. This call only verifies the write
+     * can work and records the paths.
      *
-     * Impure by contract: both registrations write into the running analysis.
+     * Impure by contract: it records state the deferred write reads.
      *
      * @param list<string> $templatePaths `.blade.php` paths, never shadow paths
      *
-     * @return bool false when Psalm's project-file list could not be extended; the caller must then
+     * @return bool false when Psalm's project-file list cannot be extended; the caller must then
      *              register no shadows at all
      *
      * @psalm-impure
@@ -74,8 +77,9 @@ interface ShadowRegistrar
     public function queueFilesForScanning(array $paths): void;
 
     /**
-     * Reports a template the compiler threw on, at its line 1, as `BladeCompileError`. Only called
-     * after {@see self::markTemplatesReportable()} succeeded for it.
+     * Records a template the compiler threw on, to be reported at its line 1 as `BladeCompileError`
+     * once its path is reportable (`AfterCodebasePopulated`, after the deferred write of
+     * {@see self::markTemplatesReportable()}). Only called after that succeeded for it.
      *
      * @param string $source  the template source the compiler was given
      * @param string $message the compiler's cause, on one line

@@ -191,6 +191,27 @@ final class BladeIssueRemapTest extends TestCase
         );
     }
 
+    /**
+     * #2303: Psalm 7.4+ builds its file lists after plugins load, so a template written into the
+     * project-file list too early is also scanned and analyzed as plain PHP. Its raw `<?php` block then
+     * reports natively, on top of the remapped shadow issue. Scoped to this template: a ParseError or
+     * a trace legitimately repeats a (type, line) elsewhere.
+     */
+    #[Test]
+    public function a_template_with_a_php_block_reports_no_duplicate_native_issue(): void
+    {
+        $seen = [];
+
+        foreach ($this->analyze('psalm.xml') as $issue) {
+            if (\str_ends_with($issue['file_path'], 'resources/views/php-block-lines.blade.php')) {
+                $seen[$issue['type'] . ':' . $issue['line_from']][] = $issue['message'];
+            }
+        }
+
+        $this->assertNotSame([], $seen);
+        $this->assertSame([], \array_filter($seen, static fn(array $messages): bool => \count($messages) > 1), \json_encode($seen, \JSON_THROW_ON_ERROR));
+    }
+
     #[Test]
     public function a_shadow_issue_is_reported_on_the_template_path_and_line(): void
     {

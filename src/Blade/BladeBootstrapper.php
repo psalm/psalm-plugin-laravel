@@ -164,8 +164,8 @@ final class BladeBootstrapper
 
         if ($shadows === []) {
             // Nothing joins the analysis and no template fact is published, but a compile failure
-            // still gets its issue: an app whose every template fails would otherwise go silent
-            // under --no-progress.
+            // still gets its issue (recorded here, reported at AfterCodebasePopulated): an app whose
+            // every template fails would otherwise go silent under --no-progress.
             $reported = $this->compileFailures !== []
                 && $this->registrar->markTemplatesReportable(\array_keys($this->compileFailures));
 
@@ -188,13 +188,14 @@ final class BladeBootstrapper
             return false;
         }
 
-        // The run is about to activate and report each compile failure as an issue, so the warning
-        // keeps only the rest. If activation fails after all, the degradation warning covers every
+        // The run is about to activate and each compile failure becomes an issue (reported at
+        // AfterCodebasePopulated), so the warning keeps only the rest. If activation fails after all, the degradation warning covers every
         // template.
         $this->reportFailures($failures, $this->compileFailures);
 
-        // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry.
-        // Config::reportIssueInFile() consults only this project-file list.
+        // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry. This only probes that
+        // Psalm's project-file list is writable and records the paths: the write is deferred to
+        // AfterCodebasePopulated (TemplateReportability), after Psalm has built its scan lists.
         if (!$this->registrar->markTemplatesReportable($templates)) {
             $this->degrade(
                 "issues found in Blade templates could not be made reportable (Psalm's internal project-file "

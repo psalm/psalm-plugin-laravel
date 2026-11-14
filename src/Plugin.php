@@ -284,6 +284,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         Blade\ComponentViewRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
         Blade\ShadowRegistry::reset();
+        Blade\TemplateReportability::reset();
         Blade\ViewReferenceRegistry::reset();
     }
 
@@ -849,6 +850,15 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Collections/EmptyCollectionLookupIssueHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\EmptyCollectionLookupIssueHandler::class);
 
+        // Writes the Blade templates into Psalm's project-file list and reports the ones that failed to
+        // compile, once Psalm has built its scan lists (a write at boot would get the templates scanned
+        // as PHP on Psalm 7.4+). Gated on recorded work, not on $bladeActive alone: a boot where every
+        // template failed to compile returns false yet still owes those BladeCompileError issues.
+        if ($bladeActive || Blade\TemplateReportability::hasCompileFailures()) {
+            require_once __DIR__ . '/Blade/TemplateReportability.php';
+            $registration->registerHooksFromClass(Blade\TemplateReportability::class);
+        }
+
         // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
         // nothing the shadow analysis finds is visible without it. Registered LAST of the
         // BeforeAddIssue handlers on purpose: Psalm's dispatcher stops at the first handler that
@@ -1062,12 +1072,15 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
      * run: the shadows for analysis, the templates for reporting.
      *
      * Runs synchronously inside `__invoke()` because that is the only window in which a file can
-     * still join the analysis — Psalm calls `Config::initializePlugins()` after it has queued the
-     * project files and before it starts scanning them.
+     * still join the analysis — Psalm calls `Config::initializePlugins()` before it scans.
+     * Only the shadows join the analysis here: the templates are merely RECORDED for reporting, and
+     * `Blade\TemplateReportability` writes them into the project-file list at `AfterCodebasePopulated`.
+     * Psalm 7.4+ builds its scan and analysis lists from that list after plugins initialize, so an
+     * earlier write would have the templates scanned and analyzed as plain PHP.
      *
-     * Holds no static state, so there is nothing to reset between invocations: every run recompiles
-     * from the manifest on disk, whose fingerprints carry the Laravel version, the plugin version,
-     * and the booted `BladeCompiler`'s own registration surface (see
+     * Its only static state, `Blade\TemplateReportability`, is reset in `resetInvocationState()`:
+     * every run recompiles from the manifest on disk, whose fingerprints carry the Laravel version,
+     * the plugin version, and the booted `BladeCompiler`'s own registration surface (see
      * `Blade\CompilerEnvironment::describe()`).
      *
      * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod driving this run, told why
