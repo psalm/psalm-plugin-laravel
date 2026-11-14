@@ -25,9 +25,8 @@ use Psalm\Type\Union;
  * stays native (it feeds MethodComparator). `: self` is not late-static-bound and must NOT be
  * rewritten. Retire once TypeExpander carries `is_static` through the rebuild.
  *
- * Scoped to every class transitively extending Eloquent\Builder (matches
- * {@see BuilderSubclassQueryMixinHandler}), which also catches abstract intermediate builders no
- * model references directly.
+ * Scoped to every class transitively extending Eloquent\Builder, which also catches abstract
+ * intermediate builders no model references directly.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1216
  */

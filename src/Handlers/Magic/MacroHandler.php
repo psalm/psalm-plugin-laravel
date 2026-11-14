@@ -47,8 +47,10 @@ use Psalm\Storage\MethodStorage;
  * into children, but it runs in `populateClassLikeStorages` which strictly precedes
  * `dispatchAfterCodebasePopulated`. Pseudo-methods we inject here are too late for
  * that copy. At lookup time, `MissingMethodCallHandler::findPseudoMethodAndClass-
- * Storages()` walks `class_implements` and `namedMixins`, NOT `parent_classes` —
- * so children would not see parent macros either. We propagate explicitly: for
+ * Storages()` reads the populated `declaring_pseudo_method_ids`, the class's own
+ * `pseudo_methods` and its `class_implements`, never `parent_classes` (a mixin's
+ * `@method`s are found by the mixin lookup instead) — so children would not see
+ * parent macros injected after population either. We propagate explicitly: for
  * each Macroable owner, walk every analysed class whose `parent_classes` includes
  * it and inject the same pseudo-methods.
  *
