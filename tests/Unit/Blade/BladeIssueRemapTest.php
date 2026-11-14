@@ -18,7 +18,7 @@ use Symfony\Component\Process\Process;
  * End-to-end proof that an issue Psalm finds in a shadow file surfaces on the `.blade.php` path and
  * line instead. A real `vendor/bin/psalm` run is the only way to pin it: the remap depends on Psalm
  * dispatching `BeforeAddIssue` before its reportability and suppression gates, and on the template
- * having been written into `ProjectAnalyzer`'s private project-file list at boot.
+ * having been written into `ProjectAnalyzer`'s private project-file list (after scanning, or earlier by the remap itself).
  */
 #[CoversClass(BladeIssueRemapHandler::class)]
 #[CoversClass(ShadowIssueRelocator::class)]
@@ -210,6 +210,23 @@ final class BladeIssueRemapTest extends TestCase
 
         $this->assertNotSame([], $seen);
         $this->assertSame([], \array_filter($seen, static fn(array $messages): bool => \count($messages) > 1), \json_encode($seen, \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * Psalm reports `DuplicateFunction` while SCANNING the shadow, before `AfterCodebasePopulated`
+     * could make the template reportable. The remap re-emits it on the template path, so it has to make
+     * the template reportable itself or the gate drops the one finding.
+     */
+    #[Test]
+    public function a_diagnostic_psalm_raises_while_scanning_a_shadow_is_reported_on_the_template(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+
+        $this->assertSame(
+            [4],
+            $this->linesFor($issues, 'DuplicateFunction', 'resources/views/duplicate-function.blade.php'),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
     }
 
     #[Test]

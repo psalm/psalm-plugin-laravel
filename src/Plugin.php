@@ -1087,7 +1087,8 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
      *                                                Blade disabled itself
      *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
-     *              published nothing, so no Blade handler may register
+     *              published nothing, so no Blade handler may register, except `Blade\TemplateReportability` when a
+     *              compile failure was recorded
      *
      * @throws Blade\BladeDisabledException when Blade disabled itself and `failOnInternalError` is on
      */

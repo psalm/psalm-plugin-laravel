@@ -23,6 +23,11 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  *
  * The boot records; this handler applies. It is registered only when something was recorded.
  *
+ * Psalm also reports some diagnostics WHILE scanning a shadow (`DuplicateFunction`), before this
+ * hook fires. {@see BladeIssueRemapHandler} re-emits those on the template path and so calls
+ * {@see self::apply()} first; the write is idempotent per process. A forked scanner worker applies
+ * in its own copy, which dies with it, so the parent still applies here.
+ *
  * @internal
  */
 final class TemplateReportability implements AfterCodebasePopulatedInterface
@@ -33,12 +38,15 @@ final class TemplateReportability implements AfterCodebasePopulatedInterface
     /** @var array<string, array{0: string, 1: string}> template path => [source, compiler error] */
     private static array $compileFailures = [];
 
+    private static bool $applied = false;
+
     /**
      * @param list<string> $paths `.blade.php` paths, never shadow paths
      */
     public static function record(array $paths): void
     {
         self::$templatePaths = \array_values(\array_unique([...self::$templatePaths, ...$paths]));
+        self::$applied = false;
     }
 
     public static function recordCompileFailure(string $templatePath, string $source, string $message): void
@@ -55,13 +63,29 @@ final class TemplateReportability implements AfterCodebasePopulatedInterface
     {
         self::$templatePaths = [];
         self::$compileFailures = [];
+        self::$applied = false;
+    }
+
+    /**
+     * Writes the recorded templates into Psalm's project-file list, once per process.
+     *
+     * Safe while Psalm is still scanning: it copied the list before `scanFiles()`, so a later write
+     * enqueues nothing.
+     */
+    public static function apply(): void
+    {
+        if (self::$applied || self::$templatePaths === []) {
+            return;
+        }
+
+        self::$applied = ProjectFileInjector::inject(ProjectAnalyzer::getInstance(), self::$templatePaths);
     }
 
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
         // Before any report: the issues below are filtered through the project-file list.
-        ProjectFileInjector::inject(ProjectAnalyzer::getInstance(), self::$templatePaths);
+        self::apply();
 
         $config = $event->getCodebase()->config;
 
