@@ -7,15 +7,15 @@ namespace Psalm\LaravelPlugin\Blade;
 /**
  * Adds paths to `ProjectAnalyzer::$project_files` after the fact.
  *
- * The project-file list is built from psalm.xml in the `ProjectAnalyzer` constructor, and
- * `ProjectAnalyzer::canReportIssues()` (so `Config::reportIssueInFile()`) reads nothing else — so a
- * file the plugin generates can never have issues reported for it without this write. The property
- * is private and there is no API for it on Psalm 6, hence reflection.
+ * That list is what `ProjectAnalyzer::canReportIssues()` reads, and `Config::reportIssueInFile()`
+ * consults it, so a file the plugin generates can never have issues reported for it without this
+ * write. Psalm builds the list inside `check()` / `checkPaths()` (`initProjectFiles()`), the property
+ * is private, and Psalm 7.5 has no public setter, hence reflection. A public API (vimeo/psalm#13718,
+ * contract: call before scanning starts) replaces this class, and with it the scan-time
+ * {@see TemplateReportability::apply()} call in the issue remap.
  *
- * WHEN the write may happen is the caller's problem, and it matters: Psalm 7.4+ queues the list for
- * scanning and analysis AFTER `Config::initializePlugins()`, so a template written at plugin boot is
- * scanned and analyzed as plain PHP. {@see TemplateReportability} therefore writes it at
- * `AfterCodebasePopulated`, and the boot only {@see self::canInject() probes} that the write can work.
+ * WHEN the write may happen is the caller's problem: see {@see TemplateReportability}, which owns
+ * that decision. The boot only {@see self::canInject() probes} that the write can work.
  *
  * Every failure mode returns false instead of throwing, so a Psalm internal change costs the Blade
  * feature rather than the whole run. The target is typed `object` on purpose: the guards are the

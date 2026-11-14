@@ -850,9 +850,8 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Collections/EmptyCollectionLookupIssueHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\EmptyCollectionLookupIssueHandler::class);
 
-        // Writes the Blade templates into Psalm's project-file list and reports the ones that failed to
-        // compile, once Psalm has built its scan lists (a write at boot would get the templates scanned
-        // as PHP on Psalm 7.4+). Gated on recorded work, not on $bladeActive alone: a boot where every
+        // Makes the recorded Blade templates reportable and reports the ones that failed to compile (see
+        // TemplateReportability). Gated on recorded work, not on $bladeActive alone: a boot where every
         // template failed to compile returns false yet still owes those BladeCompileError issues.
         if ($bladeActive || Blade\TemplateReportability::hasCompileFailures()) {
             require_once __DIR__ . '/Blade/TemplateReportability.php';
@@ -1073,15 +1072,13 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
      *
      * Runs synchronously inside `__invoke()` because that is the only window in which a file can
      * still join the analysis — Psalm calls `Config::initializePlugins()` before it scans.
-     * Only the shadows join the analysis here: the templates are merely RECORDED for reporting, and
-     * `Blade\TemplateReportability` writes them into the project-file list at `AfterCodebasePopulated`.
-     * Psalm 7.4+ builds its scan and analysis lists from that list after plugins initialize, so an
-     * earlier write would have the templates scanned and analyzed as plain PHP.
+     * Only the shadows join the analysis here: the templates are merely RECORDED for reporting, see
+     * {@see Blade\TemplateReportability} for why and when they are written.
      *
-     * Its only static state, `Blade\TemplateReportability`, is reset in `resetInvocationState()`:
-     * every run recompiles from the manifest on disk, whose fingerprints carry the Laravel version,
-     * the plugin version, and the booted `BladeCompiler`'s own registration surface (see
-     * `Blade\CompilerEnvironment::describe()`).
+     * Its per-run state (the Blade registries, `Blade\TemplateReportability`, `RuntimeHelperVisibility`)
+     * is reset in `resetInvocationState()`; the compile itself starts from the manifest on disk, whose
+     * fingerprints carry the Laravel version, the plugin version, and the booted `BladeCompiler`'s own
+     * registration surface (see `Blade\CompilerEnvironment::describe()`).
      *
      * @param Blade\Annotate\AnnotateRequest|null $annotate the annotate codemod driving this run, told why
      *                                                Blade disabled itself

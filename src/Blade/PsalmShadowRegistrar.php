@@ -19,8 +19,7 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
  *    flow whose source sits in it.
  *  - the TEMPLATE is reportable but never analyzed: it is not PHP. Only the project-file write
  *    applies to it, which is what lets a later remap put an issue on the `.blade.php` path. That
- *    write is deferred to {@see TemplateReportability}: Psalm 7.4+ builds its scan lists from the
- *    same property after plugins initialize, so an earlier write would scan the template as PHP.
+ *    write is deferred, see {@see TemplateReportability}.
  *
  * @internal
  */

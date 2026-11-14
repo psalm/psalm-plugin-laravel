@@ -13,13 +13,17 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  *
  * Psalm keeps no global function table for ordinary project code: a bare `foo()` resolves through
  * the ROOT file's `FileStorage::$declaring_function_ids`, which a file gets entries in only by
- * `require`ing the declaring file, transitively (or, from Psalm 7.4, through
- * `Config::getPredefinedFunctions()`, a snapshot of the functions declared in the process once the
- * boot is done, which then covers project files too). A shadow is a standalone compiled template —
- * it requires nothing and usually names no class — so it reaches nothing, and every helper a
- * provider `include`d at boot reported `UndefinedFunction … consider enabling allFunctionsGlobal`,
- * with `define()`d constants in the same files reporting `UndefinedConstant` through the identical
+ * `require`ing the declaring file, transitively. A shadow is a standalone compiled template — it
+ * requires nothing and usually names no class — so it reaches nothing, and every helper a provider
+ * `include`d at boot reported `UndefinedFunction … consider enabling allFunctionsGlobal`, with
+ * `define()`d constants in the same files reporting `UndefinedConstant` through the identical
  * mechanism.
+ *
+ * Psalm 7.4+ narrows that, but only in `check()` and `checkPaths()` runs, the ones that call
+ * `visitAutoloadFiles()`: it snapshots the functions the process declared (after the boot) into
+ * `Config::getPredefinedFunctions()`, which resolves a helper by reflection, i.e. by its native
+ * signature, for every file. `checkDir()` / `checkFile()` take no snapshot, and a docblock type is
+ * invisible to reflection, so this injection stays what gives a shadow the helper's real signature.
  *
  * A template is rendered by a fully booted application, so "visible = what the boot declared" is
  * the faithful model, and it is far narrower than turning `allFunctionsGlobal` on. The injection is

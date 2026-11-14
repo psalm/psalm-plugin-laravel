@@ -17,10 +17,11 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  * has built its scan lists.
  *
  * A template must sit in `ProjectAnalyzer::$project_files` for an issue to be reportable on it, but
- * Psalm 7.4+ derives its scan and analysis lists from that same property after plugins initialize:
- * a template written at boot would be analyzed as plain PHP. `AfterCodebasePopulated` runs after
- * scanning and before analysis forks its workers, which filter issues through the parent's
- * `Config::reportIssueInFile()`, so the write has to happen here and not in a worker.
+ * Psalm 7.4+ derives its scan and analysis lists from that same property AFTER plugins initialize
+ * (`check()` runs `initializePlugins()`, then queues `$project_files`): a template written at boot
+ * would be scanned and analyzed as plain PHP, duplicating every shadow finding natively.
+ * `AfterCodebasePopulated` runs after scanning and before analysis forks its workers, which filter
+ * issues through the list they inherit, so the write has to happen here and not in a worker.
  *
  * The boot records; this handler applies. It is registered only when something was recorded.
  *

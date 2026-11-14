@@ -13,10 +13,8 @@ namespace Psalm\LaravelPlugin\Blade;
 interface ShadowRegistrar
 {
     /**
-     * Makes issues located in these Blade templates reportable, once Psalm has built its scan lists:
-     * the write itself is deferred to `AfterCodebasePopulated`, because Psalm 7.4+ derives those lists
-     * from the same project-file property after plugins initialize. This call only verifies the write
-     * can work and records the paths.
+     * Makes issues located in these Blade templates reportable. This call only verifies that the
+     * write can work and records the paths; when the write happens is not the caller's concern.
      *
      * Impure by contract: it records state the deferred write reads.
      *

@@ -189,8 +189,8 @@ final class BladeBootstrapper
         }
 
         // The run is about to activate and each compile failure becomes an issue (reported at
-        // AfterCodebasePopulated), so the warning keeps only the rest. If activation fails after all, the degradation warning covers every
-        // template.
+        // AfterCodebasePopulated), so the warning keeps only the rest. If activation fails after
+        // all, the degradation warning covers every template.
         $this->reportFailures($failures, $this->compileFailures);
 
         // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry. This only probes that
