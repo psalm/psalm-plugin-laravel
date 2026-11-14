@@ -391,7 +391,9 @@ final class BladeTemplatesTest extends TestCase
     /**
      * A helper file's storage also carries symbols it merely CONTAINS (a declaration behind a version
      * gate), which the runtime never declared, so those diagnostics must survive the injection. The blast
-     * radius is shadows only: a project file calling the same helper keeps Psalm's own answer.
+     * radius is shadows only: a project file calling that gated function keeps Psalm's own answer. The
+     * control cannot be a function the boot DID declare: from Psalm 7.4 those count as predefined for
+     * every file.
      */
     #[Test]
     public function symbols_the_boot_never_declared_and_project_files_still_report(): void

@@ -13,10 +13,12 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  *
  * Psalm keeps no global function table for ordinary project code: a bare `foo()` resolves through
  * the ROOT file's `FileStorage::$declaring_function_ids`, which a file gets entries in only by
- * `require`ing the declaring file, transitively. A shadow is a standalone compiled template — it
- * requires nothing and usually names no class — so it reaches nothing, and every helper a provider
- * `include`d at boot reported `UndefinedFunction … consider enabling allFunctionsGlobal`, with
- * `define()`d constants in the same files reporting `UndefinedConstant` through the identical
+ * `require`ing the declaring file, transitively (or, from Psalm 7.4, through
+ * `Config::getPredefinedFunctions()`, a snapshot of the functions declared in the process once the
+ * boot is done, which then covers project files too). A shadow is a standalone compiled template —
+ * it requires nothing and usually names no class — so it reaches nothing, and every helper a
+ * provider `include`d at boot reported `UndefinedFunction … consider enabling allFunctionsGlobal`,
+ * with `define()`d constants in the same files reporting `UndefinedConstant` through the identical
  * mechanism.
  *
  * A template is rendered by a fully booted application, so "visible = what the boot declared" is
