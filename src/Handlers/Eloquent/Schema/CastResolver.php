@@ -20,6 +20,7 @@ use Psalm\LaravelPlugin\Internal\AutoloadOnce;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Internal\ConfiguredDateClass;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\FunctionLikeStorage;
 use Psalm\Type;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TGenericObject;
@@ -377,6 +378,22 @@ final class CastResolver
         $method = $castClass . '::get';
         if (!$codebase->methodExists($method)) {
             return null;
+        }
+
+        // A `get()` with only a native return type has no docblock of its own, so Psalm answers with the
+        // interface's `TGet|null` (unresolved, or resolved to a nullable `@implements` argument); the
+        // declared signature is the precise type.
+        $declaringId = ClassLineage::storage($codebase, $castClass)?->declaring_method_ids['get'] ?? null;
+        $declared = $declaringId === null
+            ? null
+            : ClassLineage::storage($codebase, $declaringId->fq_class_name)?->methods['get'] ?? null;
+
+        if (
+            $declared instanceof FunctionLikeStorage
+            && $declared->signature_return_type instanceof Union
+            && $declared->return_type === $declared->signature_return_type
+        ) {
+            return self::makeNullable($declared->signature_return_type, $nullable);
         }
 
         $returnType = $codebase->getMethodReturnType($method, $castClass);
