@@ -14,6 +14,8 @@ namespace Psalm\LaravelPlugin\Blade;
  * contract: call before scanning starts) replaces this class, and with it the scan-time
  * {@see TemplateReportability::apply()} call in the issue remap.
  *
+ * @todo-by https://github.com/vimeo/psalm/issues/13718 delete this class and ProjectFileInjectorTest, call the new Psalm API from the boot instead, and raise the Psalm floor in composer.json to the release that ships it
+ *
  * WHEN the write may happen is the caller's problem: see {@see TemplateReportability}, which owns
  * that decision. The boot only {@see self::canInject() probes} that the write can work.
  *

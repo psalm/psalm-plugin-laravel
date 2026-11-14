@@ -99,6 +99,7 @@ final class BladeIssueRemapHandler implements BeforeAddIssueInterface
 
         // A scan-time diagnostic (`DuplicateFunction`) arrives before AfterCodebasePopulated, when the
         // template is not yet reportable and the gate in `accepts()` would drop it.
+        // @todo-by https://github.com/vimeo/psalm/issues/13718 delete this scan-time TemplateReportability::apply() call once templates are reportable from boot
         TemplateReportability::apply();
 
         self::$remapping = true;
