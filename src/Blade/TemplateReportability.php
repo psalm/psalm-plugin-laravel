@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Blade;
 use Psalm\CodeLocation\Raw;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
 use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Internal\PluginWarning;
 use Psalm\LaravelPlugin\Issues\BladeCompileError;
 use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
 use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
@@ -71,21 +72,32 @@ final class TemplateReportability implements AfterCodebasePopulatedInterface
      *
      * Safe while Psalm is still scanning: it copied the list before `scanFiles()`, so a later write
      * enqueues nothing.
+     *
+     * @return bool false when the write failed
      */
-    public static function apply(): void
+    public static function apply(): bool
     {
         if (self::$applied || self::$templatePaths === []) {
-            return;
+            return true;
         }
 
         self::$applied = ProjectFileInjector::inject(ProjectAnalyzer::getInstance(), self::$templatePaths);
+
+        return self::$applied;
     }
 
     #[\Override]
     public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
     {
-        // Before any report: the issues below are filtered through the project-file list.
-        self::apply();
+        // Before any report: the issues below are filtered through the project-file list. The boot
+        // probed that the write works, so a failure here means Psalm changed under us; nothing can
+        // degrade any more, so say it rather than lose every template issue silently.
+        if (!self::apply()) {
+            PluginWarning::emit(
+                $event->getCodebase()->progress,
+                'Laravel plugin: Blade templates could not be made reportable, so no issue found in them is reported.',
+            );
+        }
 
         $config = $event->getCodebase()->config;
 

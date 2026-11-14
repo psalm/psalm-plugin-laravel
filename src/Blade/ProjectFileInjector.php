@@ -28,11 +28,15 @@ final class ProjectFileInjector
     private const PROPERTY = 'project_files';
 
     /**
-     * Whether {@see self::inject()} could write to this target, without writing.
+     * Whether {@see self::inject()} could write to this target. Writes the current value back: a
+     * readonly or otherwise unwritable property passes every read guard and would only fail later,
+     * when nothing can degrade any more.
      */
     public static function canInject(object $projectAnalyzer): bool
     {
-        return self::read($projectAnalyzer) !== null;
+        $read = self::read($projectAnalyzer);
+
+        return $read !== null && self::write($projectAnalyzer, $read[0], $read[1]);
     }
 
     /**
@@ -58,6 +62,14 @@ final class ProjectFileInjector
             $projectFiles[$filePath] = $filePath;
         }
 
+        return self::write($projectAnalyzer, $property, $projectFiles);
+    }
+
+    /**
+     * @param array<array-key, mixed> $projectFiles
+     */
+    private static function write(object $projectAnalyzer, \ReflectionProperty $property, array $projectFiles): bool
+    {
         try {
             $property->setValue($projectAnalyzer, $projectFiles);
         } catch (\Throwable) {
