@@ -39,6 +39,7 @@ The check declines rather than guess. On top of the shared [supported call sites
 
 - The template declares nothing, or its `@props([...])` array is not fully literal (the declared set is then only a lower bound).
 - The `@props` entry carries a literal default, which Blade fills in itself, or the `@var` declaration ends in `= null`.
+- A `@var` declaration that nothing in the template or its `@include` chain reads: a stale declaration owes the call site nothing. This follows the read set of [UnusedViewData](UnusedViewData.md#limitations), so a template whose reads cannot be proven (`$$name`, `extract()`, a dynamic `@include`) keeps this report.
 - The name is one the framework supplies to every view (`$app`, `$errors`, anything a provider `share()`d at boot): it is never a declaration.
 - The variable is supplied by a view composer or creator. The other declared variables of that view are still checked, but when a composer cannot be read, the whole view is skipped. See [Composers and creators](../blade.md#composers-and-creators).
 - The call site is the `render()` method of an `Illuminate\View\Component` subclass: `render()` is public and a caller can chain `->with([...])` on its result. Its framework-supplied properties still take part in [InvalidViewData](InvalidViewData.md). See [Framework-supplied data](../blade.md#framework-supplied-data), which also lists the Mailable, MailMessage and Livewire receivers with an open key set.
