@@ -18,7 +18,7 @@ use Symfony\Component\Process\Process;
  * End-to-end proof that an issue Psalm finds in a shadow file surfaces on the `.blade.php` path and
  * line instead. A real `vendor/bin/psalm` run is the only way to pin it: the remap depends on Psalm
  * dispatching `BeforeAddIssue` before its reportability and suppression gates, and on the template
- * having been written into `ProjectAnalyzer`'s private project-file list (after scanning, or earlier by the remap itself).
+ * having been made reportable (`Codebase::addReportableFiles()`) at boot.
  */
 #[CoversClass(BladeIssueRemapHandler::class)]
 #[CoversClass(ShadowIssueRelocator::class)]
@@ -192,10 +192,10 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #2303: Psalm 7.4+ builds its file lists after plugins load, so a template written into the
-     * project-file list too early is also scanned and analyzed as plain PHP. Its raw `<?php` block then
-     * reports natively, on top of the remapped shadow issue. Scoped to this template: a ParseError or
-     * a trace legitimately repeats a (type, line) elsewhere.
+     * #2303: a template must be reportable without joining the scan and analysis lists. Written into
+     * Psalm's project-file list it would also be analyzed as plain PHP on Psalm 7.4+, and its raw `<?php`
+     * block would report natively on top of the remapped shadow issue. Scoped to this template: a
+     * ParseError or a trace legitimately repeats a (type, line) elsewhere.
      */
     #[Test]
     public function a_template_with_a_php_block_reports_no_duplicate_native_issue(): void

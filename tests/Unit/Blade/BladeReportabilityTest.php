@@ -8,25 +8,24 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Psalm\LaravelPlugin\Blade\TemplateReportability;
+use Psalm\LaravelPlugin\Blade\PsalmShadowRegistrar;
 
 /**
- * Two runs only the real Psalm can answer, each in a fixture of its own. The shared fixtures cannot
- * prove the `AfterCodebasePopulated` hook is registered, because the remap calls `apply()` on every
- * issue it relocates; the compile-failure-only run is the one that does.
+ * Two runs only the real Psalm can answer, each in a fixture of its own: whether a template is
+ * reportable at the moment Psalm raises an issue in its shadow, and whether a run where nothing
+ * compiled still reports why.
  */
-#[CoversClass(TemplateReportability::class)]
+#[CoversClass(PsalmShadowRegistrar::class)]
 #[Group('subprocess')]
-final class TemplateReportabilityTest extends TestCase
+final class BladeReportabilityTest extends TestCase
 {
     use AnalysesFixtureApp;
 
     private const ARGUMENTS = ['-c', 'psalm.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json'];
 
     /**
-     * Psalm reports `DuplicateFunction` while SCANNING the shadow, before `AfterCodebasePopulated`
-     * could make the template reportable. The remap re-emits it on the template path, so it has to
-     * make the template reportable itself or the gate drops the one finding.
+     * Psalm reports `DuplicateFunction` while SCANNING the shadow. The remap re-emits it on the
+     * template path, so the template has to be reportable by then, not only once analysis starts.
      */
     #[Test]
     public function a_diagnostic_psalm_raises_while_scanning_a_shadow_is_reported_on_the_template(): void
@@ -41,8 +40,8 @@ final class TemplateReportabilityTest extends TestCase
     }
 
     /**
-     * Every template fails to compile, so the boot activates nothing and returns false: the handler
-     * that reports `BladeCompileError` must still register, and the template must still be reportable.
+     * Every template fails to compile, so the boot activates nothing and returns false; the
+     * template must still be reportable for its `BladeCompileError` to survive.
      */
     #[Test]
     public function a_run_where_every_template_fails_to_compile_still_reports_each_failure(): void
@@ -54,6 +53,22 @@ final class TemplateReportabilityTest extends TestCase
             $this->onTemplate($issues, 'prose-directive.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * With `hideAllErrorsExceptPassedFiles`, a run on one explicit file reports that file only. Psalm
+     * fills the list of passed files AFTER plugins initialize, and treats an empty list as "no filter",
+     * so a `BladeCompileError` emitted at boot would leak an unrelated template into the report.
+     */
+    #[Test]
+    public function a_single_file_run_with_hidden_errors_does_not_report_an_unrelated_templates_compile_failure(): void
+    {
+        $issues = $this->fixtureIssues(
+            __DIR__ . '/Fixtures/BladeCompileFailureOnly',
+            ['-c', 'psalm-hide.xml', '--no-cache', '--threads=1', '--no-progress', '--output-format=json', 'app/Marker.php'],
+        );
+
+        $this->assertSame([], $issues, \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR));
     }
 
     /**

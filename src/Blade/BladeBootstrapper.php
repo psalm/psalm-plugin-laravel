@@ -164,16 +164,15 @@ final class BladeBootstrapper
 
         if ($shadows === []) {
             // Nothing joins the analysis and no template fact is published, but a compile failure
-            // still gets its issue (recorded here, reported at AfterCodebasePopulated): an app whose
-            // every template fails would otherwise go silent under --no-progress.
-            $reported = $this->compileFailures !== []
-                && $this->registrar->recordReportableTemplates(\array_keys($this->compileFailures));
-
-            if ($reported) {
-                $this->reportCompileFailures();
+            // still gets its issue (recorded here, reported once Psalm knows the files passed on the
+            // command line): an app whose every template fails would otherwise go silent under
+            // --no-progress.
+            if ($this->compileFailures !== []) {
+                $this->registrar->makeTemplatesReportable(\array_keys($this->compileFailures));
+                $this->recordCompileFailures();
             }
 
-            $this->reportFailures($failures, $reported ? $this->compileFailures : []);
+            $this->reportFailures($failures, $this->compileFailures);
 
             // Unreadable view roots and nothing found elsewhere: the user asked for Blade and got none of it.
             if ($templates === [] && $failures !== []) {
@@ -188,22 +187,12 @@ final class BladeBootstrapper
             return false;
         }
 
-        // The run is about to activate and each compile failure becomes an issue (reported at
-        // AfterCodebasePopulated), so the warning keeps only the rest. If activation fails after
-        // all, the degradation warning covers every template.
+        // The run is about to activate and report each compile failure as an issue, so the warning
+        // keeps only the rest.
         $this->reportFailures($failures, $this->compileFailures);
 
-        // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry. This only probes that
-        // Psalm's project-file list is writable and records the paths: the write is deferred to
-        // AfterCodebasePopulated (TemplateReportability), after Psalm has built its scan lists.
-        if (!$this->registrar->recordReportableTemplates($templates)) {
-            $this->degrade(
-                "issues found in Blade templates could not be made reportable (Psalm's internal project-file "
-                . 'list is not writable on this Psalm version)',
-            );
-
-            return false;
-        }
+        // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry.
+        $this->registrar->makeTemplatesReportable($templates);
 
         // Psalm's scanner only reads the LAST stacked docblock comment on a node (see
         // ShadowRegistrar::queueClassLikesForScanning); queued once so a warm-manifest run
@@ -260,12 +249,12 @@ final class BladeBootstrapper
 
         $this->publishTemplateFacts();
         ContractRegistry::registerComposerSources($composerSources);
-        $this->reportCompileFailures();
+        $this->recordCompileFailures();
 
         return true;
     }
 
-    private function reportCompileFailures(): void
+    private function recordCompileFailures(): void
     {
         foreach ($this->compileFailures as $templatePath => [$source, $message]) {
             $this->registrar->recordCompileFailure($templatePath, $source, $message);

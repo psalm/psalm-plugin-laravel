@@ -17,9 +17,9 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
  *    it: `Analyzer::addFilesToAnalyze()` already writes the same `files_with_analysis_results` map,
  *    and making the shadow reportable in `ProjectAnalyzer` would make `TaintFlowGraph` skip every
  *    flow whose source sits in it.
- *  - the TEMPLATE is reportable but never analyzed: it is not PHP. Only the project-file write
- *    applies to it, which is what lets a later remap put an issue on the `.blade.php` path. That
- *    write is deferred, see {@see TemplateReportability}.
+ *  - the TEMPLATE is reportable but never analyzed: it is not PHP. `Codebase::addReportableFiles()`
+ *    is all that applies to it, which is what lets a later remap put an issue on the `.blade.php`
+ *    path, whether Psalm raises it while scanning the shadow or while analyzing it.
  *
  * @internal
  */
@@ -30,18 +30,15 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
      */
     public function __construct(private readonly ProjectAnalyzer $projectAnalyzer) {}
 
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     *
+     * @psalm-impure
+     */
     #[\Override]
-    public function recordReportableTemplates(array $templatePaths): bool
+    public function makeTemplatesReportable(array $templatePaths): void
     {
-        // @todo-by https://github.com/vimeo/psalm/issues/13718 drop this writability probe and the "not writable" degrade branch in BladeBootstrapper::run()
-        if (!ProjectFileInjector::canInject($this->projectAnalyzer)) {
-            return false;
-        }
-
-        TemplateReportability::record($templatePaths);
-
-        return true;
+        $this->projectAnalyzer->getCodebase()->addReportableFiles($templatePaths);
     }
 
     /**
@@ -98,7 +95,7 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     #[\Override]
     public function recordCompileFailure(string $templatePath, string $source, string $message): void
     {
-        TemplateReportability::recordCompileFailure($templatePath, $source, $message);
+        CompileFailureReporter::record($templatePath, $source, $message);
     }
 
     /**

@@ -283,8 +283,8 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         Blade\ContractRegistry::reset();
         Blade\ComponentViewRegistry::reset();
         Blade\RuntimeHelperVisibility::reset();
+        Blade\CompileFailureReporter::reset();
         Blade\ShadowRegistry::reset();
-        Blade\TemplateReportability::reset();
         Blade\ViewReferenceRegistry::reset();
     }
 
@@ -848,12 +848,11 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Collections/EmptyCollectionLookupIssueHandler.php';
         $registration->registerHooksFromClass(Handlers\Collections\EmptyCollectionLookupIssueHandler::class);
 
-        // Makes the recorded Blade templates reportable and reports the ones that failed to compile (see
-        // TemplateReportability). Gated on recorded work, not on $bladeActive alone: a boot where every
-        // template failed to compile returns false yet still owes those BladeCompileError issues.
-        if ($bladeActive || Blade\TemplateReportability::hasCompileFailures()) {
-            require_once __DIR__ . '/Blade/TemplateReportability.php';
-            $registration->registerHooksFromClass(Blade\TemplateReportability::class);
+        // Reports the templates the compiler threw on. Registered only when the boot recorded a failure,
+        // which can happen when it activated nothing (every template failed), so not behind $bladeActive.
+        if (Blade\CompileFailureReporter::hasFailures()) {
+            require_once __DIR__ . '/Blade/CompileFailureReporter.php';
+            $registration->registerHooksFromClass(Blade\CompileFailureReporter::class);
         }
 
         // Moves issues found in a compiled Blade shadow onto the `.blade.php` line they came from;
@@ -1069,12 +1068,12 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
      * run: the shadows for analysis, the templates for reporting.
      *
      * Runs synchronously inside `__invoke()` because that is the only window in which a file can
-     * still join the analysis — Psalm calls `Config::initializePlugins()` before it scans.
-     * Only the shadows join the analysis here: the templates are merely RECORDED for reporting, see
-     * {@see Blade\TemplateReportability} for why and when they are written.
+     * still join the analysis — Psalm calls `Config::initializePlugins()` before it scans. The
+     * templates join it as reportable files (`Codebase::addReportableFiles()`), which Psalm applies
+     * to scan-time and analysis-time issues in every process.
      *
-     * Its per-run state (the Blade registries, `Blade\TemplateReportability`, `RuntimeHelperVisibility`)
-     * is reset in `resetInvocationState()`; the compile itself starts from the manifest on disk, whose
+     * Its per-run state (the Blade registries, `RuntimeHelperVisibility`) is reset in
+     * `resetInvocationState()`; the compile itself starts from the manifest on disk, whose
      * fingerprints carry the Laravel version, the plugin version, and the booted `BladeCompiler`'s own
      * registration surface (see `Blade\CompilerEnvironment::describe()`).
      *
@@ -1082,8 +1081,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
      *                                                Blade disabled itself
      *
      * @return bool whether the boot actually activated: false means it degraded with a warning and
-     *              published nothing, so no Blade handler may register, except `Blade\TemplateReportability` when a
-     *              compile failure was recorded
+     *              published nothing, so no Blade handler may register
      *
      * @throws Blade\BladeDisabledException when Blade disabled itself and `failOnInternalError` is on
      */

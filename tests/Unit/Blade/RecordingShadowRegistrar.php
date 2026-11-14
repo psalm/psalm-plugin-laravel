@@ -7,8 +7,8 @@ namespace Tests\Psalm\LaravelPlugin\Unit\Blade;
 use Psalm\LaravelPlugin\Blade\ShadowRegistrar;
 
 /**
- * Records what the bootstrapper handed to Psalm, and can pretend the project-file write failed.
- * The real adapter needs a live `ProjectAnalyzer`, which a unit test cannot build.
+ * Records what the bootstrapper handed to Psalm. The real adapter needs a live `ProjectAnalyzer`,
+ * which a unit test cannot build.
  */
 final class RecordingShadowRegistrar implements ShadowRegistrar
 {
@@ -27,22 +27,13 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     /** @var list<array{0: string, 1: string, 2: string}> template path, source, message */
     public array $compileFailures = [];
 
-    public int $markCalls = 0;
-
-    public function __construct(private readonly bool $markSucceeds = true) {}
+    public int $reportableCalls = 0;
 
     #[\Override]
-    public function recordReportableTemplates(array $templatePaths): bool
+    public function makeTemplatesReportable(array $templatePaths): void
     {
-        ++$this->markCalls;
-
-        if (!$this->markSucceeds) {
-            return false;
-        }
-
+        ++$this->reportableCalls;
         $this->reportableTemplates = $templatePaths;
-
-        return true;
     }
 
     #[\Override]
