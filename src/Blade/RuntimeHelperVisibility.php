@@ -19,11 +19,12 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  * `define()`d constants in the same files reporting `UndefinedConstant` through the identical
  * mechanism.
  *
- * Psalm 7.4+ narrows that, but only in `check()` and `checkPaths()` runs, the ones that call
- * `visitAutoloadFiles()`: it snapshots the functions the process declared (after the boot) into
+ * Psalm 7.4+ narrows that in the runs that call `visitAutoloadFiles()` (`check()`, `checkPaths()`,
+ * the language server): it snapshots the functions the process declared (after the boot) into
  * `Config::getPredefinedFunctions()`, which resolves a helper by reflection, i.e. by its native
- * signature, for every file. `checkDir()` / `checkFile()` take no snapshot, and a docblock type is
- * invisible to reflection, so this injection stays what gives a shadow the helper's real signature.
+ * signature, for every file. `checkDir()` / `checkFile()` (e.g. Psalter) do not call it and take no
+ * snapshot, and a docblock type is invisible to reflection, so this injection stays what gives a
+ * shadow the helper's real signature.
  *
  * A template is rendered by a fully booted application, so "visible = what the boot declared" is
  * the faithful model, and it is far narrower than turning `allFunctionsGlobal` on. The injection is

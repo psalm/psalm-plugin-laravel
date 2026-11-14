@@ -82,7 +82,7 @@ final class ProjectFileInjectorTest extends TestCase
         $this->assertNull($target->read());
     }
 
-    /** The boot's degrade gate: probes without writing, and agrees with inject() on every shape. */
+    /** The boot's degrade gate: probes without changing the value, and agrees with inject() on every shape. */
     #[Test]
     public function the_probe_agrees_with_inject_and_writes_nothing(): void
     {

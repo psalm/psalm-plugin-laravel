@@ -11,8 +11,9 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Blade\TemplateReportability;
 
 /**
- * Two runs only the real Psalm can answer, each in a fixture of its own so the shared fixtures keep
- * exercising the `AfterCodebasePopulated` hook rather than the scan-time `apply()`.
+ * Two runs only the real Psalm can answer, each in a fixture of its own. The shared fixtures cannot
+ * prove the `AfterCodebasePopulated` hook is registered, because the remap calls `apply()` on every
+ * issue it relocates; the compile-failure-only run is the one that does.
  */
 #[CoversClass(TemplateReportability::class)]
 #[Group('subprocess')]
