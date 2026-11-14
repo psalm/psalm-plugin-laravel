@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794564888372,
+  "lastUpdate": 1794651696287,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18650,6 +18650,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1272,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "17141c77282c4831ca5d2fd683f2f1a3bbafd64c",
+          "message": "Support nested `@mixin` PHPDocs (like `@mixin \\Eloquent`) on Psalm 7.5 (#2301)\n\n* fix(eloquent): keep the Query Builder mixin above a builder's own @mixin\n\nPsalm 7.5 merges inherited mixins below a class's own ones\n(vimeo/psalm#13671) instead of dropping them. A builder subclass with\n`@mixin Model` then resolves Query\\Builder methods through the model,\nwhich claims them too, and fails. Place Query\\Builder last instead of\nskipping when it is already present.\n\nPin #2297 (models with laravel-ide-helper's `@mixin \\Eloquent`) with a\ntype test on the merged mixins, incl. a registered custom-builder model.\n\nRefs #2297\n\n* docs: document the supported laravel-ide-helper workflow\n\nRefs #2297\n\n* test: drop the transitive-helper name clash from the #2297 type test\n\nWhich mixin wins a clash between an inherited mixin and the own mixin's transitive chain is Psalm's ordering (vimeo/psalm#13687), not plugin behavior. The row still checks that a transitive helper member and builder methods both resolve.\n\n* docs: drop the laravel-ide-helper page",
+          "timestamp": "2026-11-14T11:18:56+01:00",
+          "tree_id": "872bbffc75a4c399b120f26339cdcda5deb9b1a9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/17141c77282c4831ca5d2fd683f2f1a3bbafd64c"
+        },
+        "date": 1794651694132,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.93,
+            "range": "± 0.38",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
             "unit": "MB"
           }
         ]
