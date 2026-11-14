@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade;
 
+use Psalm\CodeLocation\Raw;
 use Psalm\Config;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\IssueBuffer;
+use Psalm\LaravelPlugin\Issues\BladeCompileError;
 
 /**
  * Registers Blade shadows with the running Psalm analysis.
@@ -17,9 +20,9 @@ use Psalm\Internal\Analyzer\ProjectAnalyzer;
  *    it: `Analyzer::addFilesToAnalyze()` already writes the same `files_with_analysis_results` map,
  *    and making the shadow reportable in `ProjectAnalyzer` would make `TaintFlowGraph` skip every
  *    flow whose source sits in it.
- *  - the TEMPLATE is reportable but never analyzed: it is not PHP. Only the project-file write
- *    applies to it, which is what lets a later remap put an issue on the `.blade.php` path. That
- *    write is deferred, see {@see TemplateReportability}.
+ *  - the TEMPLATE is reportable but never analyzed: it is not PHP. `Codebase::addReportableFiles()`
+ *    is all that applies to it, which is what lets a later remap put an issue on the `.blade.php`
+ *    path, whether Psalm raises it while scanning the shadow or while analyzing it.
  *
  * @internal
  */
@@ -30,18 +33,15 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
      */
     public function __construct(private readonly ProjectAnalyzer $projectAnalyzer) {}
 
-    /** @inheritDoc */
+    /**
+     * @inheritDoc
+     *
+     * @psalm-capabilities read-props
+     */
     #[\Override]
-    public function recordReportableTemplates(array $templatePaths): bool
+    public function makeTemplatesReportable(array $templatePaths): void
     {
-        // @todo-by https://github.com/vimeo/psalm/issues/13718 drop this writability probe and the "not writable" degrade branch in BladeBootstrapper::run()
-        if (!ProjectFileInjector::canInject($this->projectAnalyzer)) {
-            return false;
-        }
-
-        TemplateReportability::record($templatePaths);
-
-        return true;
+        $this->projectAnalyzer->getCodebase()->addReportableFiles($templatePaths);
     }
 
     /**
@@ -96,9 +96,18 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     }
 
     #[\Override]
-    public function recordCompileFailure(string $templatePath, string $source, string $message): void
+    public function reportCompileFailure(string $templatePath, string $source, string $message): void
     {
-        TemplateReportability::recordCompileFailure($templatePath, $source, $message);
+        $name = $this->projectAnalyzer->getCodebase()->config->shortenFileName($templatePath);
+        $location = TemplateLocation::atLine($templatePath, $name, $source, 1)
+            ?? new Raw($source, $templatePath, $name, 0, 0);
+
+        // Nothing to suppress from: the template never compiled, so `<issueHandlers>` is the only
+        // way to silence it.
+        IssueBuffer::accepts(
+            new BladeCompileError("Template not analyzed: {$message}", $location),
+            [],
+        );
     }
 
     /**
