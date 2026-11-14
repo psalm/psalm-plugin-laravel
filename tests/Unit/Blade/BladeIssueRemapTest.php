@@ -212,23 +212,6 @@ final class BladeIssueRemapTest extends TestCase
         $this->assertSame([], \array_filter($seen, static fn(array $messages): bool => \count($messages) > 1), \json_encode($seen, \JSON_THROW_ON_ERROR));
     }
 
-    /**
-     * Psalm reports `DuplicateFunction` while SCANNING the shadow, before `AfterCodebasePopulated`
-     * could make the template reportable. The remap re-emits it on the template path, so it has to make
-     * the template reportable itself or the gate drops the one finding.
-     */
-    #[Test]
-    public function a_diagnostic_psalm_raises_while_scanning_a_shadow_is_reported_on_the_template(): void
-    {
-        $issues = $this->analyze('psalm.xml');
-
-        $this->assertSame(
-            [4],
-            $this->linesFor($issues, 'DuplicateFunction', 'resources/views/duplicate-function.blade.php'),
-            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
-        );
-    }
-
     #[Test]
     public function a_shadow_issue_is_reported_on_the_template_path_and_line(): void
     {

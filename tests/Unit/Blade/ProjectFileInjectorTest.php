@@ -115,7 +115,22 @@ final class ProjectFileInjectorTest extends TestCase
             }
         };
 
+        // Readable and initialized, so it passes every read guard; only the write refuses it.
+        $readonly = new class (['/app/Foo.php' => '/app/Foo.php']) {
+            /** @param array<string, string> $project_files */
+            public function __construct(private readonly array $project_files) {}
+
+            /** @return array<string, string> */
+            public function read(): array
+            {
+                return $this->project_files;
+            }
+        };
+
         $this->assertTrue(ProjectFileInjector::canInject($writable));
+        $this->assertFalse(ProjectFileInjector::canInject($readonly));
+        $this->assertFalse(ProjectFileInjector::inject($readonly, ['/views/a.blade.php']));
+        $this->assertSame(['/app/Foo.php' => '/app/Foo.php'], $readonly->read());
         $this->assertSame([], $writable->read());
         $this->assertFalse(ProjectFileInjector::canInject(new class {}));
         $this->assertFalse(ProjectFileInjector::canInject($notAnArray));
