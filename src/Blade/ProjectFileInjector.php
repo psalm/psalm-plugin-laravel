@@ -7,10 +7,15 @@ namespace Psalm\LaravelPlugin\Blade;
 /**
  * Adds paths to `ProjectAnalyzer::$project_files` after the fact.
  *
- * The project-file list is built from psalm.xml in the `ProjectAnalyzer` constructor, before
- * `Config::initializePlugins()` runs, and `ProjectAnalyzer::canReportIssues()` reads nothing else —
- * so a file the plugin generates at boot can never have issues reported for it without this write.
- * The property is private and there is no API for it on Psalm 6, hence reflection.
+ * That list is what `ProjectAnalyzer::canReportIssues()` reads, and `Config::reportIssueInFile()`
+ * consults it, so a file the plugin generates can never have issues reported for it without this
+ * write. Psalm builds the list inside `check()` / `checkPaths()` (`initProjectFiles()`), the property
+ * is private, and Psalm 7.5 has no public setter, hence reflection. A public API (vimeo/psalm#13718,
+ * contract: call before scanning starts) replaces this class, and with it the scan-time
+ * {@see TemplateReportability::apply()} call in the issue remap.
+ *
+ * WHEN the write may happen is the caller's problem: see {@see TemplateReportability}, which owns
+ * that decision. The boot only {@see self::canInject() probes} that the write can work.
  *
  * Every failure mode returns false instead of throwing, so a Psalm internal change costs the Blade
  * feature rather than the whole run. The target is typed `object` on purpose: the guards are the
@@ -23,6 +28,18 @@ final class ProjectFileInjector
     private const PROPERTY = 'project_files';
 
     /**
+     * Whether {@see self::inject()} could write to this target. Writes the current value back: a
+     * readonly or otherwise unwritable property passes every read guard and would only fail later,
+     * when nothing can degrade any more.
+     */
+    public static function canInject(object $projectAnalyzer): bool
+    {
+        $read = self::read($projectAnalyzer);
+
+        return $read !== null && self::write($projectAnalyzer, $read[0], $read[1]);
+    }
+
+    /**
      * @param list<string> $filePaths absolute paths
      *
      * @return bool false when the write did not happen
@@ -33,8 +50,42 @@ final class ProjectFileInjector
             return true;
         }
 
-        if (!\property_exists($projectAnalyzer, self::PROPERTY)) {
+        $read = self::read($projectAnalyzer);
+
+        if ($read === null) {
             return false;
+        }
+
+        [$property, $projectFiles] = $read;
+
+        foreach ($filePaths as $filePath) {
+            $projectFiles[$filePath] = $filePath;
+        }
+
+        return self::write($projectAnalyzer, $property, $projectFiles);
+    }
+
+    /**
+     * @param array<array-key, mixed> $projectFiles
+     */
+    private static function write(object $projectAnalyzer, \ReflectionProperty $property, array $projectFiles): bool
+    {
+        try {
+            $property->setValue($projectAnalyzer, $projectFiles);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array{0: \ReflectionProperty, 1: array<array-key, mixed>}|null
+     */
+    private static function read(object $projectAnalyzer): ?array
+    {
+        if (!\property_exists($projectAnalyzer, self::PROPERTY)) {
+            return null;
         }
 
         try {
@@ -43,24 +94,26 @@ final class ProjectFileInjector
             $property = new \ReflectionProperty($projectAnalyzer, self::PROPERTY);
 
             if (!$property->isInitialized($projectAnalyzer)) {
-                return false;
+                return null;
             }
 
-            $projectFiles = $property->getValue($projectAnalyzer);
-
-            if (!\is_array($projectFiles)) {
-                return false;
-            }
-
-            foreach ($filePaths as $filePath) {
-                $projectFiles[$filePath] = $filePath;
-            }
-
-            $property->setValue($projectAnalyzer, $projectFiles);
+            $projectFiles = self::asArray($property->getValue($projectAnalyzer));
         } catch (\Throwable) {
-            return false;
+            return null;
         }
 
-        return true;
+        return $projectFiles === null ? null : [$property, $projectFiles];
+    }
+
+    /**
+     * A helper rather than a local, so no `mixed` variable is left behind (type-coverage.md, pattern 6).
+     *
+     * @return array<array-key, mixed>|null
+     *
+     * @psalm-pure
+     */
+    private static function asArray(mixed $value): ?array
+    {
+        return \is_array($value) ? $value : null;
     }
 }

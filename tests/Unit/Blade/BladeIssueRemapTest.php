@@ -18,7 +18,7 @@ use Symfony\Component\Process\Process;
  * End-to-end proof that an issue Psalm finds in a shadow file surfaces on the `.blade.php` path and
  * line instead. A real `vendor/bin/psalm` run is the only way to pin it: the remap depends on Psalm
  * dispatching `BeforeAddIssue` before its reportability and suppression gates, and on the template
- * having been written into `ProjectAnalyzer`'s private project-file list at boot.
+ * having been written into `ProjectAnalyzer`'s private project-file list (after scanning, or earlier by the remap itself).
  */
 #[CoversClass(BladeIssueRemapHandler::class)]
 #[CoversClass(ShadowIssueRelocator::class)]
@@ -189,6 +189,27 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'InvalidArgument', 'resources/views/php-block-lines.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * #2303: Psalm 7.4+ builds its file lists after plugins load, so a template written into the
+     * project-file list too early is also scanned and analyzed as plain PHP. Its raw `<?php` block then
+     * reports natively, on top of the remapped shadow issue. Scoped to this template: a ParseError or
+     * a trace legitimately repeats a (type, line) elsewhere.
+     */
+    #[Test]
+    public function a_template_with_a_php_block_reports_no_duplicate_native_issue(): void
+    {
+        $seen = [];
+
+        foreach ($this->analyze('psalm.xml') as $issue) {
+            if (\str_ends_with($issue['file_path'], 'resources/views/php-block-lines.blade.php')) {
+                $seen[$issue['type'] . ':' . $issue['line_from']][] = $issue['message'];
+            }
+        }
+
+        $this->assertNotSame([], $seen);
+        $this->assertSame([], \array_filter($seen, static fn(array $messages): bool => \count($messages) > 1), \json_encode($seen, \JSON_THROW_ON_ERROR));
     }
 
     #[Test]

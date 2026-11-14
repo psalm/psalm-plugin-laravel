@@ -32,7 +32,7 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     public function __construct(private readonly bool $markSucceeds = true) {}
 
     #[\Override]
-    public function markTemplatesReportable(array $templatePaths): bool
+    public function recordReportableTemplates(array $templatePaths): bool
     {
         ++$this->markCalls;
 
@@ -72,7 +72,7 @@ final class RecordingShadowRegistrar implements ShadowRegistrar
     public function queueFilesForScanning(array $paths): void {}
 
     #[\Override]
-    public function reportCompileFailure(string $templatePath, string $source, string $message): void
+    public function recordCompileFailure(string $templatePath, string $source, string $message): void
     {
         $this->compileFailures[] = [$templatePath, $source, $message];
     }

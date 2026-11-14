@@ -13,6 +13,18 @@ if (!\function_exists('demo_helper')) {
     }
 }
 
+// The constraint lives only in the docblock, so Psalm sees it only through this file's own storage,
+// never through reflection of the declared function.
+if (!\function_exists('demo_positive')) {
+    /**
+     * @param positive-int $count
+     */
+    function demo_positive(int $count): int
+    {
+        return $count;
+    }
+}
+
 if (!\defined('DEMO_CONST')) {
     \define('DEMO_CONST', 'demo-const');
 }
