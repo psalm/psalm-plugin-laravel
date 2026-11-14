@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794658952693,
+  "lastUpdate": 1794659783261,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18715,6 +18715,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 35.6,
             "range": "± 0.46",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99a7827d46ae2f839aedb0f3f51f3404a97f22b2",
+          "message": "chore: add todo-by reminders for open Psalm upstream workarounds (#2306)",
+          "timestamp": "2026-11-14T13:32:59+01:00",
+          "tree_id": "b7d8677f358406c58a3eccf0fc60b4b5de683281",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/99a7827d46ae2f839aedb0f3f51f3404a97f22b2"
+        },
+        "date": 1794659781711,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.36,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
