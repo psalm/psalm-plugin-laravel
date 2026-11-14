@@ -21,12 +21,15 @@ ENV COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_MEMORY_LIMIT=-1 COMPOSER_NO_AUDIT=1 COMP
 # - laravel/framework: the plugin only conflicts with old Laravel, so it must be unlocked explicitly.
 # - the path repo's `versions` pin: /plugin has no .git here, and Composer's guessed version fails Psalm's
 #   `psalm/plugin-laravel: ^4.17.4` requirement.
-# - vimeo/psalm at the plugin's floor: the trend then moves only on commits here, not on Psalm tags.
+# - vimeo/psalm at the plugin's floor: the trend then moves only on commits here, not on Psalm tags. While the
+#   floor has no tag yet, `^floor` resolves it from the dev-master branch alias; the exact tag is pinned once it exists.
+# @todo-by 2026-11-15 Psalm 7.6.0 is released: delete the `git ls-remote` check in the RUN below that falls back to ^floor, and pin the exact floor again
 RUN composer update laravel-lang/http-statuses --no-progress \
     && composer config repositories.plugin '{"type": "path", "url": "/plugin", "options": {"symlink": true, "versions": {"psalm/plugin-laravel": "4.x-dev"}}}' \
     && composer config minimum-stability dev \
     && composer require --dev "psalm/plugin-laravel:*" --no-update \
     && PSALM_FLOOR=$(jq -er '.require["vimeo/psalm"] | split("||")[0] | gsub("^[\\s^~>=]+|\\s+$"; "")' /plugin/composer.json) \
+    && if [ -z "$(git ls-remote --tags https://github.com/vimeo/psalm "refs/tags/$PSALM_FLOOR")" ]; then PSALM_FLOOR="^$PSALM_FLOOR"; fi \
     && composer update psalm/plugin-laravel laravel/framework --with="vimeo/psalm:$PSALM_FLOOR" \
         --no-progress --with-all-dependencies \
     && composer show | grep -E '^(psalm/plugin-laravel|vimeo/psalm|laravel/framework) ' \
