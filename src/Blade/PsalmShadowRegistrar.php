@@ -33,7 +33,7 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
 
     /** @inheritDoc */
     #[\Override]
-    public function markTemplatesReportable(array $templatePaths): bool
+    public function recordReportableTemplates(array $templatePaths): bool
     {
         if (!ProjectFileInjector::canInject($this->projectAnalyzer)) {
             return false;
@@ -96,7 +96,7 @@ final class PsalmShadowRegistrar implements ShadowRegistrar
     }
 
     #[\Override]
-    public function reportCompileFailure(string $templatePath, string $source, string $message): void
+    public function recordCompileFailure(string $templatePath, string $source, string $message): void
     {
         TemplateReportability::recordCompileFailure($templatePath, $source, $message);
     }

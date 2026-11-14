@@ -27,7 +27,7 @@ interface ShadowRegistrar
      *
      * @psalm-impure
      */
-    public function markTemplatesReportable(array $templatePaths): bool;
+    public function recordReportableTemplates(array $templatePaths): bool;
 
     /**
      * @param list<string> $shadowPaths compiled PHP files, never `.blade.php` paths
@@ -79,12 +79,12 @@ interface ShadowRegistrar
     /**
      * Records a template the compiler threw on, to be reported at its line 1 as `BladeCompileError`
      * once its path is reportable (`AfterCodebasePopulated`, after the deferred write of
-     * {@see self::markTemplatesReportable()}). Only called after that succeeded for it.
+     * {@see self::recordReportableTemplates()}). Only called after that succeeded for it.
      *
      * @param string $source  the template source the compiler was given
      * @param string $message the compiler's cause, on one line
      *
      * @psalm-impure
      */
-    public function reportCompileFailure(string $templatePath, string $source, string $message): void;
+    public function recordCompileFailure(string $templatePath, string $source, string $message): void;
 }

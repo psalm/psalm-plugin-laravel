@@ -26,7 +26,7 @@ use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
  *
  * Psalm also reports some diagnostics WHILE scanning a shadow (`DuplicateFunction`), before this
  * hook fires. {@see BladeIssueRemapHandler} re-emits those on the template path and so calls
- * {@see self::apply()} first; the write is idempotent per process. A forked scanner worker applies
+ * {@see self::apply()} first; the write is idempotent. A forked scanner worker applies
  * in its own copy, which dies with it, so the parent still applies here.
  *
  * @internal
@@ -46,13 +46,16 @@ final class TemplateReportability implements AfterCodebasePopulatedInterface
      */
     public static function record(array $paths): void
     {
-        self::$templatePaths = \array_values(\array_unique([...self::$templatePaths, ...$paths]));
-        self::$applied = false;
+        self::addPaths($paths);
     }
 
+    /**
+     * Also records the path: a failed template must be reportable for its issue to survive the gate.
+     */
     public static function recordCompileFailure(string $templatePath, string $source, string $message): void
     {
         self::$compileFailures[$templatePath] = [$source, $message];
+        self::addPaths([$templatePath]);
     }
 
     public static function hasCompileFailures(): bool
@@ -68,7 +71,8 @@ final class TemplateReportability implements AfterCodebasePopulatedInterface
     }
 
     /**
-     * Writes the recorded templates into Psalm's project-file list, once per process.
+     * Writes the recorded templates into Psalm's project-file list, at most once per recording: a
+     * later `record()` or `recordCompileFailure()` clears the flag, so the next call writes again.
      *
      * Safe while Psalm is still scanning: it copied the list before `scanFiles()`, so a later write
      * enqueues nothing.
@@ -84,6 +88,15 @@ final class TemplateReportability implements AfterCodebasePopulatedInterface
         self::$applied = ProjectFileInjector::inject(ProjectAnalyzer::getInstance(), self::$templatePaths);
 
         return self::$applied;
+    }
+
+    /**
+     * @param list<string> $paths
+     */
+    private static function addPaths(array $paths): void
+    {
+        self::$templatePaths = \array_values(\array_unique([...self::$templatePaths, ...$paths]));
+        self::$applied = false;
     }
 
     #[\Override]

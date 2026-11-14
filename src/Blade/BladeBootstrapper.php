@@ -167,7 +167,7 @@ final class BladeBootstrapper
             // still gets its issue (recorded here, reported at AfterCodebasePopulated): an app whose
             // every template fails would otherwise go silent under --no-progress.
             $reported = $this->compileFailures !== []
-                && $this->registrar->markTemplatesReportable(\array_keys($this->compileFailures));
+                && $this->registrar->recordReportableTemplates(\array_keys($this->compileFailures));
 
             if ($reported) {
                 $this->reportCompileFailures();
@@ -196,7 +196,7 @@ final class BladeBootstrapper
         // Reached only with ≥1 shadow: a remap needs a ShadowRegistry entry. This only probes that
         // Psalm's project-file list is writable and records the paths: the write is deferred to
         // AfterCodebasePopulated (TemplateReportability), after Psalm has built its scan lists.
-        if (!$this->registrar->markTemplatesReportable($templates)) {
+        if (!$this->registrar->recordReportableTemplates($templates)) {
             $this->degrade(
                 "issues found in Blade templates could not be made reportable (Psalm's internal project-file "
                 . 'list is not writable on this Psalm version)',
@@ -268,7 +268,7 @@ final class BladeBootstrapper
     private function reportCompileFailures(): void
     {
         foreach ($this->compileFailures as $templatePath => [$source, $message]) {
-            $this->registrar->reportCompileFailure($templatePath, $source, $message);
+            $this->registrar->recordCompileFailure($templatePath, $source, $message);
         }
     }
 
