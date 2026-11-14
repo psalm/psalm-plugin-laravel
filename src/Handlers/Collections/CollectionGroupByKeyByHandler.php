@@ -18,6 +18,7 @@ use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInterface
@@ -55,6 +56,13 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             ? $source->getNodeTypeProvider()->getType($stmt->var)
             : null;
         if ($arg->isSingleStringLiteral()) {
+            // The result is rebuilt as `<class><key, value>`, which only matches a plain class receiver whose own
+            // templates are (TKey, TValue): a template-bound receiver (`C of Collection<..>`, #2005), an intersection
+            // or a subclass with a different template list would get a type it does not declare (#1917).
+            if (!self::keepsBaseTemplateLayout($lhs, $source->getCodebase())) {
+                return null;
+            }
+
             $model = ModelPropertyResolver::resolveExactlyOneModelClass($templates, 1, $lhs, $source->getCodebase());
             $key = $model === null ? null : self::resolveKeyType(
                 ModelPropertyHandler::resolveColumnType($source->getCodebase(), $model, $arg->getSingleStringLiteral()->value),
@@ -132,6 +140,53 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
 
         foreach ($lhs->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject || $atomic->extra_types !== [] || !self::isBaseCollection($atomic->value)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Every receiver atomic is a named class without intersections that is a base collection, or a subclass declaring
+     * no templates of its own (`@extends Collection<int, Model>`) or exactly `<TKey, TValue>` passed through in order.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function keepsBaseTemplateLayout(?Union $lhs, \Psalm\Codebase $codebase): bool
+    {
+        if (!$lhs instanceof Union) {
+            return false;
+        }
+
+        foreach ($lhs->getAtomicTypes() as $atomic) {
+            if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []) {
+                return false;
+            }
+
+            if (self::isBaseCollection($atomic->value)) {
+                continue;
+            }
+
+            try {
+                $storage = $codebase->classlike_storage_provider->get($atomic->value);
+            } catch (\InvalidArgumentException) {
+                return false;
+            }
+
+            $own = \array_keys($storage->template_types ?? []);
+            if ($own === []) {
+                continue;
+            }
+
+            $extended = $storage->template_extended_params[Collection::class] ?? [];
+            $passed = [];
+            foreach ($extended as $union) {
+                $single = $union->isSingle() ? $union->getSingleAtomic() : null;
+                $passed[] = $single instanceof TTemplateParam ? $single->param_name : null;
+            }
+
+            if (\count($own) !== 2 || $passed !== $own) {
                 return false;
             }
         }
