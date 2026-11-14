@@ -2,6 +2,7 @@
 <?php declare(strict_types=1);
 
 use App\Models\AbstractUuidKeyModel;
+use App\Models\Admin;
 use App\Models\ConflictingKeyCastModel;
 use App\Models\GetKeyOverrideModel;
 use App\Models\KeylessPermission;
@@ -100,6 +101,27 @@ function test_get_key_conflicting_cast(ConflictingKeyCastModel $model): int|stri
 {
     $key = $model->getKey();
     /** @psalm-check-type-exact $key = int|string */
+
+    return $key;
+}
+
+/**
+ * The non-final framework User is the base of app models that may switch the key type with
+ * HasUlids/HasUuids, so its own int default must not be assumed for every subclass.
+ */
+function test_get_key_non_final_framework_user(\Illuminate\Foundation\Auth\User $user): int|string
+{
+    $key = $user->getKey();
+    /** @psalm-check-type-exact $key = int|string */
+
+    return $key;
+}
+
+/** An app model extending the framework User still narrows: its subclasses are the app's own. */
+function test_get_key_app_model_extending_framework_user(Admin $admin): int
+{
+    $key = $admin->getKey();
+    /** @psalm-check-type-exact $key = int */
 
     return $key;
 }

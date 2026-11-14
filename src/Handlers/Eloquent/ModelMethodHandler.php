@@ -759,7 +759,7 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         if ($methodName === 'getkey') {
-            return self::getKeyReturnType($called_fq_classlike_name);
+            return self::getKeyReturnType($called_fq_classlike_name, $codebase);
         }
 
         // Model::query(), and Model::with() which is `static::query()->with(...)` (issue #1678)
@@ -836,13 +836,30 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         return true;
     }
 
+    /** @psalm-capabilities read-props */
+    private static function isFinalModel(Codebase $codebase, string $modelFqcn): bool
+    {
+        try {
+            return $codebase->classlike_storage_provider->get(\strtolower($modelFqcn))->final;
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+    }
+
     /**
      * Narrow Model::getKey()'s stub return (`int|string`) using the registry's primary-key
      * metadata. Every bail returns null so the stub fallback applies — this only narrows,
      * it never widens or invents a type.
      */
-    private static function getKeyReturnType(string $modelFqcn): ?Union
+    private static function getKeyReturnType(string $modelFqcn, Codebase $codebase): ?Union
     {
+        // A non-final framework model (Illuminate\Foundation\Auth\User) is a base for app subclasses
+        // that switch the key type with HasUlids/HasUuids; its own default must not be assumed
+        // for them. Non-final app models keep narrowing: their subclasses are the app's to own.
+        if (\str_starts_with($modelFqcn, 'Illuminate\\') && !self::isFinalModel($codebase, $modelFqcn)) {
+            return null;
+        }
+
         /** @var class-string $modelFqcn */
         $metadata = ModelMetadataRegistry::for($modelFqcn);
 
