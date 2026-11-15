@@ -520,8 +520,9 @@ final class ComponentViewRegistry
 
         $functionId = \strtolower(\ltrim($namespaced, '\\'));
 
-        // Psalm resolves the same call in that file this way: its own (and included) declarations, then stubbed ones.
-        if ($codebase->functions->hasStubbedFunction($functionId)) {
+        // Psalm resolves the same call in that file through its own and included declarations, then stubbed ones;
+        // the booted app is in this process, so a function it declared at runtime (a `require`d helper) counts too.
+        if ($codebase->functions->hasStubbedFunction($functionId) || \function_exists($functionId)) {
             return false;
         }
 
