@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794691138416,
+  "lastUpdate": 1794782508321,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18785,6 +18785,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.15,
             "range": "± 0.27",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1230,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0e010b4ba9223ac60ac2bf564a8630e3b6050b53",
+          "message": "Fix crash on Psalm 7.6.0 when a class component calls an unqualified `view()` (#2311)\n\n* fix(blade): resolve a namespaced view() like Psalm does, without Functions::isDeclaredInCode()\n\n* fix(blade): decline a namespaced view() the booted app declares",
+          "timestamp": "2026-11-15T23:39:01+01:00",
+          "tree_id": "8c58e388ffe8f2e48ce4d2f304d5dd35d7907294",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0e010b4ba9223ac60ac2bf564a8630e3b6050b53"
+        },
+        "date": 1794782506491,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.77,
+            "range": "± 0.76",
             "unit": "s"
           },
           {
