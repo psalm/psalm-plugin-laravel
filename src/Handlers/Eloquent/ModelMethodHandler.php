@@ -53,8 +53,8 @@ use Psalm\Type\Union;
  * deferred to the stubs at
  * `stubs/common/Database/Eloquent/Model.phpstub` whose `static`/`$this` annotations preserve
  * model-specific template binding through Psalm's type expansion (see #799).
- * `__callStatic` is similarly proxied for methods resolvable through the single-hop mixin
- * chain.
+ * `__callStatic` is similarly proxied for the Query\Builder methods confirmed by
+ * {@see self::doesMethodExist()}.
  *
  * Builder-instance handlers (trait methods and scopes on custom builders) are in
  * {@see CustomBuilderMethodHandler}.
@@ -301,7 +301,8 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
      *
      * We only handle:
      * 1. Query\Builder methods not explicitly on Eloquent\Builder (e.g., whereIn, orderBy)
-     *    These can't be reached through the double mixin: Model → Builder → Query\Builder.
+     *    Psalm reaches them through Model → Builder → Query\Builder too, but with Query\Builder's
+     *    own types; Eloquent\Builder::__call returns the Eloquent builder, which the fake call keeps.
      * 2. Scope methods (legacy scopeX or #[Scope] attribute)
      *
      * Registered as a closure per concrete Model class by {@see ModelRegistrationHandler}.
@@ -603,10 +604,10 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         }
 
         // Methods on Query\Builder that are NOT on Eloquent\Builder (e.g., whereIn,
-        // orderBy). At runtime these are forwarded via Builder::__call → forwardCallTo.
-        // Psalm's single-level mixin resolution can't reach them through the double hop:
-        // Model → Builder → Query\Builder. Confirm existence so Psalm doesn't emit
-        // UndefinedMagicMethod.
+        // orderBy). At runtime these are forwarded via Builder::__call → forwardCallTo,
+        // which returns the Eloquent builder. Psalm's mixin chain Model → Builder →
+        // Query\Builder would type them with Query\Builder's own returns, so confirm
+        // existence here and let the forwarded fake call type them.
         if ($codebase->methodExists(new MethodIdentifier(QueryBuilder::class, $methodName))) {
             return self::$unresolvedCache[$key] = true;
         }
@@ -648,9 +649,13 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
         //
         // A PUBLIC real method declared on the concrete model (own, trait, or parent) is dispatched by
         // PHP before __callStatic/__call, so it is never a dynamic where; an inaccessible one is not.
+        // A macro or `@method` on the model's Eloquent builder is not one either: Builder::__call runs
+        // macros before forwarding to Query\Builder's dynamicWhere. Declining lets Psalm resolve it
+        // through the model's `@mixin Builder<static>`, which a confirmed existence would skip.
         if (
             DynamicWhereResolver::isEnabled()
             && !self::hasPublicMethod($codebase, $modelClass, $methodName)
+            && !self::builderDeclaresPseudoMethod($codebase, $modelClass, $methodName)
             && DynamicWhereResolver::methodMatchesColumns($codebase, $modelClass, $methodName)
         ) {
             return self::$unresolvedCache[$key] = true;
@@ -667,6 +672,28 @@ final class ModelMethodHandler implements MethodReturnTypeProviderInterface
     private static function hasPublicMethod(Codebase $codebase, string $modelClass, string $methodName): bool
     {
         return self::effectiveVisibility($codebase, $modelClass, $methodName) === ClassLikeAnalyzer::VISIBILITY_PUBLIC;
+    }
+
+    /**
+     * Whether the model's Eloquent builder (its custom builder, or the base Builder) carries the
+     * method as a pseudo-method: a registered macro (MacroHandler) or a builder `@method` tag.
+     *
+     * @param class-string<Model> $modelClass
+     * @param lowercase-string $methodName
+     */
+    private static function builderDeclaresPseudoMethod(Codebase $codebase, string $modelClass, string $methodName): bool
+    {
+        foreach (\array_unique([self::getBuilderClassForModel($modelClass), Builder::class]) as $builderClass) {
+            try {
+                if (isset($codebase->classlike_storage_provider->get($builderClass)->pseudo_methods[$methodName])) {
+                    return true;
+                }
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+        }
+
+        return false;
     }
 
     /**
