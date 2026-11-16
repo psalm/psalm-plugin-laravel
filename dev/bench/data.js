@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794838509234,
+  "lastUpdate": 1794838785031,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18890,6 +18890,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.45,
             "range": "± 0.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd0d372fb13adf63b72beb9ab48ebdae367dad05",
+          "message": "Pin `shivammathur/setup-php` to 2.40.0 and scope poutine's unverified-creator rule (#2316)\n\n* ci: pin shivammathur/setup-php to 2.40.0 by exact tag\n\nThe '# v2' comment named a moving tag that no longer points at the pinned SHA (2.37.2), which zizmor reports as ref-version-mismatch.\n\n* ci: skip poutine unverified-creator findings for reviewed actions\n\nThe rule flags every SHA-pinned use of six reviewed actions whose owners are missing from the verified-creator list bundled with poutine 1.1.4. Every edit to such a line re-raises the alert. The skip is scoped to this rule and these actions, so a newly added unverified action is still reported.",
+          "timestamp": "2026-11-16T15:16:15+01:00",
+          "tree_id": "beee9a70a5742c00405aeb216a97ad8f3f939424",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/cd0d372fb13adf63b72beb9ab48ebdae367dad05"
+        },
+        "date": 1794838783416,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 36.94,
+            "range": "± 0.16",
             "unit": "s"
           },
           {
