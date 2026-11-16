@@ -330,6 +330,19 @@ Both are Psalm-side defects. The stub does not work around them: a per-shape wor
 
 **Boundaries:** `splice()` keeps its receiver key type `TKey` (`array_splice()` renumbers integer keys, which is not modelled) and returns the removed slice, so only its this-out carries the replacement values. `getOrPut()` leaves the key unbounded because Laravel accepts `mixed`.
 
+### Range keys of a literal array are widened at `collect()` / `make()` (#1766)
+
+**Decision:** `CollectionInputTypeResolver` binds `int` for a key that is an int range (`int<0, 1>` for `[$a, $b]`, `int<0, max>` for a `list<T>`) when an array reaches `collect()`, `Collection::make()` or `LazyCollection::make()`. Values stay as Psalm infers them. It declines (the stub binding stays) when no key is a range, so `[]` keeps `Collection<never, never>`. An unpacked first argument (`collect(...$args)`) is declined by both providers, since the element type is not the array being unpacked.
+
+**Why:** `TKey` is invariant, so `@return Collection<int, Item>` rejected `return collect([$a, $b]);` (root cause: [vimeo/psalm#10985](https://github.com/vimeo/psalm/issues/10985)). Range keys are the strict case. Psalm skips the invariant check for an argument holding a literal, so literal keys (`Collection<0, A>`, `Collection<'x', A>`) already satisfy `Collection<int|string, A>`.
+
+**Rejected (probed):**
+- Widening literal keys: adds `InvalidArgument` at bare `Collection` params (`Collection<array-key, mixed>`).
+- Widening literal values (`[1]` to `Collection<int, int>`): not part of #1766, and it removes the literal leniency Psalm applies to class-strings, callable strings, shaped rows and mixed unions, so correct code starts failing.
+- A `new Collection([...])` handler: no probed call site was rejected, and overriding it only added errors.
+
+**Accepted cost:** a declaration that pinned the narrow key (`Collection<int<0, 1>, T>`) no longer matches, and `collect(['x', 'y'])[$c->count() - 1]` is no longer flagged as a possibly missing key.
+
 ### Lookups on an empty collection: the `expects never` issue is dropped at emission, not widened in a stub
 
 **Decision:** `Handlers\Collections\EmptyCollectionLookupIssueHandler` (`BeforeAddIssueInterface`) drops an `InvalidArgument`/`PossiblyInvalidArgument`/`ArgumentTypeCoercion`/`InvalidScalarArgument` on `get`, `has`, `hasAny`, `contains`, `containsStrict`, `doesntContain`, `doesntContainStrict`, `search`, `offsetGet` or `offsetExists` of `Support\Collection` / `Eloquent\Collection` only when the expected type quoted in its message equals the declaring method's declared parameter with every class template replaced by `never` (`never`, `array<array-key, never>`, `callable(never, never):bool|string`, ...). It is registered before the Blade remap, which stops the dispatcher at the first bool. Companion stub fixes: `get()` takes `TKey|null` like Laravel, and `except()`/`only()`/`hasAny()` are `@psalm-variadic` because Laravel reads `func_get_args()` (they used to report `TooManyArguments`) (#1814).
