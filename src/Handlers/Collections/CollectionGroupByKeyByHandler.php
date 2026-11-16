@@ -57,9 +57,9 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             ? $source->getNodeTypeProvider()->getType($stmt->var)
             : null;
         if ($arg->isSingleStringLiteral()) {
-            // The result is rebuilt as `<class><key, value>`, which only matches a plain class receiver whose own
-            // templates are (TKey, TValue): a template-bound receiver (`C of Collection<..>`, #2005), an intersection
-            // or a subclass with a different template list would get a type it does not declare (#1917).
+            // The result is rebuilt as `<class><key, value>`, which only fits a receiver whose own templates are
+            // (TKey, TValue): an intersection or a subclass with a different template list would get a type it does
+            // not declare (#1917). A template-bound receiver (`C of Collection<..>`) is judged by its bound.
             if (!self::keepsBaseTemplateLayout($lhs, $source->getCodebase())) {
                 return null;
             }
@@ -83,6 +83,14 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         if (!$key instanceof Union || !$value instanceof Union) {
+            return null;
+        }
+
+        // Psalm replaces a parameterized `static` in the stub's return type with the receiver template itself, which
+        // discards our new arguments. That is only right when the call leaves the shape unchanged (#2005); otherwise
+        // (`groupBy()` always nests, `keyBy()` may change the key) keep the rebuilt type so a wrong `@return C` is
+        // reported (#2328).
+        if ($method === 'keyby' && self::isTemplateBound($lhs) && self::sameShape($templates, $key, $value)) {
             return null;
         }
 
@@ -148,9 +156,33 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         return true;
     }
 
+    /** @psalm-pure */
+    private static function isTemplateBound(?Union $lhs): bool
+    {
+        foreach ($lhs?->getAtomicTypes() ?? [] as $atomic) {
+            if ($atomic instanceof TTemplateParam) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
-     * Every receiver atomic is a named class without intersections that is a base collection, or a subclass declaring
-     * no templates of its own (`@extends Collection<int, Model>`) or exactly `<TKey, TValue>` passed through in order.
+     * @param list<Union>|null $templates
+     * @psalm-pure
+     */
+    private static function sameShape(?array $templates, Union $key, Union $value): bool
+    {
+        return isset($templates[0], $templates[1])
+            && $templates[0]->getId() === $key->getId()
+            && $templates[1]->getId() === $value->getId();
+    }
+
+    /**
+     * Every receiver atomic (a template parameter stands for its bound) is a named class without intersections that is
+     * a base collection, or a subclass declaring no templates of its own (`@extends Collection<int, Model>`) or exactly
+     * `<TKey, TValue>` passed through in order.
      *
      * Known limitation: for any other template list we decline, so Psalm resolves the stub's `static<array-key, TValue>`
      * positionally against the subclass's own templates and the `array-key` can land on a non-key slot; see
@@ -164,7 +196,14 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             return false;
         }
 
-        foreach ($lhs->getAtomicTypes() as $atomic) {
+        $pending = \array_values($lhs->getAtomicTypes());
+        while ($pending !== []) {
+            $atomic = \array_shift($pending);
+            if ($atomic instanceof TTemplateParam) {
+                \array_push($pending, ...\array_values($atomic->as->getAtomicTypes()));
+                continue;
+            }
+
             if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []) {
                 return false;
             }
