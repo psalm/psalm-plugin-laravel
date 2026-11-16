@@ -37,6 +37,13 @@ final class ReadSetResolver
      * A declaration in an included partial is no read of the host's, and the other way round: only an
      * actual read anywhere in the chain keeps a declaration alive, because the chain shares one scope.
      *
+     * Boundary: this models the scope reads in the template's own code (`get_defined_vars()`, `$__data`,
+     * `extract()`, variable variables, `include` / `eval`, `call_user_func*()`, callable strings naming
+     * scope or introspection functions) and declines on them. A read through stack introspection from
+     * code the template calls (a helper, a composer, a callback held in a variable calling
+     * `debug_backtrace()`) is out of scope: any callee can inspect the stack, so "provably unread"
+     * cannot cover it, and such a read can hide a MissingViewData.
+     *
      * @return list<string> declared variable names (without `$`)
      */
     public static function staleDeclarations(string $viewName): array
