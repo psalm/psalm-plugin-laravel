@@ -454,7 +454,7 @@ pseudo-method into `ClassLikeStorage::$pseudo_methods` **and** `$pseudo_static_m
 storage shape Psalm uses for `@method` annotations, so both `$instance->macroName()` and
 `Class::macroName()` resolve. It propagates macros to subclasses (walking `parent_classes`) and to
 facades that proxy to the Macroable owner (via `FacadeMapProvider`, including manager-forwarding
-facades like `Auth`/`Cache`/`Session`/`Storage`/`Mail`). Closure param/return types are recovered from
+facades like `Auth`/`Cache`/`Session`/`Storage`/`Mail`/`DB`/`Schema`). Closure param/return types are recovered from
 Psalm's own scanned `FunctionLikeStorage` when the closure's file is analysed (docblock-aware); a
 `: static` native return type narrows to the calling instance.
 

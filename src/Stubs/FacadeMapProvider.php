@@ -88,6 +88,12 @@ final class FacadeMapProvider
         \Illuminate\Session\Store::class => [\Illuminate\Support\Facades\Session::class, 'Session'],
         \Illuminate\Filesystem\FilesystemAdapter::class => [\Illuminate\Support\Facades\Storage::class, 'Storage'],
         \Illuminate\Mail\Mailer::class => [\Illuminate\Support\Facades\Mail::class, 'Mail'],
+        // `DatabaseManager` is Macroable itself (so `DB::macro()` already resolves) but its `__call`
+        // forwards unknown methods to the default Connection, where `DB::myMacro()` runs.
+        \Illuminate\Database\Connection::class => [\Illuminate\Support\Facades\DB::class, 'DB'],
+        // The `Schema` facade root is a driver builder (`SQLiteBuilder`, ...) while the macro store is
+        // declared on the shared base, so the exact-class root link never meets the registered macros.
+        \Illuminate\Database\Schema\Builder::class => [\Illuminate\Support\Facades\Schema::class, 'Schema'],
     ];
 
     /** @var array<lowercase-string, list<class-string>> service class → facade + alias classes */

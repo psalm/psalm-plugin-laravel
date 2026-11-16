@@ -103,6 +103,16 @@ final class ContainerResolver
             // some path-helpers actually return a string when being resolved
             $resolved = [$concrete, false];
         } elseif (\is_object($concrete)) {
+            // Container keys are case-sensitive, class lookup is not: see knownClassName(). An unbound,
+            // un-namespaced key (`schema`) that make() built anyway got there through PHP's
+            // case-insensitive lookup of a class_alias such as the `Schema` facade. A real app throws.
+            if (!\str_contains($abstract, '\\')
+                && $concrete::class !== $abstract
+                && !ApplicationProvider::getApp()->bound($abstract)
+            ) {
+                return null;
+            }
+
             // normally we have an object resolved
             $resolved = [$concrete::class, true];
         } else {
@@ -225,10 +235,12 @@ final class ContainerResolver
      * lack storage, and naming it reports UndefinedClass. Never autoloads: a class whose load raises a
      * deprecation would crash the run under Psalm's error handler, here where nothing catches it (#1652).
      *
-     * Psalm's storage lookup is case-insensitive but container keys are not: an un-namespaced `hash` or
-     * `schema` is a service key that must not match the global `Hash` / `Schema` facade alias class, so it
-     * has to be spelled exactly as the storage name. A namespaced name keeps the lenient match. A
-     * global-namespace `class_alias()` whose name differs from its target therefore stays unknown.
+     * Psalm's storage lookup is case-insensitive but container keys are not, in two places that share one
+     * rule: an un-namespaced `hash` or `schema` is a service key that must not match the global `Hash` /
+     * `Schema` facade alias class. Here the key has to be spelled exactly as the storage name (a namespaced
+     * name keeps the lenient match, and a global-namespace `class_alias()` whose name differs from its
+     * target stays unknown). In resolveFromApplicationContainer() the same key, when unbound, must not
+     * resolve through make() to an object whose class is not spelled exactly as the key.
      *
      * @psalm-mutation-free
      */
