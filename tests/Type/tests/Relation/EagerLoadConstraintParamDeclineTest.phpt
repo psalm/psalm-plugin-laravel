@@ -712,6 +712,69 @@ function test_overridden_collection_delegate_and_unknown_collection_decline(Chai
         takes_mixed($q);
     }]);
 }
+
+/**
+ * A Relation that overrides its forwarding `__call()` may hand the constraint its Builder.
+ *
+ * @extends HasMany<Vehicle, Customer>
+ */
+final class ForwardingHasMany extends HasMany
+{
+    /** @inheritDoc */
+    #[\Override]
+    public function __call($method, $parameters)
+    {
+        return parent::__call($method, $parameters);
+    }
+}
+
+function test_overridden_relation_forwarding_declines(ForwardingHasMany $relation): void
+{
+    $relation->with(['workOrders' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
+
+interface EagerMarker {}
+
+/**
+ * An intersection in the model param would be reduced to its class, dropping the interface a correctly annotated
+ * callback keeps.
+ *
+ * @param Builder<Customer&EagerMarker> $builder
+ * @param Collection<int, Customer&EagerMarker> $customers
+ */
+function test_model_intersections_decline(Builder $builder, Collection $customers): void
+{
+    $builder->with(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $customers->load(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $customers->loadMissing(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
+
+/** A by-reference param is valid for Laravel (`combineConstraints()` passes a local variable): never report a mismatch. */
+function test_by_reference_param_declines(): void
+{
+    Customer::query()->with('vehicles', function (HasMany &$q): void {
+        takes_mixed($q);
+    });
+    Customer::query()->with(['vehicles' => function (HasMany &$q): void {
+        takes_mixed($q);
+    }]);
+    Customer::query()->with(['vehicles' => function (&$q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
 ?>
 --EXPECTF--
 MissingClosureParamType on line %d: Parameter $q has no provided type
@@ -776,5 +839,10 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 LessSpecificImplementedReturnType on line %d: %s
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type

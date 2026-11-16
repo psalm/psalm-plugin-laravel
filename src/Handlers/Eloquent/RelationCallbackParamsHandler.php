@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\HasCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Traits\ForwardsCalls;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
@@ -559,7 +560,8 @@ final class RelationCallbackParamsHandler implements
         $callbackForm = $relations instanceof String_
             && !\str_contains($relations->value, ':')
             && ($callback instanceof Closure || $callback instanceof ArrowFunction)
-            && !($callback->params[0]->variadic ?? false);
+            && !($callback->params[0]->variadic ?? false)
+            && !($callback->params[0]->byRef ?? false);
         $call = (self::$calls[$args[0]] ?? null)?->get();
 
         if ($call === null || !$relations instanceof Array_ && !$callbackForm) {
@@ -630,7 +632,7 @@ final class RelationCallbackParamsHandler implements
         // Every entry point ends in the model's builder `with()`: that delegate must be Laravel's too.
         if ($host === Builder::class) {
             $atomic = $call instanceof StaticCall ? null : self::receiverAtomic($source, $call);
-            $receiver = $atomic instanceof TNamedObject && $atomic->extra_types !== [] ? null : self::receiverModel($source, $call, $dispatched);
+            $receiver = $atomic instanceof TNamedObject && $atomic->extra_types !== [] ? null : self::receiverModel($source, $call, $dispatched, true);
             if ($receiver === null) {
                 return null;
             }
@@ -639,6 +641,7 @@ final class RelationCallbackParamsHandler implements
 
             // The receiver runs on its own class; a static or Relation-forwarded call runs on the model's builder.
             if (self::hasUnknownBuilder($codebase, $model)
+                || ($forwards && $atomic instanceof TNamedObject && !self::relationForwardsLaravels($codebase, $atomic->value))
                 || !self::builderIsLaravels($codebase, $dispatched)
                 || ($forwards && !self::modelRunsLaravelsEagerLoad($codebase, $model))
             ) {
@@ -672,6 +675,29 @@ final class RelationCallbackParamsHandler implements
     {
         foreach (self::COLLECTION_EAGER_PATH as $method) {
             if (!self::declaredBy($codebase, $class, $method, EloquentCollection::class) instanceof MethodIdentifier) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether a Relation receiver forwards `with()` to its builder through Laravel's own `__call()` and the
+     * `ForwardsCalls` helpers it uses: an override may hand the constraint its Builder instead of the Relation.
+     *
+     * @psalm-pure
+     */
+    private static function relationForwardsLaravels(Codebase $codebase, string $relation): bool
+    {
+        if (!self::declaredBy($codebase, $relation, '__call', Relation::class) instanceof MethodIdentifier) {
+            return false;
+        }
+
+        foreach (['forwardcallto', 'forwarddecoratedcallto'] as $method) {
+            $declaring = $codebase->getDeclaringMethodId($relation . '::' . $method);
+
+            if ($declaring === null || !\in_array(\strtolower(MethodIdentifier::wrap($declaring)->fq_class_name), [\strtolower(Relation::class), \strtolower(ForwardsCalls::class)], true)) {
                 return false;
             }
         }
@@ -800,7 +826,7 @@ final class RelationCallbackParamsHandler implements
 
         return $host === Model::class
             ? (ClassLineage::isA($codebase, $atomic->value, Model::class) ? $atomic->value : null)
-            : self::projectedModel($codebase, $atomic, EloquentCollection::class, 'TModel');
+            : self::projectedModel($codebase, $atomic, EloquentCollection::class, 'TModel', true);
     }
 
     /**
@@ -889,7 +915,7 @@ final class RelationCallbackParamsHandler implements
                         $properties[$key] = $shape;
                     }
                 } elseif ($value instanceof Closure || $value instanceof ArrowFunction) {
-                    $relation = !\str_contains($key, ':') && ($counts[$path] ?? 0) === 1 && ($allowNested || $prefix === '') && self::pathBuildersAreLaravels($source->getCodebase(), $model, $path)
+                    $relation = !($value->params[0]->byRef ?? false) && !\str_contains($key, ':') && ($counts[$path] ?? 0) === 1 && ($allowNested || $prefix === '') && self::pathBuildersAreLaravels($source->getCodebase(), $model, $path)
                         ? self::resolveRelation($source->getCodebase(), $model, $path, true)[1] ?? null
                         : null;
 
@@ -1084,7 +1110,7 @@ final class RelationCallbackParamsHandler implements
      * The model the receiver's relations belong to, and whether the call forwards through that model's own builder
      * (a static call, or a Relation) rather than running on the receiver itself: a single-atomic Builder of exactly
      * the dispatched class, a Relation (it forwards to `Builder`) via its TRelatedModel, or the named model of a
-     * static call.
+     * static call. `$exact` declines a model that is an intersection ({@see projectedModel()}).
      *
      * @return array{class-string<Model>, bool}|null
      */
@@ -1092,6 +1118,7 @@ final class RelationCallbackParamsHandler implements
         StatementsAnalyzer $source,
         MethodCall|NullsafeMethodCall|StaticCall $call,
         string $dispatched,
+        bool $exact = false,
     ): ?array {
         $codebase = $source->getCodebase();
         $isBuilderDispatch = \strtolower($dispatched) === \strtolower(Builder::class);
@@ -1119,8 +1146,8 @@ final class RelationCallbackParamsHandler implements
         }
 
         $model = $forwards
-            ? ($isBuilderDispatch ? self::projectedModel($codebase, $atomic, Relation::class, 'TRelatedModel') : null)
-            : self::projectedModel($codebase, $atomic, Builder::class, 'TModel');
+            ? ($isBuilderDispatch ? self::projectedModel($codebase, $atomic, Relation::class, 'TRelatedModel', $exact) : null)
+            : self::projectedModel($codebase, $atomic, Builder::class, 'TModel', $exact);
 
         return $model === null ? null : [$model, $forwards];
     }
@@ -1138,18 +1165,25 @@ final class RelationCallbackParamsHandler implements
 
     /**
      * The model a receiver binds an ancestor's template to (`Builder::TModel`, `Relation::TRelatedModel`), see
-     * {@see ClassLineage::projectedTemplate()}. Anything that is not exactly one model names no model.
+     * {@see ClassLineage::projectedTemplate()}. Anything that is not exactly one model names no model, and with `$exact`
+     * an intersection (`Customer&Marker`, which would be reduced to `Customer`) names none either.
      *
      * @param class-string $ancestor
      * @return class-string<Model>|null
      * @psalm-capabilities read-props
      */
-    private static function projectedModel(Codebase $codebase, TNamedObject $atomic, string $ancestor, string $template): ?string
+    private static function projectedModel(Codebase $codebase, TNamedObject $atomic, string $ancestor, string $template, bool $exact = false): ?string
     {
-        return ModelPropertyResolver::extractExactlyOneModelFromUnion(
-            ClassLineage::projectedTemplate($codebase, $atomic, $ancestor, $template),
-            $codebase,
-        );
+        $projected = ClassLineage::projectedTemplate($codebase, $atomic, $ancestor, $template);
+
+        // The eager-load slot is rebuilt from the bare class, dropping what the receiver's model carries besides it.
+        foreach ($exact && $projected instanceof Union ? $projected->getAtomicTypes() : [] as $model) {
+            if ($model instanceof TNamedObject && $model->extra_types !== []) {
+                return null;
+            }
+        }
+
+        return ModelPropertyResolver::extractExactlyOneModelFromUnion($projected, $codebase);
     }
 
     /**
