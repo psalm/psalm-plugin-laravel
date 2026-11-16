@@ -1,12 +1,16 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Vite;
@@ -118,6 +122,34 @@ function test_mail_macro_resolves_via_facade_fqcn(): string
 {
     $_ = Mail::testMailFacadeMacro('user@example.com');
     /** @psalm-check-type-exact $_ = string */
+    return $_;
+}
+
+function test_db_macro_via_connection_resolves_via_facade_fqcn(): int
+{
+    $_ = DB::testDbConnectionFacadeMacro('users');
+    /** @psalm-check-type-exact $_ = int */
+    return $_;
+}
+
+function test_schema_macro_via_builder_resolves_via_facade_fqcn(): bool
+{
+    $_ = Schema::testSchemaFacadeMacro('users');
+    /** @psalm-check-type-exact $_ = bool */
+    return $_;
+}
+
+function test_event_macro_resolves_via_facade_fqcn(): string
+{
+    $_ = Event::testEventFacadeMacro('user.created');
+    /** @psalm-check-type-exact $_ = string */
+    return $_;
+}
+
+function test_app_macro_resolves_via_facade_fqcn(): int
+{
+    $_ = App::testAppFacadeMacro('config');
+    /** @psalm-check-type-exact $_ = int */
     return $_;
 }
 

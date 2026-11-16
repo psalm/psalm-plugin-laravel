@@ -260,7 +260,7 @@ final class AnnotationWriterTest extends TestCase
         $path = $this->template("<?php /** Header. */ ?>\n<p>{{ \$title }}</p>\n");
         $before = (string) \file_get_contents($path);
 
-        $diff = $this->applyFromProjectRoot(fn(): ?string => AnnotationWriter::apply($path, ['title' => 'string'], true));
+        $diff = $this->applyFromProjectRoot(static fn(): ?string => AnnotationWriter::apply($path, ['title' => 'string'], true));
         $this->assertNotNull($diff);
 
         AnnotationWriter::apply($path, ['title' => 'string'], false);
