@@ -8,3 +8,6 @@ updates:
     labels: [dependencies, release:internal]
     schedule:
       interval: monthly
+    # Hold back action releases younger than a week: compromised releases are usually pulled within days.
+    cooldown:
+      default-days: 7
