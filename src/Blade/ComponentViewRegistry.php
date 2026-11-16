@@ -84,9 +84,6 @@ final class ComponentViewRegistry
     /** @var array<string, array<string, list<string>>> shadow path => variable name => property ids */
     private static array $propertyIds = [];
 
-    /** @var array<lowercase-string, bool> namespaced function id => declared somewhere */
-    private static array $declaredFunctions = [];
-
     /**
      * @param array<array-key, true> $tagRenderedClasses lowercased class => true
      * @param array<array-key, true> $namedSlots         slot name => true
@@ -301,7 +298,6 @@ final class ComponentViewRegistry
         self::$renderedByName = [];
         self::$seeds = [];
         self::$propertyIds = [];
-        self::$declaredFunctions = [];
     }
 
     /**
@@ -380,7 +376,7 @@ final class ComponentViewRegistry
         $returns = $livewire && \count($stmts) > 1 ? (new NodeFinder())->findInstanceOf($stmts, Stmt\Return_::class) : $stmts;
         // The body's last statement: a lone return nested in a closure or a block is not render()'s.
         $only = \count($returns) === 1 ? \end($stmts) : null;
-        $view = $only instanceof Stmt\Return_ && $only->expr instanceof Expr ? self::viewOf($codebase, $only->expr) : null;
+        $view = $only instanceof Stmt\Return_ && $only->expr instanceof Expr ? self::viewOf($codebase, $only->expr, $resolved['methodStorage']->location?->file_path) : null;
 
         if ($view !== null) {
             return $view;
@@ -400,7 +396,7 @@ final class ComponentViewRegistry
     /**
      * @return array{0: string, 1: array<array-key, true>|null, 2: bool}|null
      */
-    private static function viewOf(Codebase $codebase, Expr $expr): ?array
+    private static function viewOf(Codebase $codebase, Expr $expr, ?string $filePath): ?array
     {
         // `Component::resolveView()` treats a returned string naming an existing view as that view.
         if ($expr instanceof String_) {
@@ -417,7 +413,7 @@ final class ComponentViewRegistry
             && $expr->var->name === 'this';
 
         $recognised = $viaThis
-            || ($expr instanceof Expr\FuncCall && self::isViewHelper($codebase, $expr))
+            || ($expr instanceof Expr\FuncCall && self::isViewHelper($codebase, $expr, $filePath))
             || ($expr instanceof Expr\StaticCall
                 && $expr->class instanceof Name
                 && \strtolower(self::resolvedName($expr->class)) === self::VIEW_FACADE
@@ -427,7 +423,7 @@ final class ComponentViewRegistry
                 && self::isNamed($expr->name, 'make')
                 && $expr->var instanceof Expr\FuncCall
                 && $expr->var->args === []
-                && self::isViewHelper($codebase, $expr->var));
+                && self::isViewHelper($codebase, $expr->var, $filePath));
 
         $args = $recognised && $expr instanceof Expr\CallLike ? self::viewArgs($expr) : null;
 
@@ -498,7 +494,7 @@ final class ComponentViewRegistry
     }
 
     /** The global `view()` helper, not a same-named function of the calling namespace. */
-    private static function isViewHelper(Codebase $codebase, Expr\FuncCall $call): bool
+    private static function isViewHelper(Codebase $codebase, Expr\FuncCall $call, ?string $filePath): bool
     {
         if (!$call->name instanceof Name || \strtolower($call->name->getLast()) !== 'view') {
             return false;
@@ -524,12 +520,20 @@ final class ComponentViewRegistry
 
         $functionId = \strtolower(\ltrim($namespaced, '\\'));
 
-        if (!\array_key_exists($functionId, self::$declaredFunctions)) {
-            self::$declaredFunctions[$functionId] = $codebase->functions->hasStubbedFunction($functionId)
-                || $codebase->functions->isDeclaredInCode($functionId);
+        // Psalm resolves the same call in that file through its own and included declarations, then stubbed ones;
+        // the booted app is in this process, so a function it declared at runtime (a `require`d helper) counts too.
+        if ($codebase->functions->hasStubbedFunction($functionId) || \function_exists($functionId)) {
+            return false;
         }
 
-        return !self::$declaredFunctions[$functionId];
+        try {
+            $declared = $filePath === null
+                || isset($codebase->file_storage_provider->get($filePath)->declaring_function_ids[$functionId]);
+        } catch (\InvalidArgumentException) {
+            $declared = true;
+        }
+
+        return !$declared;
     }
 
     /**

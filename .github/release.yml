@@ -22,7 +22,6 @@ changelog:
     - title: Internal changes
       labels:
         - 'release:internal'
-        - 'chore'
     - title: Typos
       labels:
         - 'release:typo'

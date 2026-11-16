@@ -56,14 +56,17 @@ final class HigherOrderProxyPropertyFetchItemTypeKnownLimitation
     }
 
     /**
-     * Not a limitation: a nullsafe OUTER fetch (`$c->map?->parent`) resolves like the plain one.
+     * A nullsafe OUTER fetch (`$c->map?->parent`) on the never-null proxy keeps Psalm's dead short-circuit null
+     * since Psalm 7.7.0; ideally it resolves like the plain fetch, `Collection<int, PropFetchLimitItem|null>`.
+     *
+     * @todo-by https://github.com/vimeo/psalm/issues/13936 drop the `|null`, a nullsafe outer fetch then resolves like the plain one
      *
      * @param Collection<int, PropFetchLimitItem> $p
      */
     public function nullsafeOuterFetch(Collection $p): void
     {
         $_parent = $p->map?->parent;
-        /** @psalm-check-type-exact $_parent = Collection<int, PropFetchLimitItem|null> */
+        /** @psalm-check-type-exact $_parent = Collection<int, PropFetchLimitItem|null>|null */
     }
 }
 ?>
