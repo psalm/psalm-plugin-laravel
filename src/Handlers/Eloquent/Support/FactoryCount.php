@@ -591,6 +591,28 @@ final class FactoryCount
     }
 
     /**
+     * The receiver as the answer for a class that owns its count and leaves `TCount` at the default, or null when the
+     * receiver is not proven to be exactly `$class`: a union, a template, a class-string, an intersection (`F&Marker`),
+     * a mixin proxy (it names another class) and a generic class whose `TModel` the receiver does not carry.
+     * The receiver atomic comes back as is, so its `&static` and a generic base's `TModel` survive. A literal
+     * `UserFactory::times(2)` on a class without template types has no receiver and answers the class itself.
+     */
+    public static function provenReceiver(MethodReturnTypeProviderEvent $event, ClassLikeStorage $class): ?Union
+    {
+        $generic = ($class->template_types ?? []) !== [];
+        $stmt = $event->getStmt();
+        if ($stmt instanceof StaticCall && $stmt->class instanceof Name && !\in_array(\strtolower($stmt->class->name), ['static', 'self', 'parent'], true)) {
+            return $generic ? null : new Union([new TNamedObject($class->name)]);
+        }
+
+        $receiver = self::receiver($event, $class->name);
+
+        return $receiver instanceof TNamedObject && $receiver->extra_types === [] && ($receiver instanceof TGenericObject || !$generic)
+            ? new Union([$receiver])
+            : null;
+    }
+
+    /**
      * `static::new()`, `$class::new()` or an instance receiver may name a subclass that overrides the
      * method and presets a count, which `final` rules out. Callers then answer "count unknown".
      *
@@ -608,14 +630,31 @@ final class FactoryCount
 
     /**
      * The base `Factory<TModel, $count>`, the answer for a factory the plugin does not own the count of (no
-     * synthesized `TCount`): an explicit `@extends Factory<M, X>`, a user's own `@template TCount`, or a class
-     * that declares a Laravel method.
+     * synthesized `TCount`): an explicit `@extends Factory<M, X>`, a user's own `@template TCount`, or a class that
+     * owns its count and whose receiver {@see provenReceiver()} cannot prove.
      *
      * @psalm-pure
      */
     public static function baseFactory(Union $model, Union $count): Union
     {
         return new Union([new TGenericObject(Factory::class, [$model, $count])]);
+    }
+
+    /**
+     * True for a `Factory` subclass whose `TCount` is the default `int|null`: the plugin does not own its count and
+     * the user gave no contract (an explicit `@extends Factory<M, null>` / `<M, int>`, or their own `@template TCount`,
+     * project to something else). Psalm fills an omitted slot with the default, so it reads the same as `<M, int|null>`.
+     *
+     * @psalm-mutation-free
+     */
+    public static function leavesCountDefault(Codebase $codebase, string $factoryClass): bool
+    {
+        $storage = $codebase->classlike_storage_provider->get($factoryClass);
+        $count = $storage->template_extended_params[Factory::class]['TCount'] ?? null;
+
+        return $count instanceof Union
+            && !self::hasSynthesizedCount($storage)
+            && $count->getId() === 'int|null';
     }
 
     /**
