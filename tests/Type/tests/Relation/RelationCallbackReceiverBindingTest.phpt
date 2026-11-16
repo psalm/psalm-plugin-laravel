@@ -239,8 +239,6 @@ function test_morph_map_applies_to_class_literals(): void
 function takes_string(string $_value): void {}
 ?>
 --EXPECTF--
-MissingParamType on line %d: Parameter $relation has no provided type
-MissingParamType on line %d: Parameter $relation has no provided type
 InvalidArgument on line %d: Argument 3 of TransparentBuilder::whereHas expects string, but array<never, never> provided
 InvalidArgument on line %d: Argument 4 of TransparentBuilder::whereHas expects Illuminate\Contracts\Database\Query\Expression|int, but 'wrong' provided
 MissingClosureParamType on line %d: Parameter $q has no provided type
