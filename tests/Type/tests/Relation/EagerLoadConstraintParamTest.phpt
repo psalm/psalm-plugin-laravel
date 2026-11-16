@@ -2,6 +2,7 @@
 <?php declare(strict_types=1);
 
 use App\Builders\VehicleBuilder;
+use App\Models\BaseCollectionCustomer;
 use App\Models\Customer;
 use App\Models\Vehicle;
 use App\Models\WorkOrder;
@@ -257,23 +258,10 @@ final class SecondEagerCustomer extends Customer
 }
 
 /** A `newCollection()` override that still returns Eloquent's own Collection is not an unknown collection. */
-final class BaseCollectionOverrideCustomer extends Customer
-{
-    /**
-     * @param array<array-key, \Illuminate\Database\Eloquent\Model> $models
-     * @return Collection<array-key, \Illuminate\Database\Eloquent\Model&static>
-     */
-    #[\Override]
-    public function newCollection(array $models = [])
-    {
-        return parent::newCollection($models);
-    }
-}
-
-function test_base_collection_override_stays_typed(BaseCollectionOverrideCustomer $customer): void
+function test_base_collection_override_stays_typed(BaseCollectionCustomer $customer): void
 {
     $customer->loadMissing(['vehicles' => function ($q): void {
-        /** @psalm-check-type-exact $q = HasMany<Vehicle, BaseCollectionOverrideCustomer> */
+        /** @psalm-check-type-exact $q = HasMany<Vehicle, BaseCollectionCustomer> */
         $q->where('year', 2020);
     }]);
 }
@@ -284,4 +272,3 @@ InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::
 InvalidArgument on line %d: Argument 1 of App\Models\Customer::load expects array{vehicles?: Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer>):mixed, ...<array-key, array<array-key, mixed>|callable[impure](Illuminate\Database\Eloquent\Relations\Relation<Illuminate\Database\Eloquent\Model, Illuminate\Database\Eloquent\Model, mixed>):mixed|string>}, but array{vehicles: Closure[write-props|read-globals|write-globals|io|time](Illuminate\Database\Eloquent\Relations\BelongsTo):void} provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::with expects array{vehicles?: array{workOrders?: Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\WorkOrder, App\Models\Vehicle>):mixed, ...<array-key, mixed>}, ...<array-key, mixed>}, but array{vehicles: array{workOrders: Closure[write-props|read-globals|write-globals|io|time](Illuminate\Database\Eloquent\Relations\BelongsTo):void}} provided
 InvalidArgument on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::with expects Closure[impure](Illuminate\Database\Eloquent\Relations\HasMany<App\Models\Vehicle, App\Models\Customer>):mixed, but Closure[write-props|read-globals|write-globals|io|time](Illuminate\Database\Eloquent\Relations\BelongsTo):void provided
-LessSpecificImplementedReturnType on line %d: %s

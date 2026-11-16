@@ -10,6 +10,17 @@ use App\Builders\CallbackWrappingBuilder;
 use App\Builders\CombiningBuilder;
 use App\Models\CombiningModel;
 use App\Models\WorkOrder;
+use App\Models\LoadOverridingModel;
+use App\Models\WrappedParent;
+use App\Models\DocblockBuilderChild;
+use App\Models\DocblockBuilderOwner;
+use App\Models\GenericEagerOwner;
+use App\Models\CombiningOwner;
+use App\Models\OwnQueryModel;
+use App\Models\UnknownCollectionModel;
+use App\Models\ForwardingModel;
+use App\Models\CustomRelationOwner;
+use App\Collections\ChainOverridingCollection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -169,26 +180,8 @@ final class OverridingBuilder extends Builder
     }
 }
 
-final class OverridingModel extends Model
-{
-    /** @return HasMany<Vehicle, $this> */
-    public function vehicles(): HasMany
-    {
-        return $this->hasMany(Vehicle::class);
-    }
-
-    /** @inheritDoc */
-    #[\Override]
-    public function load($relations)
-    {
-        parent::load($relations);
-
-        return $this;
-    }
-}
-
 /** @param OverridingBuilder<Customer> $builder */
-function test_userland_overrides_decline(OverridingBuilder $builder, OverridingModel $model): void
+function test_userland_overrides_decline(OverridingBuilder $builder, LoadOverridingModel $model): void
 {
     $builder->with(['vehicles' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
@@ -349,23 +342,13 @@ function test_loop_widening_revokes_string_callback_inference(bool $flag): void
     }
 }
 
-/** A nested constraint runs through the related model's builder: its `with()` override keeps its own contract. */
-final class ParentOfWrapped extends Model
-{
-    /** @return HasMany<WrappedModel, $this> */
-    public function wrapped(): HasMany
-    {
-        return $this->hasMany(WrappedModel::class);
-    }
-}
-
 function test_nested_constraint_on_overridden_related_builder_declines(): void
 {
-    ParentOfWrapped::query()->with(['wrapped.parts' => function ($q): void {
+    WrappedParent::query()->with(['wrapped.parts' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-    ParentOfWrapped::query()->with(['wrapped' => ['parts' => function ($q): void {
+    WrappedParent::query()->with(['wrapped' => ['parts' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]]);
@@ -405,7 +388,7 @@ function test_collection_override_declines(OverridingCollection $customers): voi
 
 function test_string_callback_through_overridden_related_builder_declines(): void
 {
-    ParentOfWrapped::query()->with('wrapped.parts', function ($q): void {
+    WrappedParent::query()->with('wrapped.parts', function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     });
@@ -421,66 +404,18 @@ function test_load_missing_dynamic_nested_key_declines(Customer $customer, strin
 }
 
 /**
- * @template TModel of Model
- * @extends Builder<TModel>
- */
-final class UnknownBuilderWithOverride extends Builder
-{
-    /** @inheritDoc */
-    #[\Override]
-    public function with($relations, $callback = null)
-    {
-        return parent::with($relations, $callback);
-    }
-}
-
-final class UnknownBuilderGrandchild extends Model {}
-
-/** `newEloquentBuilder()` with a docblock-only return type: the real builder (and its `with()`) is unknown. */
-final class UnknownBuilderChild extends Model
-{
-    /**
-     * @param \Illuminate\Database\Query\Builder $query
-     * @return UnknownBuilderWithOverride<static>
-     */
-    #[\Override]
-    public function newEloquentBuilder($query)
-    {
-        /** @var UnknownBuilderWithOverride<UnknownBuilderChild> $builder */
-        $builder = new UnknownBuilderWithOverride($query);
-
-        return $builder;
-    }
-
-    /** @return HasMany<UnknownBuilderGrandchild, $this> */
-    public function grandchildren(): HasMany
-    {
-        return $this->hasMany(UnknownBuilderGrandchild::class);
-    }
-}
-
-final class EagerUnknownBuilderOwner extends Model
-{
-    /** @return HasMany<UnknownBuilderChild, $this> */
-    public function children(): HasMany
-    {
-        return $this->hasMany(UnknownBuilderChild::class);
-    }
-}
-
-/**
  * A builder the plugin cannot see is not assumed to be Laravel's: its `with()` may pass something else to the
  * constraint. Every entry point declines, and so does a dot path or nested array through such a model.
  *
- * @param Collection<int, UnknownBuilderChild> $children
+ * @param Collection<int, DocblockBuilderChild> $children
  */
-function test_unknown_builder_declines(UnknownBuilderChild $child, Collection $children, EagerUnknownBuilderOwner $owner): void
+function test_unknown_builder_declines(DocblockBuilderChild $child, Collection $children, DocblockBuilderOwner $owner): void
 {
-    UnknownBuilderChild::with(['grandchildren' => function ($q): void {
+    DocblockBuilderChild::with(['grandchildren' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-    UnknownBuilderChild::query()->with(['grandchildren' => function ($q): void {
+    DocblockBuilderChild::query()->with(['grandchildren' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
@@ -500,15 +435,15 @@ function test_unknown_builder_declines(UnknownBuilderChild $child, Collection $c
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-    EagerUnknownBuilderOwner::query()->with(['children.grandchildren' => function ($q): void {
+    DocblockBuilderOwner::query()->with(['children.grandchildren' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-    EagerUnknownBuilderOwner::query()->with(['children' => ['grandchildren' => function ($q): void {
+    DocblockBuilderOwner::query()->with(['children' => ['grandchildren' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]]);
-    EagerUnknownBuilderOwner::query()->with('children.grandchildren', function ($q): void {
+    DocblockBuilderOwner::query()->with('children.grandchildren', function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     });
@@ -561,21 +496,6 @@ final class EagerTraitUnrelatedConsumer
     public function load(array $relations): void {}
 }
 
-/**
- * The Relation types are rebuilt from bare class names, so a model with template params would be typed with
- * arguments the receiver does not carry (`HasMany<Vehicle, GenericEagerOwner>` for a `GenericEagerOwner<int>`).
- *
- * @template TKey of int|string
- */
-final class GenericEagerOwner extends Model
-{
-    /** @return HasMany<Vehicle, $this> */
-    public function vehicles(): HasMany
-    {
-        return $this->hasMany(Vehicle::class);
-    }
-}
-
 /** @param Builder<GenericEagerOwner<int>> $builder */
 function test_generic_model_owner_declines(Builder $builder): void
 {
@@ -587,20 +507,6 @@ function test_generic_model_owner_declines(Builder $builder): void
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-}
-
-/**
- * A registered builder that overrides a method between `with()` and the constraint call (`CombiningBuilder` overrides
- * `combineConstraints()`) may call the constraint with anything: the receiver, the model's own builder and an
- * intermediate model's builder all decline.
- */
-final class CombiningBuilderOwner extends Model
-{
-    /** @return HasMany<CombiningModel, $this> */
-    public function children(): HasMany
-    {
-        return $this->hasMany(CombiningModel::class);
-    }
 }
 
 /** @param CombiningBuilder<Customer> $builder */
@@ -618,29 +524,10 @@ function test_overridden_builder_delegate_declines(CombiningBuilder $builder, Co
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-    CombiningBuilderOwner::query()->with(['children.vehicles' => function ($q): void {
+    CombiningOwner::query()->with(['children.vehicles' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-}
-
-/** A model that overrides a method building its eager-load query keeps its own contract. */
-final class OwnQueryModel extends Model
-{
-    /** @return HasMany<Vehicle, $this> */
-    public function vehicles(): HasMany
-    {
-        return $this->hasMany(Vehicle::class);
-    }
-
-    /**
-     * @return \Illuminate\Database\Eloquent\Builder<static>
-     */
-    #[\Override]
-    public function newQueryWithoutRelationships()
-    {
-        return parent::newQueryWithoutRelationships();
-    }
 }
 
 function test_overridden_model_query_method_declines(OwnQueryModel $model): void
@@ -649,51 +536,6 @@ function test_overridden_model_query_method_declines(OwnQueryModel $model): void
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-}
-
-/**
- * `loadMissing()` walks a relation chain through the collection's `loadMissingRelation()`: an override keeps its own
- * contract, and so does a collection the plugin cannot see (docblock-only `newCollection()`), while `load()` on that
- * model does not touch the collection and stays typed.
- *
- * @template TKey of array-key
- * @template TModel of Model
- * @extends Collection<TKey, TModel>
- */
-final class ChainOverridingCollection extends Collection
-{
-    /** @inheritDoc */
-    #[\Override]
-    protected function loadMissingRelation(Collection $models, array $path)
-    {
-        parent::loadMissingRelation($models, $path);
-    }
-}
-
-final class UnknownCollectionModel extends Model
-{
-    /** @return HasMany<Vehicle, $this> */
-    public function vehicles(): HasMany
-    {
-        return $this->hasMany(Vehicle::class);
-    }
-
-    /*
-     * Docblock-only on purpose: a native named return type would register the collection. Psalm reports the docblock
-     * as less specific than the trait's `Collection<array-key, Model&static>` (expected below).
-     */
-    /**
-     * @param array<array-key, Model> $models
-     * @return ChainOverridingCollection<array-key, Model&static>
-     */
-    #[\Override]
-    public function newCollection(array $models = [])
-    {
-        /** @var ChainOverridingCollection<array-key, Model&UnknownCollectionModel> $collection */
-        $collection = new ChainOverridingCollection($models);
-
-        return $collection;
-    }
 }
 
 /** @param ChainOverridingCollection<int, Customer> $customers */
@@ -776,83 +618,12 @@ function test_by_reference_param_declines(): void
     }]);
 }
 
-/** A static `Model::withOnly()` goes through the model's magic forwarding: an override keeps its own contract. */
-final class ForwardingModel extends Model
-{
-    /** @return HasMany<Vehicle, $this> */
-    public function vehicles(): HasMany
-    {
-        return $this->hasMany(Vehicle::class);
-    }
-
-    /** @inheritDoc */
-    #[\Override]
-    public static function __callStatic($method, $parameters)
-    {
-        return parent::__callStatic($method, $parameters);
-    }
-}
-
 function test_overridden_model_static_forwarding_declines(): void
 {
     ForwardingModel::withOnly(['vehicles' => function ($q): void {
         /** @psalm-check-type-exact $q = mixed */
         takes_mixed($q);
     }]);
-}
-
-/**
- * A userland Relation subclass may override what a nested constraint runs through (`getQuery()`) or its templates, so
- * an eager-load slot is only typed through Laravel's own relation classes, on the receiver and on every path segment.
- *
- * @template TRelated of Model
- * @template TDeclaring of Model
- * @extends HasMany<TRelated, TDeclaring>
- */
-final class QueryOverridingHasMany extends HasMany
-{
-    /** @inheritDoc */
-    #[\Override]
-    public function getQuery()
-    {
-        return parent::getQuery();
-    }
-}
-
-/**
- * The declaring model comes first, unlike HasMany's own order.
- *
- * @template TDeclaring of Model
- * @template TRelated of Model
- * @extends HasMany<TRelated, TDeclaring>
- */
-final class SwappedHasMany extends HasMany {}
-
-final class CustomRelationOwner extends Model
-{
-    /** @return QueryOverridingHasMany<Vehicle, $this> */
-    public function vehicles(): QueryOverridingHasMany
-    {
-        /** @var QueryOverridingHasMany<Vehicle, CustomRelationOwner> $relation */
-        $relation = new QueryOverridingHasMany(Vehicle::query(), $this, 'customer_id', 'id');
-
-        return $relation;
-    }
-
-    /** @return SwappedHasMany<CustomRelationOwner, Vehicle> */
-    public function swapped(): SwappedHasMany
-    {
-        /** @var SwappedHasMany<CustomRelationOwner, Vehicle> $relation */
-        $relation = new SwappedHasMany(Vehicle::query(), $this, 'customer_id', 'id');
-
-        return $relation;
-    }
-
-    /** @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<WorkOrder, $this> */
-    public function workOrders(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
-    {
-        return $this->belongsToMany(WorkOrder::class);
-    }
 }
 
 function test_custom_relation_classes_on_the_path_decline(): void
@@ -929,7 +700,6 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
-LessSpecificImplementedReturnType on line %d: %s
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
