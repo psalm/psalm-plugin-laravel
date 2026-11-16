@@ -28,11 +28,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Pin actionlint version explicitly so we don't drift to a newer release between runs.
+  # Pin the actionlint release and its tarball checksum (from the release's checksums.txt). Bump both
+  # together: the download is verified before anything is extracted or run.
   ACTIONLINT_VERSION: "1.7.12"
-  # Pin the download script to a commit SHA so a compromised `main` branch in rhysd/actionlint
-  # cannot replace the bootstrap with a malicious payload.
-  ACTIONLINT_INSTALL_SHA: "3795ba2f6cb243eeca54c9d22e5c531cb9dcfb4a"
+  ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 
 jobs:
   actionlint:
@@ -52,7 +51,10 @@ jobs:
       - name: Check workflow files
         run: |
           echo "::add-matcher::.github/actionlint-matcher.json"
-          bash <(curl -sSfL "https://raw.githubusercontent.com/rhysd/actionlint/${ACTIONLINT_INSTALL_SHA}/scripts/download-actionlint.bash") "${ACTIONLINT_VERSION}"
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "$tarball" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${tarball}"
+          echo "${ACTIONLINT_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" actionlint
           ./actionlint -color
           # A bare run only finds .github/workflows. The bundled CI template is a real workflow
           # that `psalm-laravel add github` copies verbatim into users' repositories, so a syntax
