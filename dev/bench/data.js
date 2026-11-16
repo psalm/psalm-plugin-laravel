@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794838785031,
+  "lastUpdate": 1794838987273,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18925,6 +18925,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 36.94,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2dc334ad1c0e427d8cb8573269fb0db59f54b5ab",
+          "message": "chore: hold back dependency releases younger than one day (#2315)\n\nComposer 2.11 cooldown policy. vimeo/psalm and psalm/* stay exempt: plugin releases adopt new Psalm releases the day they ship.",
+          "timestamp": "2026-11-16T15:19:53+01:00",
+          "tree_id": "cd053e129d402daf23609d4b1efe3857187bf3bb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2dc334ad1c0e427d8cb8573269fb0db59f54b5ab"
+        },
+        "date": 1794838986125,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.21,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
