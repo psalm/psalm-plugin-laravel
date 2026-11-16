@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794838987273,
+  "lastUpdate": 1794839336996,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18960,6 +18960,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.21,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "647f1c01d8c9f8e960ba1f25978022f32f5d72e9",
+          "message": "chore(deps): loosen boundwize/structarmed to ^0.21 (#2318)\n\n^0.21.22 is only met by a release younger than the one-day Composer cooldown, so every composer install on 4.x failed to resolve.",
+          "timestamp": "2026-11-16T15:25:28+01:00",
+          "tree_id": "7781fe766153d3b2ddc2aa68f6a9fd3347bcedd2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/647f1c01d8c9f8e960ba1f25978022f32f5d72e9"
+        },
+        "date": 1794839334690,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 33.29,
+            "range": "± 0.19",
             "unit": "s"
           },
           {
