@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\Tests\Unit\Util\Ast;
+namespace Tests\Psalm\LaravelPlugin\Unit\Util\Ast;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
