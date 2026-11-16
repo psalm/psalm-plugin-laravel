@@ -311,6 +311,14 @@ final class CastResolver
         bool $nullable,
         ?Union $originalType,
     ): ?Union {
+        // An intersection (`@return BaseCast&CastsInboundAttributes`) may carry the inbound contract in its extra
+        // types, which the class name alone loses (and which makes Laravel skip `get()`): leave it unknown.
+        if (($atomic instanceof TNamedObject && $atomic->extra_types !== [])
+            || ($atomic instanceof TClassString && $atomic->as_type instanceof TNamedObject && $atomic->as_type->extra_types !== [])
+        ) {
+            return null;
+        }
+
         // `@return CastsAttributes<TGet, TSet>` — most common when castUsing returns an
         // anonymous class with explicit generics on the interface (e.g. AsCollection).
         // Strict equality on the interface itself: a concrete subclass's `@template`s

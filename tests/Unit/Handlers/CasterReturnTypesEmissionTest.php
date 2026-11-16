@@ -88,6 +88,15 @@ final class CasterReturnTypesEmissionTest extends TestCase
     }
 
     #[Test]
+    public function it_leaves_an_intersection_with_an_explicit_inbound_contract_unknown(): void
+    {
+        $traces = $this->runPsalm();
+
+        $this->assertContains('$_intersection: mixed', $traces);
+        $this->assertContains('$_intersectionClassString: mixed', $traces);
+    }
+
+    #[Test]
     public function it_keeps_a_docblock_return_type_inherited_from_a_base_caster(): void
     {
         $this->assertContains('$_inheritedDoc: CasterReturnFixture\Money', $this->runPsalm());

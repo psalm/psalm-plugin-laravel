@@ -20,6 +20,8 @@ return new class extends Migration {
             $table->integer('child_trait_self');
             $table->integer('child_trait_parent');
             $table->integer('multi');
+            $table->integer('intersection');
+            $table->integer('intersection_cs');
             $table->integer('self_casting');
             $table->integer('dual');
             $table->integer('dual_castable');

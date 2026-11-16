@@ -52,4 +52,10 @@ function probes(Product $product): void
 
     $_selfCasting = $product->self_casting;
     /** @psalm-trace $_selfCasting */
+
+    $_intersection = $product->intersection;
+    /** @psalm-trace $_intersection */
+
+    $_intersectionClassString = $product->intersection_cs;
+    /** @psalm-trace $_intersectionClassString */
 }
