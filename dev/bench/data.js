@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794860026522,
+  "lastUpdate": 1794860785411,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19205,6 +19205,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 27.05,
             "range": "± 0.12",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d64ace0df6e2a11b84a636edcf711926db486c8",
+          "message": "Propagate closure return taint through `value()`, `rescue()`, `retry()`, `once()`, `with()` and `DB::transaction()` (#2280)\n\n* feat(taint): propagate closure return taint through value(), rescue(), Cache::remember() and similar helpers\n\n* fix(taint): flow only the closure result through with()\n\n* fix(taint): stop propagating closure taint through Cache helpers",
+          "timestamp": "2026-11-16T21:22:35+01:00",
+          "tree_id": "930d3c926b121b04f2b73b0b7c0c6f8f5b1e84d4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/5d64ace0df6e2a11b84a636edcf711926db486c8"
+        },
+        "date": 1794860783465,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.72,
+            "range": "± 0.29",
             "unit": "s"
           },
           {
