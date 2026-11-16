@@ -55,6 +55,7 @@ jobs:
   # Runs Monica's vendor code (restored from cache) with a read-only token. The
   # result is handed to `publish-benchmark`, which holds the write token.
   master-benchmark:
+    name: Benchmark Monica
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -178,6 +179,7 @@ jobs:
   # `contents: write` would execute with that token. Here the only input is the small
   # JSON artifact from `master-benchmark`, consumed as data by the benchmark action.
   publish-benchmark:
+    name: Publish benchmark history
     needs: master-benchmark
     runs-on: ubuntu-latest
     timeout-minutes: 10
