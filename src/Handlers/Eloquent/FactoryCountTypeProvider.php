@@ -101,21 +101,20 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
         // The base `Factory`, a class with an explicit TCount contract, and a count-owning class whose receiver is not
         // proven reach here: `forEachSequence()` counts the factory like `count()` does
         // (`state(...)->count(count($sequence))`), so it takes the same fallback.
-        $modelType = self::resolveModelType($event, $codebase);
-        if (!$modelType instanceof Union) {
-            return null;
-        }
-
-        return FactoryCount::baseFactory($modelType, $countType);
+        return FactoryCount::baseFactory(self::resolveModelType($event, $codebase), $countType);
     }
 
     /**
      * Find TModel by trying:
-     *  1. The receiver's template parameters (when the type is generic, e.g.
-     *     `Factory<Customer>` declared via `@var`).
-     *  2. The called class's `extends Factory<X>` binding (covers user
+     *  1. On `Factory` itself, the receiver's first template parameter (when the type is
+     *     generic, e.g. `Factory<Customer>` declared via `@var`).
+     *  2. On a subclass, its `extends Factory<X>` binding (covers user
      *     subclasses like `class UserFactory extends Factory<User>` and
-     *     static calls `UserFactory::times(N)`).
+     *     static calls `UserFactory::times(N)`). A template the binding names
+     *     (`@extends Factory<TModel>`) takes the receiver's argument at that
+     *     template's position in the SUBCLASS's own template list, so an
+     *     unrelated first template (`@template TRelated`) never stands in
+     *     for the model.
      *  3. Last-resort fallback to base `Model`. Without this, an unbound
      *     receiver (bare `Factory` with no template params and no subclass
      *     binding — produced via `__callStatic` on a Facade, etc.) collapses
@@ -126,23 +125,25 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
      *
      * @psalm-mutation-free
      */
-    private static function resolveModelType(MethodReturnTypeProviderEvent $event, Codebase $codebase): ?Union
+    private static function resolveModelType(MethodReturnTypeProviderEvent $event, Codebase $codebase): Union
     {
         $templateParams = $event->getTemplateTypeParameters();
-
-        if ($templateParams !== null) {
-            $modelType = $templateParams[0] ?? null;
-            if (FactoryCount::isModelType($modelType, $codebase)) {
-                return $modelType;
-            }
-        }
-
         $calledClass = $event->getCalledFqClasslikeName() ?? $event->getFqClasslikeName();
-        $resolved = FactoryCount::modelBoundBy($calledClass, $codebase);
-        if ($resolved instanceof Union) {
-            return $resolved;
+
+        // The receiver's arguments follow the CALLED class's template list: only on `Factory` itself is the first
+        // one the TModel. A subclass maps them through its own `@extends Factory<...>` binding.
+        if (\strtolower($calledClass) === \strtolower(Factory::class)) {
+            $modelType = $templateParams[0] ?? null;
+
+            return $modelType instanceof Union && FactoryCount::isModelType($modelType, $codebase, true) ? $modelType : self::fallbackModel();
         }
 
+        return FactoryCount::modelBoundBy($calledClass, $codebase, $templateParams ?? []) ?? self::fallbackModel();
+    }
+
+    /** @psalm-pure */
+    private static function fallbackModel(): Union
+    {
         return new Union([new TNamedObject(Model::class)]);
     }
 }
