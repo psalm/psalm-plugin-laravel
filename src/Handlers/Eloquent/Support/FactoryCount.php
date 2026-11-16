@@ -702,23 +702,35 @@ final class FactoryCount
     }
 
     /**
-     * `$type` with every template of `$class` replaced by the receiver's argument at the same position in the
-     * class's template list, or by its bound when the receiver gave none.
+     * `$type` with every template resolved to the receiver's argument at the same position in the class's own
+     * template list, or to its bound when the receiver gave none. A template of an ancestor
+     * (`Base<T> extends Factory<T>`, `Child<U> extends Base<U>`) is first followed through the class's
+     * `template_extended_params` to what the class passes for it, until it reaches a template of the class.
      *
      * @param list<Union> $classArguments
+     * @param int<0, max> $depth bounds a self-referential mapping
      *
      * @psalm-mutation-free
      */
-    private static function withClassArguments(Union $type, ClassLikeStorage $class, array $classArguments): Union
+    private static function withClassArguments(Union $type, ClassLikeStorage $class, array $classArguments, int $depth = 0): Union
     {
         $slots = \array_keys($class->template_types ?? []);
         $atomics = [];
 
         foreach ($type->getAtomicTypes() as $atomic) {
             $replacement = $atomic;
-            if ($atomic instanceof TTemplateParam && \strtolower($atomic->defining_class) === \strtolower($class->name)) {
-                $position = \array_search($atomic->param_name, $slots, true);
-                $replacement = $position === false ? $atomic->as : ($classArguments[$position] ?? $atomic->as);
+            if ($atomic instanceof TTemplateParam) {
+                $replacement = $atomic->as;
+                $position = \strtolower($atomic->defining_class) === \strtolower($class->name)
+                    ? \array_search($atomic->param_name, $slots, true)
+                    : false;
+                $forwarded = $class->template_extended_params[$atomic->defining_class][$atomic->param_name] ?? null;
+
+                if ($position !== false) {
+                    $replacement = $classArguments[$position] ?? $atomic->as;
+                } elseif ($forwarded instanceof Union && $depth < 8) {
+                    $replacement = self::withClassArguments($forwarded, $class, $classArguments, $depth + 1);
+                }
             }
 
             foreach ($replacement instanceof Union ? $replacement->getAtomicTypes() : [$replacement] as $resolved) {
