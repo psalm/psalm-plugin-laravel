@@ -212,14 +212,14 @@ class LazyCollection implements CanBeEscapedWhenCastToString, Enumerable
      * Independent key template, as on Collection: the input keys need not match TKey.
      * Runtime is array_merge(), which renumbers integer keys from 0: only string keys survive
      * as written, so an `int` (or literal int) key widens to `int`, and a mixed `array-key` union
-     * stays `array-key`.
+     * stays `array-key`. An empty (`never`) side contributes no keys.
      *
      * @template TMergeKey of array-key
      * @template TMergeValue
      *
      * @param  \Illuminate\Contracts\Support\Arrayable<TMergeKey, TMergeValue>|iterable<TMergeKey, TMergeValue>  $items
      * @return static<
-     *  (TKey is int ? int : (TKey is string ? TKey : array-key))|(TMergeKey is int ? int : (TMergeKey is string ? TMergeKey : array-key)),
+     *  (TKey is never ? never : (TKey is int ? int : (TKey is string ? TKey : array-key)))|(TMergeKey is never ? never : (TMergeKey is int ? int : (TMergeKey is string ? TMergeKey : array-key))),
      *  TValue|TMergeValue
      * >
      */

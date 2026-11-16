@@ -16,8 +16,9 @@ use Illuminate\Support\LazyCollection;
 /**
  * @param LazyCollection<int, M> $l
  * @param LazyCollection<string, string> $strings
+ * @param LazyCollection<never, never> $empty
  */
-function lazy_stub_overrides(LazyCollection $l, LazyCollection $strings): void
+function lazy_stub_overrides(LazyCollection $l, LazyCollection $strings, LazyCollection $empty): void
 {
     $_merge = $l->merge(['a' => 1]);
     /** @psalm-check-type-exact $_merge = LazyCollection<'a'|int, 1|M>&static */
@@ -28,6 +29,16 @@ function lazy_stub_overrides(LazyCollection $l, LazyCollection $strings): void
 
     $_mergeStringKeys = $strings->merge(['k' => 'y']);
     /** @psalm-check-type-exact $_mergeStringKeys = LazyCollection<string, string>&static */
+
+    // An empty operand or receiver (`never` keys) contributes no keys: it must not become `int`.
+    $_mergeEmptyInput = $strings->merge([]);
+    /** @psalm-check-type-exact $_mergeEmptyInput = LazyCollection<string, string>&static */
+
+    $_mergeIntoEmpty = $empty->merge(['k' => 'y']);
+    /** @psalm-check-type-exact $_mergeIntoEmpty = LazyCollection<'k', 'y'>&static */
+
+    $_mergeEmptyIntoEmpty = $empty->merge([]);
+    /** @psalm-check-type-exact $_mergeEmptyIntoEmpty = LazyCollection<never, never>&static */
 
     $_groupByColumn = $l->groupBy('foreign_id');
     /** @psalm-check-type-exact $_groupByColumn = LazyCollection<array-key, Illuminate\Support\Collection<int, M>>&static */
