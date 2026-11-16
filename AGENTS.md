@@ -84,6 +84,7 @@ Each rule exists because violating it shipped a bug. The pointer holds the full 
 5. A regression test must fail before the fix. For trivial stub syncs a write-then-delete throwaway test suffices; commit a type test for the fragile cases (conditional returns, template tricks, version-gated behavior). New narrowing handlers need positive AND negative coverage (handler declines, fallback stays intact).
 6. Plugin self-analysis has no baseline and must never gain one. The only baseline is the Application-fixture snapshot `tests/Application/laravel-test-psalm-baseline.xml` (refresh via `tests/Application/laravel-test.sh -u`). Never `@psalm-suppress` before trying hard to fix the issue at its source.
 7. Grep the diff for `CLAUDE` before committing. Comments and docs state facts directly and never cite agent instruction files.
+8. Fix upstream first. When a bug or gap lives in vimeo/psalm, laravel/framework or another dependency, fix or report it there (a psalm.dev reproduction for Psalm) before writing plugin code, and say which layer owns it. A plugin-level workaround is the exception, for when upstream cannot fix it in time or declines. Every workaround links its upstream issue or PR with `@todo-by <URL> <what to remove or change once it lands>` next to the workaround code (handler docblock, stub method or the line itself). The `todo-by` CI workflow fails once that issue or PR closes, so the workaround is revisited instead of left behind.
 
 ## Writing code
 
@@ -132,7 +133,6 @@ Regression phpts use minimal abstracted fixtures (house style), but reduce towar
 
 ## Policies
 
-- Upstream first: when plugin work reveals a bug in vimeo/psalm, laravel/framework, or another dependency, say so and name the correct layer BEFORE attempting a plugin-level workaround.
 - Doc pairing: any change to `Plugin::registerHandlers()`, `Plugin::registerStubs()`, or the stub directory layout updates `docs/contributing/README.md` in the same PR. A change to which Blade handlers register, or on which gate, updates the handler table in `docs/contributing/blade.md` ("Handler registration").
 - Every new class in `src/Issues/` ships its `docs/issues/<Name>.md` page plus an entry in `docs/issues/index.md` in the same PR. Opt-in issues also document their `PluginConfig` flag in `docs/config.md`; severity defaults go through the experimental lifecycle (contributing README).
 - Taint source/sink/escape changes update the detection table in `docs/security.md` in the same PR.
