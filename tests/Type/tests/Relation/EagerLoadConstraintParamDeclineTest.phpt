@@ -775,6 +775,31 @@ function test_by_reference_param_declines(): void
         takes_mixed($q);
     }]);
 }
+
+/** A static `Model::withOnly()` goes through the model's magic forwarding: an override keeps its own contract. */
+final class ForwardingModel extends Model
+{
+    /** @return HasMany<Vehicle, $this> */
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class);
+    }
+
+    /** @inheritDoc */
+    #[\Override]
+    public static function __callStatic($method, $parameters)
+    {
+        return parent::__callStatic($method, $parameters);
+    }
+}
+
+function test_overridden_model_static_forwarding_declines(): void
+{
+    ForwardingModel::withOnly(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
 ?>
 --EXPECTF--
 MissingClosureParamType on line %d: Parameter $q has no provided type
@@ -839,6 +864,7 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 LessSpecificImplementedReturnType on line %d: %s
+MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type

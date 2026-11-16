@@ -221,7 +221,8 @@ final class RelationCallbackParamsHandler implements
     ];
 
     /**
-     * The Model methods that build the query `with()`/`load()` run on, each declared by Model itself.
+     * The Model methods that build the query `with()`/`load()` run on, each declared by Model itself (its magic
+     * forwarding is checked next to them, see {@see forwardingIsLaravels()}).
      *
      * @var non-empty-list<lowercase-string>
      */
@@ -641,7 +642,7 @@ final class RelationCallbackParamsHandler implements
 
             // The receiver runs on its own class; a static or Relation-forwarded call runs on the model's builder.
             if (self::hasUnknownBuilder($codebase, $model)
-                || ($forwards && $atomic instanceof TNamedObject && !self::relationForwardsLaravels($codebase, $atomic->value))
+                || ($forwards && $atomic instanceof TNamedObject && !self::forwardingIsLaravels($codebase, $atomic->value, Relation::class, ['__call']))
                 || !self::builderIsLaravels($codebase, $dispatched)
                 || ($forwards && !self::modelRunsLaravelsEagerLoad($codebase, $model))
             ) {
@@ -683,21 +684,26 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * Whether a Relation receiver forwards `with()` to its builder through Laravel's own `__call()` and the
-     * `ForwardsCalls` helpers it uses: an override may hand the constraint its Builder instead of the Relation.
+     * Whether `$class` forwards calls (to its builder) through Laravel's own magic methods: each of `$magic` is declared
+     * by `$laravel` itself and the `ForwardsCalls` helpers they use are `$laravel`'s or the trait's. An override may hand
+     * the constraint the Builder instead of the Relation.
      *
+     * @param class-string $laravel the class that declares the magic methods: Relation or Model
+     * @param non-empty-list<lowercase-string> $magic
      * @psalm-pure
      */
-    private static function relationForwardsLaravels(Codebase $codebase, string $relation): bool
+    private static function forwardingIsLaravels(Codebase $codebase, string $class, string $laravel, array $magic): bool
     {
-        if (!self::declaredBy($codebase, $relation, '__call', Relation::class) instanceof MethodIdentifier) {
-            return false;
+        foreach ($magic as $method) {
+            if (!self::declaredBy($codebase, $class, $method, $laravel) instanceof MethodIdentifier) {
+                return false;
+            }
         }
 
         foreach (['forwardcallto', 'forwarddecoratedcallto'] as $method) {
-            $declaring = $codebase->getDeclaringMethodId($relation . '::' . $method);
+            $declaring = $codebase->getDeclaringMethodId($class . '::' . $method);
 
-            if ($declaring === null || !\in_array(\strtolower(MethodIdentifier::wrap($declaring)->fq_class_name), [\strtolower(Relation::class), \strtolower(ForwardsCalls::class)], true)) {
+            if ($declaring === null || !\in_array(\strtolower(MethodIdentifier::wrap($declaring)->fq_class_name), [\strtolower($laravel), \strtolower(ForwardsCalls::class)], true)) {
                 return false;
             }
         }
@@ -740,7 +746,8 @@ final class RelationCallbackParamsHandler implements
             }
         }
 
-        return true;
+        // A static `Model::withOnly()` reaches the builder through the model's magic forwarding.
+        return self::forwardingIsLaravels($codebase, $model, Model::class, ['__call', '__callstatic']);
     }
 
     /**
