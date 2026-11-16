@@ -11,3 +11,8 @@ skip:
       - pkg:githubactions/shivammathur/setup-php
       - pkg:githubactions/stefanzweifel/git-auto-commit-action
       - pkg:githubactions/synacktiv/action-octoscan
+  # psalm-delta runs PR code by design: maintainer-gated `/psalm-delta`, contents:read, no secrets,
+  # persist-credentials:false, forks never save cache (see the header of psalm-delta.yml). The
+  # write-token job that could consume a poisoned cache (benchmark publish) restores no caches.
+  - rule: untrusted_checkout_exec
+    path: .github/workflows/psalm-delta.yml
