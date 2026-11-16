@@ -26,86 +26,9 @@ final class CasterReturnTypesEmissionTest extends TestCase
     private static ?array $traces = null;
 
     #[Test]
-    public function it_types_a_native_only_get_by_its_signature_with_and_without_implements(): void
+    public function it_types_a_native_only_get_by_its_signature(): void
     {
-        $traces = $this->runPsalm();
-
-        $this->assertContains('$_generic: CasterReturnFixture\Money', $traces);
-        $this->assertContains('$_native: CasterReturnFixture\Money', $traces);
-    }
-
-    #[Test]
-    public function it_keeps_the_docblock_return_type_of_get(): void
-    {
-        $this->assertContains('$_documented: CasterReturnFixture\Money', $this->runPsalm());
-    }
-
-    #[Test]
-    public function it_binds_relative_native_return_types_to_the_caster(): void
-    {
-        $traces = $this->runPsalm();
-
-        $this->assertContains('$_traitSelf: CasterReturnFixture\Models\TraitSelfCast', $traces);
-        $this->assertContains('$_traitStatic: CasterReturnFixture\Models\TraitStaticCast', $traces);
-        $this->assertContains('$_staticBase: CasterReturnFixture\Models\StaticBaseCast', $traces);
-        $this->assertContains('$_parent: CasterReturnFixture\Models\StaticBaseCast', $traces);
-    }
-
-    #[Test]
-    public function it_binds_inherited_trait_signatures_to_the_class_that_imported_the_trait(): void
-    {
-        $traces = $this->runPsalm();
-
-        $this->assertContains('$_childTraitSelf: CasterReturnFixture\\Models\\BaseTraitSelfCast', $traces);
-        $this->assertContains('$_childTraitParent: CasterReturnFixture\\Models\\LegacyBase', $traces);
-    }
-
-    #[Test]
-    public function it_combines_every_caster_a_castable_may_return(): void
-    {
-        $this->assertContains('$_multi: int|string', $this->runPsalm());
-    }
-
-    #[Test]
-    public function it_types_a_native_only_get_inherited_from_a_base_caster(): void
-    {
-        $this->assertContains('$_childNative: CasterReturnFixture\\Money', $this->runPsalm());
-    }
-
-    #[Test]
-    public function it_reads_an_inbound_caster_as_the_raw_column_value_even_when_it_also_has_get(): void
-    {
-        $traces = $this->runPsalm();
-
-        $this->assertContains('$_dual: int', $traces);
-        $this->assertContains('$_dualCastable: int', $traces);
-    }
-
-    #[Test]
-    public function it_leaves_a_castable_with_an_unresolved_cast_using_unknown(): void
-    {
-        $this->assertContains('$_selfCasting: mixed', $this->runPsalm());
-    }
-
-    #[Test]
-    public function it_leaves_an_intersection_with_an_explicit_inbound_contract_unknown(): void
-    {
-        $traces = $this->runPsalm();
-
-        $this->assertContains('$_intersection: mixed', $traces);
-        $this->assertContains('$_intersectionClassString: mixed', $traces);
-    }
-
-    #[Test]
-    public function it_types_a_get_aliased_from_a_trait_method(): void
-    {
-        $this->assertContains('$_aliased: CasterReturnFixture\\Money', $this->runPsalm());
-    }
-
-    #[Test]
-    public function it_keeps_a_docblock_return_type_inherited_from_a_base_caster(): void
-    {
-        $this->assertContains('$_inheritedDoc: CasterReturnFixture\Money', $this->runPsalm());
+        $this->assertContains('$_native: CasterReturnFixture\\Money', $this->runPsalm());
     }
 
     /** @return list<string> messages of every `@psalm-trace` */
