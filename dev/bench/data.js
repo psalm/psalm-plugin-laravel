@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794839336996,
+  "lastUpdate": 1794842582432,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18995,6 +18995,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 33.29,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "60a7fe6688a1eb0a19e6763e5dc30eb4b6aef213",
+          "message": "Resolve `Schema\\Builder` and `Connection` macros through the `Schema` and `DB` facades (#2282)\n\n* fix(macro): resolve Schema\\Builder and Connection macros through the Schema and DB facades\n\n* fix(container): keep unbound un-namespaced keys from resolving through a case-insensitive class lookup\n\nSeeding the Schema facade edge loads the global Schema alias in the booted app, so make('schema') built the facade through PHP's case-insensitive class lookup. A real app throws there.",
+          "timestamp": "2026-11-16T16:17:27+01:00",
+          "tree_id": "0d089c2f6e951c433b30c654a76a62f927036c9b",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/60a7fe6688a1eb0a19e6763e5dc30eb4b6aef213"
+        },
+        "date": 1794842580772,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.52,
+            "range": "± 0.26",
             "unit": "s"
           },
           {
