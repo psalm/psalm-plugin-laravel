@@ -16,11 +16,14 @@ use Illuminate\Database\Eloquent\Casts\AsStringable;
 use Illuminate\Support\Collection as IlluminateCollection;
 use Illuminate\Support\Stringable as IlluminateStringable;
 use Psalm\Codebase;
+use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Internal\AutoloadOnce;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Internal\ConfiguredDateClass;
 use Psalm\Storage\ClassLikeStorage;
+use Psalm\Storage\FunctionLikeStorage;
 use Psalm\Type;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
@@ -44,6 +47,10 @@ use Psalm\Type\Union;
  *    reference, so nothing queues it for scanning): the runtime, as before. The target is autoloaded
  *    at most once per process ({@see AutoloadOnce}); every check then reads only declared classes.
  *    A target that fails to load is an unknown cast (mixed).
+ *
+ * Open-world caveat: a caster class named by `castUsing()` or `$casts` is trusted as declared, so a non-final
+ * `BaseCast` is read as `BaseCast` even though a runtime subclass may also implement CastsInboundAttributes (and then
+ * Laravel skips `get()`). A documented `@return` on `get()` has always been trusted the same way.
  *
  * @internal
  */
@@ -117,14 +124,12 @@ final class CastResolver
             return self::makeNullable(new Union([new TNamedObject($castClass)]), $nullable);
         }
 
-        // Order matters: a class may implement both Castable and CastsAttributes (e.g. a value
-        // object that is its own caster). Try Castable's `castUsing()` chase first; only fall
-        // back to direct CastsAttributes reflection if the chase yields nothing.
+        // A Castable is exclusive: Laravel resolves its caster from `castUsing()` alone (HasAttributes::resolveCasterClass)
+        // and never consults the class's own `get()`, even when it implements CastsAttributes too (a value object that
+        // is its own caster). A `castUsing()` we cannot resolve therefore leaves the attribute unknown.
         if (self::castTargetIsA($codebase, $castClass, Castable::class)) {
-            $type = self::resolveCastable($codebase, $castClass, $nullable, $originalType);
-            if ($type instanceof Union) {
-                return $type;
-            }
+            return self::resolveCastable($codebase, $castClass, $nullable, $originalType)
+                ?? self::makeNullable(Type::getMixed(), $nullable);
         }
 
         if (self::castTargetIsA($codebase, $castClass, CastsAttributes::class)) {
@@ -285,78 +290,103 @@ final class CastResolver
             return null;
         }
 
+        // A union of casters (`@return IntCast|StringCast`) reads as the union of what each one returns; one member
+        // we cannot resolve makes the whole answer unknown, so the property is left to Psalm.
+        $resolved = null;
         foreach ($returnType->getAtomicTypes() as $atomic) {
-            // `@return CastsAttributes<TGet, TSet>` — most common when castUsing returns an
-            // anonymous class with explicit generics on the interface (e.g. AsCollection).
-            // Strict equality on the interface itself: a concrete subclass's `@template`s
-            // may not align with the interface's `TGet, TSet` ordering, so we only
-            // short-circuit on the interface. Concrete generic subclasses go through the
-            // TNamedObject branch below which reflects on `::get`.
-            if (
-                $atomic instanceof TGenericObject
-                && $atomic->value === CastsAttributes::class
-                && isset($atomic->type_params[0])
-            ) {
-                return self::makeNullable($atomic->type_params[0], $nullable);
+            $member = self::resolveCastableMember($codebase, $atomic, $nullable, $originalType);
+            if (!$member instanceof Union) {
+                return null;
             }
 
-            // `@return ConcreteCast` / `@return ConcreteCast<X>` / `return new ConcreteCast;`
-            // — reflect on the concrete class's `get()` (which carries the user docblock or
-            // resolves the templates via `@implements CastsAttributes<X, Y>`).
-            //
-            // TGenericObject extends TNamedObject in Psalm, so this branch fires for both
-            // shapes; the TGenericObject===CastsAttributes early-return above already
-            // siphoned off the interface-itself case.
-            if (
-                $atomic instanceof TNamedObject
-                && ClassLineage::isA($codebase, $atomic->value, CastsAttributes::class)
-            ) {
-                $resolved = self::resolveCastsAttributesGet($codebase, $atomic->value, $nullable);
+            $resolved = $resolved instanceof Union ? Type::combineUnionTypes($resolved, $member) : $member;
+        }
+
+        return $resolved;
+    }
+
+    private static function resolveCastableMember(
+        Codebase $codebase,
+        Atomic $atomic,
+        bool $nullable,
+        ?Union $originalType,
+    ): ?Union {
+        // An intersection (`@return BaseCast&CastsInboundAttributes`) may carry the inbound contract in its extra
+        // types, which the class name alone loses (and which makes Laravel skip `get()`): leave it unknown.
+        if (($atomic instanceof TNamedObject && $atomic->extra_types !== [])
+            || ($atomic instanceof TClassString && $atomic->as_type instanceof TNamedObject && $atomic->as_type->extra_types !== [])
+        ) {
+            return null;
+        }
+
+        // `@return CastsAttributes<TGet, TSet>` — most common when castUsing returns an
+        // anonymous class with explicit generics on the interface (e.g. AsCollection).
+        // Strict equality on the interface itself: a concrete subclass's `@template`s
+        // may not align with the interface's `TGet, TSet` ordering, so we only
+        // short-circuit on the interface. Concrete generic subclasses go through the
+        // TNamedObject branch below which reflects on `::get`.
+        if (
+            $atomic instanceof TGenericObject
+            && $atomic->value === CastsAttributes::class
+            && isset($atomic->type_params[0])
+        ) {
+            return self::makeNullable($atomic->type_params[0], $nullable);
+        }
+
+        // `@return ConcreteCast` / `@return ConcreteCast<X>` / `return new ConcreteCast;`
+        // — reflect on the concrete class's `get()` (which carries the user docblock or
+        // resolves the templates via `@implements CastsAttributes<X, Y>`).
+        //
+        // TGenericObject extends TNamedObject in Psalm, so this branch fires for both
+        // shapes; the TGenericObject===CastsAttributes early-return above already
+        // siphoned off the interface-itself case.
+        if (
+            $atomic instanceof TNamedObject
+            && ClassLineage::isA($codebase, $atomic->value, CastsAttributes::class)
+        ) {
+            $resolved = self::resolveCastsAttributesGet($codebase, $atomic->value, $nullable);
+            if ($resolved instanceof Union) {
+                return $resolved;
+            }
+        }
+
+        // Castable that ultimately returns a CastsInboundAttributes — the contract
+        // allows this (`@return class-string<CastsAttributes|CastsInboundAttributes>|...`).
+        // Reading a write-only cast is a passthrough of the column's raw type, same as
+        // the direct CastsInboundAttributes branch in resolve().
+        if (
+            $atomic instanceof TNamedObject
+            && ClassLineage::isA($codebase, $atomic->value, CastsInboundAttributes::class)
+        ) {
+            if ($originalType instanceof Union) {
+                return self::makeNullable($originalType, $nullable);
+            }
+
+            return self::makeNullable(Type::getMixed(), $nullable);
+        }
+
+        // `@return class-string<ConcreteCast>` (or `return ConcreteCast::class;`).
+        if (
+            $atomic instanceof TClassString
+            && $atomic->as_type instanceof TNamedObject
+        ) {
+            $cls = $atomic->as_type->value;
+
+            if (ClassLineage::isA($codebase, $cls, CastsAttributes::class)) {
+                $resolved = self::resolveCastsAttributesGet($codebase, $cls, $nullable);
                 if ($resolved instanceof Union) {
                     return $resolved;
                 }
             }
 
-            // Castable that ultimately returns a CastsInboundAttributes — the contract
-            // allows this (`@return class-string<CastsAttributes|CastsInboundAttributes>|...`).
-            // Reading a write-only cast is a passthrough of the column's raw type, same as
-            // the direct CastsInboundAttributes branch in resolve().
             if (
-                $atomic instanceof TNamedObject
-                && ClassLineage::isA($codebase, $atomic->value, CastsInboundAttributes::class)
-                && !ClassLineage::isA($codebase, $atomic->value, CastsAttributes::class)
+                ClassLineage::isA($codebase, $cls, CastsInboundAttributes::class)
             ) {
                 if ($originalType instanceof Union) {
                     return self::makeNullable($originalType, $nullable);
                 }
 
                 return self::makeNullable(Type::getMixed(), $nullable);
-            }
-
-            // `@return class-string<ConcreteCast>` (or `return ConcreteCast::class;`).
-            if (
-                $atomic instanceof TClassString
-                && $atomic->as_type instanceof TNamedObject
-            ) {
-                $cls = $atomic->as_type->value;
-
-                if (ClassLineage::isA($codebase, $cls, CastsAttributes::class)) {
-                    $resolved = self::resolveCastsAttributesGet($codebase, $cls, $nullable);
-                    if ($resolved instanceof Union) {
-                        return $resolved;
-                    }
-                }
-
-                if (
-                    ClassLineage::isA($codebase, $cls, CastsInboundAttributes::class)
-                    && !ClassLineage::isA($codebase, $cls, CastsAttributes::class)
-                ) {
-                    if ($originalType instanceof Union) {
-                        return self::makeNullable($originalType, $nullable);
-                    }
-
-                    return self::makeNullable(Type::getMixed(), $nullable);
-                }
             }
         }
 
@@ -374,9 +404,20 @@ final class CastResolver
         string $castClass,
         bool $nullable,
     ): ?Union {
+        // Laravel's getClassCastableAttributeValue() hands the raw value back for an inbound caster without calling
+        // `get()`, so a caster implementing both contracts reads as the inbound passthrough.
+        if (ClassLineage::isA($codebase, $castClass, CastsInboundAttributes::class)) {
+            return null;
+        }
+
         $method = $castClass . '::get';
         if (!$codebase->methodExists($method)) {
             return null;
+        }
+
+        $native = self::nativeReturnTypeOfUndocumentedGet($codebase, $castClass);
+        if ($native instanceof Union) {
+            return self::makeNullable($native, $nullable);
         }
 
         $returnType = $codebase->getMethodReturnType($method, $castClass);
@@ -385,6 +426,55 @@ final class CastResolver
         }
 
         return self::makeNullable($returnType, $nullable);
+    }
+
+    /**
+     * A `get()` with a native return type and no docblock anywhere in its chain except the interface's `TGet|null`:
+     * Psalm answers with that (unresolved, or resolved to a nullable `@implements` argument), while the declared
+     * signature is the precise type. A docblock inherited from a base caster (`@return Money` over `get(): object`)
+     * is not the interface's, so it stays with `getMethodReturnType()`.
+     *
+     * The signature is expanded in the caster's own context: `self`/`parent`/`static` (e.g. from a trait) name a
+     * caster class, not the model the property machinery would otherwise bind them to.
+     */
+    private static function nativeReturnTypeOfUndocumentedGet(Codebase $codebase, string $castClass): ?Union
+    {
+        $storage = ClassLineage::storage($codebase, $castClass);
+        $appearingId = $storage?->appearing_method_ids['get'] ?? null;
+        $appearing = $appearingId === null ? null : ClassLineage::storage($codebase, $appearingId->fq_class_name);
+        if (!$storage instanceof ClassLikeStorage || !$appearing instanceof ClassLikeStorage) {
+            return null;
+        }
+
+        // Psalm records the documenting method on the class the method appears in, not on a child inheriting it.
+        $documentingId = $appearing->documenting_method_ids['get'] ?? null;
+        if ($documentingId === null || \strcasecmp($documentingId->fq_class_name, CastsAttributes::class) !== 0) {
+            return null;
+        }
+
+        $declaringId = $storage->declaring_method_ids['get'] ?? null;
+        $declaringStorage = $declaringId === null ? null : ClassLineage::storage($codebase, $declaringId->fq_class_name);
+        // The declaring method keeps its own name when a trait aliases it (`use ReadTrait { read as get; }`).
+        $declared = $declaringId === null ? null : $declaringStorage?->methods[$declaringId->method_name] ?? null;
+
+        if (
+            !$declared instanceof FunctionLikeStorage
+            || !$declared->signature_return_type instanceof Union
+            || $declared->has_docblock_return_type
+        ) {
+            return null;
+        }
+
+        // `self` and `parent` belong to the class the method appears in (the one that imported a trait, which may be a
+        // base of the configured caster); only `static` is the configured caster.
+        return TypeExpander::expandUnion(
+            $codebase,
+            $declared->signature_return_type,
+            $appearing->name,
+            $storage->name,
+            $appearing->parent_class,
+            final: true,
+        );
     }
 
     /** @psalm-external-mutation-free */
