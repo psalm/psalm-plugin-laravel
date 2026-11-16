@@ -191,6 +191,24 @@ final class UsesRoutes
         return route('named_leaf');
     }
 
+    /** A method outside the verified list (`attribute()`) may prefix the name, so the chain is declined. */
+    public function unlistedFluentMethodLeafIsReported(): string
+    {
+        return route('unlisted_leaf');
+    }
+
+    /** Group attributes written as an expression cannot be read, so the group is declined. */
+    public function expressionGroupAttributesLeafIsReported(): string
+    {
+        return route('merged_leaf');
+    }
+
+    /** An action with a spread may override its own `'as'`, so the written one is not trusted. */
+    public function spreadActionAsKeyIsReported(): string
+    {
+        return route('spread_old');
+    }
+
     /** `Schedule::command()->name()` is not a route definition. */
     public function scheduledEventNameIsReported(): string
     {

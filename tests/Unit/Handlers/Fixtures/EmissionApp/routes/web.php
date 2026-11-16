@@ -30,4 +30,12 @@ if (\PHP_INT_SIZE === 0) {
     Route::group(attributes: ['as' => 'named.'], routes: static function (): void {
         Route::get('/named', static fn(): string => 'named')->name('named_leaf');
     });
+
+    // Unknown is never treated as absent: an unlisted fluent method, group attributes that are an
+    // expression, and an action with a spread may each change the final name.
+    Route::middleware('web')->attribute('as', 'unlisted.')->get('/unlisted', static fn(): string => 'unlisted')->name('unlisted_leaf');
+    Route::group(array_merge(['as' => 'merged.']), static function (): void {
+        Route::get('/merged', static fn(): string => 'merged')->name('merged_leaf');
+    });
+    Route::get('/spread', ['uses' => static fn(): string => 'spread', 'as' => 'spread_old', ...['as' => 'spread_actual']]);
 }

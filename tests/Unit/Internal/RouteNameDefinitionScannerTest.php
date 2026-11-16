@@ -34,9 +34,9 @@ final class RouteNameDefinitionScannerTest extends TestCase
         $this->write('routes/web.php', <<<'PHP'
             <?php
             if (config('feature.enabled')) {
-                Route::get('/a', $action)->name('single.quoted');
-                Route::get('/b', $action)->name("double.quoted");
-                Route::get('/c', $action)
+                Route::get('/a', fn () => 1)->name('single.quoted');
+                Route::get('/b', fn () => 1)->name("double.quoted");
+                Route::get('/c', fn () => 1)
                     ->name(
                         'spread.over.lines',
                     );
@@ -46,11 +46,11 @@ final class RouteNameDefinitionScannerTest extends TestCase
                 Route::view('/v', 'page')->name('view.verb');
                 Route::redirect('/r', '/')->name('redirect.verb');
                 Route::get('/g', ['as' => 'as.commented' /* why */, 'uses' => $action]);
-                Route::name('static.direct')->get('/h', $action);
-                Route::get('/n', $action)?->name('nullsafe.call');
-                $router->get('/o', $action)->name('router.variable');
-                $this->router->get('/p', $action)->name('this.router');
-                \Illuminate\Support\Facades\Route::get('/q', $action)->name('fully.qualified');
+                Route::name('static.direct')->get('/h', fn () => 1);
+                Route::get('/n', fn () => 1)?->name('nullsafe.call');
+                $router->get('/o', fn () => 1)->name('router.variable');
+                $this->router->get('/p', fn () => 1)->name('this.router');
+                \Illuminate\Support\Facades\Route::get('/q', fn () => 1)->name('fully.qualified');
             }
             PHP);
 
@@ -63,8 +63,8 @@ final class RouteNameDefinitionScannerTest extends TestCase
     #[Test]
     public function finds_route_files_outside_any_source_directory(): void
     {
-        $this->write('packages/blog/routes/web.php', "<?php\nRoute::get('/', \$a)->name('blog.index');\n");
-        $this->write('app/Providers/RouteServiceProvider.php', "<?php\nRoute::get('/', \$a)->name('provider.defined');\n");
+        $this->write('packages/blog/routes/web.php', "<?php\nRoute::get('/', fn () => 1)->name('blog.index');\n");
+        $this->write('app/Providers/RouteServiceProvider.php', "<?php\nRoute::get('/', fn () => 1)->name('provider.defined');\n");
 
         $this->assertEqualsCanonicalizing(
             ['blog.index', 'provider.defined'],
@@ -77,17 +77,17 @@ final class RouteNameDefinitionScannerTest extends TestCase
     {
         $this->write('routes/web.php', <<<'PHP'
             <?php
-            Route::get('/a', $a)->name($variable);
-            Route::get('/b', $a)->name('prefix.' . $suffix);
-            Route::get('/c', $a)->name("interpolated.{$suffix}");
-            Route::get('/d', $a)->name("interpolated.$suffix");
-            Route::get('/e', $a)->name(RouteName::Index->value);
-            Route::get('/f', $a)->name('escaped\'quote');
-            Route::get('/g', $a)->name('');
+            Route::get('/a', fn () => 1)->name($variable);
+            Route::get('/b', fn () => 1)->name('prefix.' . $suffix);
+            Route::get('/c', fn () => 1)->name("interpolated.{$suffix}");
+            Route::get('/d', fn () => 1)->name("interpolated.$suffix");
+            Route::get('/e', fn () => 1)->name(RouteName::Index->value);
+            Route::get('/f', fn () => 1)->name('escaped\'quote');
+            Route::get('/g', fn () => 1)->name('');
             Route::get('/h', ['as' => 'orders' . '.index', 'uses' => $a]);
             Route::get('/i', ['as' => $prefix . 'x', 'uses' => $a]);
-            Route::get('/j', $a)->name('first' . '.second');
-            Route::get('/k', $a)->name(b'binary.prefixed');
+            Route::get('/j', fn () => 1)->name('first' . '.second');
+            Route::get('/k', fn () => 1)->name(b'binary.prefixed');
             $user->first_name('Not a route');
             PHP);
 
@@ -100,8 +100,8 @@ final class RouteNameDefinitionScannerTest extends TestCase
     {
         $this->write('routes/web.php', <<<'PHP'
             <?php
-            // Route::get('/a', $a)->name('commented.out');
-            /* Route::get('/b', $a)->name('block.comment'); */
+            // Route::get('/a', fn () => 1)->name('commented.out');
+            /* Route::get('/b', fn () => 1)->name('block.comment'); */
             $help = "->name('inside.string')";
             $text = <<<'TXT'
             ->name('inside.nowdoc')
@@ -119,19 +119,19 @@ final class RouteNameDefinitionScannerTest extends TestCase
         $this->write('routes/web.php', <<<'PHP'
             <?php
             Route::name('barcode.')->group(function () {
-                Route::get('/', $a)->name('index');
+                Route::get('/', fn () => 1)->name('index');
             });
             Route::middleware('auth')->name('admin.')->prefix('admin')->group(function () {
-                Route::get('/u', $a)->name('users');
+                Route::get('/u', fn () => 1)->name('users');
                 Route::group([], function () {
-                    Route::get('/n', $a)->name('nested');
+                    Route::get('/n', fn () => 1)->name('nested');
                 });
             });
             Route::group(['as' => 'array.', 'prefix' => 'a'], function () {
-                Route::get('/', $a)->name('array_leaf');
+                Route::get('/', fn () => 1)->name('array_leaf');
             });
-            Route::name('chain.')->get('/c', $a)->name('chain_leaf');
-            Route::get('/after', $a)->name('after.group');
+            Route::name('chain.')->get('/c', fn () => 1)->name('chain_leaf');
+            Route::get('/after', fn () => 1)->name('after.group');
             PHP);
 
         $this->assertSame(['after.group'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
@@ -143,15 +143,15 @@ final class RouteNameDefinitionScannerTest extends TestCase
     {
         $this->write('routes/web.php', <<<'PHP'
             <?php
-            Route::name('admin-')->group(fn () => Route::get('/a', $a)->name('dash_leaf'));
-            Route::name($prefix)->group(fn () => Route::get('/b', $a)->name('variable_leaf'));
-            Route::name('x' . $suffix)->group(fn () => Route::get('/c', $a)->name('concat_leaf'));
-            Route::as('as-method')->group(fn () => Route::get('/d', $a)->name('as_method_leaf'));
-            Route::group(['as' => $prefix], fn () => Route::get('/e', $a)->name('dynamic_as_leaf'));
+            Route::name('admin-')->group(fn () => Route::get('/a', fn () => 1)->name('dash_leaf'));
+            Route::name($prefix)->group(fn () => Route::get('/b', fn () => 1)->name('variable_leaf'));
+            Route::name('x' . $suffix)->group(fn () => Route::get('/c', fn () => 1)->name('concat_leaf'));
+            Route::as('as-method')->group(fn () => Route::get('/d', fn () => 1)->name('as_method_leaf'));
+            Route::group(['as' => $prefix], fn () => Route::get('/e', fn () => 1)->name('dynamic_as_leaf'));
             $router->name('router-')->group(function () use ($router) {
-                $router->get('/f', $a)->name('router_leaf');
+                $router->get('/f', fn () => 1)->name('router_leaf');
             });
-            Route::prefix('plain')->middleware('auth')->group(fn () => Route::get('/g', $a)->name('unprefixed.leaf'));
+            Route::prefix('plain')->middleware('auth')->group(fn () => Route::get('/g', fn () => 1)->name('unprefixed.leaf'));
             PHP);
 
         $this->assertSame(['unprefixed.leaf'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
@@ -163,7 +163,7 @@ final class RouteNameDefinitionScannerTest extends TestCase
     {
         $this->write('routes/web.php', <<<'PHP'
             <?php
-            Route::name('a')->get('/x', $a)->name('b');
+            Route::name('a')->get('/x', fn () => 1)->name('b');
             Route::get('/y', ['as' => 'c', 'uses' => $a])->name('d');
             PHP);
 
@@ -193,18 +193,18 @@ final class RouteNameDefinitionScannerTest extends TestCase
     {
         $this->write('routes/web.php', <<<'PHP'
             <?php
-            Route::get('/a', $a)->name(name: 'named.name');
+            Route::get('/a', fn () => 1)->name(name: 'named.name');
             Route::get(uri: '/b', action: ['as' => 'named.get'])->name('also.named');
             Route::get(...$arguments)->name('spread.get');
             Route::match(methods: ['get'], uri: '/c', action: ['as' => 'named.match']);
             Route::group(attributes: ['as' => 'admin.'], routes: function () {
-                Route::get('/d', $a)->name('named_group_leaf');
+                Route::get('/d', fn () => 1)->name('named_group_leaf');
             });
             Route::middleware(...$middleware)->group(function () {
-                Route::get('/e', $a)->name('spread_group_leaf');
+                Route::get('/e', fn () => 1)->name('spread_group_leaf');
             });
             Route::group($attributes, function () {
-                Route::get('/f', $a)->name('variable_attributes_leaf');
+                Route::get('/f', fn () => 1)->name('variable_attributes_leaf');
             });
             PHP);
 
@@ -222,12 +222,129 @@ final class RouteNameDefinitionScannerTest extends TestCase
             Route::resource('p', C::class)->name('resource.name');
             Route::singleton('profile', C::class)->name('singleton.name');
             Route::name('only')->prefix('x');
-            Route::get('/a', $a)->post('/b', $a)->name('two.verbs');
+            Route::get('/a', fn () => 1)->post('/b', fn () => 1)->name('two.verbs');
             Route::name('no.verb');
-            Route::get('/ok', $a)->name('one.verb');
+            Route::get('/ok', fn () => 1)->name('one.verb');
             PHP);
 
         $this->assertSame(['one.verb'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
+    }
+
+    /** Every method is on a list verified against Laravel as leaving the name alone; any other one declines. */
+    #[Test]
+    public function declines_a_chain_with_a_method_not_known_to_leave_the_name_alone(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::middleware('web')->attribute('as', 'admin.')->get('/a', fn () => 1)->name('attribute_leaf');
+            Route::get('/b', fn () => 1)->name('old')->setAction(['as' => 'actual']);
+            Route::get('/c', fn () => 1)->uses('C@m')->name('uses_leaf');
+            Route::get('/d', fn () => 1)->when($flag, fn ($r) => $r->name('x'))->name('conditionable_leaf');
+            Route::get('/e', fn () => 1)->customMacro()->name('macro_leaf');
+            Route::middleware('web')->attribute('as', 'admin.')->group(function () {
+                Route::get('/f', fn () => 1)->name('attribute_group_leaf');
+            });
+            Route::someMacro()->group(function () {
+                Route::get('/g', fn () => 1)->name('macro_group_leaf');
+            });
+            PHP);
+
+        $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
+    }
+
+    #[Test]
+    public function accepts_the_methods_that_leave_the_name_alone(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::middleware('auth')->prefix('x')->domain('d')->controller(C::class)->namespace('N')
+                ->get('/a', 'method')->where('id', '[0-9]+')->whereNumber('id')->withoutMiddleware('z')
+                ->can('view')->scopeBindings()->withTrashed()->missing(fn () => 1)->block(1, 1)->defaults('k', 'v')
+                ->metadata(['m' => 1])->name('all.safe');
+            Route::middleware('auth')->group(function () {
+                Route::get('/b', fn () => 1)->name('safe.group');
+            });
+            PHP);
+
+        $this->assertEqualsCanonicalizing(['all.safe', 'safe.group'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
+    }
+
+    /** Group attributes must be a literal array of literal keys, else the prefix is unknown and the group is declined. */
+    #[Test]
+    public function declines_a_group_whose_attributes_are_not_a_closed_literal_array(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::group(array_merge(['as' => 'admin.']), function () {
+                Route::get('/a', fn () => 1)->name('merged_leaf');
+            });
+            Route::group((['as' => 'admin.']), function () {
+                Route::get('/b', fn () => 1)->name('parenthesized_leaf');
+            });
+            Route::group([...$shared, 'prefix' => 'x'], function () {
+                Route::get('/c', fn () => 1)->name('spread_leaf');
+            });
+            Route::group([$key => 'admin.'], function () {
+                Route::get('/d', fn () => 1)->name('computed_key_leaf');
+            });
+            Route::group(['prefix' => 'x', 'admin.'], function () {
+                Route::get('/e', fn () => 1)->name('keyless_leaf');
+            });
+            Route::group(['prefix' => 'x'] + $more, function () {
+                Route::get('/f', fn () => 1)->name('union_leaf');
+            });
+            Route::group(['\x61s' => 'admin.'], function () {
+                Route::get('/g', fn () => 1)->name('escaped_key_leaf');
+            });
+            Route::group(['prefix' => 'ok', 'middleware' => ['web']], function () {
+                Route::get('/h', fn () => 1)->name('closed_literal_leaf');
+            });
+            Route::group(array('prefix' => 'ok'), function () {
+                Route::get('/i', fn () => 1)->name('array_function_leaf');
+            });
+            PHP);
+
+        $this->assertEqualsCanonicalizing(['closed_literal_leaf', 'array_function_leaf'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
+    }
+
+    /** An action that could carry its own `'as'` without the scanner seeing it is unknown, so nothing is recorded. */
+    #[Test]
+    public function declines_a_route_action_that_is_not_readable(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::get('/a', ['uses' => fn () => 1, 'as' => 'old', ...['as' => 'actual']]);
+            Route::get('/b', ['uses' => fn () => 1, $key => 'x'])->name('computed_key');
+            Route::get('/c', $action)->name('variable_action');
+            Route::get('/d', buildAction())->name('call_action');
+            Route::get('/e', [$controller, 'method'])->name('object_callable');
+            Route::get('/f', ['uses' => 'C@m'] + $extra)->name('union_action');
+            Route::get('/g', [...$parts])->name('spread_callable');
+            Route::fallback($action)->name('fallback_variable');
+            PHP);
+
+        $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
+    }
+
+    #[Test]
+    public function accepts_the_route_actions_it_can_read(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::get('/a', function () { return 1; })->name('closure');
+            Route::get('/b', static fn () => 1)->name('static.arrow');
+            Route::get('/c', 'Controller@method')->name('string');
+            Route::get('/d', Controller::class)->name('invokable');
+            Route::get('/e', [Controller::class, 'method'])->name('callable.array');
+            Route::get('/f', ['uses' => 'C@m', 'middleware' => ['web']])->name('literal.keys');
+            Route::get('/g')->name('no.action');
+            Route::fallback(fn () => 1)->name('fallback.closure');
+            PHP);
+
+        $this->assertEqualsCanonicalizing(
+            ['closure', 'static.arrow', 'string', 'invokable', 'callable.array', 'literal.keys', 'no.action', 'fallback.closure'],
+            \array_keys(RouteNameDefinitionScanner::scan($this->root)),
+        );
     }
 
     /** `name()` and `'as'` outside a route-definition chain never register a route. */
@@ -239,7 +356,7 @@ final class RouteNameDefinitionScannerTest extends TestCase
             Schedule::command('reports:run')->name('reports');
             $schedule->command('b')->name('scheduled');
             $builder->name('builder');
-            $route = Route::get('/x', $a);
+            $route = Route::get('/x', fn () => 1);
             $route->name('stored.registrar');
             $config = ['as' => 'config.entry', 'name' => 'x'];
             return ['as' => 'returned.array'];
@@ -257,10 +374,10 @@ final class RouteNameDefinitionScannerTest extends TestCase
     public function skips_blade_templates_and_dependency_or_test_directories(): void
     {
         $this->write('resources/views/page.blade.php', "<?php ->name('blade.template') ?>\n");
-        $this->write('node_modules/pkg/routes.php', "<?php\nRoute::get('/', \$a)->name('node.modules');\n");
-        $this->write('storage/framework/cache.php', "<?php\nRoute::get('/', \$a)->name('storage.cache');\n");
-        $this->write('tests/Feature/RouteTest.php', "<?php\nRoute::get('/', \$a)->name('test.only');\n");
-        $this->write('routes/web.php', "<?php\nRoute::get('/', \$a)->name('real.route');\n");
+        $this->write('node_modules/pkg/routes.php', "<?php\nRoute::get('/', fn () => 1)->name('node.modules');\n");
+        $this->write('storage/framework/cache.php', "<?php\nRoute::get('/', fn () => 1)->name('storage.cache');\n");
+        $this->write('tests/Feature/RouteTest.php', "<?php\nRoute::get('/', fn () => 1)->name('test.only');\n");
+        $this->write('routes/web.php', "<?php\nRoute::get('/', fn () => 1)->name('real.route');\n");
 
         $this->assertSame(['real.route'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
     }
@@ -268,8 +385,8 @@ final class RouteNameDefinitionScannerTest extends TestCase
     #[Test]
     public function skips_files_the_ignore_callback_rejects(): void
     {
-        $this->write('legacy/routes.php', "<?php\nRoute::get('/', \$a)->name('legacy.route');\n");
-        $this->write('routes/web.php', "<?php\nRoute::get('/', \$a)->name('current.route');\n");
+        $this->write('legacy/routes.php', "<?php\nRoute::get('/', fn () => 1)->name('legacy.route');\n");
+        $this->write('routes/web.php', "<?php\nRoute::get('/', fn () => 1)->name('current.route');\n");
 
         $names = RouteNameDefinitionScanner::scan($this->root, static fn(string $path): bool => \str_contains($path, '/legacy/'));
 
@@ -279,8 +396,8 @@ final class RouteNameDefinitionScannerTest extends TestCase
     #[Test]
     public function does_not_enter_directories_the_ignore_callback_rejects(): void
     {
-        $this->write('legacy/routes.php', "<?php\nRoute::get('/', \$a)->name('legacy.route');\n");
-        $this->write('routes/web.php', "<?php\nRoute::get('/', \$a)->name('current.route');\n");
+        $this->write('legacy/routes.php', "<?php\nRoute::get('/', fn () => 1)->name('legacy.route');\n");
+        $this->write('routes/web.php', "<?php\nRoute::get('/', fn () => 1)->name('current.route');\n");
 
         $visitedFiles = [];
         $names = RouteNameDefinitionScanner::scan($this->root, static function (string $path) use (&$visitedFiles): bool {
