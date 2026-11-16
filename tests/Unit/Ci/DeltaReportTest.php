@@ -52,7 +52,7 @@ final class DeltaReportTest extends TestCase
 
         $report = $this->render(['fine', 'not-run', 'both-lost', 'base-lost', 'head-lost']);
 
-        $this->assertStringStartsWith('## ❌ Issues: unchanged · Performance: regressed', $report);
+        $this->assertStringStartsWith('## ❌ Types: unchanged · Performance: regressed', $report);
         // ❌ first, then 💥, then ✅; selection order inside a group.
         $this->assertSame(
             ['❌ head-lost', '💥 not-run', '💥 both-lost', '💥 base-lost', '✅ fine'],
@@ -66,7 +66,7 @@ final class DeltaReportTest extends TestCase
         $this->side('base-lost', 'base', crash: true);
         $this->side('base-lost', 'head', issues: true, perf: [10.0, 80.0, 100.0]);
 
-        $this->assertStringStartsWith('## ⚠️ Issues: not compared · Performance: not compared', $this->render(['base-lost']));
+        $this->assertStringStartsWith('## ⚠️ Types: not compared · Performance: not compared', $this->render(['base-lost']));
     }
 
     #[Test]
@@ -102,11 +102,11 @@ final class DeltaReportTest extends TestCase
 
         $cells = \explode(' | ', $this->tableRows($this->render(['app']))[0]);
 
-        foreach ([1 => $wall, 2 => $memory, 5 => $coverage] as $column => $color) {
+        foreach ([[$cells[1], $wall], [$cells[2], $memory], [\end($cells), $coverage]] as [$cell, $color]) {
             if ($color === null) {
-                $this->assertStringNotContainsString('\color', $cells[$column]);
+                $this->assertStringNotContainsString('\color', $cell);
             } else {
-                $this->assertStringContainsString('\color{' . $color . '}', $cells[$column]);
+                $this->assertStringContainsString('\color{' . $color . '}', $cell);
             }
         }
     }
@@ -177,6 +177,129 @@ final class DeltaReportTest extends TestCase
         $this->assertStringContainsString('| RealType |', $report);
         $this->assertStringNotContainsString('Injected', $report);
         $this->assertStringNotContainsString("\r", $report);
+    }
+
+    #[Test]
+    public function a_taint_only_change_shows_in_the_heading_and_the_orange_taint_column_not_in_weighted(): void
+    {
+        $this->side('app', 'base', issues: [$this->issue('MixedAssignment', 1)], perf: [10.0, 80.0, 100.0]);
+        $this->side('app', 'head', issues: [
+            $this->issue('MixedAssignment', 1),
+            ...\array_map(fn(int $line): array => $this->issue('TaintedHtml', -2, $line), [10, 11, 12]),
+        ], perf: [10.0, 80.0, 100.0]);
+
+        $report = $this->render(['app']);
+        $rows = $this->tableRows($report);
+        $app = \explode(' | ', $rows[0]);
+        $total = \explode(' | ', $rows[1]);
+
+        $this->assertStringStartsWith('## ✅ Types: unchanged · Taint: +3 −0 · Performance: unchanged', $report);
+        $this->assertStringStartsWith('4 ', $app[3]);
+        $this->assertSame('1', $app[4]);
+        $this->assertStringStartsWith('3 ', $app[5]);
+        $this->assertStringContainsString('\color{orange}{\textsf{+3}}', $app[5]);
+        $this->assertStringContainsString('\color{gray}{\textsf{-0}}', $app[5]);
+        $this->assertStringContainsString('\color{orange}{\textsf{+3}}', $total[5]);
+    }
+
+    #[Test]
+    public function removed_taint_issues_are_orange_too(): void
+    {
+        $this->side('app', 'base', issues: [$this->issue('TaintedSql', -2), $this->issue('TaintedHtml', -2, 2)], perf: [10.0, 80.0, 100.0]);
+        $this->side('app', 'head', issues: [$this->issue('TaintedSql', -2)], perf: [10.0, 80.0, 100.0]);
+
+        $report = $this->render(['app']);
+        $cell = \explode(' | ', $this->tableRows($report)[0])[5];
+
+        $this->assertStringContainsString('Types: unchanged · Taint: +0 −1', $report);
+        $this->assertStringContainsString('\color{orange}{\textsf{-1}}', $cell);
+        $this->assertStringNotContainsString('green', $cell);
+    }
+
+    #[Test]
+    public function weighted_counts_only_type_issues_when_taint_moves_too(): void
+    {
+        $this->side('app', 'base', issues: true, perf: [10.0, 80.0, 100.0]);
+        $this->side('app', 'head', issues: [
+            $this->issue('InvalidArgument', 3, 1),
+            $this->issue('InvalidArgument', 3, 2),
+            $this->issue('TaintedHtml', -2, 3),
+            $this->issue('TaintedSql', -2, 4),
+        ], perf: [10.0, 80.0, 100.0]);
+
+        $report = $this->render(['app']);
+        $app = \explode(' | ', $this->tableRows($report)[0]);
+
+        $this->assertStringStartsWith('## ✅ Types: increased · Taint: +2 −0 · Performance: unchanged', $report);
+        $this->assertStringStartsWith('4 ', $app[3]);
+        $this->assertStringStartsWith('6 ', $app[4]);
+        $this->assertStringContainsString('\color{red}{\textsf{+6}}', $app[4]);
+        $this->assertStringContainsString('**Weighted** 0 → 6 (+6): L3 +2', $report);
+        $this->assertStringContainsString('**Taint** 0 → 2 (+2 −0)', $report);
+    }
+
+    #[Test]
+    public function a_strictness_check_weighs_one(): void
+    {
+        $this->side('app', 'base', issues: true, perf: [10.0, 80.0, 100.0]);
+        $this->side('app', 'head', issues: [$this->issue('PossiblyUndefinedStringArrayOffset', -2)], perf: [10.0, 80.0, 100.0]);
+
+        $report = $this->render(['app']);
+        $app = \explode(' | ', $this->tableRows($report)[0]);
+
+        $this->assertStringStartsWith('## ✅ Types: increased · Performance: unchanged', $report);
+        $this->assertStringStartsWith('1 ', $app[4]);
+        $this->assertStringContainsString('**Weighted** 0 → 1 (+1): feature +1', $report);
+    }
+
+    #[Test]
+    public function the_dead_code_column_appears_only_when_unused_code_was_reported(): void
+    {
+        $this->side('plain', 'base', issues: [$this->issue('MixedAssignment', 1)], perf: [10.0, 80.0, 100.0]);
+        $this->side('plain', 'head', issues: true, perf: [10.0, 80.0, 100.0]);
+
+        $plain = $this->render(['plain']);
+
+        $this->assertStringNotContainsString('Dead code |', $this->header($plain));
+        $this->assertStringNotContainsString('Dead code:', $plain);
+
+        $this->side('dead', 'base', issues: [$this->issue('UnusedMethod', -2, 1), $this->issue('PossiblyUnusedParam', -2, 2)], perf: [10.0, 80.0, 100.0]);
+        $this->side('dead', 'head', issues: [
+            $this->issue('UnusedMethod', -2, 1),
+            $this->issue('UnusedClass', -2, 5),
+            $this->issue('UnusedProperty', -2, 6),
+        ], perf: [10.0, 80.0, 100.0]);
+
+        $report = $this->render(['dead']);
+        $cells = \explode(' | ', $this->tableRows($report)[0]);
+
+        $this->assertStringContainsString('| Taint | Dead code | Coverage (%) |', $this->header($report));
+        $this->assertStringStartsWith('## ✅ Types: unchanged · Dead code: +2 −1 · Performance: unchanged', $report);
+        $this->assertSame('0', $cells[4]);
+        $this->assertStringStartsWith('3 ', $cells[6]);
+        $this->assertStringContainsString('\color{red}{\textsf{+2}}', $cells[6]);
+        $this->assertStringContainsString('\color{green}{\textsf{-1}}', $cells[6]);
+        $this->assertStringContainsString('**Dead code** 2 → 3 (+2 −1)', $report);
+    }
+
+    /** @return array<string, mixed> */
+    private function issue(string $type, int $level, int $line = 1): array
+    {
+        return [
+            'file_name' => 'a.php', 'line_from' => $line, 'line_to' => $line, 'column_from' => 1, 'column_to' => 2,
+            'type' => $type, 'message' => 'm', 'error_level' => $level,
+        ];
+    }
+
+    private function header(string $report): string
+    {
+        foreach (\explode("\n", $report) as $line) {
+            if (\str_starts_with($line, '| App ')) {
+                return $line;
+            }
+        }
+
+        $this->fail('No table header');
     }
 
     /**

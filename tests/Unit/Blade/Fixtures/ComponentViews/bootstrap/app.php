@@ -17,6 +17,8 @@ $app->register(new class ($app) extends ServiceProvider {
         $this->loadViewsFrom(\dirname(__DIR__) . '/resources/pkg-views', 'pkg');
 
         require_once \dirname(__DIR__) . '/app/LivewireStandIn.php';
+        // Outside `app/` and included by no component file, so only the booted app declares it.
+        require_once \dirname(__DIR__) . '/support/booted_view.php';
         \Livewire\Component::macro('flash', static fn(string $message): string => $message);
     }
 });

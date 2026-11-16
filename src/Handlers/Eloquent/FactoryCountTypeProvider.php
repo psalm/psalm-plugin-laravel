@@ -30,8 +30,12 @@ use Psalm\Type\Union;
  * a user override of `count()` / `times()` / `new()` / `forEachSequence()` owns its return type.
  * A factory that overrides how the count is set, kept or built (see
  * {@see FactoryCount::runsLaravelCountPath()}) has no synthesized `TCount`, and `times()`
- * on it answers an unknown count. A class without a synthesized `TCount` (explicit `@extends Factory<M, X>`,
- * a user's own `@template TCount`) keeps the pre-#2188 `Factory<TModel, count>` answer from `count()` / `times()` / `forEachSequence()`.
+ * on it answers an unknown count. When such a class also leaves `TCount` at the default `int|null` (see
+ * {@see FactoryCount::leavesCountDefault()}) it has no count to narrow, and `count()` / `times()` / `forEachSequence()`
+ * answer the receiver itself, its `&static` and a generic base's `TModel` kept, but only for a receiver proven to be
+ * that class (see {@see FactoryCount::provenReceiver()}, #2313). Every other receiver shape (a union, a template, an
+ * intersection, a mixin proxy, a first-class callable) and every explicit contract (`@extends Factory<M, X>`, a user's
+ * own `@template TCount`) keeps the pre-#2188 `Factory<TModel, count>` answer.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/693
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/696
@@ -70,7 +74,9 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
         // A factory that overrides how the count is set, kept or built owns its count: unknown, never narrowed.
         // That includes a descendant the receiver may hold, unless a literal `Class::times()` / `final` names the exact class.
         $lateBound = FactoryCount::isLateBound($event, $codebase, $calledClass);
-        $countType = !FactoryCount::runsLaravelCountPath($codebase->classlike_storage_provider->get($calledClass), !$lateBound)
+        $storage = $codebase->classlike_storage_provider->get($calledClass);
+        $ownsCount = !FactoryCount::runsLaravelCountPath($storage, !$lateBound);
+        $countType = $ownsCount
             ? FactoryCount::unknownCountUnion()
             : match ($methodName) {
                 'new' => $lateBound ? FactoryCount::unknownCountUnion() : FactoryCount::singleCountUnion(),
@@ -83,8 +89,18 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
             return $concrete;
         }
 
-        // Only the base `Factory` and classes without a synthesized TCount reach here: `forEachSequence()` counts
-        // the factory like `count()` does (`state(...)->count(count($sequence))`), so it takes the same fallback.
+        // A subclass that owns its count and leaves `TCount` at the default has no count to narrow: a receiver proven
+        // to be that class is the answer (its `&static` and a generic base's `TModel` kept).
+        if ($ownsCount && FactoryCount::leavesCountDefault($codebase, $calledClass)) {
+            $receiver = FactoryCount::provenReceiver($event, $storage);
+            if ($receiver instanceof Union) {
+                return $receiver;
+            }
+        }
+
+        // The base `Factory`, a class with an explicit TCount contract, and a count-owning class whose receiver is not
+        // proven reach here: `forEachSequence()` counts the factory like `count()` does
+        // (`state(...)->count(count($sequence))`), so it takes the same fallback.
         $modelType = self::resolveModelType($event, $codebase);
         if (!$modelType instanceof Union) {
             return null;

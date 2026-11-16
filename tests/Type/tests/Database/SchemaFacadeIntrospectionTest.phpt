@@ -13,7 +13,7 @@ function consume_string(string $value): void { echo $value; }
 function consume_string_list(array $value): void { echo implode(",", $value); }
 
 /**
- * The facade's generated `@method static array ...` tags lose to the `@mixin Schema\Builder` real
+ * The facade's generated `@method static array ...` tags are dropped for the `@mixin Schema\Builder` real
  * methods, so Builder's types apply. Where Laravel's Builder docblock contradicts the driver processors
  * (or is absent), stubs/common/Database/Schema/Builder.phpstub declares the runtime-true shape.
  */
