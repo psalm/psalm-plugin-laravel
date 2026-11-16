@@ -432,26 +432,25 @@ final class ShadowCompilerTest extends TestCase
      * {@see \Psalm\LaravelPlugin\Blade\MarkerPrePass} (which runs BEFORE `compileString()`, on the
      * raw source) never inserts a marker comment between its compiled sub-statements — confirmed
      * against a real compile of `nested-attributes.blade.php` (no fixture container here, so this
-     * writes the four statements as raw pass-through PHP instead). Four hand-written statements
-     * across four SOURCE lines, by contrast, each get their own marker, which is exactly why
-     * {@see \Psalm\LaravelPlugin\Blade\AttributesRestoreReassert}'s pattern declines to match this
+     * writes the three statements as raw pass-through PHP instead). Three hand-written statements
+     * across three SOURCE lines, by contrast, each get their own marker, which is exactly why
+     * {@see \Psalm\LaravelPlugin\Blade\AttributesStripReassert}'s pattern declines to match this
      * shape: it is anchored to the compiler's actual, marker-free output, not to text that merely
      * resembles it.
      *
      * A container-less `BladeCompiler` cannot compile a real `<x-...>` tag (see
      * `component_tag_yields_a_compile_error` above), so the `isComponentView()` gate itself — a
      * plain page that DOES carry a `<x-...>` tag, where a gate-less injection would have a real
-     * restore block to match — is pinned in
+     * strip block to match — is pinned in
      * `BladeIssueRemapTest::a_plain_caller_with_a_component_tag_gets_no_attributes_reassert`
      * instead, against a real compile through the fixture's booted application.
      */
     #[Test]
-    public function hand_written_lines_resembling_the_restore_are_not_reasserted(): void
+    public function hand_written_lines_resembling_the_strip_are_not_reasserted(): void
     {
         $source = "{{ \$attributes }}\n"
-            . "<?php if (isset(\$__attributesOriginalabc)): ?>\n"
-            . "<?php \$attributes = \$__attributesOriginalabc; ?>\n"
-            . "<?php unset(\$__attributesOriginalabc); ?>\n"
+            . "<?php if (isset(\$attributes) && \$attributes instanceof Illuminate\\View\\ComponentAttributeBag): ?>\n"
+            . "<?php \$attributes = \$attributes->except(\\Illuminate\\View\\AnonymousComponent::ignoredParameterNames()); ?>\n"
             . "<?php endif; ?>\n";
 
         $result = $this->compiler->compile('view.blade.php', $source);

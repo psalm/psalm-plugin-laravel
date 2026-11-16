@@ -48,7 +48,7 @@ final class RelationResolverDescendantTest extends TestCase
             $this->assertTrue(RelationResolver::relationMethodExistsOnDescendant($codebase, 'RelAliasBase', 'aliasedOnly'));
             $this->assertFalse(RelationResolver::relationMethodExistsOnDescendant($codebase, 'RelAliasBase', 'typo'));
         } finally {
-            $provider->remove('RelAliasChild');
+            $provider->remove('RelAliasChild', '');
         }
     }
 }

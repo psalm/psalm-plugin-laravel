@@ -12,6 +12,7 @@
 <x-overridden/>
 <x-chip/>
 <x-shadowed.ticket/>
+<x-booted.receipt/>
 <x-compacted/>
 <x-withed/>
 <x-included/>
