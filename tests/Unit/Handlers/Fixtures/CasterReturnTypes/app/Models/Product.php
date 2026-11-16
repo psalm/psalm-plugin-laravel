@@ -21,6 +21,9 @@ class Product extends Model
             'trait_static' => TraitStaticCast::class,
             'static_base' => StaticBaseCast::class,
             'parent_ret' => ParentReturningCast::class,
+            'child_trait_self' => ChildTraitSelfCast::class,
+            'child_trait_parent' => ChildTraitParentCast::class,
+            'multi' => MultiCastable::class,
             'inherited_doc' => InheritedDocblockCast::class,
         ];
     }

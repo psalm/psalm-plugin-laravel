@@ -31,4 +31,13 @@ function probes(Product $product): void
 
     $_inheritedDoc = $product->inherited_doc;
     /** @psalm-trace $_inheritedDoc */
+
+    $_childTraitSelf = $product->child_trait_self;
+    /** @psalm-trace $_childTraitSelf */
+
+    $_childTraitParent = $product->child_trait_parent;
+    /** @psalm-trace $_childTraitParent */
+
+    $_multi = $product->multi;
+    /** @psalm-trace $_multi */
 }

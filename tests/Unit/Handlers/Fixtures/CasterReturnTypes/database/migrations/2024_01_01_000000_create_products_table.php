@@ -17,6 +17,9 @@ return new class extends Migration {
             $table->integer('static_base');
             $table->integer('parent_ret');
             $table->integer('inherited_doc');
+            $table->integer('child_trait_self');
+            $table->integer('child_trait_parent');
+            $table->integer('multi');
         });
     }
 };

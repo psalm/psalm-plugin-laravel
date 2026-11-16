@@ -52,6 +52,21 @@ final class CasterReturnTypesEmissionTest extends TestCase
     }
 
     #[Test]
+    public function it_binds_inherited_trait_signatures_to_the_class_that_imported_the_trait(): void
+    {
+        $traces = $this->runPsalm();
+
+        $this->assertContains('$_childTraitSelf: CasterReturnFixture\\Models\\BaseTraitSelfCast', $traces);
+        $this->assertContains('$_childTraitParent: CasterReturnFixture\\Models\\LegacyBase', $traces);
+    }
+
+    #[Test]
+    public function it_combines_every_caster_a_castable_may_return(): void
+    {
+        $this->assertContains('$_multi: int|string', $this->runPsalm());
+    }
+
+    #[Test]
     public function it_keeps_a_docblock_return_type_inherited_from_a_base_caster(): void
     {
         $this->assertContains('$_inheritedDoc: CasterReturnFixture\Money', $this->runPsalm());
