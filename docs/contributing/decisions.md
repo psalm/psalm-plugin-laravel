@@ -415,6 +415,14 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Accepted limitation:** a user subclass keeps Laravel's `EnumeratesValues` declaration, because a stub override of a trait method does not reach subclasses (vimeo/psalm#12158), so `whenEmpty()`-family params on subclasses stay `mixed` (untyped `tap()`/`pipe()` params resolve to the subclass since Psalm 7.3, vimeo/psalm#13494); `chunkWhile()` is a `Collection` method and is typed there too. Pinned by `CollectionCallbackParamsSubclassKnownLimitation.phpt`. Once Psalm inherits the override, a subclass callback param becomes the base class, and a closure typed with the subclass (`fn (UserCollection $c)`) would be reported. <!-- @todo-by https://github.com/vimeo/psalm/issues/12158 drop the limitation and the subclass KnownLimitation phpt once stub trait-method overrides reach subclasses -->
 
+### `Eloquent\Collection` re-declares the inherited methods whose result stops being models (#1699)
+
+**Decision:** `chunk`, `split`, `splitIn`, `sliding`, `mapToGroups`, `mapToDictionary`, `mapSpread`, `mapInto`, `flatMap` and `crossJoin` are redeclared in the Eloquent stub with a `Support\Collection` outer and, where the groups hold models, an explicitly named `Eloquent\Collection` inner. Inherited `static<K, V>` puts a non-model into `TModel of Model` (`InvalidTemplateParam`). The inner class is named because a `static` nested in another class's generic is re-bound to the outer class on later calls.
+
+**Accepted limitations:**
+- A user subclass keeps the inherited declaration (vimeo/psalm#12158), so `PriceCollection::chunk()` still reports `InvalidTemplateParam`.
+- `mergeRecursive`, `collapseWithKeys` and `times()` still report it on `Eloquent\Collection` (rare calls, not worth a redeclaration each).
+
 ## Factories
 
 ### The count lives on the concrete factory class, as a synthesized `TCount` template (#2188)
