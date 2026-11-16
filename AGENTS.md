@@ -52,6 +52,7 @@ composer test:app                                                      # plugin 
 composer psalm -- --no-progress --no-suggestions --output-format=compact  # self-analysis
 composer cs                                                            # auto-fix code style (quiet flags baked in)
 composer rector -- --no-progress-bar --no-ansi                         # rector refactoring
+vendor/bin/structarmed analyse --no-progress                           # architecture rules (PSR-4, layer ruleset)
 
 # single test file, cheaper than the suite
 ./vendor/bin/phpunit tests/Unit/PluginConfigTest.php
@@ -61,7 +62,9 @@ composer rector -- --no-progress-bar --no-ansi                         # rector 
 Gotchas:
 
 - The final pre-commit psalm gate must DROP `--no-suggestions` to match CI, which runs bare `psalm` (`.github/workflows/psalm.yml`) and reports what the flag hides locally. Keep the flag for iteration only.
+- `structarmed.php` maps each `src/` directory (plus `src/Plugin.php`) to a layer and lists the layers it may depend on. A new cross-directory dependency fails the `StructArmed` workflow: add it to the ruleset only when the direction is intended, and register a layer for any new top-level `src/` directory.
 - Before citing Psalm source or defaults, confirm `vendor/composer/installed.json` carries the Psalm major that composer.json requires: a stale vendor from an interrupted install answers every source read and probe with the PREVIOUS major's behavior, convincingly.
+- `composer.json` sets a one-day Composer cooldown (`config.policy.cooldown`, Composer 2.11+), with `vimeo/psalm` and `psalm/*` exempt. A requirement floor that only a release younger than a day satisfies fails to resolve, both locally and in CI (no `composer.lock` is committed). Wait out the cooldown, or exempt the package in `config.policy.cooldown.ignore` when it must land the same day.
 
 ## Git and PRs
 

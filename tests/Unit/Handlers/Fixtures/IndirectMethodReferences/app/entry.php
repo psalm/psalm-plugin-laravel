@@ -13,6 +13,7 @@ use IndirectMethodReferencesFixture\Conventions\DemotedPipe;
 use IndirectMethodReferencesFixture\Conventions\NonUniqueQueuedJob;
 use IndirectMethodReferencesFixture\Conventions\NotAPipe;
 use IndirectMethodReferencesFixture\Conventions\PlainInvokable;
+use IndirectMethodReferencesFixture\Conventions\PrivateConstructorEvent;
 use IndirectMethodReferencesFixture\Conventions\PrivateConstructorJob;
 use IndirectMethodReferencesFixture\Conventions\QueuedListener;
 use IndirectMethodReferencesFixture\Conventions\SendReportJob;
@@ -49,5 +50,6 @@ function consume(): array
         DemotedPipe::class,
         SendReportJob::dispatch('report', 'note'),
         PrivateConstructorJob::dispatch('payload'),
+        PrivateConstructorEvent::dispatch('payload'),
     ];
 }
