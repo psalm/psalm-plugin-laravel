@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794842582432,
+  "lastUpdate": 1794857251962,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19030,6 +19030,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.52,
             "range": "± 0.26",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78e7c9faa063d79545c7d239893ca1af6d3f5711",
+          "message": "fix(eloquent): do not narrow getKey() for non-final framework model receivers (#2293)",
+          "timestamp": "2026-11-16T20:10:27+01:00",
+          "tree_id": "eaefa824e033da2cc7a56d633e6e1b9946cfe6a7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/78e7c9faa063d79545c7d239893ca1af6d3f5711"
+        },
+        "date": 1794857250811,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.62,
+            "range": "± 0.1",
             "unit": "s"
           },
           {
