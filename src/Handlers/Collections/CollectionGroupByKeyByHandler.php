@@ -90,6 +90,9 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         // discards our new arguments. That is only right when the call leaves the shape unchanged (#2005); otherwise
         // (`groupBy()` always nests, `keyBy()` may change the key) keep the rebuilt type so a wrong `@return C` is
         // reported (#2328).
+        // @todo-by https://github.com/vimeo/psalm/issues/13997 once Psalm keeps `static<...>` arguments on a template
+        // receiver, decline for every template-bound receiver (drop isTemplateBound()/sameShape() and the bound walk
+        // in keepsBaseTemplateLayout()) and let the stub's `static<...>` answer.
         if ($method === 'keyby' && self::isTemplateBound($lhs) && self::sameShape($templates, $key, $value)) {
             return null;
         }
