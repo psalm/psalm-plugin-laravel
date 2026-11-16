@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<files psalm-version="7.0.4@fa5b1f6e665cb743838ffd865b8fc96207f9409f">
+<files psalm-version="7.7.0@0fd455bdcb8d4385c1b4b2fd81e1cb85b8625518">
   <file src="app/Broadcasting/ExampleChannel.php">
     <InvalidReturnType>
       <code><![CDATA[array|bool]]></code>
@@ -16,10 +16,12 @@
     </MissingReturnType>
   </file>
   <file src="app/Http/Resources/ExampleResource.php">
-    <MixedReturnTypeCoercion>
-      <code><![CDATA[array<string, mixed>]]></code>
+    <InvalidReturnStatement>
       <code><![CDATA[parent::toArray($request)]]></code>
-    </MixedReturnTypeCoercion>
+    </InvalidReturnStatement>
+    <InvalidReturnType>
+      <code><![CDATA[array<string, mixed>]]></code>
+    </InvalidReturnType>
   </file>
   <file src="app/Mail/ExampleMail.php">
     <MissingView>

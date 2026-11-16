@@ -45,7 +45,7 @@ final class ResolveColumnTypeTest extends TestCase
     #[\Override]
     protected function tearDown(): void
     {
-        $this->classLikeStorageProvider->remove(WorkOrder::class);
+        $this->classLikeStorageProvider->remove(WorkOrder::class, '');
         // Reset the schema set by `it_returns_null_when_no_property_and_no_schema`
         // so later unit tests in the suite don't see a stray empty aggregator.
         \Psalm\LaravelPlugin\Handlers\Eloquent\Schema\SchemaStateProvider::setSchema(

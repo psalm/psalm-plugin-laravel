@@ -308,7 +308,7 @@ final class PreludeBuilderTest extends TestCase
         yield 'Blade comment' => ['{{ $compo{{-- split --}}nent->id() }}'];
     }
 
-    /** A component view keeps its own `$attributes` typing, restore re-assert included (#1543); `$component` is typed as in any caller. */
+    /** A component view keeps its own `$attributes` typing (#1543); `$component` is typed as in any caller. */
     #[Test]
     public function a_component_view_keeps_its_attributes_typing(): void
     {
