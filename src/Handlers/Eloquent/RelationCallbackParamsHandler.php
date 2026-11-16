@@ -100,7 +100,8 @@ use Psalm\Type\Union;
  * ones included), a static `Model::with()`, a model instance and an Eloquent Collection, each exactly one known model.
  * Declines: the lists above (a MorphTo anywhere on the path included), a template-typed or intersection receiver,
  * `with('a', fn)` on a model, a closure on a `:columns` key, on a repeated flattened path or in a nested `loadMissing()`
- * array, a computed key or spread anywhere in the literal, a generic (templated) model anywhere on the path, and every
+ * array, a computed key or spread anywhere in the literal, a generic (templated) model anywhere on the path, a Relation
+ * that is not exactly one of Laravel's own ({@see LARAVEL_RELATIONS}: the receiver and every segment of the path), and every
  * class whose own code the constraint passes through not being Laravel's ({@see modelRunsLaravelsEagerLoad()}): the
  * builder (an unknown one, see {@see hasUnknownBuilder()}, or one overriding any method of BUILDER_EAGER_PATH), the model
  * (MODEL_QUERY_PATH, or an unknown collection for `loadMissing()`, see {@see hasUnknownCollection()}) and the collection
@@ -129,6 +130,25 @@ final class RelationCallbackParamsHandler implements
     private const LARAVEL_DECLARING_CLASSES = [
         'illuminate\\database\\eloquent\\builder',
         'illuminate\\database\\eloquent\\concerns\\queriesrelationships',
+    ];
+
+    /**
+     * The concrete relation classes Laravel ships. An eager-load constraint is only typed through exactly these: a
+     * userland subclass may override `getQuery()`, forwarding or its templates, and an abstract base names no relation.
+     *
+     * @var list<lowercase-string>
+     */
+    private const LARAVEL_RELATIONS = [
+        'illuminate\\database\\eloquent\\relations\\hasone',
+        'illuminate\\database\\eloquent\\relations\\hasmany',
+        'illuminate\\database\\eloquent\\relations\\belongsto',
+        'illuminate\\database\\eloquent\\relations\\belongstomany',
+        'illuminate\\database\\eloquent\\relations\\morphone',
+        'illuminate\\database\\eloquent\\relations\\morphmany',
+        'illuminate\\database\\eloquent\\relations\\morphto',
+        'illuminate\\database\\eloquent\\relations\\morphtomany',
+        'illuminate\\database\\eloquent\\relations\\hasonethrough',
+        'illuminate\\database\\eloquent\\relations\\hasmanythrough',
     ];
 
     /**
@@ -222,7 +242,7 @@ final class RelationCallbackParamsHandler implements
 
     /**
      * The Model methods that build the query `with()`/`load()` run on, each declared by Model itself (its magic
-     * forwarding is checked next to them, see {@see forwardingIsLaravels()}).
+     * forwarding is checked next to them, see {@see modelForwardingIsLaravels()}).
      *
      * @var non-empty-list<lowercase-string>
      */
@@ -642,7 +662,7 @@ final class RelationCallbackParamsHandler implements
 
             // The receiver runs on its own class; a static or Relation-forwarded call runs on the model's builder.
             if (self::hasUnknownBuilder($codebase, $model)
-                || ($forwards && $atomic instanceof TNamedObject && !self::forwardingIsLaravels($codebase, $atomic->value, Relation::class, ['__call']))
+                || ($forwards && $atomic instanceof TNamedObject && !self::isLaravelRelation($atomic->value))
                 || !self::builderIsLaravels($codebase, $dispatched)
                 || ($forwards && !self::modelRunsLaravelsEagerLoad($codebase, $model))
             ) {
@@ -684,26 +704,34 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * Whether `$class` forwards calls (to its builder) through Laravel's own magic methods: each of `$magic` is declared
-     * by `$laravel` itself and the `ForwardsCalls` helpers they use are `$laravel`'s or the trait's. An override may hand
-     * the constraint the Builder instead of the Relation.
+     * Whether `$relation` is exactly one of Laravel's own relation classes ({@see LARAVEL_RELATIONS}).
      *
-     * @param class-string $laravel the class that declares the magic methods: Relation or Model
-     * @param non-empty-list<lowercase-string> $magic
      * @psalm-pure
      */
-    private static function forwardingIsLaravels(Codebase $codebase, string $class, string $laravel, array $magic): bool
+    private static function isLaravelRelation(string $relation): bool
     {
-        foreach ($magic as $method) {
-            if (!self::declaredBy($codebase, $class, $method, $laravel) instanceof MethodIdentifier) {
+        return \in_array(\strtolower($relation), self::LARAVEL_RELATIONS, true);
+    }
+
+    /**
+     * Whether `$model` forwards calls to its builder through Laravel's own `__call()`/`__callStatic()` and the
+     * `ForwardsCalls` helpers they use: an override may hand the constraint the Builder instead of the Relation.
+     *
+     * @param class-string<Model> $model
+     * @psalm-pure
+     */
+    private static function modelForwardingIsLaravels(Codebase $codebase, string $model): bool
+    {
+        foreach (['__call', '__callstatic'] as $method) {
+            if (!self::declaredBy($codebase, $model, $method, Model::class) instanceof MethodIdentifier) {
                 return false;
             }
         }
 
         foreach (['forwardcallto', 'forwarddecoratedcallto'] as $method) {
-            $declaring = $codebase->getDeclaringMethodId($class . '::' . $method);
+            $declaring = $codebase->getDeclaringMethodId($model . '::' . $method);
 
-            if ($declaring === null || !\in_array(\strtolower(MethodIdentifier::wrap($declaring)->fq_class_name), [\strtolower($laravel), \strtolower(ForwardsCalls::class)], true)) {
+            if ($declaring === null || !\in_array(\strtolower(MethodIdentifier::wrap($declaring)->fq_class_name), [\strtolower(Model::class), \strtolower(ForwardsCalls::class)], true)) {
                 return false;
             }
         }
@@ -747,7 +775,7 @@ final class RelationCallbackParamsHandler implements
         }
 
         // A static `Model::withOnly()` reaches the builder through the model's magic forwarding.
-        return self::forwardingIsLaravels($codebase, $model, Model::class, ['__call', '__callstatic']);
+        return self::modelForwardingIsLaravels($codebase, $model);
     }
 
     /**
@@ -1230,6 +1258,11 @@ final class RelationCallbackParamsHandler implements
             $class = self::relationClass($codebase, $model, $segment, $type);
 
             if ($class === null || ClassLineage::isA($codebase, $class, MorphTo::class)) {
+                return null;
+            }
+
+            // An eager-load slot is only proven through Laravel's own relation classes, on every segment of the path.
+            if ($eager && !self::isLaravelRelation($class)) {
                 return null;
             }
 

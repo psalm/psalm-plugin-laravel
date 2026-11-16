@@ -800,6 +800,72 @@ function test_overridden_model_static_forwarding_declines(): void
         takes_mixed($q);
     }]);
 }
+
+/**
+ * A userland Relation subclass may override what a nested constraint runs through (`getQuery()`) or its templates, so
+ * an eager-load slot is only typed through Laravel's own relation classes, on the receiver and on every path segment.
+ *
+ * @template TRelated of Model
+ * @template TDeclaring of Model
+ * @extends HasMany<TRelated, TDeclaring>
+ */
+final class QueryOverridingHasMany extends HasMany
+{
+    /** @inheritDoc */
+    #[\Override]
+    public function getQuery()
+    {
+        return parent::getQuery();
+    }
+}
+
+/**
+ * The declaring model comes first, unlike HasMany's own order.
+ *
+ * @template TDeclaring of Model
+ * @template TRelated of Model
+ * @extends HasMany<TRelated, TDeclaring>
+ */
+final class SwappedHasMany extends HasMany {}
+
+final class CustomRelationOwner extends Model
+{
+    /** @return QueryOverridingHasMany<Vehicle, $this> */
+    public function vehicles(): QueryOverridingHasMany
+    {
+        /** @var QueryOverridingHasMany<Vehicle, CustomRelationOwner> $relation */
+        $relation = new QueryOverridingHasMany(Vehicle::query(), $this, 'customer_id', 'id');
+
+        return $relation;
+    }
+
+    /** @return SwappedHasMany<CustomRelationOwner, Vehicle> */
+    public function swapped(): SwappedHasMany
+    {
+        /** @var SwappedHasMany<CustomRelationOwner, Vehicle> $relation */
+        $relation = new SwappedHasMany(Vehicle::query(), $this, 'customer_id', 'id');
+
+        return $relation;
+    }
+
+    /** @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<WorkOrder, $this> */
+    public function workOrders(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(WorkOrder::class);
+    }
+}
+
+function test_custom_relation_classes_on_the_path_decline(): void
+{
+    CustomRelationOwner::query()->with(['vehicles.workOrders' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    CustomRelationOwner::query()->with(['swapped.workOrders' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
 ?>
 --EXPECTF--
 MissingClosureParamType on line %d: Parameter $q has no provided type
@@ -864,6 +930,8 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 LessSpecificImplementedReturnType on line %d: %s
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
