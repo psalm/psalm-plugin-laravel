@@ -45,6 +45,8 @@ use Psalm\Type\Union;
  * is the default "Detected tainted user secret leaking" rather than CWE-208-specific.
  * The flow still pinpoints the comparison site correctly.
  *
+ * @todo-by https://github.com/vimeo/psalm/issues/11762 emit the CWE-208-specific message and drop the "default text" caveat above
+ *
  * @see https://cwe.mitre.org/data/definitions/208.html
  * @see https://github.com/vimeo/psalm/issues/11762
  */
