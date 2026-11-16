@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794857251962,
+  "lastUpdate": 1794857799361,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19065,6 +19065,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 26.62,
             "range": "± 0.1",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "35de6e6504d5a3d96c1c8e8fb411e0d03e4b2f8d",
+          "message": "Publish benchmark history from a job that restores no caches (#2323)\n\n* ci: publish benchmark history from a job that restores no caches\n\n* ci: name the benchmark jobs",
+          "timestamp": "2026-11-16T20:33:07+01:00",
+          "tree_id": "fa0667c1d56847a2db44c63c3c677d9f03585a02",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/35de6e6504d5a3d96c1c8e8fb411e0d03e4b2f8d"
+        },
+        "date": 1794857797814,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.67,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
