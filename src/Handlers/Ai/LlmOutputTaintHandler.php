@@ -27,6 +27,8 @@ use Psalm\Type\Atomic\TNamedObject;
  * `toArray()`; the `*KnownLimitation.phpt` fixtures pin the gap and
  * `docs/contributing/taint-analysis.md` explains it.
  *
+ * @todo-by https://github.com/vimeo/psalm/issues/11912 source array-access reads too, drop this caveat, and flip the *KnownLimitation.phpt fixtures (StructuredResponseArrayAccess, SubAgentToolDelegation) to positive tests
+ *
  * @see https://genai.owasp.org/llmrisk/llm01-prompt-injection/ OWASP LLM01:2025
  * @see https://github.com/laravel/ai Laravel AI SDK
  *
@@ -97,8 +99,8 @@ final class LlmOutputTaintHandler implements AfterExpressionAnalysisInterface
     {
         $codebase = $event->getCodebase();
 
-        // Performance gate: skip the per-expression type lookup unless --taint-analysis is on.
-        if (!$codebase->taint_flow_graph instanceof \Psalm\Internal\Codebase\TaintFlowGraph) {
+        // Performance gate: skip the per-expression type lookup unless taint is tracked here.
+        if (!$codebase->tracksTaintFlow($event->getStatementsSource())) {
             return null;
         }
 
