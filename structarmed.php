@@ -36,7 +36,7 @@ return Architecture::define()
         '*/tests/Unit/*/Fixtures/*',
         '*/tests/Unit/Handlers/Eloquent/Schema/migrations/*',
 
-        // multiple classs in single file
+        // multiple classes in single file
         Psr4Preset::CLASSES_MUST_MATCH_COMPOSER => [
             '*/tests/Unit/Handlers/Rules/NoEnvOutsideConfigHandlerTest.php',
             '*/tests/Unit/Handlers/Views/MissingViewHandlerTest.php',
