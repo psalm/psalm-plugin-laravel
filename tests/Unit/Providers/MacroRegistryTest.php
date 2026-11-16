@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\Tests\Unit\Providers;
+namespace Tests\Psalm\LaravelPlugin\Unit\Providers;
 
 use Illuminate\Support\Stringable;
 use PHPUnit\Framework\Attributes\CoversClass;
