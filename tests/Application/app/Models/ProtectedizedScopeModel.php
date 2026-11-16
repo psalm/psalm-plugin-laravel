@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  * A public trait `#[Scope]` narrowed with `as protected`: PHP forwards an outside static call to
  * `__callStatic`, but Psalm reads the trait method's own (public) visibility.
  */
-class ProtectedizedScopeModel extends Model
+abstract class ProtectedizedScopeModel extends Model
 {
     use HasPublicScope {
         published as protected;
