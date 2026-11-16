@@ -107,21 +107,29 @@ final class RouteNameDefinitionScannerTest extends TestCase
         $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
     }
 
-    /** The leaf of a group-prefixed definition is found, the composed name is not: a documented limitation. */
+    /** Neither the prefix nor the bare leaf is a route name: Laravel registers only the composed one. */
     #[Test]
-    public function does_not_compose_group_prefixes(): void
+    public function declines_names_registered_under_a_group_prefix(): void
     {
         $this->write('routes/web.php', <<<'PHP'
             <?php
             Route::name('barcode.')->group(function () {
                 Route::get('/', $a)->name('index');
             });
+            Route::middleware('auth')->name('admin.')->prefix('admin')->group(function () {
+                Route::get('/u', $a)->name('users');
+                Route::group([], function () {
+                    Route::get('/n', $a)->name('nested');
+                });
+            });
+            Route::group(['as' => 'array.', 'prefix' => 'a'], function () {
+                Route::get('/', $a)->name('array_leaf');
+            });
+            Route::name('chain.')->get('/c', $a)->name('chain_leaf');
+            Route::get('/after', $a)->name('after.group');
             PHP);
 
-        $names = RouteNameDefinitionScanner::scan($this->root);
-
-        $this->assertArrayHasKey('index', $names);
-        $this->assertArrayNotHasKey('barcode.index', $names);
+        $this->assertSame(['after.group'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
     }
 
     #[Test]

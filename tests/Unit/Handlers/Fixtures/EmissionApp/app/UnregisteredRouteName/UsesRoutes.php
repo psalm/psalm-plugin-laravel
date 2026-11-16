@@ -160,4 +160,10 @@ final class UsesRoutes
     {
         return route('barcode.index');
     }
+
+    /** The bare leaf of a prefixed group is not a registered name: Laravel only registers `barcode.index`. */
+    public function groupLeafWithoutPrefixIsReported(): string
+    {
+        return route('index');
+    }
 }

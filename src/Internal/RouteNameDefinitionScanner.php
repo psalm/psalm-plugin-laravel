@@ -17,7 +17,10 @@ namespace Psalm\LaravelPlugin\Internal;
  * substring, which keeps a large app at a few hundred milliseconds. The lexer (not a regex) decides
  * what counts, so comments, strings and heredocs never define a name, and only one plain string
  * literal does: concatenation, interpolation, enums and variables do not. A name composed at runtime,
- * such as the leaf of `Route::name('barcode.')->group(...)`, is never spelled out and is not found. A
+ * such as the leaf of `Route::name('barcode.')->group(...)`, is never spelled out and is not found; nor is the
+ * bare leaf recorded, because Laravel registers only the composed name. Names inside a prefixed group, and the
+ * prefix literal itself (a trailing dot), are therefore skipped. A group loaded from another file
+ * (`->group(base_path('routes/admin.php'))`) cannot be followed. A
  * `->name('x')` on an unrelated class, or an `'as' => 'x'` pair outside a route action, counts as a
  * definition, which only hides a finding, never adds one.
  *
@@ -117,13 +120,60 @@ final class RouteNameDefinitionScanner
 
         $names = [];
         $count = \count($tokens);
+        // One entry per open parenthesis: 0 for any, 1 for a `group(` call, 2 for a `group(` call whose
+        // routes are registered under a name prefix.
+        $parens = [];
+        $prefixedGroups = 0;
+        // A name prefix (`->name('admin.')`) was seen in this statement and no `group(` has consumed it yet.
+        $prefixPending = false;
 
         for ($i = 0; $i < $count; $i++) {
-            $name = \in_array($tokens[$i]->id, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true)
-                ? self::nameCallArgument($tokens, $i + 1)
-                : self::actionAsValue($tokens, $i);
+            $text = $tokens[$i]->text;
 
-            if ($name !== null) {
+            if ($text === ';') {
+                $prefixPending = false;
+            } elseif ($text === '(') {
+                $kind = self::isIdentifier($tokens[$i - 1] ?? null, 'group') ? 1 : 0;
+
+                if ($kind === 1 && $prefixPending) {
+                    $kind = 2;
+                    $prefixPending = false;
+                    ++$prefixedGroups;
+                }
+
+                $parens[] = $kind;
+            } elseif ($text === ')' && \array_pop($parens) === 2) {
+                --$prefixedGroups;
+            }
+
+            $isNameCall = \in_array($tokens[$i]->id, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true);
+            $name = $isNameCall ? self::nameCallArgument($tokens, $i + 1) : self::actionAsValue($tokens, $i);
+
+            if ($name === null) {
+                continue;
+            }
+
+            // A trailing dot makes the literal a prefix that Laravel prepends to the names registered
+            // under it, never a route name itself. `Route::name('admin.')->group(fn () => ...->name('users'))`
+            // registers only `admin.users`, so the leaf is not a definition of `users`: it, and every name
+            // inside such a group, is declined rather than recorded as a fragment.
+            if (\str_ends_with($name, '.')) {
+                if ($isNameCall) {
+                    $prefixPending = true;
+                } else {
+                    // `Route::group(['as' => 'admin.'], ...)`: the innermost enclosing, not yet prefixed `group(`.
+                    $groupKeys = \array_keys($parens, 1, true);
+
+                    if ($groupKeys !== []) {
+                        $parens[\end($groupKeys)] = 2;
+                        ++$prefixedGroups;
+                    }
+                }
+
+                continue;
+            }
+
+            if (!$prefixPending && $prefixedGroups === 0) {
                 $names[] = $name;
             }
         }

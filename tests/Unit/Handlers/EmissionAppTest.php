@@ -288,13 +288,13 @@ final class EmissionAppTest extends TestCase
         // redirect()->route(), url()->route() on the Contracts\UrlGenerator url() returns with no path)
         // + 3 named-argument (route(absolute:, name:) with the name at offset 1, to_route(route:),
         // redirect()->route(route:)) + 2 non-literal names (string-backed enum case, class constant)
-        // + 1 group-prefix composed name (known limitation, see the next test).
+        // + 2 group-prefix names (the composed name is a known limitation, the bare leaf must be reported).
         // An exact count proves both full receiver coverage and that the clean, spread, dynamic and
         // conditionally-defined shapes do not over-fire.
-        $this->assertCount(14, $findings, "Expected exactly 14 UnregisteredRouteName findings, got:\n{$joined}");
+        $this->assertCount(15, $findings, "Expected exactly 15 UnregisteredRouteName findings, got:\n{$joined}");
         $this->assertStringNotContainsString("'dashboard'", $joined);
         $this->assertStringNotContainsString("'posts.show'", $joined);
-        $this->assertSame(\array_fill(0, 14, 'error'), \array_column($findings, 'severity'));
+        $this->assertSame(\array_fill(0, 15, 'error'), \array_column($findings, 'severity'));
     }
 
     #[Test]
@@ -321,6 +321,14 @@ final class EmissionAppTest extends TestCase
         $joined = \implode("\n", $this->messages($this->scenarioFindings('UnregisteredRouteName', 'UnregisteredRouteName')));
 
         $this->assertStringContainsString("Route name 'barcode.index' is not registered", $joined);
+    }
+
+    #[Test]
+    public function unregistered_route_name_is_reported_for_the_unprefixed_leaf_of_a_prefixed_group(): void
+    {
+        $joined = \implode("\n", $this->messages($this->scenarioFindings('UnregisteredRouteName', 'UnregisteredRouteName')));
+
+        $this->assertStringContainsString("Route name 'index' is not registered", $joined);
     }
 
     #[Test]

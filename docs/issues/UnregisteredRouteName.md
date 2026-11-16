@@ -90,7 +90,7 @@ Details:
 
 - Names are checked when they are string literals, string-backed enum cases, or class constants typed as one string literal (`self::` included). Variables, concatenation, int-backed and pure enum cases, `static::` / `parent::` constants, and global constants are skipped
 - A call site guarded by `Route::has('name')` is not tracked
-- A name composed at runtime from a group prefix is never spelled out in source, so it is still reported when its group is not registered by the analysed boot. For `Route::name('barcode.')->group(fn () => Route::get('/')->name('index'))`, only `barcode.` and `index` are found, so `route('barcode.index')` is reported when that group is conditional
+- A name composed at runtime from a group prefix is never spelled out in source, so it is still reported when its group is not registered by the analysed boot. For `Route::name('barcode.')->group(fn () => Route::get('/')->name('index'))`, `route('barcode.index')` is reported when that group is conditional. The bare leaf (`index`) is not treated as a definition either, so `route('index')` stays reported. A prefixed group loaded from another file (`->group(base_path('routes/admin.php'))`) cannot be followed, so its leaf names count as definitions
 - A stale route cache (written before a route was added, renamed, or named) can produce a false positive; `php artisan route:cache` or `route:clear` fixes it
 - A missing-named-route resolver registered after boot (middleware, controller, test) cannot be detected
 - Inside Blade templates, names are checked when [Blade analysis](../blade.md) is on
