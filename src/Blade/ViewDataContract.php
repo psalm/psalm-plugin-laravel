@@ -39,6 +39,14 @@ final class ViewDataContract
      *                                                  type hint on a local). Consumed-only: they
      *                                                  make a passed key count as used and nothing
      *                                                  more.
+     * @param bool                       $readsScope    the compiled body calls `get_defined_vars()`
+     *                                                  outside the scope argument Blade compiles
+     *                                                  into an include, so it may read any name in
+     *                                                  scope. Does NOT make $readVariables a lower
+     *                                                  bound for UnusedViewData (a bare
+     *                                                  `get_defined_vars()` is too common for that);
+     *                                                  only the stale-declaration check declines on
+     *                                                  it, since it must prove a name unread.
      */
     public function __construct(
         public readonly array $vars,
@@ -47,5 +55,6 @@ final class ViewDataContract
         public readonly bool $readsUnknown = true,
         public readonly array $localVariables = [],
         public readonly array $rawDeclaredVariables = [],
+        public readonly bool $readsScope = false,
     ) {}
 }
