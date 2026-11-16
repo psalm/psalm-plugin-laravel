@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Foundation\Bus\Dispatchable as BusDispatchable;
+use Illuminate\Foundation\Events\Dispatchable as EventsDispatchable;
 use Illuminate\Foundation\Queue\Queueable as FoundationQueueable;
 use Illuminate\Routing\Controller;
 use Psalm\Codebase;
@@ -260,7 +261,8 @@ final class IndirectMethodReferenceHandler implements AfterCodebasePopulatedInte
             // A native `Closure` on `$next` is all that tells a pipe from any other class with a
             // public handle(); a docblock does not count.
             'pipe' => isset($methods['handle']) && self::isNativeClosure($methods['handle']['storage']->params[1] ?? null),
-            'dispatchable' => $dispatchable,
+            // Events `Dispatchable::dispatch()` runs `new static()` too, but an event has no job `handle()`.
+            'dispatchable' => $dispatchable || isset($traits[\strtolower(EventsDispatchable::class)]),
             'busJob' => $dispatchable || isset($traits[\strtolower(BusQueueable::class)]),
         ];
         $active['queued'] = $active['busJob'] || ClassLineage::isA($codebase, $storage->name, ShouldQueue::class);
