@@ -264,7 +264,7 @@ When the same variable is assigned twice in a method (e.g., `$redirectUrl` set o
 
 ### Second choice: baseline entry
 
-When escape would force a refactor (split a chain, extract from a `match`/ternary expression, introduce a typed local just to satisfy the cast), add the finding to `psalm-baseline.xml` (`--set-baseline` for a new file, `--update-baseline` to extend it). The entry covers that finding only, and no other flow in the method loses coverage. Keep the rationale in a code comment next to the sink, since the baseline carries none.
+When escape would force a refactor (split a chain, extract from a `match`/ternary expression, introduce a typed local just to satisfy the cast), add the finding to `psalm-baseline.xml`. `--update-baseline` only prunes fixed entries and never adds a new one, so regenerate with `--set-baseline=psalm-baseline.xml` instead. It records every current issue, not just the selected finding, so review the file's diff and keep only the entries you chose to add (for example with `git add -p`). The entry covers that finding only, and no other flow in the method loses coverage. Keep the rationale in a code comment next to the sink, since the baseline carries none.
 
 ### Last resort: `@psalm-suppress TaintedInput`
 
@@ -288,7 +288,7 @@ public function store(Request $request, Dispatcher $dispatcher): RedirectRespons
 | Clear `$x = strval(source); sink($x);` with no surrounding chain | `@psalm-taint-escape <kind>` (kind documents what was sanitized) |
 | Mail builder chain `(new MailMessage)->cc(...)->subject(...)` | extract each value with `@psalm-taint-escape header`; if impractical, a baseline entry per finding |
 | Single-expression `__invoke`/match/ternary that ends in the sink | baseline entry (a method-wide `@psalm-suppress TaintedInput` hides every other flow in it) |
-| `class-string<T>` flowing into `new $fqcn()` (would need `strval()` + `@var` to escape) | baseline entry if the type is already proven by `is_subclass_of`; escape with `strval()` + `@var` otherwise |
+| `class-string<T>` flowing into `new $fqcn()` (would need `strval()` + `@var` to escape) | first make sure a runtime guard (`is_subclass_of()` or an allowlist) rejects every other class: neither an escape nor a baseline entry makes an unchecked class name safe. Then a baseline entry (or the `strval()` + `@var` escape if you prefer) |
 | Multiple distinct kinds reaching distinct sinks in the same method | escape per assignment (keeps each kind narrow) |
 
 Whenever `@psalm-suppress TaintedInput` is used, include a `--` rationale after it so the reason survives in the diff.
