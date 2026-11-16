@@ -46,5 +46,17 @@ function nullable_variable_argument(Route $route, ?string $domain): void
     $_result = $route->domain($domain);
     /** @psalm-check-type-exact $_result = Illuminate\Routing\Route&static|null|string */
 }
+
+/** A first-class callable binds `TDomain` per call, so each call picks its own branch. */
+function first_class_callable(Route $route): void
+{
+    $fn = $route->domain(...);
+
+    $_set = $fn('api.example.com');
+    /** @psalm-check-type-exact $_set = Route&static */
+
+    $_get = $fn();
+    /** @psalm-check-type-exact $_get = string|null */
+}
 ?>
 --EXPECTF--

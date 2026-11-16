@@ -367,8 +367,7 @@ jobs:
           mkdir "$RUNNER_TEMP/console-6" && cd "$RUNNER_TEMP/console-6"
           composer init --no-interaction --name=acme/console-6 --stability=stable
           composer config repositories.plugin "{\"type\": \"path\", \"url\": \"$GITHUB_WORKSPACE\", \"options\": {\"versions\": {\"psalm/plugin-laravel\": \"4.x-dev\"}}}"
-          # @todo-by 2026-11-15 Psalm 7.6.0 is released: change 'vimeo/psalm:^7.6@dev' below back to 'vimeo/psalm:^7.6@stable', and restore "vimeo/psalm": "^7.6.0@stable" in composer.json
-          composer require --no-interaction --no-progress 'symfony/console:6.4.*' 'vimeo/psalm:^7.6@dev' 'psalm/plugin-laravel:4.x-dev@dev'
+          composer require --no-interaction --no-progress 'symfony/console:6.4.*' 'vimeo/psalm:^7.7@stable' 'psalm/plugin-laravel:4.x-dev@dev'
 
       - name: Run the help of every psalm-laravel command
         working-directory: ${{ runner.temp }}/console-6
