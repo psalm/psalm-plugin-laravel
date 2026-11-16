@@ -166,4 +166,16 @@ final class UsesRoutes
     {
         return route('index');
     }
+
+    /** A prefix without a trailing dot composes `dash-leaf` the same way. */
+    public function dashPrefixedGroupLeafIsReported(): string
+    {
+        return route('leaf');
+    }
+
+    /** `Schedule::command()->name()` is not a route definition. */
+    public function scheduledEventNameIsReported(): string
+    {
+        return route('scheduled_report');
+    }
 }

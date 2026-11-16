@@ -43,12 +43,12 @@ use Psalm\Type\Union;
  * registers a missing-named-route resolver, which `UrlGenerator::route()` consults before throwing.
  *
  * A name absent from the booted table is still skipped when the project's sources spell it out as
- * `->name('x')` or `'as' => 'x'` ({@see RouteNameDefinitionScanner}): it is defined, just registered
+ * a `Route` call chain's `->name('x')` or `'as' => 'x'` ({@see RouteNameDefinitionScanner}): it is defined, just registered
  * under a runtime condition the boot did not meet (a feature flag, a provider returning early).
  *
  * Known limitations: `Route::has()` guards are not tracked; a resolver registered after boot is
  * invisible; a name composed from a group prefix (`Route::name('a.')->group(... ->name('b'))`)
- * is never spelled out, so it is still reported when its group is not registered; a stale route
+ * is never spelled out (and the bare `b` is not a definition), so it is still reported when its group is not registered; a stale route
  * cache can produce false positives; Blade templates are out of scope.
  *
  * @see https://laravel.com/docs/routing#named-routes

@@ -45,12 +45,15 @@ final class RouteNameDefinitionScannerTest extends TestCase
                 Route::get('/f', $action)->name(name: 'named.argument');
                 Route::get('/g', ['as' => 'as.commented' /* why */, 'uses' => $action]);
                 Route::name('static.direct')->get('/h', $action);
-                $route?->name('nullsafe.call');
+                Route::get('/n', $action)?->name('nullsafe.call');
+                $router->get('/o', $action)->name('router.variable');
+                $this->router->get('/p', $action)->name('this.router');
+                \Illuminate\Support\Facades\Route::get('/q', $action)->name('fully.qualified');
             }
             PHP);
 
         $this->assertSame(
-            ['single.quoted', 'double.quoted', 'spread.over.lines', 'as.single', 'as.double', 'named.argument', 'as.commented', 'static.direct', 'nullsafe.call'],
+            ['single.quoted', 'double.quoted', 'spread.over.lines', 'as.single', 'as.double', 'named.argument', 'as.commented', 'static.direct', 'nullsafe.call', 'router.variable', 'this.router', 'fully.qualified'],
             \array_keys(RouteNameDefinitionScanner::scan($this->root)),
         );
     }
@@ -130,6 +133,62 @@ final class RouteNameDefinitionScannerTest extends TestCase
             PHP);
 
         $this->assertSame(['after.group'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
+    }
+
+    /** A prefix needs no trailing dot, and need not be a literal: any name set before `group()` is one. */
+    #[Test]
+    public function declines_a_group_whatever_its_prefix_looks_like(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::name('admin-')->group(fn () => Route::get('/a', $a)->name('dash_leaf'));
+            Route::name($prefix)->group(fn () => Route::get('/b', $a)->name('variable_leaf'));
+            Route::name('x' . $suffix)->group(fn () => Route::get('/c', $a)->name('concat_leaf'));
+            Route::as('as-method')->group(fn () => Route::get('/d', $a)->name('as_method_leaf'));
+            Route::group(['as' => $prefix], fn () => Route::get('/e', $a)->name('dynamic_as_leaf'));
+            $router->name('router-')->group(function () use ($router) {
+                $router->get('/f', $a)->name('router_leaf');
+            });
+            Route::prefix('plain')->middleware('auth')->group(fn () => Route::get('/g', $a)->name('unprefixed.leaf'));
+            PHP);
+
+        $this->assertSame(['unprefixed.leaf'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
+    }
+
+    /** Laravel concatenates names set in one chain, so two sources never spell out the final name. */
+    #[Test]
+    public function declines_a_chain_with_more_than_one_name_source(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::name('a')->get('/x', $a)->name('b');
+            Route::get('/y', ['as' => 'c', 'uses' => $a])->name('d');
+            PHP);
+
+        $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
+    }
+
+    /** `name()` and `'as'` outside a route-definition chain never register a route. */
+    #[Test]
+    public function ignores_names_that_have_no_route_provenance(): void
+    {
+        $this->write('routes/console.php', <<<'PHP'
+            <?php
+            Schedule::command('reports:run')->name('reports');
+            $schedule->command('b')->name('scheduled');
+            $builder->name('builder');
+            $route = Route::get('/x', $a);
+            $route->name('stored.registrar');
+            $config = ['as' => 'config.entry', 'name' => 'x'];
+            return ['as' => 'returned.array'];
+            Cache::remember('k', 1, fn () => ['as' => 'arrow.array']);
+            Route::get('/y', fn () => ['as' => 'response.array']);
+            Route::get('/z', function () { return ['as' => 'closure.array']; });
+            Route::get('/w', [Controller::class, 'a'])->middleware(['as' => 'middleware.array']);
+            Route::get('/v', ['nested' => ['as' => 'too.deep']]);
+            PHP);
+
+        $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
     }
 
     #[Test]

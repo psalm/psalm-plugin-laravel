@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Internal;
 
 /**
- * Collects the route names a project's own PHP sources spell out literally, as `->name('x')`,
- * `Route::name('x')`, `->name(name: 'x')` or `'as' => 'x'`.
+ * Collects the route names a project's own PHP sources spell out literally in a route definition:
+ * `Route::get(...)->name('x')`, `Route::name('x')->get(...)`, `->name(name: 'x')` or `Route::get('/', ['as' => 'x'])`.
  *
  * The booted app's router only holds the routes the boot actually registered. A route wrapped in
  * `if (config('feature.enabled'))`, or loaded by a provider that returned early, is absent from it
@@ -16,13 +16,20 @@ namespace Psalm\LaravelPlugin\Internal;
  * Nothing is evaluated or parsed into an AST: a file is lexed only when it contains a candidate
  * substring, which keeps a large app at a few hundred milliseconds. The lexer (not a regex) decides
  * what counts, so comments, strings and heredocs never define a name, and only one plain string
- * literal does: concatenation, interpolation, enums and variables do not. A name composed at runtime,
- * such as the leaf of `Route::name('barcode.')->group(...)`, is never spelled out and is not found; nor is the
- * bare leaf recorded, because Laravel registers only the composed name. Names inside a prefixed group, and the
- * prefix literal itself (a trailing dot), are therefore skipped. A group loaded from another file
- * (`->group(base_path('routes/admin.php'))`) cannot be followed. A
- * `->name('x')` on an unrelated class, or an `'as' => 'x'` pair outside a route action, counts as a
- * definition, which only hides a finding, never adds one.
+ * literal does: concatenation, interpolation, enums and variables do not.
+ *
+ * Provenance: only a call chain rooted at the `Route` facade, `$router` or `$this->router` counts. A
+ * `Schedule::command(...)->name('x')`, an unrelated `->name('x')` or a configuration array with an
+ * `'as'` key is not a route definition. An `'as'` key counts only in an array passed directly to a
+ * call of such a chain. A route registered through a stored registrar or a variable
+ * (`$route = Route::get(...); $route->name('x')`) is not followed.
+ *
+ * Prefixes: Laravel concatenates every name set in a chain, so a literal counts only when it is the
+ * chain's sole name. A name set before `group(...)` (or an `'as'` key of its attributes) is a prefix
+ * whatever it looks like (`'admin.'`, `'admin-'`, a variable); the routes inside register under a
+ * composed name, such as `admin.users`, never the bare `users`, so none of them is recorded. The
+ * composed name itself is never spelled out and is not found. A group loaded from another file
+ * (`->group(base_path('routes/admin.php'))`) cannot be followed.
  *
  * Scans every `.php` file (Blade templates excluded) under the project root, not only Psalm's
  * `<projectFiles>`: route files commonly sit next to `src/` rather than inside it
@@ -32,6 +39,12 @@ namespace Psalm\LaravelPlugin\Internal;
  */
 final class RouteNameDefinitionScanner
 {
+    /**
+     * Route methods whose array argument is a route action or group attributes, where an `'as'` key names
+     * the route. `middleware(['as' => ...])` and the like take no such array.
+     */
+    private const ACTION_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'options', 'any', 'match', 'group', 'view', 'redirect', 'permanentredirect', 'fallback'];
+
     /**
      * Directory basenames never worth entering: dependencies, caches and VCS data hold no project
      * routes, and `tests` fixtures register routes the application never serves.
@@ -92,7 +105,7 @@ final class RouteNameDefinitionScanner
             $code = @\file_get_contents($path);
 
             // Cheap literal pre-filter: almost no file passes it, so only a few are lexed.
-            if ($code === false || (!\str_contains($code, 'name(') && !\str_contains($code, "'as'") && !\str_contains($code, '"as"'))) {
+            if ($code === false || (!\str_contains($code, 'name(') && !\str_contains($code, 'as(') && !\str_contains($code, "'as'") && !\str_contains($code, '"as"'))) {
                 continue;
             }
 
@@ -120,110 +133,218 @@ final class RouteNameDefinitionScanner
 
         $names = [];
         $count = \count($tokens);
-        // One entry per open parenthesis: 0 for any, 1 for a `group(` call, 2 for a `group(` call whose
-        // routes are registered under a name prefix.
-        $parens = [];
-        $prefixedGroups = 0;
-        // A name prefix (`->name('admin.')`) was seen in this statement and no `group(` has consumed it yet.
-        $prefixPending = false;
+        // Routes inside a name-prefixed `group(...)` are registered under a composed name, so none of them
+        // is a definition of its own literal.
+        $declinedUntil = 0;
 
         for ($i = 0; $i < $count; $i++) {
-            $text = $tokens[$i]->text;
+            $chainStart = $i < $declinedUntil ? null : self::chainStart($tokens, $i);
 
-            if ($text === ';') {
-                $prefixPending = false;
-            } elseif ($text === '(') {
-                $kind = self::isIdentifier($tokens[$i - 1] ?? null, 'group') ? 1 : 0;
-
-                if ($kind === 1 && $prefixPending) {
-                    $kind = 2;
-                    $prefixPending = false;
-                    ++$prefixedGroups;
-                }
-
-                $parens[] = $kind;
-            } elseif ($text === ')' && \array_pop($parens) === 2) {
-                --$prefixedGroups;
-            }
-
-            $isNameCall = \in_array($tokens[$i]->id, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true);
-            $name = $isNameCall ? self::nameCallArgument($tokens, $i + 1) : self::actionAsValue($tokens, $i);
-
-            if ($name === null) {
+            if ($chainStart === null) {
                 continue;
             }
 
-            // A trailing dot makes the literal a prefix that Laravel prepends to the names registered
-            // under it, never a route name itself. `Route::name('admin.')->group(fn () => ...->name('users'))`
-            // registers only `admin.users`, so the leaf is not a definition of `users`: it, and every name
-            // inside such a group, is declined rather than recorded as a fragment.
-            if (\str_ends_with($name, '.')) {
-                if ($isNameCall) {
-                    $prefixPending = true;
-                } else {
-                    // `Route::group(['as' => 'admin.'], ...)`: the innermost enclosing, not yet prefixed `group(`.
-                    $groupKeys = \array_keys($parens, 1, true);
+            [$name, $groupEnd] = self::analyseChain($tokens, $chainStart);
 
-                    if ($groupKeys !== []) {
-                        $parens[\end($groupKeys)] = 2;
-                        ++$prefixedGroups;
-                    }
-                }
-
-                continue;
-            }
-
-            if (!$prefixPending && $prefixedGroups === 0) {
+            if ($name !== null) {
                 $names[] = $name;
             }
+
+            $declinedUntil = \max($declinedUntil, $groupEnd);
         }
 
         return $names;
     }
 
     /**
-     * `name('x')`, `name('x',)` or `name(name: 'x')`, starting at the method name after `->`, `?->` or `::`.
+     * The index of the first `::` or `->` after a route-definition root: the `Route` facade, `$router`
+     * or `$this->router`. Only a chain that starts there is proven to register a route; `Schedule::command()->name()`
+     * or an unrelated `$builder->name()` is not.
      *
      * @param list<\PhpToken> $tokens
      * @psalm-capabilities read-props
      */
-    private static function nameCallArgument(array $tokens, int $at): ?string
+    private static function chainStart(array $tokens, int $at): ?int
     {
-        if (!self::isIdentifier($tokens[$at] ?? null, 'name') || ($tokens[$at + 1]->text ?? '') !== '(') {
+        $token = $tokens[$at];
+        $previous = $tokens[$at - 1] ?? null;
+
+        if ($previous instanceof \PhpToken && \in_array($previous->id, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true)) {
+            // `$this->router` is the one member access that roots a chain, handled from `$this` below.
             return null;
         }
 
-        $at += 2;
+        if (\in_array($token->id, [\T_STRING, \T_NAME_QUALIFIED, \T_NAME_FULLY_QUALIFIED], true)
+            && ($token->text === 'Route' || \str_ends_with($token->text, '\\Route'))
+        ) {
+            return ($tokens[$at + 1]->id ?? null) === \T_DOUBLE_COLON ? $at + 1 : null;
+        }
+
+        if ($token->id !== \T_VARIABLE) {
+            return null;
+        }
+
+        if ($token->text === '$router') {
+            return ($tokens[$at + 1]->id ?? null) === \T_OBJECT_OPERATOR ? $at + 1 : null;
+        }
+
+        if ($token->text === '$this'
+            && ($tokens[$at + 1]->id ?? null) === \T_OBJECT_OPERATOR
+            && self::isIdentifier($tokens[$at + 2] ?? null, 'router')
+            && ($tokens[$at + 3]->id ?? null) === \T_OBJECT_OPERATOR
+        ) {
+            return $at + 3;
+        }
+
+        return null;
+    }
+
+    /**
+     * Walks `->method(...)` links from the first operator. A link is `name(...)`, `as(...)` or an `'as'` key
+     * of an array argument; each contributes to the route's name, and Laravel concatenates them, so the
+     * literal counts only when it is the single source.
+     *
+     * A name set before `group(...)` is a prefix, whatever its text (`'admin.'`, `'admin-'`, a variable): the
+     * group's routes get a composed name, so the group is declined, and the index of its closing parenthesis
+     * is returned to skip it.
+     *
+     * @param list<\PhpToken> $tokens
+     * @return array{?string, int} the defined name, and the token index up to which routes are declined
+     * @psalm-capabilities read-props
+     */
+    private static function analyseChain(array $tokens, int $at): array
+    {
+        $sources = 0;
+        $literal = null;
+        $groupEnd = 0;
+
+        while (\in_array($tokens[$at]->id ?? null, [\T_OBJECT_OPERATOR, \T_NULLSAFE_OBJECT_OPERATOR, \T_DOUBLE_COLON], true)
+            // `as` is a keyword token, not a T_STRING, after `::`.
+            && \in_array($tokens[$at + 1]->id ?? null, [\T_STRING, \T_AS], true)
+            && ($tokens[$at + 2]->text ?? '') === '('
+        ) {
+            $open = $at + 2;
+            $close = self::closingParenthesis($tokens, $open);
+
+            if ($close === null) {
+                break;
+            }
+
+            $method = \strtolower($tokens[$at + 1]->text);
+            $asValues = \in_array($method, self::ACTION_METHODS, true) ? self::asKeyValues($tokens, $open, $close) : [];
+
+            if ($method === 'name' || $method === 'as') {
+                ++$sources;
+                $literal = self::singleLiteralArgument($tokens, $open, $close);
+            } else {
+                $sources += \count($asValues);
+                $literal = $asValues[0] ?? $literal;
+            }
+
+            if ($method === 'group') {
+                $groupEnd = $close;
+            }
+
+            $at = $close + 1;
+        }
+
+        if ($groupEnd !== 0) {
+            return [null, $sources > 0 ? $groupEnd : 0];
+        }
+
+        // A trailing dot is a prefix (`Route::name('admin.')->get(...)`), never a complete name.
+        return [$sources === 1 && $literal !== null && !\str_ends_with($literal, '.') ? $literal : null, 0];
+    }
+
+    /**
+     * The index of the `)` that closes the `(` at $open.
+     *
+     * @param list<\PhpToken> $tokens
+     * @psalm-capabilities read-props
+     */
+    private static function closingParenthesis(array $tokens, int $open): ?int
+    {
+        $depth = 0;
+
+        for ($i = $open, $count = \count($tokens); $i < $count; $i++) {
+            if ($tokens[$i]->text === '(') {
+                ++$depth;
+            } elseif ($tokens[$i]->text === ')' && --$depth === 0) {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * `name('x')`, `name('x',)` or `name(name: 'x')`: the literal, or null when the argument is anything else.
+     *
+     * @param list<\PhpToken> $tokens
+     * @psalm-capabilities read-props
+     */
+    private static function singleLiteralArgument(array $tokens, int $open, int $close): ?string
+    {
+        $at = $open + 1;
 
         // A named argument: `name: 'x'`.
-        if (self::isIdentifier($tokens[$at] ?? null, 'name') && ($tokens[$at + 1]->text ?? '') === ':') {
+        if (($tokens[$at]->id ?? null) === \T_STRING && ($tokens[$at + 1]->text ?? '') === ':') {
             $at += 2;
         }
 
         $name = self::literal($tokens[$at] ?? null);
-        $at++;
+        ++$at;
 
         if (($tokens[$at]->text ?? '') === ',') {
-            $at++;
+            ++$at;
         }
 
-        return $name !== null && ($tokens[$at]->text ?? '') === ')' ? $name : null;
+        return $name !== null && $at === $close ? $name : null;
     }
 
     /**
-     * `'as' => 'x'` followed by the end of the array item, starting at the `'as'` key.
+     * The value of every `'as' => ...` pair of an array that is itself an argument of the call at $open,
+     * null for a value that is not one plain literal. An `'as'` key nested deeper, or in a closure body, is
+     * not a route action.
      *
      * @param list<\PhpToken> $tokens
+     * @return list<?string>
      * @psalm-capabilities read-props
      */
-    private static function actionAsValue(array $tokens, int $at): ?string
+    private static function asKeyValues(array $tokens, int $open, int $close): array
     {
-        if (self::literal($tokens[$at]) !== 'as' || ($tokens[$at + 1]->id ?? null) !== \T_DOUBLE_ARROW) {
-            return null;
+        $values = [];
+        // One entry per open bracket: whether it is an array literal passed directly as an argument.
+        $stack = [];
+
+        for ($i = $open + 1; $i < $close; $i++) {
+            $text = $tokens[$i]->text;
+
+            if (in_array($text, ['[', '(', '{', '${'], true)) {
+                $isArray = $text === '[' || ($text === '(' && $tokens[$i - 1]->id === \T_ARRAY);
+                $start = $text === '[' ? $i : $i - 1;
+                $stack[] = $stack === [] && $isArray && \in_array($tokens[$start - 1]->text, ['(', ','], true);
+
+                continue;
+            }
+
+            if (in_array($text, [']', ')', '}'], true)) {
+                \array_pop($stack);
+
+                continue;
+            }
+
+            if ($stack === [true]
+                && self::literal($tokens[$i]) === 'as'
+                && ($tokens[$i + 1]->id ?? null) === \T_DOUBLE_ARROW
+                && \in_array($tokens[$i - 1]->text, ['[', '(', ','], true)
+            ) {
+                // The literal must end the item: `'as' => 'a' . '.b'` names `a.b`, not `a`.
+                $values[] = \in_array($tokens[$i + 3]->text ?? '', [',', ']', ')'], true) ? self::literal($tokens[$i + 2] ?? null) : null;
+            }
         }
 
-        // The literal must end the item: `'as' => 'a' . '.b'` names `a.b`, not `a`.
-        return \in_array($tokens[$at + 3]->text ?? '', [',', ']', ')'], true) ? self::literal($tokens[$at + 2] ?? null) : null;
+        return $values;
     }
 
     /** @psalm-capabilities read-props */

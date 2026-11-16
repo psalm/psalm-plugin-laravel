@@ -17,4 +17,9 @@ if (\PHP_INT_SIZE === 0) {
     Route::name('barcode.')->group(static function (): void {
         Route::get('/barcode', static fn(): string => 'barcode')->name('index');
     });
+
+    // A prefix needs no trailing dot: this registers `dash-leaf`, never the bare `leaf`.
+    Route::name('dash-')->group(static function (): void {
+        Route::get('/dash', static fn(): string => 'dash')->name('leaf');
+    });
 }
