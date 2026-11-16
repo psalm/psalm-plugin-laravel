@@ -33,7 +33,7 @@ A value no part of which can fit (`['member' => 123]`, a bare `null`) stays [Inv
 
 ## Limitations
 
-The same gates as [InvalidViewData](InvalidViewData.md#limitations) apply, and the check is silent for a value of unknown type: a `mixed`, or a template parameter bounded by `mixed` (`first()` on an unparameterized `Collection`).
+The same gates as [InvalidViewData](InvalidViewData.md#limitations) apply, and the check is silent for a value of unknown type: a `mixed`, or a template parameter bounded by `mixed` (`first()` on an unparameterized `Collection`; one intersected with a class, `T&Foo`, is still compared).
 
 The comparison classifies a passed type the way Psalm's own argument check classifies the same inferred type, and what Psalm rejects outright is [InvalidViewData](InvalidViewData.md). For example `collect([...])` of a literal list is not accepted for a `Collection<int, array<string, mixed>>` declaration, in a function call or in a view. A data array has no expected parameter type to infer against, so an expression Psalm types from its parameter in a call (`new Collection([...])`) can still be reported here.
 

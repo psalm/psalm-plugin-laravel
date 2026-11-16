@@ -146,6 +146,22 @@ final class ViewDataClassificationTest extends TestCase
         $this->assertSame([], $issues, \var_export($issues, true));
     }
 
+    /**
+     * An unbounded template reads as `mixed`, which is not judged, but `T&Tag` still pins part of the
+     * value to a Tag. Handed to a view declaring an unrelated class it is reported as Psalm's own
+     * argument check does (`MixedArgumentTypeCoercion`): partial, because the mixed part is unknown.
+     * `T&Member` fits and a bare `T` stays unjudged.
+     */
+    #[Test]
+    public function an_intersection_on_a_mixed_template_is_still_judged(): void
+    {
+        $issues = $this->viewIssuesIn('MixedBoundIntersection.php');
+
+        $this->assertCount(1, $issues, \var_export($issues, true));
+        $this->assertSame(self::PARTIAL, $issues[0]['type']);
+        $this->assertStringContainsString('as mixed)&ViewClassifyFixture\\Tag', $issues[0]['message']);
+    }
+
     #[Test]
     public function a_value_of_unknown_type_is_not_judged(): void
     {

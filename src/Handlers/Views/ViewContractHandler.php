@@ -290,12 +290,13 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         // A class nothing defines is already reported where it was written (UndefinedDocblockClass).
         // A template parameter bounded by mixed (`first()` on a raw `Collection`) is an unknown value,
         // exactly like the mixed it stands for: Psalm expands it to its bound for the comparison.
+        // Not when it carries an intersection (`T&Tag`): that part is a known type the value must have.
         foreach ($supplied->getAtomicTypes() as $atomic) {
             if ($atomic instanceof Type\Atomic\TNamedObject && !$codebase->classOrInterfaceOrEnumExists($atomic->value)) {
                 return;
             }
 
-            if ($atomic instanceof Type\Atomic\TTemplateParam && $atomic->as->hasMixed()) {
+            if ($atomic instanceof Type\Atomic\TTemplateParam && $atomic->as->hasMixed() && $atomic->extra_types === []) {
                 return;
             }
         }

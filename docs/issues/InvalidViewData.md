@@ -35,7 +35,7 @@ The same applies to `->with('name', 123)` and `response()->view()`. In a templat
 The check declines rather than guess. On top of the shared [supported call sites](../blade.md#supported-call-sites), it is silent when:
 
 - The declared type is `mixed`, which is every `@props([...])` entry (a literal default types the template body, never what a caller may pass).
-- The passed value is `mixed`, or a template parameter bounded by `mixed` (`first()` on an unparameterized `Collection`), which is an unknown value and satisfies any declaration.
+- The passed value is `mixed`, or a template parameter bounded by `mixed` (`first()` on an unparameterized `Collection`; one intersected with a class, `T&Foo`, is still compared), which is an unknown value and satisfies any declaration.
 - The passed value is of a class that does not exist, which Psalm already reports where it is named.
 - The passed value is a `Renderable` (a view, for example) and the declaration accepts a `string`, because Laravel renders it to a string before the template sees it.
 - The declared type does not parse. An unparseable declared type is excluded from this comparison; invalid optional declarations (`@var string $x = null`) can separately report `InvalidDocblock`.
