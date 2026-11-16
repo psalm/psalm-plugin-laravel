@@ -9,7 +9,6 @@ use PhpParser\Node\Arg;
 use PhpParser\Node\Scalar\String_;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
-use Psalm\LaravelPlugin\Config\TranslationKeys;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Issues\MissingTranslation;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
@@ -88,8 +87,13 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
     /** Whether to emit MissingTranslation issues for keys not found in language files */
     private static bool $reportMissing = false;
 
-    /** Which keys are eligible for MissingTranslation when $reportMissing is on (emission only, not narrowing) */
-    private static TranslationKeys $translationKeys = TranslationKeys::All;
+    /**
+     * Which missing keys get a MissingTranslation when $reportMissing is on (emission only, not narrowing).
+     * Null reports every key. A predicate rather than the Config enum keeps Handlers off the Config layer.
+     *
+     * @var (\Closure(string): bool)|null
+     */
+    private static ?\Closure $shouldReportKey = null;
 
     /**
      * Cached translation resolution results.
@@ -113,15 +117,16 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
     {
         self::$translator = null;
         self::$reportMissing = false;
-        self::$translationKeys = TranslationKeys::All;
+        self::$shouldReportKey = null;
         self::$resolvedKeys = [];
     }
 
-    public static function init(Translator $translator, bool $reportMissing, TranslationKeys $translationKeys): void
+    /** @param (\Closure(string): bool)|null $shouldReportKey */
+    public static function init(Translator $translator, bool $reportMissing, ?\Closure $shouldReportKey = null): void
     {
         self::$translator = $translator;
         self::$reportMissing = $reportMissing;
-        self::$translationKeys = $translationKeys;
+        self::$shouldReportKey = $shouldReportKey;
         self::$resolvedKeys = [];
         self::$zeroArgTransUnions = [];
     }
@@ -441,7 +446,11 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         // Key does not exist — emit the issue only when findMissingTranslations
         // is enabled, then fall through to TransHandler for the fallback type
-        if (self::$reportMissing && $emitMissingTranslation && self::$translationKeys->shouldReport($translationKey)) {
+        if (
+            self::$reportMissing
+            && $emitMissingTranslation
+            && (!self::$shouldReportKey instanceof \Closure || (self::$shouldReportKey)($translationKey))
+        ) {
             IssueBuffer::accepts(
                 new MissingTranslation(
                     "Translation key '{$translationKey}' not found in language files",

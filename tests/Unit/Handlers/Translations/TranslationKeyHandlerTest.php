@@ -16,7 +16,6 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psalm\CodeLocation;
 use Psalm\Context;
-use Psalm\LaravelPlugin\Config\TranslationKeys;
 use Psalm\LaravelPlugin\Handlers\Translations\TranslationKeyHandler;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\StatementsSource;
@@ -64,7 +63,7 @@ final class TranslationKeyHandlerTest extends TestCase
             static fn(string $key): string|array => self::TRANSLATIONS[$key] ?? $key,
         );
 
-        TranslationKeyHandler::init($translator, reportMissing: true, translationKeys: TranslationKeys::All);
+        TranslationKeyHandler::init($translator, reportMissing: true);
     }
 
     /**
@@ -154,7 +153,7 @@ final class TranslationKeyHandlerTest extends TestCase
         $translator = $this->createStub(Translator::class);
         $translator->method('has')->willThrowException($exception);
 
-        TranslationKeyHandler::init($translator, reportMissing: true, translationKeys: TranslationKeys::All);
+        TranslationKeyHandler::init($translator, reportMissing: true);
 
         $event = $this->createEvent('broken.key');
         $result = TranslationKeyHandler::getFunctionReturnType($event);
@@ -176,7 +175,7 @@ final class TranslationKeyHandlerTest extends TestCase
         $translator->method('has')->willReturn(true);
         $translator->method('get')->willThrowException($exception);
 
-        TranslationKeyHandler::init($translator, reportMissing: true, translationKeys: TranslationKeys::All);
+        TranslationKeyHandler::init($translator, reportMissing: true);
 
         $event = $this->createEvent('broken.value');
         $result = TranslationKeyHandler::getFunctionReturnType($event);
@@ -212,7 +211,7 @@ final class TranslationKeyHandlerTest extends TestCase
             static fn(string $key): string|array => self::TRANSLATIONS[$key] ?? $key,
         );
 
-        TranslationKeyHandler::init($translator, reportMissing: false, translationKeys: TranslationKeys::All);
+        TranslationKeyHandler::init($translator, reportMissing: false);
 
         $event = $this->createEvent('auth.failed');
         $result = TranslationKeyHandler::getFunctionReturnType($event);
@@ -231,7 +230,7 @@ final class TranslationKeyHandlerTest extends TestCase
         $translator = $this->createStub(Translator::class);
         $translator->method('has')->willReturn(false);
 
-        TranslationKeyHandler::init($translator, reportMissing: false, translationKeys: TranslationKeys::All);
+        TranslationKeyHandler::init($translator, reportMissing: false);
 
         $event = $this->createEvent('nonexistent.key');
 

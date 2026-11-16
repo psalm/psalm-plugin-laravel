@@ -987,7 +987,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
             return;
         }
 
-        Handlers\Translations\TranslationKeyHandler::init($translator, $reportMissing, $translationKeys);
+        Handlers\Translations\TranslationKeyHandler::init($translator, $reportMissing, $translationKeys->shouldReport(...));
     }
 
     /**
