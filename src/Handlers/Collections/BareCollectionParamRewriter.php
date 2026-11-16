@@ -105,7 +105,9 @@ final class BareCollectionParamRewriter extends MutableTypeVisitor
      */
     private function expand(TNamedObject $type): ?TGenericObject
     {
-        if ($type->extra_types !== [] || !$this->codebase->classOrInterfaceExists($type->value)) {
+        // An unresolved `static` (`@param self&static`) must stay late-bound: the rewrite would drop the flag and
+        // accept a base-class collection where the called subclass is required. Psalm's TypeExpander skips it too.
+        if ($type->is_static || $type->extra_types !== [] || !$this->codebase->classOrInterfaceExists($type->value)) {
             return null;
         }
 
@@ -151,7 +153,9 @@ final class BareCollectionParamRewriter extends MutableTypeVisitor
 
         unset($argument, $this->expanding[$key]);
 
-        return new TGenericObject($type->value, $arguments);
+        // Keep the docblock provenance: Union::setTypes() recomputes `from_docblock` from the atomics, and the
+        // docblock-specific diagnostics (RedundantConditionGivenDocblockType) depend on it.
+        return new TGenericObject($type->value, $arguments, from_docblock: $type->from_docblock);
     }
 
     /**

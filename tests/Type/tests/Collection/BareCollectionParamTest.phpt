@@ -41,6 +41,24 @@ final class Nested extends Collection {}
  */
 final class SelfRef extends Collection {}
 
+/**
+ * @template TKey of array-key
+ * @template TValue
+ * @extends Collection<TKey, TValue>
+ */
+class Bag extends Collection
+{
+    /** @param self&static $other */
+    public function takeSame($other): void {}
+}
+
+/**
+ * @template TKey of array-key
+ * @template TValue
+ * @extends Bag<TKey, TValue>
+ */
+final class SubBag extends Bag {}
+
 function takeNestedBound(Nested $nested): int
 {
     return $nested->count();
@@ -180,7 +198,28 @@ function rejects(Consumer $consumer, Collection $dogs, Box $box): void
     // Only collections are relaxed: a bare non-collection generic keeps Psalm's behaviour.
     $consumer->takeBox($box);
 }
+
+/**
+ * @param Bag<int, Dog> $base
+ * @param SubBag<int, Dog> $sub
+ */
+function keepsLateStaticBound(Bag $base, SubBag $sub): void
+{
+    // An unresolved `static` is not "any instantiation": the called subclass is still required.
+    $sub->takeSame($base);
+}
+
+/** @param Collection $c */
+function docblockProvenanceIsKept($c): void
+{
+    // The rewritten type is still docblock-defined, so the docblock-specific issue (and its suppressions) applies.
+    if (is_object($c)) {
+        echo 1;
+    }
+}
 ?>
 --EXPECTF--
 InvalidArgument on line %d: Argument 1 of Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Consumer::takeExplicit expects Illuminate\Support\Collection<string, Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Dog>, but Illuminate\Support\Collection<int, Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Dog> provided
 InvalidArgument on line %d: Argument 1 of Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Consumer::takeBox expects Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Box<array-key>, but Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Box<int> provided
+ArgumentTypeCoercion on line %d: Argument 1 of Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\SubBag::takeSame expects Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\SubBag<array-key, mixed>, but parent type Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Bag<int, Tests\Psalm\LaravelPlugin\Sandbox\BareCollectionParam\Dog> provided
+RedundantConditionGivenDocblockType on line %d: Docblock-defined type Illuminate\Support\Collection<array-key, mixed> for $c is always object
