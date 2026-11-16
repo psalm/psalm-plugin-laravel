@@ -29,6 +29,7 @@ class Product extends Model
             'self_casting' => SelfCastingValue::class,
             'intersection' => IntersectionCastable::class,
             'intersection_cs' => IntersectionClassStringCastable::class,
+            'aliased' => AliasedTraitGetCast::class,
             'multi' => MultiCastable::class,
             'inherited_doc' => InheritedDocblockCast::class,
         ];

@@ -97,6 +97,12 @@ final class CasterReturnTypesEmissionTest extends TestCase
     }
 
     #[Test]
+    public function it_types_a_get_aliased_from_a_trait_method(): void
+    {
+        $this->assertContains('$_aliased: CasterReturnFixture\\Money', $this->runPsalm());
+    }
+
+    #[Test]
     public function it_keeps_a_docblock_return_type_inherited_from_a_base_caster(): void
     {
         $this->assertContains('$_inheritedDoc: CasterReturnFixture\Money', $this->runPsalm());

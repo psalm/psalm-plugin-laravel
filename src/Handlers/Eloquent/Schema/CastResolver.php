@@ -454,7 +454,8 @@ final class CastResolver
 
         $declaringId = $storage->declaring_method_ids['get'] ?? null;
         $declaringStorage = $declaringId === null ? null : ClassLineage::storage($codebase, $declaringId->fq_class_name);
-        $declared = $declaringStorage?->methods['get'] ?? null;
+        // The declaring method keeps its own name when a trait aliases it (`use ReadTrait { read as get; }`).
+        $declared = $declaringId === null ? null : $declaringStorage?->methods[$declaringId->method_name] ?? null;
 
         if (
             !$declared instanceof FunctionLikeStorage

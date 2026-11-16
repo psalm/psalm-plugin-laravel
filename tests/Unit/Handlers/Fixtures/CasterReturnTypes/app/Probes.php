@@ -58,4 +58,7 @@ function probes(Product $product): void
 
     $_intersectionClassString = $product->intersection_cs;
     /** @psalm-trace $_intersectionClassString */
+
+    $_aliased = $product->aliased;
+    /** @psalm-trace $_aliased */
 }
