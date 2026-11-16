@@ -335,6 +335,10 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
         // return string to avoid PossiblyInvalidCast noise from string|array union.
         // A `mixed` key (typically an element of an untyped config or row array) is a
         // translation key in practice; the stub fallback would add `array|null`.
+        // Deliberately unsound for a runtime `null` key (`__(null)` -> null, `trans(null)` ->
+        // the Translator): `mixed` is "unknown", not "possibly null", so the key itself is
+        // flagged by MixedArgument and the result is not widened. An explicitly nullable
+        // key (`?string`) keeps its `null` alternative below.
         $firstArgType = $source->getNodeTypeProvider()->getType($keyArg->value);
 
         if ($firstArgType instanceof \Psalm\Type\Union) {
