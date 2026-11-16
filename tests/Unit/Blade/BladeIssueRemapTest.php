@@ -18,7 +18,7 @@ use Symfony\Component\Process\Process;
  * End-to-end proof that an issue Psalm finds in a shadow file surfaces on the `.blade.php` path and
  * line instead. A real `vendor/bin/psalm` run is the only way to pin it: the remap depends on Psalm
  * dispatching `BeforeAddIssue` before its reportability and suppression gates, and on the template
- * having been written into `ProjectAnalyzer`'s private project-file list at boot.
+ * having been made reportable (`Codebase::addReportableFiles()`) at boot.
  */
 #[CoversClass(BladeIssueRemapHandler::class)]
 #[CoversClass(ShadowIssueRelocator::class)]
@@ -189,6 +189,27 @@ final class BladeIssueRemapTest extends TestCase
             $this->linesFor($issues, 'InvalidArgument', 'resources/views/php-block-lines.blade.php'),
             \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
         );
+    }
+
+    /**
+     * #2303: a template must be reportable without joining the scan and analysis lists. Written into
+     * Psalm's project-file list it would also be analyzed as plain PHP on Psalm 7.4+, and its raw `<?php`
+     * block would report natively on top of the remapped shadow issue. Scoped to this template: a
+     * ParseError or a trace legitimately repeats a (type, line) elsewhere.
+     */
+    #[Test]
+    public function a_template_with_a_php_block_reports_no_duplicate_native_issue(): void
+    {
+        $seen = [];
+
+        foreach ($this->analyze('psalm.xml') as $issue) {
+            if (\str_ends_with($issue['file_path'], 'resources/views/php-block-lines.blade.php')) {
+                $seen[$issue['type'] . ':' . $issue['line_from']][] = $issue['message'];
+            }
+        }
+
+        $this->assertNotSame([], $seen);
+        $this->assertSame([], \array_filter($seen, static fn(array $messages): bool => \count($messages) > 1), \json_encode($seen, \JSON_THROW_ON_ERROR));
     }
 
     #[Test]
@@ -623,13 +644,13 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
-     * #1543: {@see \Psalm\LaravelPlugin\Blade\AttributesRestoreReassert} must not fire on a plain
-     * caller — `compiler-bookkeeping.blade.php` carries a real `<x-alert>` tag's compiled
-     * `$__attributesOriginal*` save/restore pair, so a gate-less injection would still find
-     * something to match here, even though the template itself never mentions `@props`/`@aware`/
-     * `$attributes`/`$slot` and `isComponentView()` is false for it (#1543 review must-fix 1: the
-     * previous `"Hello {{ \$name }}\n"` fixture compiled to no restore/strip block at all, so it
-     * passed with the `isComponentView()` gate deleted).
+     * #1543: {@see \Psalm\LaravelPlugin\Blade\AttributesStripReassert} must not fire on a plain
+     * caller — `compiler-bookkeeping.blade.php` carries a real `<x-alert>` tag's compiled inner
+     * `except()` strip, so a gate-less injection would still find something to match here, even
+     * though the template itself never mentions `@props`/`@aware`/`$attributes`/`$slot` and
+     * `isComponentView()` is false for it (#1543 review must-fix 1: the previous
+     * `"Hello {{ \$name }}\n"` fixture compiled to no strip block at all, so it passed with the
+     * `isComponentView()` gate deleted).
      */
     #[Test]
     public function a_plain_caller_with_a_component_tag_gets_no_attributes_reassert(): void
@@ -638,8 +659,8 @@ final class BladeIssueRemapTest extends TestCase
         $template = 'resources/views/compiler-bookkeeping.blade.php';
         $shadow = $this->shadowSourceFor($template);
 
-        // Guard against a vacuous pass: the tag must have actually compiled its restore pair.
-        $this->assertStringContainsString('$__attributesOriginal', $shadow);
+        // Guard against a vacuous pass: the tag must have actually compiled its strip block.
+        $this->assertStringContainsString('::ignoredParameterNames()); ?>', $shadow);
 
         $this->assertStringNotContainsString('endif; /** @var', $shadow);
     }
@@ -712,10 +733,10 @@ final class BladeIssueRemapTest extends TestCase
      * both siblings are gated, or this test cannot see the exact shape it exists to pin.
      *
      * `PossiblyNullReference` on the `merge()` call used to be a survivor here too: the impossible
-     * negative arm above left Psalm holding the reconciled `null` from the never-taken branch and
-     * re-unioning it into `$attributes`'s type at `endif`. #1543 fixes it at the source instead of
-     * gating the message: {@see \Psalm\LaravelPlugin\Blade\AttributesRestoreReassert} re-asserts
-     * `$attributes` as non-null right after that `endif`, so the issue no longer fires at all.
+     * negative arm of the save/restore pair left Psalm holding the reconciled `null` from the
+     * never-taken branch and re-unioning it into `$attributes`'s type at `endif`. Psalm 7.7 no longer
+     * does, so that `endif` gets no re-assert: one there is reported as UnnecessaryVarAnnotation,
+     * which this test's whole-issue-set check catches.
      */
     #[Test]
     public function ambient_guards_around_a_nested_component_tag_are_dropped(): void
@@ -1128,7 +1149,7 @@ final class BladeIssueRemapTest extends TestCase
 
     /**
      * #1543 trap 3: a read INSIDE the nested tag's own body degrades at the inner strip's `endif`,
-     * which precedes the restore — fixing only the restore leaves this case red.
+     * which {@see \Psalm\LaravelPlugin\Blade\AttributesStripReassert} re-asserts.
      */
     #[Test]
     public function attributes_stays_non_null_for_a_read_inside_the_nested_tags_body(): void
@@ -1370,14 +1391,10 @@ final class BladeIssueRemapTest extends TestCase
      * A template-assigned local is not view data: declaring it `@var mixed` ahead of its own
      * assignment makes Psalm drop the `$hasAction` <-> `$action !== null` correlation after the
      * next `if`, so the guarded `$action->attributes` read reported PossiblyNullPropertyFetch.
-     *
-     * @todo-by https://github.com/vimeo/psalm/issues/13487 remove the skip (Psalm 7.2.0 reports the guarded read again)
      */
     #[Test]
     public function a_template_assigned_flag_keeps_guarding_the_nullable_it_was_derived_from(): void
     {
-        $this->markTestSkipped('Psalm 7.2.0 regression: vimeo/psalm#13487');
-
         $issues = $this->analyze('psalm.xml');
         $template = 'resources/views/assigned-flag-guard.blade.php';
 
