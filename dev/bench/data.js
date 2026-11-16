@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794862671236,
+  "lastUpdate": 1794863393074,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19275,6 +19275,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 21.85,
             "range": "± 0.63",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cb4f5ab3c55019c74d7de88158895445142b6de1",
+          "message": "Report wrong `@return` on template-bound `groupBy()` and `keyBy()` receivers (#2332)\n\n* fix(collections): report wrong template returns from groupBy()/keyBy() on template receivers\n\nRefs #2291. Fixes #2328.\n\n* docs(collections): link the template-receiver workaround to vimeo/psalm#13997",
+          "timestamp": "2026-11-16T22:05:51+01:00",
+          "tree_id": "63cd33b24a74d87793817d0524d22f1c2e96e752",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/cb4f5ab3c55019c74d7de88158895445142b6de1"
+        },
+        "date": 1794863391482,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.02,
+            "range": "± 0.07",
             "unit": "s"
           },
           {
