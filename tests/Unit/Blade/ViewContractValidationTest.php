@@ -1243,7 +1243,7 @@ final class ViewContractValidationTest extends TestCase
     {
         $issues = $this->contractIssues();
 
-        foreach (['GateVariableVariable', 'GateExtract', 'GateDynamicInclude', 'GateCustomDirective', 'GateIncludeChain', 'GateScopeRead', 'GateScopeReadInPartial', 'GateNativeInclude', 'GateNamedInclude', 'GateDataArray', 'GateFuncArgs', 'GateComposerHost'] as $case) {
+        foreach (['GateVariableVariable', 'GateExtract', 'GateDynamicInclude', 'GateCustomDirective', 'GateIncludeChain', 'GateScopeRead', 'GateScopeReadInPartial', 'GateNativeInclude', 'GateNamedInclude', 'GateDataArray', 'GateFuncArgs', 'GateComposerHost', 'GateCallUserFunc'] as $case) {
             $this->assertReportsOnly($issues, $case . '.php', 'label');
         }
 

@@ -808,7 +808,7 @@ final class ContractParser
                 if ($node instanceof Node\Expr\Include_
                     || $node instanceof Node\Expr\Eval_
                     || ($node instanceof Node\Expr\FuncCall && !$node->name instanceof Node\Name)
-                    || ($node instanceof Node\Scalar\String_ && \strtolower($node->value) === 'get_defined_vars')
+                    || ($node instanceof Node\Scalar\String_ && $this->namesScopeFunction($node->value))
                     || (($node instanceof Node\Stmt\Use_ || $node instanceof Node\Stmt\GroupUse) && $this->importsFunction($node))
                 ) {
                     $this->scopeRead = true;
@@ -819,6 +819,18 @@ final class ContractParser
                 }
 
                 return null;
+            }
+
+            /**
+             * Whether a string is the name of a function that reads or alters its caller's scope. Used as
+             * a callable (`array_map('compact', ...)`, `call_user_func('compact', ...)`) it does so
+             * without the direct call this walk models.
+             *
+             * @psalm-pure
+             */
+            private function namesScopeFunction(string $value): bool
+            {
+                return \in_array(\ltrim(\strtolower($value), '\\'), ['compact', 'extract', 'get_defined_vars', 'func_get_args', 'func_get_arg'], true);
             }
 
             /** @psalm-mutation-free */
@@ -932,14 +944,11 @@ final class ContractParser
                     $this->scopeRead = true;
                 }
 
-                // A callback whose name is not a literal may be `get_defined_vars` (a literal one is
-                // caught as a string).
+                // A callback runs in the caller's scope, so `call_user_func('compact', 'x')` reads a
+                // template variable: any such call is a scope read, whatever its callback (the callback
+                // string itself is also caught by `namesScopeFunction()`).
                 if (\in_array($name, ['call_user_func', 'call_user_func_array', 'forward_static_call', 'forward_static_call_array'], true)) {
-                    $callback = $args[0] ?? null;
-
-                    if (!$callback instanceof Node\Arg || !$callback->value instanceof Node\Scalar\String_) {
-                        $this->scopeRead = true;
-                    }
+                    $this->scopeRead = true;
                 }
 
                 // The included template runs inside `PhpEngine::evaluatePath($path, $data)`, so the call's
