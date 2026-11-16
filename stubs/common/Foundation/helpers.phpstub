@@ -303,6 +303,9 @@ function resolve($name, array $parameters = []) {}
  * @param TDefault|(callable(\Throwable): TDefaultCallableReturn) $rescue
  * @param bool $report
  * @return TValue|(TDefault is callable ? TDefaultCallableReturn : TDefault)
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($callback(), $rescue, $rescue()) -> return
  */
 function rescue(callable $callback, $rescue = null, $report = true) {}
 
