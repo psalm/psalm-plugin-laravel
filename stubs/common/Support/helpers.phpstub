@@ -213,6 +213,9 @@ function optional($value = null, callable $callback = null) {}
  * @psalm-return TValue
  *
  * @throws \Throwable
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($callback()) -> return
  */
 function retry($times, callable $callback, $sleepMilliseconds = 0, $when = null) {}
 
@@ -334,6 +337,13 @@ function transform($value, callable $callback, $default = null) {}
  * @param  TValue  $value
  * @param  (callable(TValue): TReturn)|null  $callback
  * @return ($callback is null ? TValue : TReturn)
+ *
+ * Only the closure's result flows to the return. `$value` is deliberately not a flow source:
+ * `@psalm-flow` cannot be conditioned on `$callback`, and a supplied callback replaces `$value`
+ * in the result (`with($input, fn ($v) => e($v))` would otherwise report the raw input).
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($callback()) -> return
  */
 function with($value, ?callable $callback = null) {}
 
@@ -344,5 +354,8 @@ function with($value, ?callable $callback = null) {}
  *
  * @param  callable(): TReturnType  $callback
  * @return TReturnType
+ *
+ * @psalm-taint-specialize
+ * @psalm-flow ($callback()) -> return
  */
 function once(callable $callback) {}

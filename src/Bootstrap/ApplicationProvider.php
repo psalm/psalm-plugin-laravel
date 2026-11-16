@@ -202,12 +202,12 @@ final class ApplicationProvider
             $filesystem = new \Illuminate\Filesystem\Filesystem();
             $viewFinder = new FileViewFinder($filesystem, []);
             $engineResolver = new EngineResolver();
-            $engineResolver->register('php', fn(): PhpEngine => new PhpEngine($filesystem));
+            $engineResolver->register('php', static fn(): PhpEngine => new PhpEngine($filesystem));
             /** @var \Illuminate\Contracts\Events\Dispatcher $events */
             $events = $app['events'];
             $app->singleton(
                 'view',
-                fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events),
+                static fn(): \Illuminate\View\Factory => new Factory($engineResolver, $viewFinder, $events),
             );
         }
 
@@ -225,7 +225,7 @@ final class ApplicationProvider
             // RegisterProviders, BootProviders). Required because handlers
             // read app('config'), facades, and provider-registered bindings.
             $consoleApp = $app->make(Kernel::class);
-            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', function (): object {
+            $app->bind('Illuminate\Foundation\Bootstrap\HandleExceptions', static function (): object {
                 return new class {
                     /** @psalm-mutation-free */
                     public function bootstrap(): void {}

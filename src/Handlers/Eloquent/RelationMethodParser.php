@@ -370,7 +370,7 @@ final class RelationMethodParser
             $expr,
             $receiverClass,
             $parsed['relatedModel'],
-            fn(PhpParser\Node\Expr\MethodCall $using): ?string => self::firstClassStringArg($using, $scopeClass, $parentClass),
+            static fn(PhpParser\Node\Expr\MethodCall $using): ?string => self::firstClassStringArg($using, $scopeClass, $parentClass),
         );
         $parsed['pivotColumns'] = $chain['columns'];
         // Resolved without columns too: a delegating `$this->rel()->withPivot()` reads it.

@@ -43,7 +43,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache($this->cacheDir);
         $callCount = 0;
 
-        $compute = function () use (&$callCount): array {
+        $compute = static function () use (&$callCount): array {
             $callCount++;
             $table = new SchemaTable();
             $table->setColumn(new SchemaColumn('email', 'string'));
@@ -74,7 +74,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache($this->cacheDir);
         $callCount = 0;
 
-        $compute = function () use (&$callCount): array {
+        $compute = static function () use (&$callCount): array {
             $callCount++;
 
             return ['users' => new SchemaTable()];
@@ -105,7 +105,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache($this->cacheDir);
         $callCount = 0;
 
-        $compute = function () use (&$callCount): array {
+        $compute = static function () use (&$callCount): array {
             $callCount++;
 
             return ['users' => new SchemaTable()];
@@ -130,7 +130,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache($this->cacheDir);
         $callCount = 0;
 
-        $compute = function () use (&$callCount): array {
+        $compute = static function () use (&$callCount): array {
             $callCount++;
 
             return [];
@@ -153,7 +153,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache($this->cacheDir);
 
         // First call to populate cache
-        $cache->remember([], [], fn(): array => ['users' => new SchemaTable()]);
+        $cache->remember([], [], static fn(): array => ['users' => new SchemaTable()]);
 
         // Corrupt all cache files
         $files = \glob($this->cacheDir . '/psalm_laravel_migrations_*.cache');
@@ -166,7 +166,7 @@ final class MigrationCacheTest extends TestCase
 
         // Should fall back to compute
         $callCount = 0;
-        $cache->remember([], [], function () use (&$callCount): array {
+        $cache->remember([], [], static function () use (&$callCount): array {
             $callCount++;
 
             return [];
@@ -184,7 +184,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache($this->cacheDir);
 
         // First call creates a cache file
-        $cache->remember([], [], fn(): array => []);
+        $cache->remember([], [], static fn(): array => []);
 
         $firstCacheFiles = \glob($this->cacheDir . '/psalm_laravel_migrations_*.cache');
         $this->assertNotFalse($firstCacheFiles);
@@ -193,7 +193,7 @@ final class MigrationCacheTest extends TestCase
         // Second call with different files — creates new cache, cleans old
         $file = $this->cacheDir . '/new_migration.php';
         \file_put_contents($file, '<?php');
-        $cache->remember([$file], [], fn(): array => []);
+        $cache->remember([$file], [], static fn(): array => []);
 
         $secondCacheFiles = \glob($this->cacheDir . '/psalm_laravel_migrations_*.cache');
         $this->assertNotFalse($secondCacheFiles);
@@ -208,7 +208,7 @@ final class MigrationCacheTest extends TestCase
     {
         $cache = new MigrationCache($this->cacheDir);
 
-        $cache->remember([], [], function (): array {
+        $cache->remember([], [], static function (): array {
             $table = new SchemaTable();
             $table->setColumn(new SchemaColumn('status', 'enum', false, ['draft', 'published'], default: SchemaColumnDefault::resolved('draft')));
             $table->setColumn(new SchemaColumn('score', 'float', false, default: SchemaColumnDefault::unresolvable()));
@@ -243,7 +243,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache('/nonexistent/path/that/cannot/exist');
         $callCount = 0;
 
-        $tables = $cache->remember([], [], function () use (&$callCount): array {
+        $tables = $cache->remember([], [], static function () use (&$callCount): array {
             $callCount++;
 
             return ['users' => new SchemaTable()];
@@ -266,7 +266,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache($this->cacheDir);
         $callCount = 0;
 
-        $compute = function () use (&$callCount): array {
+        $compute = static function () use (&$callCount): array {
             $callCount++;
 
             return [];
@@ -288,7 +288,7 @@ final class MigrationCacheTest extends TestCase
         $cache = new MigrationCache($this->cacheDir);
         $callCount = 0;
 
-        $compute = function () use (&$callCount): array {
+        $compute = static function () use (&$callCount): array {
             $callCount++;
 
             return [];

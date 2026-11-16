@@ -14,6 +14,9 @@ class DB extends Facade
      * @return TReturnValue
      *
      * @throws \Throwable
+     *
+     * @psalm-taint-specialize
+     * @psalm-flow ($callback()) -> return
      */
     public static function transaction(\Closure $callback, $attempts = 1) {}
 
