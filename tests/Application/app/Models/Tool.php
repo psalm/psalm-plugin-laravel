@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/879
  */
-abstract class Tool extends Model
+class Tool extends Model
 {
     protected $table = 'tools';
 

@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1620
  */
-abstract class InheritedBuilderModel extends Model
+class InheritedBuilderModel extends Model
 {
     use SoftDeletes;
 

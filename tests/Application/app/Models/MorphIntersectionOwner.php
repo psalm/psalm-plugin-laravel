@@ -9,7 +9,7 @@ use App\Models\Concerns\HasTitleRelation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-abstract class MorphIntersectionOwner extends Model
+class MorphIntersectionOwner extends Model
 {
     use HasTitleRelation;
 
