@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794782508321,
+  "lastUpdate": 1794832958935,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18825,6 +18825,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1230,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cd21a47150d3a08ac7037964ca2b0c23de853465",
+          "message": "Require Psalm 7.7 (#2312)\n\n* ci: pin the exact Psalm floor again\n\nPsalm 7.6.0 is tagged, so the ^floor fallback for an untagged floor is\nno longer needed.\n\n* fix(blade): drop the $attributes re-assert after a tag restore\n\nPsalm 7.7 no longer re-unions the impossible null at the restore's endif,\nso the injected @var there was reported as UnnecessaryVarAnnotation in\nevery component view rendering a nested tag. The inner strip still needs it.\n\n- Rename AttributesRestoreReassert to AttributesStripReassert\n- Bump ShadowManifest::MARKER_PASS_VERSION to drop cached shadows\n\n* chore(deps): require Psalm 7.7\n\nCI resolves 7.7.0 already; the tests now pin its behavior.\n\n- ClassLikeStorageProvider::remove() takes the declaring file path\n- First-class callables bind templates per call: Route::domain(...)\n  moves from the known-limitation test to RouteDomainTest\n- Untyped override params inherit the parent's docblock types\n- Nullsafe outer fetch on the proxy gains |null (vimeo/psalm#13936)",
+          "timestamp": "2026-11-16T13:40:13+01:00",
+          "tree_id": "a51a36695c23d51fe1b1197d2cc20061f5a78d18",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/cd21a47150d3a08ac7037964ca2b0c23de853465"
+        },
+        "date": 1794832957127,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 24.57,
+            "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
             "unit": "MB"
           }
         ]
