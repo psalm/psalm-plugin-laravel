@@ -154,6 +154,14 @@ Registration order is preserved (relationship > factory > accessor > column).
   - Cost: about 250 src and 350 test lines. Revisit only if PhpStorm warm-cache runs show a real cost (#1797 reports 574-668 extra classes per single-file run on a 19k-file app).
 - **Rejected, non-instantiating discovery** (`getClosure()`'s captured `$concrete`, `$instances`): covers only 75 of 201 concretes. Core services (cache, encrypter, log) are bound with provider closures and need `make()`.
 
+### Unbound un-namespaced container keys resolve only when a cold app would (#2329)
+
+**Decision:** `ContainerResolver` accepts an object that `make()` built for an unbound, un-namespaced key (`legacycollection`) only when the key's own class-table entry existed when the boot ended, or the key was one of `AliasLoader`'s exact alias keys then. Both are snapshots taken at the end of `ApplicationProvider::doGetApp()`. A process-lifetime provenance set, not cleared by `reset()`, keeps classes an earlier invocation loaded after its boot (also after an aborted boot) out of the next snapshot. Declined, known gaps: an alias a post-boot file declares as a side effect, and a lazy alias spelled exactly.
+
+- **Why:** `make()` runs in a process where the plugin itself loaded classes and facade aliases after the boot (`Schema`), and PHP's class lookup ignores case, so `make('schema')` builds what a cold app's case-sensitive autoloader and `AliasLoader` cannot.
+- **Rejected, #2282's rule** (decline when the built class differs from the key): it dropped every legitimate `class_alias()` name, since an alias always resolves to its canonical class.
+- **Rejected, name blacklists** (decline a mis-cased spelling of the built class or of a live `AliasLoader` key): each leaked, found one per review round, through lazy aliases a facade file loads later, extenders that replace the built object, and duplicate alias keys that differ only in case.
+
 ### `Request::user()` overrides: per-subclass registration, explicit guard only
 
 **Decision:** `RequestHandler::afterCodebasePopulated()` registers the `Request::user()` return-type closure on every `Request` subclass whose `user()` resolves to an override (own, inherited from an overriding parent, or trait-imported), e.g. Laravel Nova's `NovaRequest`.

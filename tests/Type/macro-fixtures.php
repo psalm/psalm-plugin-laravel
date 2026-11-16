@@ -224,3 +224,17 @@ if (\class_exists(\Laravel\Ai\Tools\Request::class)) {
     'hasMacroCollision',
     static fn(string $label): int => \strlen($label),
 );
+
+// Classes created lazily, by a case-sensitive autoloader, so they are absent from PHP's class table when the app
+// boots (ContainerResolutionFallbackTest.phpt): once loaded later, a cold app still cannot resolve a mis-cased
+// spelling of them. `GlobalCaseFixture` is a plain class, `LazyLegacyCollection` a lazily declared `class_alias()`.
+\spl_autoload_register(static function (string $class): void {
+    if ($class === 'GlobalCaseFixture') {
+        require_once __DIR__ . '/global-case-fixture.phpstub';
+    } elseif ($class === 'LazyLegacyCollection') {
+        \class_alias(Collection::class, 'LazyLegacyCollection');
+    }
+});
+
+// An AliasLoader alias added after the boot, as a facade file the plugin autoloads could (ContainerResolutionFallbackTest.phpt).
+\Illuminate\Foundation\AliasLoader::getInstance()->alias('LateCollection', Collection::class);

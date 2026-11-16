@@ -1,0 +1,10 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * A global-namespace class with no constructor dependencies. `macro-fixtures.php` loads it lazily through a
+ * case-sensitive autoloader (PHP) and psalm.xml lists it under `<stubs>` (Psalm), like
+ * `macro-fixtures-class.phpstub`. Consumed by ContainerResolutionFallbackTest.phpt.
+ */
+final class GlobalCaseFixture {}

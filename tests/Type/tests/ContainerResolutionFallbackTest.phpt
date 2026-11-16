@@ -40,6 +40,86 @@ function appHelperDoesNotMatchAliasClassCaseInsensitively(): mixed
     return $schema;
 }
 
+// A userland global `class_alias()` (declared by EagerClassAliasPlugin before the boot) is a loaded class, not a lazy facade
+// alias: a real app auto-wires `LegacyCollection` through PHP's class table, so it resolves to the canonical class.
+function appHelperResolvesGlobalClassAlias(): object
+{
+    $collection = app('LegacyCollection');
+    /** @psalm-check-type-exact $collection = Illuminate\Support\Collection */
+    return $collection;
+}
+
+function resolveHelperResolvesGlobalClassAlias(): object
+{
+    $collection = resolve('LegacyCollection');
+    /** @psalm-check-type-exact $collection = Illuminate\Support\Collection */
+    return $collection;
+}
+
+// The cold-app rule: a mis-cased spelling resolves only when the class-table entry existed when the boot ended.
+// Eager `LegacyCollection` (class_alias in EagerClassAliasPlugin, before the boot) does, under any casing.
+function appHelperResolvesMisCasedEagerClassAlias(): object
+{
+    $collection = app('legacycollection');
+    /** @psalm-check-type-exact $collection = Illuminate\Support\Collection */
+    return $collection;
+}
+
+// `GlobalCaseFixture` and `LazyLegacyCollection` are declared lazily by a case-sensitive autoloader (macro-fixtures.php),
+// so only this exact request loads them, after the boot. A cold app autoloads the exact spelling of a class, but
+// not a mis-cased one, so the mis-cased request below (the class is in the table by now) must stay `mixed`.
+function appHelperResolvesExactlyCasedLazyGlobalClass(): object
+{
+    $exact = app('GlobalCaseFixture');
+    /** @psalm-check-type-exact $exact = GlobalCaseFixture */
+    return $exact;
+}
+
+function appHelperDeclinesMisCasedLazyGlobalClass(): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $misCased = app('globalcasefixture');
+    /** @psalm-check-type-exact $misCased = mixed */
+    return $misCased;
+}
+
+// This exact request loads the alias after the boot. A cold app resolves that spelling too, but it is declined
+// here (a known gap: resolvesInColdApp() only accepts AliasLoader's own exact aliases).
+function appHelperDeclinesExactlyCasedLazyClassAlias(): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $exact = app('LazyLegacyCollection');
+    /** @psalm-check-type-exact $exact = mixed */
+    return $exact;
+}
+
+function appHelperDeclinesMisCasedLazyClassAlias(): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $misCased = app('lazylegacycollection');
+    /** @psalm-check-type-exact $misCased = mixed */
+    return $misCased;
+}
+
+// An exact AliasLoader key (`Cache`, lazy and loaded after the boot by the plugin itself) is what a cold app's
+// AliasLoader resolves, so it keeps resolving, while the mis-cased `schema` above does not.
+function appHelperResolvesExactFacadeAlias(): object
+{
+    $cache = app('Cache');
+    /** @psalm-check-type-exact $cache = Illuminate\Support\Facades\Cache */
+    return $cache;
+}
+
+// An alias added to AliasLoader after the boot (macro-fixtures.php; a facade file the plugin autoloads can do the
+// same) is no boot-time fact, so even its exact spelling stays declined: a cold app never had it.
+function appHelperDeclinesAliasRegisteredAfterBoot(): mixed
+{
+    /** @psalm-suppress MixedAssignment */
+    $late = app('LateCollection');
+    /** @psalm-check-type-exact $late = mixed */
+    return $late;
+}
+
 // A namespaced abstract keeps the lenient match and names the canonical class: PHP builds
 // `Illuminate\Validation\Rules\enum` as `Enum` (unbound, constructor needs a scalar, so make()
 // throws and the fallback applies).

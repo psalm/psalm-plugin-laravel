@@ -103,12 +103,13 @@ final class ContainerResolver
             // some path-helpers actually return a string when being resolved
             $resolved = [$concrete, false];
         } elseif (\is_object($concrete)) {
-            // Container keys are case-sensitive, class lookup is not: see knownClassName(). An unbound,
-            // un-namespaced key (`schema`) that make() built anyway got there through PHP's
-            // case-insensitive lookup of a class_alias such as the `Schema` facade. A real app throws.
+            // Container keys are case-sensitive, class lookup is not: see knownClassName(). Whether make() built
+            // an unbound, un-namespaced key says nothing about a cold app, since this process also loaded
+            // classes and facade aliases after the boot (`schema` reaches the `Schema` alias that way). Decide
+            // from the key's own class-table entry, never the built object: an extender can replace that.
             if (!\str_contains($abstract, '\\')
-                && $concrete::class !== $abstract
                 && !ApplicationProvider::getApp()->bound($abstract)
+                && !self::resolvesInColdApp($abstract)
             ) {
                 return null;
             }
@@ -126,6 +127,18 @@ final class ContainerResolver
         self::$cache[$abstract] = $resolved;
 
         return $resolved;
+    }
+
+    /**
+     * Whether a cold app resolves this unbound, un-namespaced key to an object. Its class-table entry existed when
+     * the boot ended (PHP's lookup ignores case), or the key was one of AliasLoader's own when the boot ended, loaded for
+     * exactly this spelling. An exactly spelled class needs no entry: the caller falls back to it. Known gaps, declined: an
+     * alias a post-boot file declares as a side effect, and a lazy alias that is spelled exactly.
+     */
+    private static function resolvesInColdApp(string $key): bool
+    {
+        return ApplicationProvider::wasClassDeclaredAtBoot($key)
+            || ApplicationProvider::wasAliasRegisteredAtBoot($key);
     }
 
     /**
@@ -240,7 +253,7 @@ final class ContainerResolver
      * `Schema` facade alias class. Here the key has to be spelled exactly as the storage name (a namespaced
      * name keeps the lenient match, and a global-namespace `class_alias()` whose name differs from its
      * target stays unknown). In resolveFromApplicationContainer() the same key, when unbound, must not
-     * resolve through make() to an object whose class is not spelled exactly as the key.
+     * resolve through make() unless a cold app would find it too: see resolvesInColdApp().
      *
      * @psalm-mutation-free
      */

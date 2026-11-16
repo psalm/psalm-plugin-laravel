@@ -73,6 +73,40 @@ final class ApplicationProvider
      */
     private static array $runtimeDeclaredConstants = [];
 
+    /**
+     * Lowercase names in PHP's class table (classes and `class_alias()` names) the moment the boot ended.
+     * Taken before any plugin-induced load, so it tells an entry a cold app also has (an eager alias, a class
+     * a provider loaded) from one only this process created. See {@see wasClassDeclaredAtBoot()}.
+     *
+     * @var array<string, true>
+     */
+    private static array $classesDeclaredAtBoot = [];
+
+    /**
+     * Lowercase class-table names an earlier invocation of this process loaded after its boot ended (the plugin's
+     * own facade-alias loads, analysed code). Deliberately NOT cleared by {@see reset()}: PHP keeps those entries
+     * in the class table, so without this set the next boot's snapshot would take them for boot-time facts.
+     * Leaving out a name the next boot also loads legitimately only declines it, which is sound.
+     *
+     * @var array<string, true>
+     */
+    private static array $classesLoadedAfterBoot = [];
+
+    /**
+     * Exact `AliasLoader` alias keys when the boot ended. The registry stays live and a facade file the plugin
+     * autoloads afterwards can add to it, which a cold app never has. See {@see wasAliasRegisteredAtBoot()}.
+     *
+     * @var array<string, true>
+     */
+    private static array $aliasesAtBoot = [];
+
+    /**
+     * Set when a boot starts, before anything in it can throw. An aborted boot leaves the snapshots empty, so
+     * their emptiness cannot tell "no boot yet" from "boot aborted": {@see reset()} must still treat every class
+     * loaded since as loaded after a boot.
+     */
+    private static bool $bootAttempted = false;
+
     public static function bootApp(): void
     {
         self::getApp();
@@ -93,6 +127,10 @@ final class ApplicationProvider
         self::$runtimeDeclaredFunctionFiles = [];
         self::$runtimeDeclaredFunctionIds = [];
         self::$runtimeDeclaredConstants = [];
+        self::rememberClassesLoadedAfterBoot();
+        self::$bootAttempted = false;
+        self::$classesDeclaredAtBoot = [];
+        self::$aliasesAtBoot = [];
 
         \Illuminate\Support\Facades\Facade::clearResolvedInstances();
         \Illuminate\Support\Facades\Facade::setFacadeApplication(null);
@@ -171,6 +209,8 @@ final class ApplicationProvider
      */
     private function doGetApp(): LaravelApplication
     {
+        self::$bootAttempted = true;
+
         if (!\defined('LARAVEL_START')) {
             \define('LARAVEL_START', \microtime(true));
         }
@@ -254,8 +294,60 @@ final class ApplicationProvider
         self::$runtimeDeclaredConstants = \array_keys(
             \array_diff_key(\get_defined_constants(true)['user'] ?? [], $constantsBeforeBoot),
         );
+        // get_declared_classes() lists aliases too, lowercased.
+        self::$classesDeclaredAtBoot = [];
+        foreach (\get_declared_classes() as $declaredClass) {
+            $declaredClass = \strtolower($declaredClass);
+
+            if (!isset(self::$classesLoadedAfterBoot[$declaredClass])) {
+                self::$classesDeclaredAtBoot[$declaredClass] = true;
+            }
+        }
+
+        self::$aliasesAtBoot = [];
+        foreach (\array_keys(\Illuminate\Foundation\AliasLoader::getInstance()->getAliases()) as $alias) {
+            self::$aliasesAtBoot[(string) $alias] = true;
+        }
 
         return $app;
+    }
+
+    /**
+     * Moves every class loaded since the previous boot ended into {@see $classesLoadedAfterBoot}; after an
+     * aborted boot (empty snapshot) that is every declared class, which only declines. Without a previous boot
+     * (the first reset of the process) there is nothing to compare against.
+     */
+    private static function rememberClassesLoadedAfterBoot(): void
+    {
+        if (!self::$bootAttempted) {
+            return;
+        }
+
+        foreach (\get_declared_classes() as $declaredClass) {
+            $declaredClass = \strtolower($declaredClass);
+
+            if (!isset(self::$classesDeclaredAtBoot[$declaredClass])) {
+                self::$classesLoadedAfterBoot[$declaredClass] = true;
+            }
+        }
+    }
+
+    /**
+     * True when `$key` was an `AliasLoader` alias, spelled exactly like this, when the boot ended: a cold app's
+     * autoloader then creates it for exactly this spelling.
+     */
+    public static function wasAliasRegisteredAtBoot(string $key): bool
+    {
+        return isset(self::$aliasesAtBoot[$key]);
+    }
+
+    /**
+     * True when the class or `class_alias()` name, under any casing, was already in PHP's class table when the
+     * boot ended: a cold app has that entry too, so its case-insensitive lookup resolves the name.
+     */
+    public static function wasClassDeclaredAtBoot(string $class): bool
+    {
+        return isset(self::$classesDeclaredAtBoot[\strtolower($class)]);
     }
 
     /**
