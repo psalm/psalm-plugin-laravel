@@ -17,6 +17,11 @@ class Product extends Model
             'generic_price' => GenericMoneyCast::class,
             'native_price' => NativeMoneyCast::class,
             'documented_price' => DocumentedMoneyCast::class,
+            'trait_self' => TraitSelfCast::class,
+            'trait_static' => TraitStaticCast::class,
+            'static_base' => StaticBaseCast::class,
+            'parent_ret' => ParentReturningCast::class,
+            'inherited_doc' => InheritedDocblockCast::class,
         ];
     }
 }

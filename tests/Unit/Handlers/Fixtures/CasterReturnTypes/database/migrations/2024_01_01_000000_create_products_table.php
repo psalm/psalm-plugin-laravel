@@ -12,6 +12,11 @@ return new class extends Migration {
             $table->integer('generic_price');
             $table->integer('native_price');
             $table->integer('documented_price');
+            $table->integer('trait_self');
+            $table->integer('trait_static');
+            $table->integer('static_base');
+            $table->integer('parent_ret');
+            $table->integer('inherited_doc');
         });
     }
 };

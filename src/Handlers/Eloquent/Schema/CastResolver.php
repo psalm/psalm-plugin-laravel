@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Casts\AsStringable;
 use Illuminate\Support\Collection as IlluminateCollection;
 use Illuminate\Support\Stringable as IlluminateStringable;
 use Psalm\Codebase;
+use Psalm\Internal\Type\TypeExpander;
 use Psalm\LaravelPlugin\Internal\AutoloadOnce;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Internal\ConfiguredDateClass;
@@ -380,20 +381,9 @@ final class CastResolver
             return null;
         }
 
-        // A `get()` with only a native return type has no docblock of its own, so Psalm answers with the
-        // interface's `TGet|null` (unresolved, or resolved to a nullable `@implements` argument); the
-        // declared signature is the precise type.
-        $declaringId = ClassLineage::storage($codebase, $castClass)?->declaring_method_ids['get'] ?? null;
-        $declared = $declaringId === null
-            ? null
-            : ClassLineage::storage($codebase, $declaringId->fq_class_name)?->methods['get'] ?? null;
-
-        if (
-            $declared instanceof FunctionLikeStorage
-            && $declared->signature_return_type instanceof Union
-            && $declared->return_type === $declared->signature_return_type
-        ) {
-            return self::makeNullable($declared->signature_return_type, $nullable);
+        $native = self::nativeReturnTypeOfUndocumentedGet($codebase, $castClass);
+        if ($native instanceof Union) {
+            return self::makeNullable($native, $nullable);
         }
 
         $returnType = $codebase->getMethodReturnType($method, $castClass);
@@ -402,6 +392,49 @@ final class CastResolver
         }
 
         return self::makeNullable($returnType, $nullable);
+    }
+
+    /**
+     * A `get()` with a native return type and no docblock anywhere in its chain except the interface's `TGet|null`:
+     * Psalm answers with that (unresolved, or resolved to a nullable `@implements` argument), while the declared
+     * signature is the precise type. A docblock inherited from a base caster (`@return Money` over `get(): object`)
+     * is not the interface's, so it stays with `getMethodReturnType()`.
+     *
+     * The signature is expanded in the caster's own context: `self`/`parent`/`static` (e.g. from a trait) name the
+     * caster, not the model the property machinery would otherwise bind them to.
+     */
+    private static function nativeReturnTypeOfUndocumentedGet(Codebase $codebase, string $castClass): ?Union
+    {
+        $storage = ClassLineage::storage($codebase, $castClass);
+        $documentingId = $storage?->documenting_method_ids['get'] ?? null;
+        if (!$storage instanceof \Psalm\Storage\ClassLikeStorage || $documentingId === null || \strcasecmp($documentingId->fq_class_name, CastsAttributes::class) !== 0) {
+            return null;
+        }
+
+        $declaringId = $storage->declaring_method_ids['get'] ?? null;
+        $declaringStorage = $declaringId === null ? null : ClassLineage::storage($codebase, $declaringId->fq_class_name);
+        $declared = $declaringStorage?->methods['get'] ?? null;
+
+        if (
+            !$declaringStorage instanceof \Psalm\Storage\ClassLikeStorage
+            || !$declared instanceof FunctionLikeStorage
+            || !$declared->signature_return_type instanceof Union
+            || $declared->has_docblock_return_type
+        ) {
+            return null;
+        }
+
+        // `self` of a trait method is the using class; of an inherited method, the class that declares it.
+        $self = $declaringStorage->is_trait ? $storage->name : $declaringStorage->name;
+
+        return TypeExpander::expandUnion(
+            $codebase,
+            $declared->signature_return_type,
+            $self,
+            $storage->name,
+            $declaringStorage->is_trait ? $storage->parent_class : $declaringStorage->parent_class,
+            final: true,
+        );
     }
 
     /** @psalm-external-mutation-free */

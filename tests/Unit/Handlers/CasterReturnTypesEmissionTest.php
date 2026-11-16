@@ -40,6 +40,23 @@ final class CasterReturnTypesEmissionTest extends TestCase
         $this->assertContains('$_documented: CasterReturnFixture\Money', $this->runPsalm());
     }
 
+    #[Test]
+    public function it_binds_relative_native_return_types_to_the_caster(): void
+    {
+        $traces = $this->runPsalm();
+
+        $this->assertContains('$_traitSelf: CasterReturnFixture\Models\TraitSelfCast', $traces);
+        $this->assertContains('$_traitStatic: CasterReturnFixture\Models\TraitStaticCast', $traces);
+        $this->assertContains('$_staticBase: CasterReturnFixture\Models\StaticBaseCast', $traces);
+        $this->assertContains('$_parent: CasterReturnFixture\Models\StaticBaseCast', $traces);
+    }
+
+    #[Test]
+    public function it_keeps_a_docblock_return_type_inherited_from_a_base_caster(): void
+    {
+        $this->assertContains('$_inheritedDoc: CasterReturnFixture\Money', $this->runPsalm());
+    }
+
     /** @return list<string> messages of every `@psalm-trace` */
     private function runPsalm(): array
     {
