@@ -97,4 +97,35 @@ final class ReadSetResolverTest extends TestCase
         $this->assertSame([], ReadSetResolver::staleDeclarations('open'));
         $this->assertSame([], ReadSetResolver::staleDeclarations('unregistered'));
     }
+
+    /**
+     * `get_defined_vars()` reads every name in scope. Only the one Blade compiles into an include is
+     * a known hand-over (the partial is walked instead); anywhere else, in this template or in an
+     * included partial, it declines.
+     */
+    #[Test]
+    public function a_scope_read_outside_a_compiled_include_declines(): void
+    {
+        $this->register('echo', "<?php /** @var string \$title */ ?>\n{{ get_defined_vars()['title'] }}\n");
+        $this->register('php-block', "<?php /** @var string \$title */ ?>\n@php(\$all = \\get_defined_vars())\n");
+        $this->register('scope-host', "<?php /** @var string \$title */ ?>\n@include('scope-partial')\n", includes: ['scope-partial']);
+        $this->register('scope-partial', "<p>{{ json_encode(get_defined_vars()) }}</p>\n");
+        // A look-alike of the compiled scope argument, outside an include call.
+        $this->register('look-alike', "<?php /** @var string \$title */ ?>\n@php(\$all = array_diff_key(get_defined_vars(), ['__data' => 1]))\n");
+
+        foreach (['echo', 'php-block', 'scope-host', 'look-alike'] as $view) {
+            $this->assertSame([], ReadSetResolver::staleDeclarations($view), $view);
+        }
+    }
+
+    /** The negative: the scope argument every include directive compiles is not a scope read. */
+    #[Test]
+    public function the_scope_argument_of_a_compiled_include_is_not_a_scope_read(): void
+    {
+        $source = "<?php /** @var string \$title */ ?>\n@include('a')\n@includeWhen(true, 'a')\n@includeUnless(false, 'a')\n@includeFirst(['a'])\n@extends('a')\n";
+        $this->register('directives', $source, includes: ['a']);
+        $this->register('a', "<p>x</p>\n");
+
+        $this->assertSame(['title'], ReadSetResolver::staleDeclarations('directives'));
+    }
 }

@@ -539,6 +539,7 @@ final class BladeBootstrapper
             $contract->readsUnknown,
             $contract->localVariables,
             [...$contract->rawDeclaredVariables, ...\array_keys($dropped)],
+            $contract->readsScope,
         );
     }
 

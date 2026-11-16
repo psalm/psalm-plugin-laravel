@@ -73,7 +73,7 @@ final class ContractParser
     public function parseDataContract(string $source, string $compiled): ViewDataContract
     {
         [$vars, $propsUnknown] = $this->parseSource($source);
-        [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
+        [$reads, $readsUnknown, $localVariables, $readsScope] = $this->parseReads($compiled);
 
         $vars += $this->rawContractVars($source, $localVariables);
 
@@ -81,7 +81,7 @@ final class ContractParser
         // a Blade-owned name, a non-docblock comment, or a name-first `@var $x T`.
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
-        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
+        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared, $readsScope);
     }
 
     /**
@@ -668,14 +668,15 @@ final class ContractParser
      * "does the template use this name at all", and dropping them would report the very name a
      * `@foreach` binds), and an unknowable body is flagged rather than reported as an empty set.
      *
-     * @return array{0: list<string>, 1: bool, 2: list<string>} names read, whether the set is only a
-     *         lower bound, and the names the template binds for itself
+     * @return array{0: list<string>, 1: bool, 2: list<string>, 3: bool} names read, whether the set is
+     *         only a lower bound, the names the template binds for itself, and whether it reads the
+     *         whole scope outside a compiled include
      */
     private function parseReads(string $compiled): array
     {
-        [$names, $locals, $unknown] = $this->walkReads($compiled);
+        [$names, $locals, $unknown, $scopeRead] = $this->walkReads($compiled);
 
-        return [$this->filterNames($names), $unknown, $this->filterNames($locals)];
+        return [$this->filterNames($names), $unknown, $this->filterNames($locals), $scopeRead];
     }
 
     /**
@@ -717,8 +718,9 @@ final class ContractParser
     /**
      * One walk of the compiled body.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
-     *         the body binds for itself, and whether it hides which names it reads
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool} names read, the
+     *         names the body binds for itself, whether it hides which names it reads, and whether it
+     *         reads the whole scope outside a compiled include
      */
     private function walkReads(string $compiled): array
     {
@@ -729,7 +731,7 @@ final class ContractParser
         } catch (\Throwable) {
             // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
             // would turn every key a call site passes into a false positive.
-            return [[], [], true];
+            return [[], [], true, true];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -740,6 +742,12 @@ final class ContractParser
             public array $locals = [];
 
             public bool $unknown = false;
+
+            /**
+             * A `get_defined_vars()` that is not the compiled scope argument of an include: it reads
+             * names this walk cannot enumerate, yet leaves `$unknown` alone (see {@see self::enterCall()}).
+             */
+            public bool $scopeRead = false;
 
             #[\Override]
             public function enterNode(Node $node): null
@@ -784,11 +792,49 @@ final class ContractParser
                     }
                 }
 
+                if ($node instanceof Node\Expr\MethodCall) {
+                    $this->markCompiledScopePass($node);
+                }
+
                 if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
-                    $this->enterCall(\strtolower($node->name->toString()), $node->args);
+                    $this->enterCall(\strtolower($node->name->toString()), $node->args, $node);
                 }
 
                 return null;
+            }
+
+            /**
+             * Tags the `get_defined_vars()` of the `array_diff_key(get_defined_vars(), [...])` argument
+             * every Blade include directive compiles (`$__env->make()`, `first()`, `renderWhen()`,
+             * `renderUnless()`), the one scope hand-over `ViewReferenceCollector` resolves to a named
+             * view. A look-alike anywhere else (`@php`, `{{ }}`) is not tagged. The traverser enters a
+             * call before its arguments, so the tag is in place when the inner call is reached.
+             */
+            private function markCompiledScopePass(Node\Expr\MethodCall $call): void
+            {
+                if (!$call->var instanceof Node\Expr\Variable
+                    || $call->var->name !== '__env'
+                    || !$call->name instanceof Node\Identifier
+                    || !\in_array($call->name->toLowerString(), ['make', 'first', 'renderwhen', 'renderunless'], true)
+                ) {
+                    return;
+                }
+
+                foreach ($call->args as $arg) {
+                    if (!$arg instanceof Node\Arg
+                        || !$arg->value instanceof Node\Expr\FuncCall
+                        || !$arg->value->name instanceof Node\Name
+                        || \strtolower($arg->value->name->toString()) !== 'array_diff_key'
+                    ) {
+                        continue;
+                    }
+
+                    $inner = $arg->value->args[0] ?? null;
+
+                    if ($inner instanceof Node\Arg && $inner->value instanceof Node\Expr\FuncCall) {
+                        $inner->value->setAttribute('compiledScopePass', true);
+                    }
+                }
             }
 
             /**
@@ -826,10 +872,8 @@ final class ContractParser
 
             /**
              * @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
-             *
-             * @psalm-external-mutation-free
              */
-            private function enterCall(string $name, array $args): void
+            private function enterCall(string $name, array $args, Node\Expr\FuncCall $node): void
             {
                 if ($name === 'extract') {
                     $this->unknown = true;
@@ -837,8 +881,14 @@ final class ContractParser
                     return;
                 }
 
-                // `get_defined_vars()` is deliberately not in this list: Blade compiles it into every
-                // `@include`, so reading it as unknown would turn the rule off almost everywhere.
+                // `get_defined_vars()` never sets `$unknown`: Blade compiles it into every `@include`, so
+                // reading it as unknown would turn UnusedViewData off almost everywhere. Outside that
+                // compiled shape it is a read of every name in scope, which only the stale-declaration
+                // check cares about (see `$scopeRead`).
+                if ($name === 'get_defined_vars' && $node->getAttribute('compiledScopePass') !== true) {
+                    $this->scopeRead = true;
+                }
+
                 if ($name !== 'compact') {
                     return;
                 }
@@ -862,6 +912,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->locals, $visitor->unknown];
+        return [$visitor->names, $visitor->locals, $visitor->unknown, $visitor->scopeRead];
     }
 }

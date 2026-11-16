@@ -84,6 +84,13 @@ final class ReadSetResolver
             return null;
         }
 
+        // The stale check must prove a name unread, and a `get_defined_vars()` that is not a compiled
+        // include's scope argument may read any of them (the chain shares one scope, so this holds for
+        // an included partial too). UnusedViewData tolerates that: see ViewDataContract::$readsScope.
+        if (!$declarationsCount && $contract->readsScope) {
+            return null;
+        }
+
         $dataIncludes = ContractRegistry::dataIncludesFor($viewName);
 
         if ($dataIncludes === null || $dataIncludes[1]) {

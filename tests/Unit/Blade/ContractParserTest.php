@@ -334,6 +334,20 @@ final class ContractParserTest extends TestCase
         $this->assertSame(['name'], $contract->readVariables);
     }
 
+    /** The scope argument of every include directive is no scope read; a call anywhere else is, yet never makes the set unknown. */
+    #[Test]
+    public function a_get_defined_vars_outside_a_compiled_include_is_a_scope_read(): void
+    {
+        $include = $this->dataContract("@include('a')\n@includeFirst(['a'])\n@includeWhen(true, 'a')\n@includeUnless(false, 'a')\n@extends('a')\n");
+        $echo = $this->dataContract("{{ get_defined_vars()['title'] }}\n");
+        $php = $this->dataContract("@php(\$all = array_diff_key(get_defined_vars(), ['__data' => 1]))\n");
+
+        $this->assertFalse($include->readsScope);
+        $this->assertTrue($echo->readsScope);
+        $this->assertTrue($php->readsScope);
+        $this->assertFalse($echo->readsUnknown);
+    }
+
     #[Test]
     public function collects_a_destructured_loop_binding_as_a_local_variable(): void
     {
