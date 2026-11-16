@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794859491395,
+  "lastUpdate": 1794860026522,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19170,6 +19170,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 26.07,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2c0007a29dd45f6d98e45d743da705a0c74e6252",
+          "message": "Type the closure parameter of eager-load constraints in `with()`, `withOnly()`, `load()` and `loadMissing()` (#1955)\n\n* refactor(eloquent): extract relation path segmentation\n\nShared by the relation-name rule and the upcoming eager-load\nconstraint typing; each consumer keeps its own per-segment guards.\n\nRefs #1945\n\n* feat(eloquent): type eager-load constraint closure params\n\n* fix(eloquent): restore declared eager-load callback types and decline unknown builders\n\nRestore a closure param to its declared type on every eager-load pass, also from\nbeforeExpressionAnalysis for receivers no params provider dispatches on, and\ndecline eager-load constraint typing when the model's builder is unknown.\n\n* fix(eloquent): decline eager-load typing when Laravel's constraint path is overridden\n\nDecline when the builder, model or collection overrides a method the constraint\npasses through, when the model's collection is unknown, and for generic models.\nOne guard serves the receiver, forwarded receivers and intermediate models.\n\n* fix(eloquent): decline eager-load typing for overridden relation forwarding, intersection models and by-reference params\n\n* fix(eloquent): decline eager-load typing when a model overrides its magic forwarding\n\n* docs: reword eager-load path list to satisfy the typo check\n\n* fix(eloquent): type eager-load constraints only through Laravel's own relation classes\n\n* test(eloquent): move eager-load fixture models to the shared application fixture",
+          "timestamp": "2026-11-16T21:10:22+01:00",
+          "tree_id": "2c3b8cb014c73a1564d7951726c7612a9051fa00",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2c0007a29dd45f6d98e45d743da705a0c74e6252"
+        },
+        "date": 1794860025041,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.05,
+            "range": "± 0.12",
             "unit": "s"
           },
           {
