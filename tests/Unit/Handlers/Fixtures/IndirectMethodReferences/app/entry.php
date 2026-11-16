@@ -24,6 +24,16 @@ use IndirectMethodReferencesFixture\Dependencies\ProtectedDependency;
 use IndirectMethodReferencesFixture\Dependencies\PublicControl;
 use IndirectMethodReferencesFixture\Dependencies\UnusedDependency;
 use IndirectMethodReferencesFixture\Models\User;
+use IndirectMethodReferencesFixture\Models\UserBuilder;
+
+/** Custom builders are mutable: discarding what a builder-returning method gives back is the idiom (#1448). */
+function restrictUsers(UserBuilder $query): void
+{
+    $query->fluentSelf();
+    $query->fluentStatic();
+    $query->fluentThis();
+    $query->builderOrCollection(true);
+}
 
 /** Keep fixture classes reachable while leaving their constructors/methods uncalled. */
 function consume(): array

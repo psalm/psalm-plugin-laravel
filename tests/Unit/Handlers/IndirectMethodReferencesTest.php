@@ -8,14 +8,16 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psalm\LaravelPlugin\Handlers\Eloquent\BuilderFluentReturnHandler;
 use Psalm\LaravelPlugin\Handlers\References\IndirectMethodReferenceHandler;
 use Symfony\Component\Process\Process;
 use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
 
 /**
- * Whole-project regression coverage for Laravel's indirect method references. Psalm's dead-code
- * consolidation does not inspect an explicitly passed file, so this deliberately runs a real
- * fixture project with findUnusedCode enabled, matching a consuming application's lifecycle.
+ * Whole-project regression coverage for Laravel's indirect method references and for fluent custom
+ * builder methods. Psalm's dead-code consolidation does not inspect an explicitly passed file, so
+ * this deliberately runs a real fixture project with findUnusedCode enabled, matching a consuming
+ * application's lifecycle.
  *
  * Markers are matched against the whole dead-code family, never against method findings alone:
  * when a class loses its last live reference Psalm folds all of its members into one UnusedClass
@@ -24,6 +26,7 @@ use Tests\Psalm\LaravelPlugin\Unit\Concerns\CopiesFixtureDirectories;
  * using class, not the declaring one.
  */
 #[CoversClass(IndirectMethodReferenceHandler::class)]
+#[CoversClass(BuilderFluentReturnHandler::class)]
 #[Group('subprocess')]
 final class IndirectMethodReferencesTest extends TestCase
 {
@@ -193,6 +196,14 @@ final class IndirectMethodReferencesTest extends TestCase
         $this->assertStringNotContainsString('function handle(string $request, \Closure $next)', $deadReturns, 'Expected the middleware return value to read as used.');
         $this->assertStringNotContainsString('function uniqueId(): string', $deadReturns, 'Expected a queue hook return value to read as used.');
         $this->assertStringContainsString('function discarded(', $deadReturns, 'Expected a discarded return value to remain reportable.');
+
+        // A custom builder is mutable, so its builder-returning methods read as fluent (#1448).
+        // Docblock-declared returns are reported at the annotation, so those markers match it.
+        foreach (['function fluentSelf(', 'function fluentStatic(', '@return $this'] as $marker) {
+            $this->assertStringNotContainsString($marker, $deadReturns, "Expected the builder method behind {$marker} to read as fluent.");
+        }
+
+        $this->assertStringContainsString('@return self|Collection', $deadReturns, 'Expected a builder-or-collection union to stay reportable.');
     }
 
     /**
