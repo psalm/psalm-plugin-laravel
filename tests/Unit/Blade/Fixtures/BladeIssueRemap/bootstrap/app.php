@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use BladeIssueRemapFixture\Providers\BlazeStubProvider;
+use BladeIssueRemapFixture\Providers\ClosureDirectiveStubProvider;
 use BladeIssueRemapFixture\Providers\LivewireStubProvider;
 use BladeIssueRemapFixture\Providers\PrefixedTagStubProvider;
 use BladeIssueRemapFixture\Providers\RouteHelperStubProvider;
@@ -12,6 +13,7 @@ use Illuminate\Foundation\Application;
 // only ever read by Psalm's own file scanner, never by PHP), but a real service provider's boot()
 // runs as real PHP during the app boot below, so PHP's autoloader must be able to find the class.
 require_once __DIR__ . '/../app/Providers/BlazeStubProvider.php';
+require_once __DIR__ . '/../app/Providers/ClosureDirectiveStubProvider.php';
 require_once __DIR__ . '/../app/Providers/LivewireStubProvider.php';
 require_once __DIR__ . '/../app/Providers/PrefixedTagStubProvider.php';
 require_once __DIR__ . '/../app/Providers/RouteHelperStubProvider.php';
@@ -31,5 +33,5 @@ require_once __DIR__ . '/../packages/blaze/src/BlazeManager.php';
 // Filament, ...): their boot() registers Blade directives/precompilers, exactly like the packages
 // ApplicationProvider::doGetApp() already runs boot() for.
 return Application::configure(basePath: \dirname(__DIR__))
-    ->withProviders([BlazeStubProvider::class, LivewireStubProvider::class, PrefixedTagStubProvider::class, RouteHelperStubProvider::class])
+    ->withProviders([BlazeStubProvider::class, ClosureDirectiveStubProvider::class, LivewireStubProvider::class, PrefixedTagStubProvider::class, RouteHelperStubProvider::class])
     ->create();
