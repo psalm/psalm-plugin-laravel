@@ -23,6 +23,9 @@ class Product extends Model
             'parent_ret' => ParentReturningCast::class,
             'child_trait_self' => ChildTraitSelfCast::class,
             'child_trait_parent' => ChildTraitParentCast::class,
+            'dual' => DualContractCast::class,
+            'dual_castable' => DualContractCastable::class,
+            'child_native' => ChildNativeCast::class,
             'multi' => MultiCastable::class,
             'inherited_doc' => InheritedDocblockCast::class,
         ];

@@ -67,6 +67,21 @@ final class CasterReturnTypesEmissionTest extends TestCase
     }
 
     #[Test]
+    public function it_types_a_native_only_get_inherited_from_a_base_caster(): void
+    {
+        $this->assertContains('$_childNative: CasterReturnFixture\\Money', $this->runPsalm());
+    }
+
+    #[Test]
+    public function it_reads_an_inbound_caster_as_the_raw_column_value_even_when_it_also_has_get(): void
+    {
+        $traces = $this->runPsalm();
+
+        $this->assertContains('$_dual: int', $traces);
+        $this->assertContains('$_dualCastable: int', $traces);
+    }
+
+    #[Test]
     public function it_keeps_a_docblock_return_type_inherited_from_a_base_caster(): void
     {
         $this->assertContains('$_inheritedDoc: CasterReturnFixture\Money', $this->runPsalm());

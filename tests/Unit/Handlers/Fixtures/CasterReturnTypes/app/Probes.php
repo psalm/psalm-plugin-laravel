@@ -40,4 +40,13 @@ function probes(Product $product): void
 
     $_multi = $product->multi;
     /** @psalm-trace $_multi */
+
+    $_dual = $product->dual;
+    /** @psalm-trace $_dual */
+
+    $_dualCastable = $product->dual_castable;
+    /** @psalm-trace $_dualCastable */
+
+    $_childNative = $product->child_native;
+    /** @psalm-trace $_childNative */
 }

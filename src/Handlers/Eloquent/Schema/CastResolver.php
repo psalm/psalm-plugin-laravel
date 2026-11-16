@@ -347,7 +347,6 @@ final class CastResolver
         if (
             $atomic instanceof TNamedObject
             && ClassLineage::isA($codebase, $atomic->value, CastsInboundAttributes::class)
-            && !ClassLineage::isA($codebase, $atomic->value, CastsAttributes::class)
         ) {
             if ($originalType instanceof Union) {
                 return self::makeNullable($originalType, $nullable);
@@ -372,7 +371,6 @@ final class CastResolver
 
             if (
                 ClassLineage::isA($codebase, $cls, CastsInboundAttributes::class)
-                && !ClassLineage::isA($codebase, $cls, CastsAttributes::class)
             ) {
                 if ($originalType instanceof Union) {
                     return self::makeNullable($originalType, $nullable);
@@ -396,6 +394,12 @@ final class CastResolver
         string $castClass,
         bool $nullable,
     ): ?Union {
+        // Laravel's getClassCastableAttributeValue() hands the raw value back for an inbound caster without calling
+        // `get()`, so a caster implementing both contracts reads as the inbound passthrough.
+        if (ClassLineage::isA($codebase, $castClass, CastsInboundAttributes::class)) {
+            return null;
+        }
+
         $method = $castClass . '::get';
         if (!$codebase->methodExists($method)) {
             return null;
@@ -426,8 +430,15 @@ final class CastResolver
     private static function nativeReturnTypeOfUndocumentedGet(Codebase $codebase, string $castClass): ?Union
     {
         $storage = ClassLineage::storage($codebase, $castClass);
-        $documentingId = $storage?->documenting_method_ids['get'] ?? null;
-        if (!$storage instanceof ClassLikeStorage || $documentingId === null || \strcasecmp($documentingId->fq_class_name, CastsAttributes::class) !== 0) {
+        $appearingId = $storage?->appearing_method_ids['get'] ?? null;
+        $appearing = $appearingId === null ? null : ClassLineage::storage($codebase, $appearingId->fq_class_name);
+        if (!$storage instanceof ClassLikeStorage || !$appearing instanceof ClassLikeStorage) {
+            return null;
+        }
+
+        // Psalm records the documenting method on the class the method appears in, not on a child inheriting it.
+        $documentingId = $appearing->documenting_method_ids['get'] ?? null;
+        if ($documentingId === null || \strcasecmp($documentingId->fq_class_name, CastsAttributes::class) !== 0) {
             return null;
         }
 
@@ -436,8 +447,7 @@ final class CastResolver
         $declared = $declaringStorage?->methods['get'] ?? null;
 
         if (
-            !$declaringStorage instanceof ClassLikeStorage
-            || !$declared instanceof FunctionLikeStorage
+            !$declared instanceof FunctionLikeStorage
             || !$declared->signature_return_type instanceof Union
             || $declared->has_docblock_return_type
         ) {
@@ -446,12 +456,6 @@ final class CastResolver
 
         // `self` and `parent` belong to the class the method appears in (the one that imported a trait, which may be a
         // base of the configured caster); only `static` is the configured caster.
-        $appearingId = $storage->appearing_method_ids['get'] ?? null;
-        $appearing = $appearingId === null ? null : ClassLineage::storage($codebase, $appearingId->fq_class_name);
-        if (!$appearing instanceof ClassLikeStorage) {
-            return null;
-        }
-
         return TypeExpander::expandUnion(
             $codebase,
             $declared->signature_return_type,
