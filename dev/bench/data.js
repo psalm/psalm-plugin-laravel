@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794858289580,
+  "lastUpdate": 1794859491395,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19135,6 +19135,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.43,
             "range": "± 0.11",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0dca02325403a35421e9aa5c68f8b855e82e8f63",
+          "message": "Type `__()` and `trans()` calls with a `mixed` key as `string` (#2289)\n\n* fix(translation): resolve __() and trans() with a mixed key to string\n\n* docs(translations): state the mixed-key null assumption in TranslationKeyHandler",
+          "timestamp": "2026-11-16T21:00:57+01:00",
+          "tree_id": "56fb0362df7287bd35af8e71d14dcce28a0327a7",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0dca02325403a35421e9aa5c68f8b855e82e8f63"
+        },
+        "date": 1794859490395,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.07,
+            "range": "± 0.16",
             "unit": "s"
           },
           {
