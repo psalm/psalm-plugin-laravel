@@ -173,12 +173,10 @@ class StateOverride extends Base
     /**
      * @param (callable(array<string, mixed>, Model|null): array<string, mixed>)|array<string, mixed> $state
      * @return static
-     * @psalm-suppress MoreSpecificReturnType
      */
     #[\Override]
     public function state($state)
     {
-        /** @psalm-suppress LessSpecificReturnStatement */
         return $this->count(2);
     }
 }

@@ -55,7 +55,7 @@ final class CastResolverTest extends TestCase
         // `Date::use()` is a static of the framework, and ClassLikeStorageProvider keeps its storage in a static too.
         DateFactory::useDefault();
         foreach (self::DATE_STORAGE_CLASSES as $class) {
-            $this->codebase->classlike_storage_provider->remove($class);
+            $this->codebase->classlike_storage_provider->remove($class, '');
         }
     }
 

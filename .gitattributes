@@ -18,4 +18,5 @@
 /psalm.xml          export-ignore
 /psalm-baseline.xml export-ignore
 /rector.php         export-ignore
+/structarmed.php    export-ignore
 /UPGRADING.md       export-ignore

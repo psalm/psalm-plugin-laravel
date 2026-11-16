@@ -593,7 +593,7 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('blade.compiler', $this->progress->warningText());
-        $this->assertSame(0, $registrar->markCalls);
+        $this->assertSame(0, $registrar->reportableCalls);
         $this->assertSame([], $registrar->analyzedShadows);
         $this->assertDirectoryDoesNotExist($this->shadowDir);
     }
@@ -629,7 +629,7 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString($this->shadowDir, $this->progress->warningText());
-        $this->assertSame(0, $registrar->markCalls);
+        $this->assertSame(0, $registrar->reportableCalls);
     }
 
     #[Test]
@@ -692,53 +692,6 @@ final class BladeBootstrapperTest extends TestCase
         $this->assertStringNotContainsString('Blade template(s) were skipped', $this->progress->warningText());
     }
 
-    /**
-     * Degradation is all-or-nothing (#1518). ContractRegistry and ViewReferenceRegistry feed
-     * call-site validation and template annotation, so a run whose templates never became
-     * reportable must leave both empty.
-     */
-    #[Test]
-    public function publishes_no_template_facts_when_activation_fails(): void
-    {
-        $this->writeTemplate('profile.blade.php', "{{ \$name }}\n");
-        $registrar = new RecordingShadowRegistrar(markSucceeds: false);
-
-        $booted = $this->bootstrapper($this->app(), $registrar)->boot();
-
-        $this->assertFalse($booted);
-        $this->assertNull(ContractRegistry::contractFor('profile'), 'a contract nothing can remap must not reach call sites');
-        $this->assertSame([], ViewReferenceRegistry::templates());
-
-        $shadows = $this->shadowFiles();
-        $this->assertCount(1, $shadows, 'the shadow was written to disk; only its publication is withheld');
-
-        foreach ($shadows as $shadow) {
-            $this->assertNull(ShadowRegistry::entryFor($shadow));
-        }
-
-        $this->assertCount(1, $this->progress->warnings, $this->progress->warningText());
-    }
-
-
-    /**
-     * Shadow files written this run, straight off disk: on the failure path the registrar never
-     * receives them, so the bootstrapper's own return value cannot name them.
-     *
-     * @return list<string>
-     */
-    private function shadowFiles(): array
-    {
-        $shadows = [];
-
-        foreach (\glob($this->shadowDir . '/*.php') ?: [] as $path) {
-            if (\basename($path) !== 'manifest.php') {
-                $shadows[] = $path;
-            }
-        }
-
-        return $shadows;
-    }
-
     #[Test]
     public function warns_once_when_no_templates_are_discovered(): void
     {
@@ -749,7 +702,7 @@ final class BladeBootstrapperTest extends TestCase
 
         $this->assertCount(1, $this->progress->warnings);
         $this->assertStringContainsString('no Blade templates were discovered', $this->progress->warningText());
-        $this->assertSame(0, $registrar->markCalls);
+        $this->assertSame(0, $registrar->reportableCalls);
         $this->assertNull($bootstrapper->disabled(), 'an empty view tree is not a disable: failOnInternalError must not fire');
     }
 

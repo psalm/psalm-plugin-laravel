@@ -389,9 +389,30 @@ final class BladeTemplatesTest extends TestCase
     }
 
     /**
+     * From Psalm 7.4 a function the boot declared resolves through reflection even without
+     * RuntimeHelperVisibility, but reflection only knows the native signature. `positive-int` (reported as
+     * `int<1, max>`) exists only in the helper's docblock, so rejecting `0` proves the shadow reads
+     * the helper's own storage.
+     */
+    #[Test]
+    public function a_helper_docblock_type_the_boot_declared_is_enforced_inside_a_template(): void
+    {
+        $this->assertCompiled('runtime-helpers.blade.php');
+        $messages = \array_column($this->in('runtime-helpers.blade.php'), 'message');
+
+        $this->assertCount(
+            1,
+            \array_filter($messages, static fn(string $message): bool => \str_contains($message, 'int<1, max>')),
+            \implode("\n", $messages),
+        );
+    }
+
+    /**
      * A helper file's storage also carries symbols it merely CONTAINS (a declaration behind a version
      * gate), which the runtime never declared, so those diagnostics must survive the injection. The blast
-     * radius is shadows only: a project file calling the same helper keeps Psalm's own answer.
+     * radius is shadows only: a project file calling that gated function keeps Psalm's own answer. The
+     * control cannot be a function the boot DID declare: from Psalm 7.4 those count as predefined for
+     * every file.
      */
     #[Test]
     public function symbols_the_boot_never_declared_and_project_files_still_report(): void

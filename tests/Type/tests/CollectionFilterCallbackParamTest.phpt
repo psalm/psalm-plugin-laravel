@@ -389,8 +389,8 @@ ArgumentTypeCoercion on line %d: Type CfcpNamed should be a subtype of CfcpAnima
 ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpNamed, int):bool|null, but parent type Closure[pure](CfcpAnimal):true provided
 InvalidArgument on line %d: Type CfcpDog|CfcpSuit should be a subtype of CfcpSuit
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpDog|CfcpSuit, int):bool|null, but Closure[pure](CfcpSuit):true provided
-ArgumentTypeCoercion on line %d: Type CfcpAnimal|CfcpItem should be a subtype of CfcpDog
-ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal|CfcpItem, int):bool|null, but parent type Closure[pure](CfcpDog):true provided
+InvalidArgument on line %d: Type CfcpAnimal|CfcpItem should be a subtype of CfcpDog
+InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal|CfcpItem, int):bool|null, but Closure[pure](CfcpDog):true provided
 ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
 ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpAnimal, int):bool|null, but parent type Closure[pure](CfcpDog, int):true provided
 ArgumentTypeCoercion on line %d: Type Illuminate\Database\Eloquent\Model should be a subtype of CfcpModel
