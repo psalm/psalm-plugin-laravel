@@ -99,7 +99,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           # The production ini default (zend.assertions=-1) would skip assert() checks.
@@ -171,7 +171,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           # zend.assertions=1: the production ini default (-1) hides php-parser assert() crashes (#1657).
@@ -231,7 +231,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: 8.4
           ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, zend.assertions=1
@@ -317,7 +317,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: 8.4
           ini-values: opcache.enable_cli=1, opcache.jit=tracing, opcache.jit_buffer_size=256M, zend.assertions=1
@@ -356,7 +356,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.2'
           coverage: none
@@ -367,7 +367,7 @@ jobs:
           mkdir "$RUNNER_TEMP/console-6" && cd "$RUNNER_TEMP/console-6"
           composer init --no-interaction --name=acme/console-6 --stability=stable
           composer config repositories.plugin "{\"type\": \"path\", \"url\": \"$GITHUB_WORKSPACE\", \"options\": {\"versions\": {\"psalm/plugin-laravel\": \"4.x-dev\"}}}"
-          composer require --no-interaction --no-progress 'symfony/console:6.4.*' 'vimeo/psalm:^7.3@stable' 'psalm/plugin-laravel:4.x-dev@dev'
+          composer require --no-interaction --no-progress 'symfony/console:6.4.*' 'vimeo/psalm:^7.7@stable' 'psalm/plugin-laravel:4.x-dev@dev'
 
       - name: Run the help of every psalm-laravel command
         working-directory: ${{ runner.temp }}/console-6
