@@ -62,6 +62,15 @@ final class ContractParser
      */
     private const DIRECTIVE_PATTERN = '/\B@(?<name>@?\w+(?:::\w+)?)(?:[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
 
+    /**
+     * Functions that reach the template's data through the call stack (the template runs inside
+     * `PhpEngine::evaluatePath($path, $data)`). A direct call and a callable string naming one are
+     * both scope reads, so the walk's two checks share this list.
+     *
+     * @internal
+     */
+    public const INTROSPECTION_FUNCTIONS = ['func_get_args', 'func_get_arg', 'debug_backtrace', 'debug_print_backtrace'];
+
     private ?Parser $parser = null;
 
     /**
@@ -830,7 +839,10 @@ final class ContractParser
              */
             private function namesScopeFunction(string $value): bool
             {
-                return \in_array(\ltrim(\strtolower($value), '\\'), ['compact', 'extract', 'get_defined_vars', 'func_get_args', 'func_get_arg'], true);
+                $name = \ltrim(\strtolower($value), '\\');
+
+                return \in_array($name, ['compact', 'extract', 'get_defined_vars'], true)
+                    || \in_array($name, ContractParser::INTROSPECTION_FUNCTIONS, true);
             }
 
             /** @psalm-mutation-free */
@@ -953,7 +965,7 @@ final class ContractParser
 
                 // The included template runs inside `PhpEngine::evaluatePath($path, $data)`, so the call's
                 // own arguments (the original data array) are reachable by introspection.
-                if (\in_array($name, ['func_get_args', 'func_get_arg', 'debug_backtrace', 'debug_print_backtrace'], true)) {
+                if (\in_array($name, ContractParser::INTROSPECTION_FUNCTIONS, true)) {
                     $this->scopeRead = true;
                 }
 

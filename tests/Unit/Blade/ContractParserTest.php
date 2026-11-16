@@ -365,6 +365,8 @@ final class ContractParserTest extends TestCase
         yield 'call_user_func with any callback' => ["{{ call_user_func('strtoupper', 'x') }}\n"];
         yield 'compact as a callable string' => ["{{ implode(array_map('compact', ['title'])) }}\n"];
         yield 'namespaced extract string' => ["{{ is_callable('\\Extract') }}\n"];
+        yield 'debug_backtrace as a callable' => ["{{ implode(array_map('debug_backtrace', [])) }}\n"];
+        yield 'namespaced debug_print_backtrace as a callable' => ["{{ is_callable('\\Debug_Print_Backtrace') }}\n"];
         yield 'include' => ["@php(include resource_path('views/legacy.php'))\n"];
         yield 'require_once' => ["@php(require_once __DIR__ . '/legacy.php')\n"];
         yield 'eval' => ["@php(eval('echo 1;'))\n"];
