@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794857799361,
+  "lastUpdate": 1794858289580,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19100,6 +19100,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 32.67,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "49699333+dependabot[bot]@users.noreply.github.com",
+            "name": "dependabot[bot]",
+            "username": "dependabot[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "927e5ff15de3806f239be2e9b2725c65a0aba766",
+          "message": "build(deps): bump step-security/harden-runner from 2.21.1 to 2.22.4 (#2324)\n\nBumps [step-security/harden-runner](https://github.com/step-security/harden-runner) from 2.21.1 to 2.22.4.\n- [Release notes](https://github.com/step-security/harden-runner/releases)\n- [Commits](https://github.com/step-security/harden-runner/compare/e14015d583714f6e62063499dc959a02595150a1...1d88384fd173af6ecb012dfd0264a306b711241a)\n\n---\nupdated-dependencies:\n- dependency-name: step-security/harden-runner\n  dependency-version: 2.22.4\n  dependency-type: direct:production\n  update-type: version-update:semver-minor\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+          "timestamp": "2026-11-16T20:40:38+01:00",
+          "tree_id": "178b72fd88bd6ad64104ab6a21b91fe66f0eaa10",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/927e5ff15de3806f239be2e9b2725c65a0aba766"
+        },
+        "date": 1794858288510,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 32.43,
+            "range": "± 0.11",
             "unit": "s"
           },
           {
