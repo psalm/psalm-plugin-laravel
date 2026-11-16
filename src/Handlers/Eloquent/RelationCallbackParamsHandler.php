@@ -97,9 +97,11 @@ use Psalm\Type\Union;
  * `loadMissing()` relations array is typed as the Relation its dot-path key resolves to. Receivers are a Builder (custom
  * ones included), a static `Model::with()`, a model instance and an Eloquent Collection, each exactly one known model.
  * Declines: the lists above (a MorphTo anywhere on the path included), a template-typed or intersection receiver,
- * `with('a', fn)` on a model, a model whose builder or custom collection overrides the delegated `with()`/`load()`,
- * a closure on a `:columns` key, on a repeated flattened path or in a nested `loadMissing()` array, and a computed
- * key or spread anywhere in the literal, or a related model on the path whose builder overrides `with()`. A declined
+ * `with('a', fn)` on a model, a model whose builder or custom collection overrides the delegated `with()`/`load()`
+ * (or whose builder is unknown, see {@see hasUnknownBuilder()}), a closure on a `:columns` key, on a repeated flattened
+ * path or in a nested `loadMissing()` array, and a computed key or spread anywhere in the literal, or a related model on
+ * the path whose builder overrides `with()` or is unknown. Every pass restores a closure param to its declaration
+ * before restating it ({@see beforeExpressionAnalysis()} covers receivers no provider dispatches on), so a declined
  * pass revokes earlier inference.
  *
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1676
@@ -208,18 +210,19 @@ final class RelationCallbackParamsHandler implements
     private static array $registered = [];
 
     /**
-     * Closure params this handler typed. The param object itself is the key, so storage Psalm replaced on a file
-     * reload is not ours, and only our own write is ever revoked.
+     * The declared `[type, type_inferred]` of every closure param the eager-load handling has seen, taken before its
+     * first write (Psalm itself narrows a typed param to the type a params answer supplies). The param object itself
+     * is the key, so storage Psalm replaced on a file reload is a new param with its own declaration.
      *
-     * @psalm-var \WeakMap<FunctionLikeParameter, true>|null
+     * @psalm-var \WeakMap<FunctionLikeParameter, array{?Union, bool}>|null
      */
-    private static ?\WeakMap $written = null;
+    private static ?\WeakMap $declared = null;
 
     public static function reset(): void
     {
         self::$calls = null;
         self::$registered = [];
-        self::$written = null;
+        self::$declared = null;
     }
 
     #[\Override]
@@ -271,6 +274,20 @@ final class RelationCallbackParamsHandler implements
             }
 
             self::$calls->offsetSet($args[0], \WeakReference::create($expr));
+        }
+
+        // The params provider only runs for the receivers it is registered on, so a closure analyzed earlier through a
+        // consumer it typed (a trait body, a loop pass) is restored here, before any provider can dispatch.
+        $source = $event->getStatementsSource();
+        if (self::$declared instanceof \WeakMap
+            && $source instanceof StatementsAnalyzer
+            && $args !== []
+            && $expr->name instanceof Identifier
+            && isset(self::EAGER_LOAD[$expr->name->toLowerString()])
+        ) {
+            foreach (self::eagerLoadClosures(\array_values($args), $expr->name->toLowerString()) as $closure) {
+                self::restoreClosureParam($source, $closure);
+            }
         }
 
         return null;
@@ -438,21 +455,35 @@ final class RelationCallbackParamsHandler implements
             return null;
         }
 
-        $relations = ArgUtil::boundTo($args, 'relations', 0)?->value;
-        $callback = ArgUtil::boundTo($args, 'callback', 1)?->value;
         $resolved = [];
         $result = self::eagerLoadParams($event, $args, $source, $resolved);
 
-        $closures = $relations instanceof Array_ ? self::closureLiterals($relations) : [];
-        if ($relations instanceof String_ && $event->getMethodNameLowercase() === 'with' && ($callback instanceof Closure || $callback instanceof ArrowFunction)) {
-            $closures[] = $callback;
-        }
-
-        foreach ($closures as $closure) {
+        foreach (self::eagerLoadClosures($args, $event->getMethodNameLowercase()) as $closure) {
             self::inferClosureParam($source, $closure, $resolved[\spl_object_id($closure)] ?? null);
         }
 
         return $result;
+    }
+
+    /**
+     * The closure literals an eager-load call may constrain: those in a literal relations array (nested arrays
+     * included) and the callback of `with('relation', fn)`.
+     *
+     * @param list<Arg> $args
+     * @return list<Closure|ArrowFunction>
+     * @psalm-capabilities read-props
+     */
+    private static function eagerLoadClosures(array $args, string $method): array
+    {
+        $relations = ArgUtil::boundTo($args, 'relations', 0)?->value;
+        $callback = ArgUtil::boundTo($args, 'callback', 1)?->value;
+
+        $closures = $relations instanceof Array_ ? self::closureLiterals($relations) : [];
+        if ($relations instanceof String_ && $method === 'with' && ($callback instanceof Closure || $callback instanceof ArrowFunction)) {
+            $closures[] = $callback;
+        }
+
+        return $closures;
     }
 
     /**
@@ -548,7 +579,7 @@ final class RelationCallbackParamsHandler implements
         if ($host === Builder::class) {
             $atomic = $call instanceof StaticCall ? null : self::receiverAtomic($source, $call);
             $receiver = $atomic instanceof TNamedObject && $atomic->extra_types !== [] ? null : self::receiverModel($source, $call, $dispatched);
-            if ($receiver === null) {
+            if ($receiver === null || self::hasUnknownBuilder($codebase, $receiver[0])) {
                 return null;
             }
 
@@ -565,6 +596,7 @@ final class RelationCallbackParamsHandler implements
 
         return $model !== null
             && $declaring instanceof MethodIdentifier
+            && !self::hasUnknownBuilder($codebase, $model)
             && self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($model), 'with') instanceof MethodIdentifier
             && ($method !== 'loadmissing' || self::collectionIsLaravels($codebase, $collection))
             ? [$model, $declaring]
@@ -789,41 +821,61 @@ final class RelationCallbackParamsHandler implements
      * closure's storage, before the closure is analyzed.
      *
      * The storage outlives a pass (Psalm re-analyzes loops and branches, and a trait body once per consuming class),
-     * so every pass restates the closure's Relation: it writes the pass's type, or revokes this handler's earlier
-     * write when the pass declines. A type the handler did not write is never touched.
+     * so every pass starts from the param's declaration ({@see restoreClosureParam()}) and then restates the
+     * closure's Relation. Only a param declared without a type is written; a typed one is left to the params answer,
+     * which Psalm may narrow, hence the restore.
      */
     private static function inferClosureParam(StatementsAnalyzer $source, Closure|ArrowFunction $closure, ?Union $type): void
+    {
+        $param = self::closureParam($source, $closure);
+
+        if (!$param instanceof FunctionLikeParameter) {
+            return;
+        }
+
+        if (!self::$declared instanceof \WeakMap) {
+            /** @psalm-var \WeakMap<FunctionLikeParameter, array{?Union, bool}> $fresh */
+            $fresh = new \WeakMap();
+            self::$declared = $fresh;
+        }
+
+        $declared = self::$declared;
+
+        if (!isset($declared[$param])) {
+            $declared[$param] = [$param->type, $param->type_inferred];
+        }
+
+        [$param->type, $param->type_inferred] = $declared[$param];
+
+        if ($type instanceof Union && !$param->type instanceof Union) {
+            $param->type = $type;
+            $param->type_inferred = true;
+        }
+    }
+
+    /** Puts a closure param this handler has seen back to its declared type: Psalm's or this handler's own earlier write goes. */
+    private static function restoreClosureParam(StatementsAnalyzer $source, Closure|ArrowFunction $closure): void
+    {
+        $declared = self::$declared;
+        $param = $declared instanceof \WeakMap ? self::closureParam($source, $closure) : null;
+
+        if ($declared instanceof \WeakMap && $param instanceof FunctionLikeParameter && isset($declared[$param])) {
+            [$param->type, $param->type_inferred] = $declared[$param];
+        }
+    }
+
+    /** The first param of a closure literal's storage, unless it is variadic. */
+    private static function closureParam(StatementsAnalyzer $source, Closure|ArrowFunction $closure): ?FunctionLikeParameter
     {
         $closureId = \strtolower($source->getFilePath()) . ':' . $closure->getLine() . ':' . (int) $closure->getAttribute('startFilePos') . ':-:closure';
 
         try {
             $param = $source->getCodebase()->getClosureStorage($source->getFilePath(), $closureId)->params[0] ?? null;
         } catch (\UnexpectedValueException) {
-            return;
+            return null;
         }
 
-        if (!$param instanceof FunctionLikeParameter || $param->is_variadic) {
-            return;
-        }
-
-        if (!self::$written instanceof \WeakMap) {
-            /** @psalm-var \WeakMap<FunctionLikeParameter, true> $fresh */
-            $fresh = new \WeakMap();
-            self::$written = $fresh;
-        }
-
-        $written = self::$written;
-        $ours = isset($written[$param]);
-
-        if ($type instanceof Union && ($ours || !$param->type instanceof Union)) {
-            $param->type = $type;
-            $param->type_inferred = true;
-            $written[$param] = true;
-        } elseif ($ours) {
-            $param->type = null;
-            $param->type_inferred = false;
-            unset($written[$param]);
-        }
+        return $param instanceof FunctionLikeParameter && !$param->is_variadic ? $param : null;
     }
 
     /**
@@ -843,7 +895,7 @@ final class RelationCallbackParamsHandler implements
             $prefix .= ($prefix === '' ? '' : '.') . $segment;
             $related = self::resolveRelation($codebase, $model, $prefix, false)[0] ?? null;
 
-            if ($related === null || !self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($related), 'with') instanceof MethodIdentifier) {
+            if ($related === null || self::hasUnknownBuilder($codebase, $related) || !self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($related), 'with') instanceof MethodIdentifier) {
                 return false;
             }
         }

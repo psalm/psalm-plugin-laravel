@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\Relation;
 
 /*
  * Eager-load constraint closures stay as today (`$q` is mixed) wherever the key or the receiver does not name
@@ -416,8 +417,159 @@ function test_load_missing_dynamic_nested_key_declines(Customer $customer, strin
         takes_mixed($q);
     }, 'vehicles' => ['customer' => [$key => 'x']]]);
 }
+
+/**
+ * @template TModel of Model
+ * @extends Builder<TModel>
+ */
+final class UnknownBuilderWithOverride extends Builder
+{
+    /** @inheritDoc */
+    #[\Override]
+    public function with($relations, $callback = null)
+    {
+        return parent::with($relations, $callback);
+    }
+}
+
+final class UnknownBuilderGrandchild extends Model {}
+
+/** `newEloquentBuilder()` with a docblock-only return type: the real builder (and its `with()`) is unknown. */
+final class UnknownBuilderChild extends Model
+{
+    /**
+     * @param \Illuminate\Database\Query\Builder $query
+     * @return UnknownBuilderWithOverride<static>
+     */
+    #[\Override]
+    public function newEloquentBuilder($query)
+    {
+        /** @var UnknownBuilderWithOverride<UnknownBuilderChild> $builder */
+        $builder = new UnknownBuilderWithOverride($query);
+
+        return $builder;
+    }
+
+    /** @return HasMany<UnknownBuilderGrandchild, $this> */
+    public function grandchildren(): HasMany
+    {
+        return $this->hasMany(UnknownBuilderGrandchild::class);
+    }
+}
+
+final class EagerUnknownBuilderOwner extends Model
+{
+    /** @return HasMany<UnknownBuilderChild, $this> */
+    public function children(): HasMany
+    {
+        return $this->hasMany(UnknownBuilderChild::class);
+    }
+}
+
+/**
+ * A builder the plugin cannot see is not assumed to be Laravel's: its `with()` may pass something else to the
+ * constraint. Every entry point declines, and so does a dot path or nested array through such a model.
+ *
+ * @param Collection<int, UnknownBuilderChild> $children
+ */
+function test_unknown_builder_declines(UnknownBuilderChild $child, Collection $children, EagerUnknownBuilderOwner $owner): void
+{
+    UnknownBuilderChild::with(['grandchildren' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    UnknownBuilderChild::query()->with(['grandchildren' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $child->load(['grandchildren' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $child->loadMissing(['grandchildren' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $children->load(['grandchildren' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $owner->children()->with(['grandchildren' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    EagerUnknownBuilderOwner::query()->with(['children.grandchildren' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    EagerUnknownBuilderOwner::query()->with(['children' => ['grandchildren' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]]);
+    EagerUnknownBuilderOwner::query()->with('children.grandchildren', function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    });
+}
+
+/**
+ * A declared `Relation` type is not narrowed to the first receiver's relation for good: the `with('parts', fn)` form
+ * hands the closure straight to Psalm, which narrows the storage to the supplied relation, and a later pass over a
+ * widened (union) receiver declines, so the declared type must come back.
+ */
+function test_loop_widening_restores_declared_callback_type(bool $flag): void
+{
+    $builder = WorkOrder::query();
+
+    while ($flag) {
+        $builder->with('parts', function (Relation $q): void {
+            /** @psalm-check-type-exact $q = Relation<Model, Model, mixed> */
+            takes_mixed($q);
+            if ($q instanceof BelongsTo) {
+                takes_mixed($q);
+            }
+        });
+
+        $builder = Supplier::query();
+    }
+}
+
+/** A trait body shares one closure storage between its consumers, including a class no params provider dispatches on. */
+trait EagerLoadsVehiclesFromTrait
+{
+    public function loadVehiclesFromTrait(): void
+    {
+        $this->load(['vehicles' => function ($q): void {
+            takes_mixed($q);
+        }]);
+    }
+}
+
+final class EagerTraitModelConsumer extends Customer
+{
+    use EagerLoadsVehiclesFromTrait;
+}
+
+/** Has its own `load()`: the Customer pass above typed the closure, this one must see it untyped again. */
+final class EagerTraitUnrelatedConsumer
+{
+    use EagerLoadsVehiclesFromTrait;
+
+    /** @param array<string, mixed> $relations */
+    public function load(array $relations): void {}
+}
 ?>
---EXPECTF--MMissingClosureParamType on line %d: Parameter $q has no provided type
+--EXPECTF--
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
