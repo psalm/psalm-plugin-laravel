@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794832958935,
+  "lastUpdate": 1794838509234,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -18855,6 +18855,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 24.57,
             "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "samsonasik@gmail.com",
+            "name": "Abdul Malik Ikhsan",
+            "username": "samsonasik"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3fae288c65239c3a2f58c6c4eb5d21eb91ee7602",
+          "message": "Use StructArmed on QA (#2314)\n\n* Use StructArmed on QA\n\n* chore: fix typo in structarmed.php comment\n\n* try fix zizmor notice\n\n* try fix zizmor notice\n\n---------\n\nCo-authored-by: Alies Lapatsin <5278175+alies-dev@users.noreply.github.com>",
+          "timestamp": "2026-11-16T15:11:36+01:00",
+          "tree_id": "70bf1c1bb234cf52ee69b6630850a2890aeb29ef",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3fae288c65239c3a2f58c6c4eb5d21eb91ee7602"
+        },
+        "date": 1794838507523,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.45,
+            "range": "± 0.26",
             "unit": "s"
           },
           {
