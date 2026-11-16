@@ -67,6 +67,15 @@
         "allow-plugins": {
             "dealerdirect/phpcodesniffer-composer-installer": true
         },
+        "policy": {
+            "cooldown": {
+                "period": "1 day",
+                "ignore": {
+                    "psalm/*": "Releases from the Psalm org are adopted the day they ship",
+                    "vimeo/psalm": "Plugin releases track new Psalm releases the day they ship"
+                }
+            }
+        },
         "sort-packages": true
     },
     "extra": {
