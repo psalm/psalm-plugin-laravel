@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Collections;
 
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Internal\LateStatic;
@@ -151,6 +152,10 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
      * Every receiver atomic is a named class without intersections that is a base collection, or a subclass declaring
      * no templates of its own (`@extends Collection<int, Model>`) or exactly `<TKey, TValue>` passed through in order.
      *
+     * Known limitation: for any other template list we decline, so Psalm resolves the stub's `static<array-key, TValue>`
+     * positionally against the subclass's own templates and the `array-key` can land on a non-key slot; see
+     * Issue2005KeyByForeignTemplateListKnownLimitation.phpt.
+     *
      * @psalm-capabilities read-props
      */
     private static function keepsBaseTemplateLayout(?Union $lhs, \Psalm\Codebase $codebase): bool
@@ -170,7 +175,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
 
             try {
                 $storage = $codebase->classlike_storage_provider->get($atomic->value);
-            } catch (\InvalidArgumentException) {
+            } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
                 return false;
             }
 
