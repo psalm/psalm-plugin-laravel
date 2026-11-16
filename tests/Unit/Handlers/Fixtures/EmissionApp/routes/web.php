@@ -22,4 +22,12 @@ if (\PHP_INT_SIZE === 0) {
     Route::name('dash-')->group(static function (): void {
         Route::get('/dash', static fn(): string => 'dash')->name('leaf');
     });
+
+    // The registrar prefix is not a route name, `Route::view()` data is not a route action, and
+    // named group attributes still prefix their routes.
+    Route::name('res-')->resource('things', \stdClass::class);
+    Route::view('/view-data', 'page', ['as' => 'view_data']);
+    Route::group(attributes: ['as' => 'named.'], routes: static function (): void {
+        Route::get('/named', static fn(): string => 'named')->name('named_leaf');
+    });
 }

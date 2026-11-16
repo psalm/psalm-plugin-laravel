@@ -173,6 +173,24 @@ final class UsesRoutes
         return route('leaf');
     }
 
+    /** A `resource()` registrar prefix is not a complete route name. */
+    public function resourceRegistrarPrefixIsReported(): string
+    {
+        return route('res-');
+    }
+
+    /** `Route::view()` takes view data, so its `'as'` key names no route. */
+    public function viewDataAsKeyIsReported(): string
+    {
+        return route('view_data');
+    }
+
+    /** A prefix given as a named `attributes:` argument still prefixes the group. */
+    public function namedGroupAttributesLeafIsReported(): string
+    {
+        return route('named_leaf');
+    }
+
     /** `Schedule::command()->name()` is not a route definition. */
     public function scheduledEventNameIsReported(): string
     {

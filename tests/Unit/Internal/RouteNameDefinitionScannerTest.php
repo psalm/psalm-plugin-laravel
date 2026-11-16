@@ -42,7 +42,9 @@ final class RouteNameDefinitionScannerTest extends TestCase
                     );
                 Route::get('/d', ['as' => 'as.single', 'uses' => $action]);
                 Route::get('/e', ["as" => "as.double", 'uses' => $action]);
-                Route::get('/f', $action)->name(name: 'named.argument');
+                Route::match(['get'], '/f', ['as' => 'match.slot', 'uses' => $action]);
+                Route::view('/v', 'page')->name('view.verb');
+                Route::redirect('/r', '/')->name('redirect.verb');
                 Route::get('/g', ['as' => 'as.commented' /* why */, 'uses' => $action]);
                 Route::name('static.direct')->get('/h', $action);
                 Route::get('/n', $action)?->name('nullsafe.call');
@@ -53,7 +55,7 @@ final class RouteNameDefinitionScannerTest extends TestCase
             PHP);
 
         $this->assertSame(
-            ['single.quoted', 'double.quoted', 'spread.over.lines', 'as.single', 'as.double', 'named.argument', 'as.commented', 'static.direct', 'nullsafe.call', 'router.variable', 'this.router', 'fully.qualified'],
+            ['single.quoted', 'double.quoted', 'spread.over.lines', 'as.single', 'as.double', 'match.slot', 'view.verb', 'redirect.verb', 'as.commented', 'static.direct', 'nullsafe.call', 'router.variable', 'this.router', 'fully.qualified'],
             \array_keys(RouteNameDefinitionScanner::scan($this->root)),
         );
     }
@@ -166,6 +168,66 @@ final class RouteNameDefinitionScannerTest extends TestCase
             PHP);
 
         $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
+    }
+
+    /** `Route::view()` takes view data, not an action: its `'as'` key names nothing. */
+    #[Test]
+    public function reads_as_only_from_the_route_action_slot(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::view('/p', 'page', ['as' => 'view.data']);
+            Route::get('/a', $a, ['as' => 'get.third.argument']);
+            Route::match(['get'], ['as' => 'match.second.argument']);
+            Route::any('/b', ['as' => 'any.slot']);
+            Route::get('/c', ['nested' => ['as' => 'too.deep']]);
+            Route::redirect('/r', '/', 301);
+            PHP);
+
+        $this->assertSame(['any.slot'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
+    }
+
+    /** Named arguments and spreads cannot be mapped to a parameter position, so the chain is declined. */
+    #[Test]
+    public function declines_named_arguments_and_spreads(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::get('/a', $a)->name(name: 'named.name');
+            Route::get(uri: '/b', action: ['as' => 'named.get'])->name('also.named');
+            Route::get(...$arguments)->name('spread.get');
+            Route::match(methods: ['get'], uri: '/c', action: ['as' => 'named.match']);
+            Route::group(attributes: ['as' => 'admin.'], routes: function () {
+                Route::get('/d', $a)->name('named_group_leaf');
+            });
+            Route::middleware(...$middleware)->group(function () {
+                Route::get('/e', $a)->name('spread_group_leaf');
+            });
+            Route::group($attributes, function () {
+                Route::get('/f', $a)->name('variable_attributes_leaf');
+            });
+            PHP);
+
+        $this->assertSame([], RouteNameDefinitionScanner::scan($this->root));
+    }
+
+    /** A registrar prefix is never a complete name: `resource` derives `admin-.posts.index` and the like. */
+    #[Test]
+    public function declines_resource_style_registrars_and_anything_but_one_route(): void
+    {
+        $this->write('routes/web.php', <<<'PHP'
+            <?php
+            Route::name('admin-')->resource('posts', PostController::class);
+            Route::name('api-')->apiResource('users', UserController::class);
+            Route::resource('p', C::class)->name('resource.name');
+            Route::singleton('profile', C::class)->name('singleton.name');
+            Route::name('only')->prefix('x');
+            Route::get('/a', $a)->post('/b', $a)->name('two.verbs');
+            Route::name('no.verb');
+            Route::get('/ok', $a)->name('one.verb');
+            PHP);
+
+        $this->assertSame(['one.verb'], \array_keys(RouteNameDefinitionScanner::scan($this->root)));
     }
 
     /** `name()` and `'as'` outside a route-definition chain never register a route. */

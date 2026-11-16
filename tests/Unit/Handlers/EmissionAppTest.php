@@ -289,13 +289,14 @@ final class EmissionAppTest extends TestCase
         // + 3 named-argument (route(absolute:, name:) with the name at offset 1, to_route(route:),
         // redirect()->route(route:)) + 2 non-literal names (string-backed enum case, class constant)
         // + 2 group-prefix names (the composed name is a known limitation, the bare leaf must be reported)
-        // + 2 names with no route provenance (a dash-prefixed group leaf, a scheduled event name).
+        // + 2 names with no route provenance (a dash-prefixed group leaf, a scheduled event name)
+        // + 3 names outside the definition allowlist (a resource prefix, view data, a named-attribute group leaf).
         // An exact count proves both full receiver coverage and that the clean, spread, dynamic and
         // conditionally-defined shapes do not over-fire.
-        $this->assertCount(17, $findings, "Expected exactly 17 UnregisteredRouteName findings, got:\n{$joined}");
+        $this->assertCount(20, $findings, "Expected exactly 20 UnregisteredRouteName findings, got:\n{$joined}");
         $this->assertStringNotContainsString("'dashboard'", $joined);
         $this->assertStringNotContainsString("'posts.show'", $joined);
-        $this->assertSame(\array_fill(0, 17, 'error'), \array_column($findings, 'severity'));
+        $this->assertSame(\array_fill(0, 20, 'error'), \array_column($findings, 'severity'));
     }
 
     #[Test]
@@ -340,6 +341,9 @@ final class EmissionAppTest extends TestCase
         $joined = \implode("\n", $this->messages($this->scenarioFindings('UnregisteredRouteName', 'UnregisteredRouteName')));
 
         $this->assertStringContainsString("Route name 'scheduled_report' is not registered", $joined);
+        $this->assertStringContainsString("Route name 'res-' is not registered", $joined);
+        $this->assertStringContainsString("Route name 'view_data' is not registered", $joined);
+        $this->assertStringContainsString("Route name 'named_leaf' is not registered", $joined);
     }
 
     #[Test]
