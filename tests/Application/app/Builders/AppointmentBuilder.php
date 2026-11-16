@@ -27,7 +27,7 @@ final class AppointmentBuilder extends Builder
 {
     public function incomplete(): self
     {
-        $this->where(static function (AppointmentBuilder $query): void {
+        $this->where(function (AppointmentBuilder $query): void {
             $query->where('scheduled_at', '>=', 'now')
                 ->orWhereNull('completed_at');
         });

@@ -48,6 +48,7 @@ return Architecture::define()
         // closures that must stay bindable: `bindDirective()` rebinds its handler to the compiler,
         // and the provider fixture exists to register closures bound to the provider instance
         CodeQualityPreset::ANONYMOUS_FUNCTIONS_MUST_BE_STATIC => [
+            '*/tests/Application',
             '*/tests/Unit/Blade/CompilerEnvironmentTest.php',
             '*/tests/Unit/Blade/ProviderBoundDirectives.php',
         ],

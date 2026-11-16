@@ -209,8 +209,8 @@ class Customer extends Authenticatable
     protected function firstName(): Attribute
     {
         return Attribute::make(
-            get: static fn(mixed $value): string => \ucfirst((string) $value),
-            set: static fn(string $value): string => \strtolower($value),
+            get: fn(mixed $value): string => \ucfirst((string) $value),
+            set: fn(string $value): string => \strtolower($value),
         );
     }
 
@@ -222,7 +222,7 @@ class Customer extends Authenticatable
     protected function displayName(): Attribute
     {
         return Attribute::get(
-            static fn(mixed $value): string => 'computed',
+            fn(mixed $value): string => 'computed',
         );
     }
 }

@@ -29,7 +29,7 @@ class AttributeSerializableModel extends Model
      */
     protected function fullName(): Attribute
     {
-        return Attribute::get(static fn(): string => 'computed');
+        return Attribute::get(fn(): string => 'computed');
     }
 
     /**
@@ -39,6 +39,6 @@ class AttributeSerializableModel extends Model
      */
     protected function secretToken(): Attribute
     {
-        return Attribute::get(static fn(): string => 'shh');
+        return Attribute::get(fn(): string => 'shh');
     }
 }
