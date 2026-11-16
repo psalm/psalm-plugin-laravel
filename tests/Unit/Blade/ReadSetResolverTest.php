@@ -128,4 +128,25 @@ final class ReadSetResolverTest extends TestCase
 
         $this->assertSame(['title'], ReadSetResolver::staleDeclarations('directives'));
     }
+
+    /**
+     * A composer the plugin cannot read (it may call `$view->getData()`) on ANY view in the chain may
+     * require the host's declaration; a readable one only passes the keys it names.
+     */
+    #[Test]
+    public function an_opaque_composer_anywhere_in_the_chain_declines(): void
+    {
+        $this->register('composed-host', "<?php /** @var string \$label */ ?>\n@include('composed-partial')\n", includes: ['composed-partial']);
+        $this->register('composed-partial', "<p>{{ \$heading }}</p>\n");
+        $this->register('literal-host', "<?php /** @var string \$label */ ?>\n@include('literal-partial')\n", includes: ['literal-partial']);
+        $this->register('literal-partial', "<p>{{ \$count }}</p>\n");
+        $this->register('own-composer', "<?php /** @var string \$label */ ?>\n<p>x</p>\n");
+
+        ContractRegistry::registerComposerSources(['composed-partial' => null, 'literal-partial' => [['App\\C', 'compose']], 'own-composer' => null]);
+        ContractRegistry::registerComposedKeys(['composed-partial' => null, 'literal-partial' => ['count' => true], 'own-composer' => null]);
+
+        $this->assertSame([], ReadSetResolver::staleDeclarations('composed-host'));
+        $this->assertSame([], ReadSetResolver::staleDeclarations('own-composer'));
+        $this->assertSame(['label'], ReadSetResolver::staleDeclarations('literal-host'));
+    }
 }

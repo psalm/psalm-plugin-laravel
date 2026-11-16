@@ -792,6 +792,12 @@ final class ContractParser
                     }
                 }
 
+                // `$__data` is Laravel's original data array: a read of it reads any supplied key, yet the
+                // read set drops every `__`-prefixed name.
+                if ($node instanceof Node\Expr\Variable && $node->name === '__data') {
+                    $this->scopeRead = true;
+                }
+
                 if ($node instanceof Node\Expr\MethodCall) {
                     $this->markCompiledScopePass($node);
                 }
@@ -934,6 +940,12 @@ final class ContractParser
                     if (!$callback instanceof Node\Arg || !$callback->value instanceof Node\Scalar\String_) {
                         $this->scopeRead = true;
                     }
+                }
+
+                // The included template runs inside `PhpEngine::evaluatePath($path, $data)`, so the call's
+                // own arguments (the original data array) are reachable by introspection.
+                if (\in_array($name, ['func_get_args', 'func_get_arg', 'debug_backtrace', 'debug_print_backtrace'], true)) {
+                    $this->scopeRead = true;
                 }
 
                 if ($name !== 'compact') {

@@ -1243,10 +1243,23 @@ final class ViewContractValidationTest extends TestCase
     {
         $issues = $this->contractIssues();
 
-        foreach (['GateVariableVariable', 'GateExtract', 'GateDynamicInclude', 'GateCustomDirective', 'GateIncludeChain', 'GateScopeRead', 'GateScopeReadInPartial', 'GateNativeInclude', 'GateNamedInclude'] as $case) {
+        foreach (['GateVariableVariable', 'GateExtract', 'GateDynamicInclude', 'GateCustomDirective', 'GateIncludeChain', 'GateScopeRead', 'GateScopeReadInPartial', 'GateNativeInclude', 'GateNamedInclude', 'GateDataArray', 'GateFuncArgs', 'GateComposerHost'] as $case) {
             $this->assertReportsOnly($issues, $case . '.php', 'label');
         }
 
         $this->assertSame([], $this->forFile($issues, 'GateProps.php'), \var_export($issues, true));
+    }
+
+    /**
+     * A composer on a view in the include chain that only passes literal keys cannot read the host's
+     * declaration, so the declaration stays stale (the control for `GateComposerHost`, whose partial's
+     * composer reads `$view->getData()`).
+     */
+    #[Test]
+    public function a_readable_composer_in_the_include_chain_keeps_the_declaration_stale(): void
+    {
+        $issues = $this->contractIssues();
+
+        $this->assertSame([], $this->forFile($issues, 'StaleBehindLiteralComposer.php'), \var_export($issues, true));
     }
 }

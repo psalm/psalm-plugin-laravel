@@ -357,6 +357,9 @@ final class ContractParserTest extends TestCase
      */
     public static function unmodelledScopeReads(): iterable
     {
+        yield 'original data array' => ["{{ \$__data['title'] }}\n"];
+        yield 'func_get_args' => ["{{ func_get_args()[1]['title'] }}\n"];
+        yield 'debug_backtrace' => ["{{ debug_backtrace()[0]['args'][1]['title'] }}\n"];
         yield 'include' => ["@php(include resource_path('views/legacy.php'))\n"];
         yield 'require_once' => ["@php(require_once __DIR__ . '/legacy.php')\n"];
         yield 'eval' => ["@php(eval('echo 1;'))\n"];

@@ -91,6 +91,13 @@ final class ReadSetResolver
             return null;
         }
 
+        // A composer or creator that cannot be read (it may call `$view->getData()`, which only the
+        // call site's data answers) can require a declared variable, and it does so for any view the
+        // chain reaches, not just the host.
+        if (!$declarationsCount && ContractRegistry::composedKeys($viewName) === null) {
+            return null;
+        }
+
         $dataIncludes = ContractRegistry::dataIncludesFor($viewName);
 
         if ($dataIncludes === null || $dataIncludes[1]) {
