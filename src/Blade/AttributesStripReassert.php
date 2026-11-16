@@ -5,24 +5,22 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Blade;
 
 /**
- * Re-asserts `$attributes` as a non-null `ComponentAttributeBag` after the two compiled
- * constructs that conditionally reassign it around a `<x-...>` tag (#1543).
+ * Re-asserts `$attributes` as a non-null `ComponentAttributeBag` after the inner `except()` strip
+ * `ComponentTagCompiler::componentString()` compiles into a `<x-...>` tag (#1543).
  *
- * `CompilesComponents::compileComponent()` saves `$attributes` behind `isset($attributes)` before
- * the tag and restores it behind `isset($__attributesOriginal<hash>)` after; both `isset()` checks
- * are provably true by the time either block runs (the save only fires when `$attributes` already
- * existed, the restore only fires when the save did), but Psalm keeps the reconciled `null` from
- * the never-taken negative arm and re-unions it into `$attributes`'s type at each block's `endif`.
- * `ComponentTagCompiler::componentString()`'s inner `except()` strip has the identical shape one
- * block earlier, so a read INSIDE the tag's own body degrades before the restore ever runs (fixing
- * only the restore leaves that case red).
+ * The strip runs behind `isset($attributes) && $attributes instanceof ComponentAttributeBag`, which
+ * the view's own bookkeeping has already made true, but Psalm keeps the reconciled `null` from the
+ * never-taken negative arm and re-unions it into `$attributes`'s type at the block's `endif`, so a
+ * read INSIDE the tag's own body reports PossiblyNullReference. The save/restore pair
+ * `CompilesComponents::compileComponent()` wraps around the tag needs no re-assert since Psalm 7.7,
+ * which no longer re-unions that null (a re-assert there is reported as UnnecessaryVarAnnotation).
  *
- * Both blocks are matched by their full, distinctive statement sequence (not just their trailing
- * `endif;`) so an unrelated `endif;` elsewhere in the shadow can never match. The docblock lands on
- * the SAME line as the matched `endif;`, before its closing ` ?>`: no line is added and no new
- * `<?php` open tag is introduced, so neither {@see LineMapBuilder} nor
- * {@see SuppressionInjector::findTargets()} (which binds a template's `{{-- @psalm-suppress --}}`
- * to the first open tag after it) sees anything different.
+ * The block is matched by its full, distinctive statement sequence (not just its trailing `endif;`)
+ * so an unrelated `endif;` elsewhere in the shadow can never match. The docblock lands on the SAME
+ * line as the matched `endif;`, before its closing ` ?>`: no line is added and no new `<?php` open
+ * tag is introduced, so neither {@see LineMapBuilder} nor {@see SuppressionInjector::findTargets()}
+ * (which binds a template's `{{-- @psalm-suppress --}}` to the first open tag after it) sees
+ * anything different.
  *
  * A regex match alone is not proof the matched text is COMPILER output (external review finding 1):
  * the identical text can appear inside an author's own PHP comment, where the injected suffix's
@@ -33,7 +31,7 @@ namespace Psalm\LaravelPlugin\Blade;
  *
  * A match also is not proof `$attributes` is genuinely non-null there (external review finding 2):
  * it proves only that LARAVEL'S OWN bookkeeping didn't null it. An author's own reassignment
- * between `@props` and the tag survives untouched by either compiled block (the save is
+ * between `@props` and the tag survives untouched by the compiled blocks (the save is
  * `isset($attributes)`-gated and runs before it). {@see self::templateAssignsAttributes()} scans
  * the raw template source for that and {@see ShadowCompiler} skips the whole pass when it finds one.
  *
@@ -41,14 +39,8 @@ namespace Psalm\LaravelPlugin\Blade;
  *
  * @psalm-immutable
  */
-final class AttributesRestoreReassert
+final class AttributesStripReassert
 {
-    /** The restore Laravel emits after a `<x-...>` tag, `CompilesComponents.php:99-102`. */
-    private const RESTORE_PATTERN = '/<\?php if \(isset\(\$__attributesOriginal[0-9a-f]+\)\): \?>\R'
-        . '<\?php \$attributes = \$__attributesOriginal[0-9a-f]+; \?>\R'
-        . '<\?php unset\(\$__attributesOriginal[0-9a-f]+\); \?>\R'
-        . '<\?php endif; \?>/';
-
     /** The ignored-parameter strip Laravel emits INSIDE a `<x-...>` tag, `ComponentTagCompiler.php:262-264`. */
     private const STRIP_PATTERN = '/<\?php if \(isset\(\$attributes\) && \$attributes instanceof Illuminate\\\\View\\\\ComponentAttributeBag\): \?>\R'
         . '<\?php \$attributes = \$attributes->except\(\\\\[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*(?:\\\\[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*)*::ignoredParameterNames\(\)\); \?>\R'
@@ -58,7 +50,7 @@ final class AttributesRestoreReassert
 
     /**
      * `$attributes` followed by a bare `=`: a plain assignment can hand it ANY value, including a
-     * null one, which is exactly what the restore/strip blocks cannot see. The negative lookahead
+     * null one, which is exactly what the compiled strip cannot see. The negative lookahead
      * excludes `==`/`===`; every compound operator (`.=`, `+=`, `??=`, ...) already fails to match
      * because its extra character sits directly before the `=`, past the `\s*`.
      */
@@ -76,37 +68,7 @@ final class AttributesRestoreReassert
      */
     public static function apply(string $compiled): string
     {
-        $compiled = self::applyPattern(self::RESTORE_PATTERN, $compiled);
-
-        return self::applyPattern(self::STRIP_PATTERN, $compiled);
-    }
-
-    /**
-     * Whether the template's OWN source assigns to, or unsets, `$attributes` anywhere. Scanned over
-     * {@see MarkerPrePass::blankInertText()}'s output (the same "is this text ever executed"
-     * classification {@see PreludeBuilder::componentTypesFor()} already relies on), so a mention
-     * inside a Blade comment or `@verbatim` body — dead text, never executed — cannot trip it; a
-     * mention inside `@php`/raw PHP is live and does.
-     *
-     * @psalm-pure
-     */
-    public static function templateAssignsAttributes(string $source): bool
-    {
-        $executable = MarkerPrePass::blankInertText($source);
-
-        return \preg_match(self::ASSIGNMENT_PATTERN, $executable) === 1
-            || \preg_match(self::UNSET_PATTERN, $executable) === 1
-            || \preg_match(self::DESTRUCTURE_PATTERN, $executable) === 1;
-    }
-
-    /**
-     * @param non-empty-string $pattern always one of this class's own regex constants
-     *
-     * @psalm-pure
-     */
-    private static function applyPattern(string $pattern, string $compiled): string
-    {
-        if (\preg_match_all($pattern, $compiled, $matches, \PREG_OFFSET_CAPTURE) === false || $matches[0] === []) {
+        if (\preg_match_all(self::STRIP_PATTERN, $compiled, $matches, \PREG_OFFSET_CAPTURE) === false || $matches[0] === []) {
             return $compiled;
         }
 
@@ -125,6 +87,24 @@ final class AttributesRestoreReassert
         }
 
         return $compiled;
+    }
+
+    /**
+     * Whether the template's OWN source assigns to, or unsets, `$attributes` anywhere. Scanned over
+     * {@see MarkerPrePass::blankInertText()}'s output (the same "is this text ever executed"
+     * classification {@see PreludeBuilder::componentTypesFor()} already relies on), so a mention
+     * inside a Blade comment or `@verbatim` body — dead text, never executed — cannot trip it; a
+     * mention inside `@php`/raw PHP is live and does.
+     *
+     * @psalm-pure
+     */
+    public static function templateAssignsAttributes(string $source): bool
+    {
+        $executable = MarkerPrePass::blankInertText($source);
+
+        return \preg_match(self::ASSIGNMENT_PATTERN, $executable) === 1
+            || \preg_match(self::UNSET_PATTERN, $executable) === 1
+            || \preg_match(self::DESTRUCTURE_PATTERN, $executable) === 1;
     }
 
     /**
