@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Psalm\LaravelPlugin\Tests\Unit\Util\Ast;
+namespace Tests\Psalm\LaravelPlugin\Unit\Util\Ast;
 
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
