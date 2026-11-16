@@ -7,6 +7,8 @@ use App\Models\Supplier;
 use App\Models\Vehicle;
 use App\Models\WrappedModel;
 use App\Builders\CallbackWrappingBuilder;
+use App\Builders\CombiningBuilder;
+use App\Models\CombiningModel;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -558,6 +560,158 @@ final class EagerTraitUnrelatedConsumer
     /** @param array<string, mixed> $relations */
     public function load(array $relations): void {}
 }
+
+/**
+ * The Relation types are rebuilt from bare class names, so a model with template params would be typed with
+ * arguments the receiver does not carry (`HasMany<Vehicle, GenericEagerOwner>` for a `GenericEagerOwner<int>`).
+ *
+ * @template TKey of int|string
+ */
+final class GenericEagerOwner extends Model
+{
+    /** @return HasMany<Vehicle, $this> */
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class);
+    }
+}
+
+/** @param Builder<GenericEagerOwner<int>> $builder */
+function test_generic_model_owner_declines(Builder $builder): void
+{
+    $builder->with(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    GenericEagerOwner::with(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
+
+/**
+ * A registered builder that overrides a method between `with()` and the constraint call (`CombiningBuilder` overrides
+ * `combineConstraints()`) may call the constraint with anything: the receiver, the model's own builder and an
+ * intermediate model's builder all decline.
+ */
+final class CombiningBuilderOwner extends Model
+{
+    /** @return HasMany<CombiningModel, $this> */
+    public function children(): HasMany
+    {
+        return $this->hasMany(CombiningModel::class);
+    }
+}
+
+/** @param CombiningBuilder<Customer> $builder */
+function test_overridden_builder_delegate_declines(CombiningBuilder $builder, CombiningModel $model): void
+{
+    $builder->with(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    CombiningModel::with(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $model->load(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    CombiningBuilderOwner::query()->with(['children.vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
+
+/** A model that overrides a method building its eager-load query keeps its own contract. */
+final class OwnQueryModel extends Model
+{
+    /** @return HasMany<Vehicle, $this> */
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<static>
+     */
+    #[\Override]
+    public function newQueryWithoutRelationships()
+    {
+        return parent::newQueryWithoutRelationships();
+    }
+}
+
+function test_overridden_model_query_method_declines(OwnQueryModel $model): void
+{
+    $model->load(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+}
+
+/**
+ * `loadMissing()` walks a relation chain through the collection's `loadMissingRelation()`: an override keeps its own
+ * contract, and so does a collection the plugin cannot see (docblock-only `newCollection()`), while `load()` on that
+ * model does not touch the collection and stays typed.
+ *
+ * @template TKey of array-key
+ * @template TModel of Model
+ * @extends Collection<TKey, TModel>
+ */
+final class ChainOverridingCollection extends Collection
+{
+    /** @inheritDoc */
+    #[\Override]
+    protected function loadMissingRelation(Collection $models, array $path)
+    {
+        parent::loadMissingRelation($models, $path);
+    }
+}
+
+final class UnknownCollectionModel extends Model
+{
+    /** @return HasMany<Vehicle, $this> */
+    public function vehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class);
+    }
+
+    /*
+     * Docblock-only on purpose: a native named return type would register the collection. Psalm reports the docblock
+     * as less specific than the trait's `Collection<array-key, Model&static>` (expected below).
+     */
+    /**
+     * @param array<array-key, Model> $models
+     * @return ChainOverridingCollection<array-key, Model&static>
+     */
+    #[\Override]
+    public function newCollection(array $models = [])
+    {
+        /** @var ChainOverridingCollection<array-key, Model&UnknownCollectionModel> $collection */
+        $collection = new ChainOverridingCollection($models);
+
+        return $collection;
+    }
+}
+
+/** @param ChainOverridingCollection<int, Customer> $customers */
+function test_overridden_collection_delegate_and_unknown_collection_decline(ChainOverridingCollection $customers, UnknownCollectionModel $model): void
+{
+    $customers->loadMissing(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $model->loadMissing(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = mixed */
+        takes_mixed($q);
+    }]);
+    $model->load(['vehicles' => function ($q): void {
+        /** @psalm-check-type-exact $q = HasMany<Vehicle, UnknownCollectionModel> */
+        takes_mixed($q);
+    }]);
+}
 ?>
 --EXPECTF--
 MissingClosureParamType on line %d: Parameter $q has no provided type
@@ -612,5 +766,15 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+MissingClosureParamType on line %d: Parameter $q has no provided type
+LessSpecificImplementedReturnType on line %d: %s
 MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $q has no provided type

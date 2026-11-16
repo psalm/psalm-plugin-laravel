@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\HasCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -97,10 +98,12 @@ use Psalm\Type\Union;
  * `loadMissing()` relations array is typed as the Relation its dot-path key resolves to. Receivers are a Builder (custom
  * ones included), a static `Model::with()`, a model instance and an Eloquent Collection, each exactly one known model.
  * Declines: the lists above (a MorphTo anywhere on the path included), a template-typed or intersection receiver,
- * `with('a', fn)` on a model, a model whose builder or custom collection overrides the delegated `with()`/`load()`
- * (or whose builder is unknown, see {@see hasUnknownBuilder()}), a closure on a `:columns` key, on a repeated flattened
- * path or in a nested `loadMissing()` array, and a computed key or spread anywhere in the literal, or a related model on
- * the path whose builder overrides `with()` or is unknown. Every pass restores a closure param to its declaration
+ * `with('a', fn)` on a model, a closure on a `:columns` key, on a repeated flattened path or in a nested `loadMissing()`
+ * array, a computed key or spread anywhere in the literal, a generic (templated) model anywhere on the path, and every
+ * class whose own code the constraint passes through not being Laravel's ({@see modelRunsLaravelsEagerLoad()}): the
+ * builder (an unknown one, see {@see hasUnknownBuilder()}, or one overriding any method of BUILDER_EAGER_PATH), the model
+ * (MODEL_QUERY_PATH, or an unknown collection for `loadMissing()`, see {@see hasUnknownCollection()}) and the collection
+ * (COLLECTION_EAGER_PATH), for the receiver, a forwarded receiver and every intermediate model of a dot path. Every pass restores a closure param to its declaration
  * before restating it ({@see beforeExpressionAnalysis()} covers receivers no provider dispatches on), so a declined
  * pass revokes earlier inference.
  *
@@ -191,6 +194,55 @@ final class RelationCallbackParamsHandler implements
         'withonly' => [Builder::class],
         'load' => [Model::class, EloquentCollection::class],
         'loadmissing' => [Model::class, EloquentCollection::class],
+    ];
+
+    /**
+     * Every Builder method an eager-load constraint passes through between `with()` and the `$constraints($relation)`
+     * call (Laravel's `Eloquent\Builder`, identical v12 to v13): a userland override of any of them may hand the
+     * constraint something else than the bare Relation. Each must be declared by Builder itself.
+     *
+     * @var non-empty-list<lowercase-string>
+     */
+    private const BUILDER_EAGER_PATH = [
+        'with',
+        'eagerloadrelations',
+        'eagerloadrelation',
+        'getrelation',
+        'geteagerloads',
+        'relationsnestedunder',
+        'isnestedunder',
+        'parsewithrelations',
+        'preparenestedwithrelationships',
+        'parsenameandattributeselectionconstraint',
+        'createselectwithconstraint',
+        'combineconstraints',
+        'addnestedwiths',
+    ];
+
+    /**
+     * The Model methods that build the query `with()`/`load()` run on, each declared by Model itself.
+     *
+     * @var non-empty-list<lowercase-string>
+     */
+    private const MODEL_QUERY_PATH = [
+        'query',
+        'newquery',
+        'newquerywithoutscopes',
+        'newmodelquery',
+        'newquerywithoutrelationships',
+        'registerglobalscopes',
+    ];
+
+    /**
+     * The Eloquent Collection methods `loadMissing()` runs through (`load()` for the rest).
+     *
+     * @var non-empty-list<lowercase-string>
+     */
+    private const COLLECTION_EAGER_PATH = [
+        'load',
+        'loadmissing',
+        'loadmissingrelation',
+        'loadmissingrelationshipchain',
     ];
 
     /**
@@ -579,11 +631,20 @@ final class RelationCallbackParamsHandler implements
         if ($host === Builder::class) {
             $atomic = $call instanceof StaticCall ? null : self::receiverAtomic($source, $call);
             $receiver = $atomic instanceof TNamedObject && $atomic->extra_types !== [] ? null : self::receiverModel($source, $call, $dispatched);
-            if ($receiver === null || self::hasUnknownBuilder($codebase, $receiver[0])) {
+            if ($receiver === null) {
                 return null;
             }
 
             [$model, $forwards] = $receiver;
+
+            // The receiver runs on its own class; a static or Relation-forwarded call runs on the model's builder.
+            if (self::hasUnknownBuilder($codebase, $model)
+                || !self::builderIsLaravels($codebase, $dispatched)
+                || ($forwards && !self::modelRunsLaravelsEagerLoad($codebase, $model))
+            ) {
+                return null;
+            }
+
             $declaring = self::builderDeclaring($codebase, $dispatched, $method, $model, $forwards);
             $delegate = $method === 'withonly' ? self::builderDeclaring($codebase, $dispatched, 'with', $model, $forwards) : $declaring;
 
@@ -596,22 +657,120 @@ final class RelationCallbackParamsHandler implements
 
         return $model !== null
             && $declaring instanceof MethodIdentifier
-            && !self::hasUnknownBuilder($codebase, $model)
-            && self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($model), 'with') instanceof MethodIdentifier
-            && ($method !== 'loadmissing' || self::collectionIsLaravels($codebase, $collection))
+            && self::modelRunsLaravelsEagerLoad($codebase, $model)
+            && ($method !== 'loadmissing' || (self::collectionIsLaravels($codebase, $collection) && ($host !== Model::class || !self::hasUnknownCollection($codebase, $model))))
             ? [$model, $declaring]
             : null;
     }
 
     /**
-     * Whether the collection class runs Laravel's own `loadMissing()` and the `load()` it delegates to.
+     * Whether every Eloquent Collection method `loadMissing()` runs through is Laravel's own.
      *
      * @psalm-pure
      */
     private static function collectionIsLaravels(Codebase $codebase, string $class): bool
     {
-        return self::declaredBy($codebase, $class, 'loadmissing', EloquentCollection::class) instanceof MethodIdentifier
-            && self::declaredBy($codebase, $class, 'load', EloquentCollection::class) instanceof MethodIdentifier;
+        foreach (self::COLLECTION_EAGER_PATH as $method) {
+            if (!self::declaredBy($codebase, $class, $method, EloquentCollection::class) instanceof MethodIdentifier) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether every Builder method of the eager-load path is Laravel's own on `$builder`. An unknown class declines.
+     *
+     * @psalm-pure
+     */
+    private static function builderIsLaravels(Codebase $codebase, string $builder): bool
+    {
+        foreach (self::BUILDER_EAGER_PATH as $method) {
+            if (!self::declaredBy($codebase, $builder, $method, Builder::class) instanceof MethodIdentifier) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether eager loading on `$model` runs through Laravel's own code: the model builds its query with Model's
+     * methods, and runs it on a known builder whose eager-load path is Builder's own. The one guard shared by the
+     * receiver, a forwarded receiver and every intermediate model of a dot path.
+     *
+     * @param class-string<Model> $model
+     */
+    private static function modelRunsLaravelsEagerLoad(Codebase $codebase, string $model): bool
+    {
+        if (self::hasUnknownBuilder($codebase, $model) || !self::builderIsLaravels($codebase, ModelMethodHandler::getBuilderClassForModel($model))) {
+            return false;
+        }
+
+        foreach (self::MODEL_QUERY_PATH as $method) {
+            if (!self::declaredBy($codebase, $model, $method, Model::class) instanceof MethodIdentifier) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether the collection a model builds in `newCollection()` is one the plugin does not know, like
+     * {@see hasUnknownBuilder()} for builders: no custom collection is registered yet `newCollection()` is overridden
+     * (a docblock-only return type is invisible to the detector), so it resolves to the base collection and its
+     * `loadMissing()` could be anything. A legitimate base collection is an override whose EFFECTIVE declared type
+     * (docblock over native) is exactly Eloquent's Collection. Unreadable storage counts as unknown.
+     *
+     * @param class-string<Model> $model
+     */
+    private static function hasUnknownCollection(Codebase $codebase, string $model): bool
+    {
+        if (CustomCollectionHandler::getCollectionClassForModel($model) !== null) {
+            return false;
+        }
+
+        try {
+            $declaring = $codebase->getDeclaringMethodId($model . '::newcollection');
+            $declaring = $declaring === null ? null : MethodIdentifier::wrap($declaring);
+
+            if (!$declaring instanceof MethodIdentifier) {
+                return true;
+            }
+
+            if (\in_array(\strtolower($declaring->fq_class_name), [\strtolower(Model::class), \strtolower(HasCollection::class)], true)) {
+                return false;
+            }
+
+            $type = $codebase->methods->getStorage($declaring)->return_type;
+        } catch (\UnexpectedValueException|\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return true;
+        }
+
+        $atomics = \array_values(\array_filter($type?->getAtomicTypes() ?? [], static fn(\Psalm\Type\Atomic $atomic): bool => !$atomic instanceof TNull));
+        $base = $atomics[0] ?? null;
+
+        return \count($atomics) !== 1
+            || !$base instanceof TNamedObject
+            || \strcasecmp($codebase->classlikes->getUnAliasedName($base->value), EloquentCollection::class) !== 0
+            || $base->extra_types !== [];
+    }
+
+    /**
+     * Whether a model has template params: the plugin rebuilds its Relation types from the bare class name, so a
+     * generic model would be typed with arguments the receiver does not carry. Unreadable storage counts as generic.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function isGenericModel(Codebase $codebase, string $model): bool
+    {
+        try {
+            return $codebase->classlike_storage_provider->get($model)->template_types !== null;
+        } catch (\InvalidArgumentException|\UnexpectedValueException) {
+            return true;
+        }
     }
 
     /**
@@ -879,9 +1038,9 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * Whether every related model a dot path passes through runs its nested constraints through Laravel's own builder
-     * `with()`: Laravel hands a nested constraint to the related model's builder, so a userland override there keeps
-     * its own contract.
+     * Whether every related model a dot path passes through runs its nested constraints through Laravel's own eager-load
+     * code ({@see modelRunsLaravelsEagerLoad()}): Laravel hands a nested constraint to the related model's builder, so
+     * a userland override there keeps its own contract.
      *
      * @param class-string<Model> $model
      */
@@ -895,7 +1054,7 @@ final class RelationCallbackParamsHandler implements
             $prefix .= ($prefix === '' ? '' : '.') . $segment;
             $related = self::resolveRelation($codebase, $model, $prefix, false)[0] ?? null;
 
-            if ($related === null || self::hasUnknownBuilder($codebase, $related) || !self::laravelDeclaring($codebase, ModelMethodHandler::getBuilderClassForModel($related), 'with') instanceof MethodIdentifier) {
+            if ($related === null || !self::modelRunsLaravelsEagerLoad($codebase, $related)) {
                 return false;
             }
         }
@@ -1038,6 +1197,11 @@ final class RelationCallbackParamsHandler implements
                 ? ModelPropertyResolver::extractExactlyOneModelFromUnion($type->type_params[0] ?? null, $codebase)
                 : RelationResolver::relatedModel($codebase, $model, $segment);
             if ($related === null || !ClassLineage::isA($codebase, $related, Model::class)) {
+                return null;
+            }
+
+            // An eager-load slot embeds the declaring and related models by class name only.
+            if ($eager && (self::isGenericModel($codebase, $model) || self::isGenericModel($codebase, $related))) {
                 return null;
             }
 
