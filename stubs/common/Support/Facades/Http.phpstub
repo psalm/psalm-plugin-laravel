@@ -5,9 +5,9 @@ namespace Illuminate\Support\Facades;
 /**
  * The facade root `Http\Client\Factory` forwards every method it does not declare (through `__call`)
  * to a fresh, sync `PendingRequest`. The `@mixin` makes Psalm analyse `Http::get($url)` as that
- * PendingRequest instance call: a static call consults a mixin target's real method before the
- * facade's generated `@method` tags (decisions.md, the `Schema` facade). So the facade shares the
- * PendingRequest stub's return types, params and `ssrf` sinks, `Http::async()` narrows to
+ * PendingRequest instance call. Psalm ranks the facade's generated `@method` tags above the mixin, so
+ * FacadeStubPrecedenceHandler drops each tag a PendingRequest real method shadows. So the facade shares
+ * the PendingRequest stub's return types, params and `ssrf` sinks, `Http::async()` narrows to
  * AsyncPendingRequest, and a verb added to the PendingRequest stub needs no edit here.
  *
  * Real methods outrank the mixin. Factory's own methods win at runtime over `__call`, so the one

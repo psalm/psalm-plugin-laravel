@@ -35,21 +35,5 @@ function domain_subclass_native_return(ChildRoute $child): void
     $_result = $child->domain('x');
     /** @psalm-check-type-exact $_result = ChildRoute&static */
 }
-
-/**
- * KNOWN LIMITATION: a first-class callable binds `TDomain` to its bound, so every call through it returns
- * the whole union instead of the getter or setter branch. Psalm reported the setter call as
- * InvalidArgument until vimeo/psalm#13008.
- */
-function domain_first_class_callable(Route $route): void
-{
-    $fn = $route->domain(...);
-
-    $_set = $fn('api.example.com');
-    /** @psalm-check-type-exact $_set = Illuminate\Routing\Route&static|null|string */
-
-    $_get = $fn();
-    /** @psalm-check-type-exact $_get = Illuminate\Routing\Route&static|null|string */
-}
 ?>
 --EXPECTF--

@@ -38,7 +38,7 @@ final class ClassLineageTest extends TestCase
             $this->assertSame($expected, ClassLineage::isA($codebase, $class, $ancestor));
         } finally {
             foreach (['LineageChild', 'LineageChildContract'] as $name) {
-                $provider->remove($name);
+                $provider->remove($name, '');
             }
         }
     }

@@ -270,23 +270,27 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
     /**
      * Static fallback (a): read the `$model` property default. An untyped
      * `protected $model = X::class;` (the pterodactyl/bookstack shape) has no
-     * declared `type`; Psalm records the inferred default in `suggested_type`
-     * as a `TLiteralClassString`. Kept lean — the `@var class-string<X>` shape
-     * is covered by the runtime path in real apps.
+     * declared type of its own; Psalm records the inferred default in `suggested_type`
+     * as a `TLiteralClassString`. Psalm 7.6 also gives such a property the parent's
+     * `@var class-string<TModel>` as its `type`, which holds no literal, so the default
+     * is read first. Kept lean — the `@var class-string<X>` shape is covered by the
+     * runtime path in real apps.
      *
      * @psalm-mutation-free
      */
     private static function resolveFromModelProperty(ClassLikeStorage $storage, Codebase $codebase): ?string
     {
         $property = $storage->properties['model'] ?? null;
-        $type = $property->type ?? $property->suggested_type ?? null;
-        if (!$type instanceof Union) {
-            return null;
-        }
 
-        foreach ($type->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TLiteralClassString && self::isModelClass($atomic->value, $codebase)) {
-                return $atomic->value;
+        foreach ([$property->suggested_type ?? null, $property->type ?? null] as $type) {
+            if (!$type instanceof Union) {
+                continue;
+            }
+
+            foreach ($type->getAtomicTypes() as $atomic) {
+                if ($atomic instanceof TLiteralClassString && self::isModelClass($atomic->value, $codebase)) {
+                    return $atomic->value;
+                }
             }
         }
 
