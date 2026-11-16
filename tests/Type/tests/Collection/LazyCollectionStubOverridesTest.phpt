@@ -15,11 +15,19 @@ use Illuminate\Support\LazyCollection;
 
 /**
  * @param LazyCollection<int, M> $l
+ * @param LazyCollection<string, string> $strings
  */
-function lazy_stub_overrides(LazyCollection $l): void
+function lazy_stub_overrides(LazyCollection $l, LazyCollection $strings): void
 {
     $_merge = $l->merge(['a' => 1]);
     /** @psalm-check-type-exact $_merge = LazyCollection<'a'|int, 1|M>&static */
+
+    // array_merge() renumbers integer keys from 0, so a literal 42 cannot stay a key.
+    $_mergeIntoStringKeys = $strings->merge([42 => 'y']);
+    /** @psalm-check-type-exact $_mergeIntoStringKeys = LazyCollection<int|string, string>&static */
+
+    $_mergeStringKeys = $strings->merge(['k' => 'y']);
+    /** @psalm-check-type-exact $_mergeStringKeys = LazyCollection<string, string>&static */
 
     $_groupByColumn = $l->groupBy('foreign_id');
     /** @psalm-check-type-exact $_groupByColumn = LazyCollection<array-key, Illuminate\Support\Collection<int, M>>&static */
