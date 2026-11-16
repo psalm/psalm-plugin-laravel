@@ -36,7 +36,7 @@
     ],
     "require-dev": {
         "alies-dev/psalm-tester": "^0.4",
-        "boundwize/structarmed": "^0.21.22",
+        "boundwize/structarmed": "^0.21",
         "brianium/paratest": "^7.7",
         "friendsofphp/php-cs-fixer": "^3.94",
         "laravel/framework": "^12.27 || ^13.20",
