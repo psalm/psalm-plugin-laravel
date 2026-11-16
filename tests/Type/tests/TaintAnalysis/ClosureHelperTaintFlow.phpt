@@ -12,14 +12,10 @@ function reported(): void {
     echo once(fn () => taintedHtml());
     echo with('x', fn () => taintedHtml());
     echo retry(3, fn () => taintedHtml());
-    echo \Illuminate\Support\Facades\Cache::rememberForever('k', fn () => taintedHtml());
-    echo \Illuminate\Support\Facades\Cache::flexible('k', [10, 20], fn () => taintedHtml());
     echo \Illuminate\Support\Facades\DB::transaction(fn () => taintedHtml());
 }
 ?>
 --EXPECTF--
-TaintedHtml on line %d: Detected tainted HTML
-TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML
 TaintedHtml on line %d: Detected tainted HTML

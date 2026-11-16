@@ -16,7 +16,6 @@ function clean(): void {
     echo rescue(fn () => 'safe');
     echo once(fn () => 'safe');
     echo retry(3, fn (): int => 1);
-    echo \Illuminate\Support\Facades\Cache::remember('k', 60, fn () => 'safe');
     echo \Illuminate\Support\Facades\DB::transaction(fn (): int => 1);
 }
 

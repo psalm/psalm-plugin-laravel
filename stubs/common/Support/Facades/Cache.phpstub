@@ -13,9 +13,6 @@ class Cache extends Facade
      * @param  \Closure|\DateTimeInterface|\DateInterval|int|null  $ttl
      * @param  \Closure(): TCacheValue  $callback
      * @return TCacheValue
-     *
-     * @psalm-taint-specialize
-     * @psalm-flow ($callback()) -> return
      */
     public static function remember($key, $ttl, \Closure $callback) {}
 
@@ -27,9 +24,6 @@ class Cache extends Facade
      * @param  \UnitEnum|string  $key
      * @param  \Closure(): TCacheValue  $callback
      * @return TCacheValue
-     *
-     * @psalm-taint-specialize
-     * @psalm-flow ($callback()) -> return
      */
     public static function rememberForever($key, \Closure $callback) {}
 
@@ -41,9 +35,6 @@ class Cache extends Facade
      * @param  \UnitEnum|string  $key
      * @param  \Closure(): TCacheValue  $callback
      * @return TCacheValue
-     *
-     * @psalm-taint-specialize
-     * @psalm-flow ($callback()) -> return
      */
     public static function sear($key, \Closure $callback) {}
 
@@ -58,9 +49,6 @@ class Cache extends Facade
      * @param  array{ seconds?: int, owner?: string }|null  $lock
      * @param  bool  $alwaysDefer
      * @return TCacheValue
-     *
-     * @psalm-taint-specialize
-     * @psalm-flow ($callback()) -> return
      */
     public static function flexible($key, $ttl, $callback, $lock = null, $alwaysDefer = false) {}
 }
