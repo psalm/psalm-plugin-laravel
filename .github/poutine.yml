@@ -1,0 +1,13 @@
+# poutine config, auto-discovered at .github/poutine.yml (poutine >= 1.1.4).
+skip:
+  # Not on the verified-creator list bundled with poutine 1.1.4. Each one is reviewed, widely used,
+  # and pinned by SHA. astral-sh is verified in later poutine releases.
+  # A purl without a version matches every pinned ref of that action.
+  - rule: github_action_from_unverified_creator_used
+    purl:
+      - pkg:githubactions/astral-sh/setup-uv
+      - pkg:githubactions/benchmark-action/github-action-benchmark
+      - pkg:githubactions/crate-ci/typos
+      - pkg:githubactions/shivammathur/setup-php
+      - pkg:githubactions/stefanzweifel/git-auto-commit-action
+      - pkg:githubactions/synacktiv/action-octoscan

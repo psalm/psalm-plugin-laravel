@@ -5,4 +5,5 @@
   <p>{{ definitely_not_defined() }}</p>
   <p>{{ demo_never_declared() }}</p>
   <p>{{ DEMO_NEVER_DEFINED }}</p>
+  <p>{{ demo_positive(0) }}</p>
 </div>

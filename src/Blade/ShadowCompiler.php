@@ -59,8 +59,8 @@ final class ShadowCompiler
             \restore_error_handler();
         }
 
-        if (PreludeBuilder::isComponentView($source) && !AttributesRestoreReassert::templateAssignsAttributes($source)) {
-            $compiled = AttributesRestoreReassert::apply($compiled);
+        if (PreludeBuilder::isComponentView($source) && !AttributesStripReassert::templateAssignsAttributes($source)) {
+            $compiled = AttributesStripReassert::apply($compiled);
         }
 
         $prelude = $this->preludeBuilder->build($compiled, $source, $propTypes);

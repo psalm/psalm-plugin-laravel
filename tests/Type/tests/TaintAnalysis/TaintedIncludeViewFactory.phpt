@@ -17,6 +17,7 @@ function renderCustomTemplateViaContract(\Illuminate\Http\Request $request, \Ill
 ?>
 --EXPECTF--
 MixedAssignment on line %d: Unable to determine the type that $template is being assigned to
+MixedArgument on line %d: Argument 1 of Illuminate\View\Factory::file cannot be mixed, expecting string
 TaintedFile on line %d: Detected tainted file handling
 TaintedInclude on line %d: Detected tainted code passed to include or similar
 TaintedFile on line %d: Detected tainted file handling

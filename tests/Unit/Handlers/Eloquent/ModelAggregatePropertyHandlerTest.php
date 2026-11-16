@@ -132,7 +132,7 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
         } finally {
             ModelMetadataRegistryBuilder::reset();
             SchemaStateProvider::setSchema(new SchemaAggregator());
-            $classLikeStorageProvider->remove(WorkOrder::class);
+            $classLikeStorageProvider->remove(WorkOrder::class, '');
         }
     }
 
@@ -172,8 +172,8 @@ final class ModelAggregatePropertyHandlerTest extends TestCase
         } finally {
             ModelMetadataRegistryBuilder::reset();
             SchemaStateProvider::setSchema(new SchemaAggregator());
-            $classLikeStorageProvider->remove(WorkOrder::class);
-            $classLikeStorageProvider->remove(ArrayFormCastsModel::class);
+            $classLikeStorageProvider->remove(WorkOrder::class, '');
+            $classLikeStorageProvider->remove(ArrayFormCastsModel::class, '');
         }
     }
 }

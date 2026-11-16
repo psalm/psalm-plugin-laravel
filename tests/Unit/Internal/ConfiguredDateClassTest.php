@@ -52,7 +52,7 @@ final class ConfiguredDateClassTest extends TestCase
         Facade::clearResolvedInstances();
         Facade::setFacadeApplication($this->previousFacadeApp);
         foreach (self::STORAGE_CLASSES as $class) {
-            $this->codebase->classlike_storage_provider->remove($class);
+            $this->codebase->classlike_storage_provider->remove($class, '');
         }
     }
 

@@ -22,7 +22,8 @@ namespace Database\Factories {
      * Explicit `@extends Factory<Pylon>` even though `$model = Beacon::class`
      * and the shortname would point elsewhere. The user binding must win — the
      * handler's `isDirectFactorySubclass()` guard detects the bound TModel and
-     * skips injection.
+     * skips injection. Psalm 7.6 gives `$model` the parent's `@var class-string<TModel>`
+     * with TModel bound to Pylon, so the contradicting default is reported too.
      *
      * @extends Factory<Pylon>
      */
@@ -47,3 +48,4 @@ namespace App\Sandbox\Explicit {
 }
 ?>
 --EXPECTF--
+InvalidPropertyAssignmentValue on line %d: $this->model with declared type 'class-string<App\Models\Pylon>' cannot be assigned type 'App\Models\Beacon::class'
