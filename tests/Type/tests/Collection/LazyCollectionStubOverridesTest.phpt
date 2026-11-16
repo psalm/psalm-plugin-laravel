@@ -43,6 +43,13 @@ function lazy_stub_overrides(LazyCollection $l, LazyCollection $strings, LazyCol
     $_groupByColumn = $l->groupBy('foreign_id');
     /** @psalm-check-type-exact $_groupByColumn = LazyCollection<array-key, Illuminate\Support\Collection<int, M>>&static */
 
+    // Multiple criteria nest the groups: the inner Collections are keyed by the next criterion's values.
+    $_groupByLevels = $l->groupBy(['foreign_id', 'name']);
+    /** @psalm-check-type-exact $_groupByLevels = LazyCollection<array-key, Illuminate\Support\Collection<array-key, mixed>>&static */
+
+    $_groupByLevelsPreserved = $l->groupBy(['foreign_id', 'name'], true);
+    /** @psalm-check-type-exact $_groupByLevelsPreserved = LazyCollection<array-key, Illuminate\Support\Collection<array-key, mixed>>&static */
+
     $_groupByClosure = $l->groupBy(static fn (M $m): int => $m->foreign_id, true);
     /** @psalm-check-type-exact $_groupByClosure = LazyCollection<int, Illuminate\Support\Collection<int, M>>&static */
 
