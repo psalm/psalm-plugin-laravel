@@ -1,0 +1,62 @@
+name: StructArmed
+
+on:
+  push:
+    branches: [4.x]
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - '.github/workflows/structarmed.yml'
+  pull_request:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - '.github/workflows/structarmed.yml'
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same branch/PR to save CI minutes on fast pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Psalm requires `psalm/plugin-laravel: ^4.17.4`. A checkout has no tag, so Composer guesses a root
+  # version that fails that constraint and silently resolves an older Psalm without template defaults
+  # (composer.json `conflict` turns that into a solve error). Stating the branch version keeps the root
+  # a valid 4.x.
+  COMPOSER_ROOT_VERSION: 4.x-dev
+
+jobs:
+  structarmed:
+    name: StructArmed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden the runner (Block all outbound calls except allowlist)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            packagist.org:443
+            release-assets.githubusercontent.com:443
+            repo.packagist.org:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Install composer dependencies
+        run: composer install -n --prefer-dist
+
+      - name: Run StructArmed
+        run: ./vendor/bin/structarmed analyse --no-progress
