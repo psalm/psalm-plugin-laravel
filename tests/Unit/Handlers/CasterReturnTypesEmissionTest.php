@@ -82,6 +82,12 @@ final class CasterReturnTypesEmissionTest extends TestCase
     }
 
     #[Test]
+    public function it_leaves_a_castable_with_an_unresolved_cast_using_unknown(): void
+    {
+        $this->assertContains('$_selfCasting: mixed', $this->runPsalm());
+    }
+
+    #[Test]
     public function it_keeps_a_docblock_return_type_inherited_from_a_base_caster(): void
     {
         $this->assertContains('$_inheritedDoc: CasterReturnFixture\Money', $this->runPsalm());

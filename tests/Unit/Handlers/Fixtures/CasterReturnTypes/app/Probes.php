@@ -49,4 +49,7 @@ function probes(Product $product): void
 
     $_childNative = $product->child_native;
     /** @psalm-trace $_childNative */
+
+    $_selfCasting = $product->self_casting;
+    /** @psalm-trace $_selfCasting */
 }

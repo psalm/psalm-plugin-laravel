@@ -48,6 +48,10 @@ use Psalm\Type\Union;
  *    at most once per process ({@see AutoloadOnce}); every check then reads only declared classes.
  *    A target that fails to load is an unknown cast (mixed).
  *
+ * Open-world caveat: a caster class named by `castUsing()` or `$casts` is trusted as declared, so a non-final
+ * `BaseCast` is read as `BaseCast` even though a runtime subclass may also implement CastsInboundAttributes (and then
+ * Laravel skips `get()`). A documented `@return` on `get()` has always been trusted the same way.
+ *
  * @internal
  */
 final class CastResolver
@@ -120,14 +124,12 @@ final class CastResolver
             return self::makeNullable(new Union([new TNamedObject($castClass)]), $nullable);
         }
 
-        // Order matters: a class may implement both Castable and CastsAttributes (e.g. a value
-        // object that is its own caster). Try Castable's `castUsing()` chase first; only fall
-        // back to direct CastsAttributes reflection if the chase yields nothing.
+        // A Castable is exclusive: Laravel resolves its caster from `castUsing()` alone (HasAttributes::resolveCasterClass)
+        // and never consults the class's own `get()`, even when it implements CastsAttributes too (a value object that
+        // is its own caster). A `castUsing()` we cannot resolve therefore leaves the attribute unknown.
         if (self::castTargetIsA($codebase, $castClass, Castable::class)) {
-            $type = self::resolveCastable($codebase, $castClass, $nullable, $originalType);
-            if ($type instanceof Union) {
-                return $type;
-            }
+            return self::resolveCastable($codebase, $castClass, $nullable, $originalType)
+                ?? self::makeNullable(Type::getMixed(), $nullable);
         }
 
         if (self::castTargetIsA($codebase, $castClass, CastsAttributes::class)) {

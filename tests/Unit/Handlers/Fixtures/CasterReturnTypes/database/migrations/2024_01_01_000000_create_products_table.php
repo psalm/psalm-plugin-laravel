@@ -20,6 +20,7 @@ return new class extends Migration {
             $table->integer('child_trait_self');
             $table->integer('child_trait_parent');
             $table->integer('multi');
+            $table->integer('self_casting');
             $table->integer('dual');
             $table->integer('dual_castable');
             $table->integer('child_native');

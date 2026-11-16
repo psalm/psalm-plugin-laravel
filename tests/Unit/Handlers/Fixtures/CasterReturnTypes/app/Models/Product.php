@@ -26,6 +26,7 @@ class Product extends Model
             'dual' => DualContractCast::class,
             'dual_castable' => DualContractCastable::class,
             'child_native' => ChildNativeCast::class,
+            'self_casting' => SelfCastingValue::class,
             'multi' => MultiCastable::class,
             'inherited_doc' => InheritedDocblockCast::class,
         ];
