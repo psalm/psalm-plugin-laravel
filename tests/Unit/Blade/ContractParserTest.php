@@ -348,6 +348,45 @@ final class ContractParserTest extends TestCase
         $this->assertFalse($echo->readsUnknown);
     }
 
+    /**
+     * Anything that can hand the scope to code this walk cannot read is a scope read: a native
+     * include/require/eval, a function-import alias or a computed callee of `get_defined_vars()`, a
+     * callable string naming it.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function unmodelledScopeReads(): iterable
+    {
+        yield 'include' => ["@php(include resource_path('views/legacy.php'))\n"];
+        yield 'require_once' => ["@php(require_once __DIR__ . '/legacy.php')\n"];
+        yield 'eval' => ["@php(eval('echo 1;'))\n"];
+        yield 'function import alias' => ["@php\nuse function get_defined_vars as scope;\n@endphp\n{{ scope()['title'] }}\n"];
+        yield 'computed callee' => ["@php(\$f = 'get_' . 'defined_vars')\n{{ \$f()['title'] }}\n"];
+        yield 'callable string' => ["{{ call_user_func('get_defined_vars')['title'] }}\n"];
+        yield 'call_user_func with a built name' => ["{{ call_user_func('get_defined_' . 'vars')['title'] }}\n"];
+    }
+
+    #[Test]
+    #[DataProvider('unmodelledScopeReads')]
+    public function an_unmodelled_scope_read_sets_reads_scope(string $source): void
+    {
+        $this->assertTrue($this->dataContract($source)->readsScope, $source);
+    }
+
+    /** A compiled include whose call the collector cannot resolve (a named argument, a spread) keeps the uncertainty. */
+    #[Test]
+    public function a_scope_argument_the_collector_cannot_resolve_is_a_scope_read(): void
+    {
+        $scope = "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])";
+        $positional = $this->parser->parseDataContract('', "<?php echo \$__env->make('partial', {$scope})->render(); ?>");
+        $named = $this->parser->parseDataContract('', "<?php echo \$__env->make(view: 'partial', data: [], mergeData: {$scope})->render(); ?>");
+        $spread = $this->parser->parseDataContract('', "<?php echo \$__env->make(...['partial'], mergeData: {$scope})->render(); ?>");
+
+        $this->assertFalse($positional->readsScope);
+        $this->assertTrue($named->readsScope);
+        $this->assertTrue($spread->readsScope);
+    }
+
     #[Test]
     public function collects_a_destructured_loop_binding_as_a_local_variable(): void
     {

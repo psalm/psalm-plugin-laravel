@@ -796,6 +796,18 @@ final class ContractParser
                     $this->markCompiledScopePass($node);
                 }
 
+                // Scope reads the walk cannot model: the scope reaches code it never sees (a native
+                // include, an `eval()`), or `get_defined_vars()` is called under another name (an
+                // imported function alias, a computed callee, a callable string).
+                if ($node instanceof Node\Expr\Include_
+                    || $node instanceof Node\Expr\Eval_
+                    || ($node instanceof Node\Expr\FuncCall && !$node->name instanceof Node\Name)
+                    || ($node instanceof Node\Scalar\String_ && \strtolower($node->value) === 'get_defined_vars')
+                    || (($node instanceof Node\Stmt\Use_ || $node instanceof Node\Stmt\GroupUse) && $this->importsFunction($node))
+                ) {
+                    $this->scopeRead = true;
+                }
+
                 if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
                     $this->enterCall(\strtolower($node->name->toString()), $node->args, $node);
                 }
@@ -803,12 +815,29 @@ final class ContractParser
                 return null;
             }
 
+            /** @psalm-mutation-free */
+            private function importsFunction(Node\Stmt\Use_|Node\Stmt\GroupUse $use): bool
+            {
+                if ($use->type === Node\Stmt\Use_::TYPE_FUNCTION) {
+                    return true;
+                }
+
+                foreach ($use->uses as $item) {
+                    if ($item->type === Node\Stmt\Use_::TYPE_FUNCTION) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
             /**
              * Tags the `get_defined_vars()` of the `array_diff_key(get_defined_vars(), [...])` argument
              * every Blade include directive compiles (`$__env->make()`, `first()`, `renderWhen()`,
              * `renderUnless()`), the one scope hand-over `ViewReferenceCollector` resolves to a named
-             * view. A look-alike anywhere else (`@php`, `{{ }}`) is not tagged. The traverser enters a
-             * call before its arguments, so the tag is in place when the inner call is reached.
+             * view. A look-alike anywhere else (`@php`, `{{ }}`), or in a call with a named or spread
+             * argument, is not tagged. The traverser enters a call before its arguments, so the tag is
+             * in place when the inner call is reached.
              */
             private function markCompiledScopePass(Node\Expr\MethodCall $call): void
             {
@@ -818,6 +847,14 @@ final class ContractParser
                     || !\in_array($call->name->toLowerString(), ['make', 'first', 'renderwhen', 'renderunless'], true)
                 ) {
                     return;
+                }
+
+                // `ViewReferenceCollector` reads the include by position, so a named or spread argument
+                // makes the call unresolvable: its scope hand-over stays an unmodelled read.
+                foreach ($call->args as $arg) {
+                    if (!$arg instanceof Node\Arg || $arg->name instanceof Node\Identifier || $arg->unpack) {
+                        return;
+                    }
                 }
 
                 foreach ($call->args as $arg) {
@@ -887,6 +924,16 @@ final class ContractParser
                 // check cares about (see `$scopeRead`).
                 if ($name === 'get_defined_vars' && $node->getAttribute('compiledScopePass') !== true) {
                     $this->scopeRead = true;
+                }
+
+                // A callback whose name is not a literal may be `get_defined_vars` (a literal one is
+                // caught as a string).
+                if (\in_array($name, ['call_user_func', 'call_user_func_array', 'forward_static_call', 'forward_static_call_array'], true)) {
+                    $callback = $args[0] ?? null;
+
+                    if (!$callback instanceof Node\Arg || !$callback->value instanceof Node\Scalar\String_) {
+                        $this->scopeRead = true;
+                    }
                 }
 
                 if ($name !== 'compact') {
