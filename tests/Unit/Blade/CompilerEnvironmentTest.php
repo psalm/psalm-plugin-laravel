@@ -134,7 +134,7 @@ final class CompilerEnvironmentTest extends TestCase
     public function bind_directive_stays_trustworthy_because_it_is_bound_to_the_compiler_itself(): void
     {
         $compiler = $this->compiler();
-        $compiler->bindDirective('mine', function (string $expression): string {
+        $compiler->bindDirective('mine', static function (string $expression): string {
             return '<?php ?>';
         });
 

@@ -28,7 +28,7 @@ final class CallbackWrappingBuilder extends Builder
     {
         return parent::whereHas(
             $relation,
-            $callback instanceof \Closure ? fn(Builder $query): mixed => $callback($query, (string) $relation) : null,
+            $callback instanceof \Closure ? static fn(Builder $query): mixed => $callback($query, (string) $relation) : null,
             $operator,
             $count,
         );

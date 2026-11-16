@@ -761,7 +761,7 @@ final class BladeBootstrapperTest extends TestCase
     {
         $this->writeTemplate('uses-directive.blade.php', "@marker\n");
 
-        $registerMarker = function (Container $app): void {
+        $registerMarker = static function (Container $app): void {
             /** @var BladeCompiler $compiler */
             $compiler = $app->make('blade.compiler');
             $compiler->directive('marker', static fn(string $expression): string => '<?php echo "MARK"; ?>');

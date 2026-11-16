@@ -26,7 +26,7 @@ class WorkOrderCollection extends Collection
     public function completed(): static
     {
         return $this->filter(
-            fn(\App\Models\WorkOrder $wo): bool => $wo->getAttribute('status') === 'completed',
+            static fn(\App\Models\WorkOrder $wo): bool => $wo->getAttribute('status') === 'completed',
         );
     }
 
@@ -35,6 +35,6 @@ class WorkOrderCollection extends Collection
      */
     public function totalLaborHours(): float
     {
-        return $this->sum(fn(\App\Models\WorkOrder $wo): float => (float) $wo->getAttribute('labor_hours'));
+        return $this->sum(static fn(\App\Models\WorkOrder $wo): float => (float) $wo->getAttribute('labor_hours'));
     }
 }

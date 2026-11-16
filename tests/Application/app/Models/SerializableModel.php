@@ -59,7 +59,7 @@ class SerializableModel extends Model
      */
     protected function badgeNumber(): Attribute
     {
-        return Attribute::get(fn(): int => 42);
+        return Attribute::get(static fn(): int => 42);
     }
 
     /**
@@ -70,7 +70,7 @@ class SerializableModel extends Model
      */
     protected function tags(): Attribute
     {
-        return Attribute::get(fn(): Collection => new Collection(['x']));
+        return Attribute::get(static fn(): Collection => new Collection(['x']));
     }
 
     /**
@@ -81,7 +81,7 @@ class SerializableModel extends Model
      */
     protected function permissions(): Attribute
     {
-        return Attribute::get(fn(): Collection => new Collection([new Collection(['read'])]));
+        return Attribute::get(static fn(): Collection => new Collection([new Collection(['read'])]));
     }
 
     /**
@@ -92,6 +92,6 @@ class SerializableModel extends Model
      */
     protected function publishedAt(): Attribute
     {
-        return Attribute::get(fn(): CarbonInterface => now());
+        return Attribute::get(static fn(): CarbonInterface => now());
     }
 }
