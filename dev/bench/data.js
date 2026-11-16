@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794860785411,
+  "lastUpdate": 1794862671236,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19240,6 +19240,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.72,
             "range": "± 0.29",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed60eef90ebe0dfb0451690859cdd8923a20fabf",
+          "message": "Fix: custom Eloquent builder methods returning self flagged as unused return value (#1449)\n\n* fix(eloquent): treat custom builder methods returning the builder as fluent\n\n* refactor(eloquent): simplify fluent builder return handler and its test\n\n- Match a single `static` or own-class return only; Psalm already resolves `self` to the class name, and unions stay declined\n- Drop intersection, visibility and pre-check branches with no real-world shape behind them\n- Cover the fix in the existing whole-project dead-code fixture instead of a dedicated runner and fixture project\n- Point at vimeo/psalm#13989 for the upstream `@return $this` exemption",
+          "timestamp": "2026-11-16T21:54:57+01:00",
+          "tree_id": "2f49fb3cc8a6d9e36b5f72ae45ab16057cdbec46",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ed60eef90ebe0dfb0451690859cdd8923a20fabf"
+        },
+        "date": 1794862670055,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 21.85,
+            "range": "± 0.63",
             "unit": "s"
           },
           {
