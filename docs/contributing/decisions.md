@@ -415,6 +415,12 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Accepted limitation:** a user subclass keeps Laravel's `EnumeratesValues` declaration, because a stub override of a trait method does not reach subclasses (vimeo/psalm#12158), so `whenEmpty()`-family params on subclasses stay `mixed` (untyped `tap()`/`pipe()` params resolve to the subclass since Psalm 7.3, vimeo/psalm#13494); `chunkWhile()` is a `Collection` method and is typed there too. Pinned by `CollectionCallbackParamsSubclassKnownLimitation.phpt`. Once Psalm inherits the override, a subclass callback param becomes the base class, and a closure typed with the subclass (`fn (UserCollection $c)`) would be reported. <!-- @todo-by https://github.com/vimeo/psalm/issues/12158 drop the limitation and the subclass KnownLimitation phpt once stub trait-method overrides reach subclasses -->
 
+### `diff()`/`intersect()` inputs are widened; `union()`/`replace()` widen the result (#1892)
+
+**Decision:** `diff`/`intersect` take `iterable<array-key, mixed>` and `union`/`replace` return `static<TKey|K, TValue|V>` on `Collection`, `LazyCollection` and `Enumerable`. Laravel binds the input to `TKey`/`TValue`, which rejects `$dogs->diff($cats)` although the input is only compared against.
+
+**Accepted limitation:** `Eloquent\Collection` inherits the widened `union()`/`replace()`, so it accepts non-model input there; its own `diff()`/`intersect()` keep `iterable<array-key, TModel>`. A user subclass of a collection keeps the inherited Support declaration (vimeo/psalm#12158).
+
 ## Factories
 
 ### The count lives on the concrete factory class, as a synthesized `TCount` template (#2188)
