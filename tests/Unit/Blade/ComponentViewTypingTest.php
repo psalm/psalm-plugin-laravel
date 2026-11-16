@@ -105,6 +105,7 @@ final class ComponentViewTypingTest extends TestCase
         yield 'data() override' => ['overridden.blade.php', ['$label: mixed']];
         yield 'inherited $this->view() under a view() override' => ['chip.blade.php', ['$tone: mixed']];
         yield 'a namespace function named view()' => ['ticket.blade.php', ['$code: mixed']];
+        yield 'a namespace function named view() the booted app declares' => ['receipt.blade.php', ['$code: mixed']];
         yield 'a data argument that is not a literal array' => ['compacted.blade.php', ['$title: mixed']];
         yield 'a ->with() link after the view call' => ['withed.blade.php', ['$title: mixed']];
         yield 'also rendered by @include' => ['included.blade.php', ['$title: mixed']];

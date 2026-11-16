@@ -71,7 +71,7 @@ final class ModelPropertyHandlerTest extends TestCase
     protected function tearDown(): void
     {
         ModelMetadataRegistryBuilder::reset();
-        $this->classLikeStorageProvider->remove(WorkOrder::class);
+        $this->classLikeStorageProvider->remove(WorkOrder::class, '');
     }
 
     #[Test]

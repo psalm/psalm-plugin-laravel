@@ -145,7 +145,7 @@ final class HigherOrderProxyPropertyFetchTest
 
         foreach (Customer::all()->map->primary_vehicle as $vehicle) {
             /** @psalm-check-type-exact $vehicle = Vehicle|null */
-            echo $vehicle?->exists === true ? 'y' : 'n';
+            echo $vehicle !== null && $vehicle->exists ? 'y' : 'n';
         }
 
         $_offset = collect($raw)->map->id[0];
@@ -309,10 +309,10 @@ final class HigherOrderProxyPropertyFetchTest
 ?>
 --EXPECTF--
 PossiblyNullReference on line %d: Cannot call method count on possibly null value
-RedundantConditionGivenDocblockType on line %d: Docblock-defined type array<int, int> for $<tmp coalesce var>%d is never null
-DocblockTypeContradiction on line %d: Cannot resolve types for $<tmp coalesce var>%d - docblock-defined type array<int, int> does not contain null
-RedundantCondition on line %d: Type int for $<tmp coalesce var>%d is never null
+RedundantConditionGivenDocblockType on line %d: Docblock-defined type array<int, int> for $p->map->id->all() is never null
+DocblockTypeContradiction on line %d: Cannot resolve types for $p->map->id->all() - docblock-defined type array<int, int> does not contain null
+RedundantCondition on line %d: Type int for $parents->map->child[0]->number() is never null
 PossiblyNullReference on line %d: Cannot call method number on possibly null value
-TypeDoesNotContainNull on line %d: Cannot resolve types for $<tmp coalesce var>%d - int does not contain null
+TypeDoesNotContainNull on line %d: Cannot resolve types for $parents->map->child[0]->number() - int does not contain null
 RedundantCondition on line %d: Type Illuminate\Support\Collection<int, PropFetchItem> for $p->sortBy->parent is always isset
 TypeDoesNotContainType on line %d: Cannot resolve types for $p->sortBy->parent with type Illuminate\Support\Collection<int, PropFetchItem> and !isset assertion
