@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Boundwize\StructArmed\Architecture;
 use Boundwize\StructArmed\Preset\Preset;
+use Boundwize\StructArmed\Preset\Presets\CodeQualityPreset;
 use Boundwize\StructArmed\Preset\Presets\Psr4Preset;
 
 return Architecture::define()
@@ -42,5 +43,12 @@ return Architecture::define()
             '*/tests/Unit/Handlers/Views/MissingViewHandlerTest.php',
             '*/tests/Unit/PluginInvocationStateTest.php',
             '*/tests/Unit/Providers/MacroRegistryTest.php',
+        ],
+
+        // closures that must stay bindable: `bindDirective()` rebinds its handler to the compiler,
+        // and the provider fixture exists to register closures bound to the provider instance
+        CodeQualityPreset::ANONYMOUS_FUNCTIONS_MUST_BE_STATIC => [
+            '*/tests/Unit/Blade/CompilerEnvironmentTest.php',
+            '*/tests/Unit/Blade/ProviderBoundDirectives.php',
         ],
     ]);

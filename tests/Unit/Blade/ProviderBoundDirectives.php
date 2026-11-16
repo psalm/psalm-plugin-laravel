@@ -16,7 +16,7 @@ final class ProviderBoundDirectives extends ServiceProvider
 {
     public function registerOn(BladeCompiler $compiler): void
     {
-        $compiler->directive('ray', static fn(string $expression): string => '');
-        $compiler->if('feature', static fn(string $name): bool => true);
+        $compiler->directive('ray', fn(string $expression): string => '');
+        $compiler->if('feature', fn(string $name): bool => true);
     }
 }
