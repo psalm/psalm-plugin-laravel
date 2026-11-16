@@ -3,6 +3,8 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use Illuminate\Http\Request;
+
 /** @psalm-taint-source html */
 function taintedHtml(): string { return '<b>'; }
 
@@ -16,6 +18,12 @@ function clean(): void {
     echo retry(3, fn (): int => 1);
     echo \Illuminate\Support\Facades\Cache::remember('k', 60, fn () => 'safe');
     echo \Illuminate\Support\Facades\DB::transaction(fn (): int => 1);
+}
+
+// A supplied callback replaces `$value` in the result, so an escaping callback must not
+// leave the raw input reaching the sink.
+function sanitized(Request $request): void {
+    echo with((string) $request->input('x'), fn (string $v): string => e($v));
 }
 ?>
 --EXPECTF--
