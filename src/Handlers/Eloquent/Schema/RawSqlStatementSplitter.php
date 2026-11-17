@@ -10,6 +10,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
  * A schema dump parser can then read each statement without phantom tables or lost columns.
  *
  * @internal
+ * @psalm-immutable
  */
 final class RawSqlStatementSplitter
 {
