@@ -20,6 +20,8 @@ class Arr
     /**
      * `array_combine($keys, ...)` in the runtime preserves the input keys, and the callback is
      * retried with the value alone on `ArgumentCountError`, so a one-parameter callback is valid.
+     * Psalm accepts that for closures and first-class callables only: a string or array callable declaring fewer
+     * params than `callable(TValue, TKey)` is reported (known limitation, see ArrMapCallableKnownLimitation.phpt).
      *
      * @template TKey of array-key
      * @template TValue
