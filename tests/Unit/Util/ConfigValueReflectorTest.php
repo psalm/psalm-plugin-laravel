@@ -16,9 +16,9 @@ use Psalm\Type\Atomic\TNamedObject;
 final class ConfigValueReflectorTest extends TestCase
 {
     #[Test]
-    public function reflects_null_to_TNull(): void
+    public function reflects_null_to_mixed(): void
     {
-        $this->assertTrue(ConfigValueReflector::reflect(null)->isNull());
+        $this->assertTrue(ConfigValueReflector::reflect(null)->isMixed());
     }
 
     #[Test]

@@ -156,7 +156,7 @@ final class ConfigKeyResolverTest extends TestCase
     }
 
     #[Test]
-    public function resolveCallReturnType_returns_null_when_value_is_null_ignoring_default(): void
+    public function resolveCallReturnType_returns_mixed_when_value_is_null_ignoring_default(): void
     {
         $repo = $this->fakeRepository(['app.providers' => null]);
         $resolver = new ConfigKeyResolver($repo);
@@ -167,8 +167,10 @@ final class ConfigKeyResolverTest extends TestCase
         );
 
         // Laravel's Arr::get returns the stored null when the key exists
-        // (array_key_exists === true) — the default is NOT applied.
-        $this->assertTrue($type->isNull());
+        // (array_key_exists === true) — the default is NOT applied. The null leaf
+        // itself is typed mixed (an unset env() value), so neither 'fallback' nor
+        // null leaks into the result.
+        $this->assertSame('mixed', $type->getId());
     }
 
     #[Test]
