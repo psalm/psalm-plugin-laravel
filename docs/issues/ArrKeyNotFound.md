@@ -42,7 +42,7 @@ function show(array $data): void
 
 ## A default does not silence it
 
-The issue is reported with or without a default. A default usually means "this key may be missing on purpose", but on a sealed shape the key is not "maybe missing": it can never be present, so the default is the only possible result and the lookup is dead code. This matches Larastan ([larastan/larastan#2635](https://github.com/larastan/larastan/issues/2635)). If the shape is deliberately incomplete, declare the key as optional or leave the shape unsealed (`array{a: int, ...<string, mixed>}`).
+The issue is reported with or without a default. A default usually means "this key may be missing on purpose", but on a sealed shape the key is not "maybe missing": it can never be present, so the default is the only possible result and the lookup is dead code. If the shape is deliberately incomplete, declare the key as optional or leave the shape unsealed (`array{a: int, ...<string, mixed>}`).
 
 ## Configuration
 
