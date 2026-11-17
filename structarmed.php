@@ -6,6 +6,7 @@ use Boundwize\StructArmed\Architecture;
 use Boundwize\StructArmed\Preset\Preset;
 use Boundwize\StructArmed\Preset\Presets\CodeQualityPreset;
 use Boundwize\StructArmed\Preset\Presets\Psr4Preset;
+use Boundwize\StructArmed\Rule\Rules\Class_\MustBeFinalRule;
 
 return Architecture::define()
     ->withPresets(Preset::PSR4(), Preset::CODEQUALITY(), Preset::YAGNI())
@@ -33,6 +34,7 @@ return Architecture::define()
         'Plugin' => ['+Handlers', 'Config'],
         'Cli' => ['Plugin', 'Blade', 'Bootstrap', 'Config'],
     ])
+    ->rule('classes.must_be_final', new MustBeFinalRule(Psr4Preset::SOURCE_LAYER))
     ->skip([
         '*/tests/Application',
         '*/tests/Unit/*/Fixtures/*',

@@ -102,7 +102,8 @@ final class CollectionWhereNotNullTest
         $_filtered = $collection
             ->map(fn (string $item): ?string => strlen($item) > 3 ? $item : null)
             ->whereNotNull();
-        /** @psalm-check-type-exact $_filtered = Collection<int, string>&static */
+        // non-empty-string: Psalm 7.9 narrows `$item` on `strlen($item) > 3`.
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-string>&static */
     }
 
     /**

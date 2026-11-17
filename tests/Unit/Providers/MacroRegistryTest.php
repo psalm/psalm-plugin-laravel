@@ -393,7 +393,7 @@ final class MacroInstanceMethodFixture
     }
 }
 
-class MacroSelfReturnFixture
+final class MacroSelfReturnFixture
 {
     public static function returnsSelf(): self
     {

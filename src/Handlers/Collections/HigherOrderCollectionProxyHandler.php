@@ -540,7 +540,7 @@ final class HigherOrderCollectionProxyHandler implements
         $retyped = $builder->freeze();
 
         if ($shortCircuit) {
-            $receiverState->afterLink($result->isNullable())->markOn($fetch);
+            $receiverState->afterLink($result)->markOn($fetch);
         }
 
         $types->setType($fetch, $retyped);
