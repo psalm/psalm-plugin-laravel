@@ -26,7 +26,7 @@ final class RawSqlStatementSplitter
         for ($i = 0; $i < $length; $i++) {
             $char = $sql[$i];
 
-            if ($char === "'" || $char === '"' || $char === '`') {
+            if (in_array($char, ["'", '"', '`'], true)) {
                 $end = self::quoteEnd($sql, $i, $char);
                 $current .= \substr($sql, $i, $end - $i);
                 $i = $end - 1;
