@@ -298,9 +298,9 @@ final class SchemaAggregator
         if (
             !isset($call->args[1])
             || !$call->args[1] instanceof PhpParser\Node\Arg
-            || !self::isBlueprintCallback($call->args[1]->value)
+            || !$this->isBlueprintCallback($call->args[1]->value)
             || \count($call->args[1]->value->params) < 1
-            || self::isForeignParamType($call->args[1]->value->params[0]->type)
+            || $this->isForeignParamType($call->args[1]->value->params[0]->type)
         ) {
             return;
         }
@@ -322,7 +322,7 @@ final class SchemaAggregator
         ) {
             $call_arg_name = $call->args[1]->value->params[0]->var->name;
 
-            $this->processColumnUpdates($table_name, $call_arg_name, self::callbackStatements($update_closure));
+            $this->processColumnUpdates($table_name, $call_arg_name, $this->callbackStatements($update_closure));
         }
     }
 
@@ -331,7 +331,7 @@ final class SchemaAggregator
      *
      * @psalm-assert-if-true PhpParser\Node\Expr\Closure|PhpParser\Node\Expr\ArrowFunction $expr
      */
-    private static function isBlueprintCallback(PhpParser\Node\Expr $expr): bool
+    private function isBlueprintCallback(PhpParser\Node\Expr $expr): bool
     {
         return $expr instanceof PhpParser\Node\Expr\Closure || $expr instanceof PhpParser\Node\Expr\ArrowFunction;
     }
@@ -344,7 +344,7 @@ final class SchemaAggregator
      *
      * @todo-by https://github.com/vimeo/psalm/pull/14134 drop the written-name fallback and compare resolvedName only once the plugin's Psalm floor includes this fix
      */
-    private static function isForeignParamType(?PhpParser\Node $type): bool
+    private function isForeignParamType(?PhpParser\Node $type): bool
     {
         if (!$type instanceof PhpParser\Node\Name) {
             return false;
@@ -362,7 +362,7 @@ final class SchemaAggregator
      *
      * @return array<array-key, PhpParser\Node\Stmt>
      */
-    private static function callbackStatements(PhpParser\Node\Expr\Closure|PhpParser\Node\Expr\ArrowFunction $callback): array
+    private function callbackStatements(PhpParser\Node\Expr\Closure|PhpParser\Node\Expr\ArrowFunction $callback): array
     {
         return $callback instanceof PhpParser\Node\Expr\ArrowFunction
             ? [new PhpParser\Node\Stmt\Expression($callback->expr)]
@@ -786,12 +786,12 @@ final class SchemaAggregator
                 case 'after':
                     if (
                         $second_arg !== null
-                        && self::isBlueprintCallback($second_arg)
+                        && $this->isBlueprintCallback($second_arg)
                         && \count($second_arg->params) >= 1
                         && $second_arg->params[0]->var instanceof PhpParser\Node\Expr\Variable
                         && \is_string($second_arg->params[0]->var->name)
                     ) {
-                        $this->processColumnUpdates($table_name, $second_arg->params[0]->var->name, self::callbackStatements($second_arg));
+                        $this->processColumnUpdates($table_name, $second_arg->params[0]->var->name, $this->callbackStatements($second_arg));
                     }
 
                     break;
