@@ -272,5 +272,18 @@ function test_pull_unpacked_arguments_decline(array $data, array $rest): void
     $_value = Arr::pull($data, ...$rest);
     /** @psalm-check-type-exact $data = array<array-key, mixed> */
 }
+
+/**
+ * A by-reference parameter of the enclosing function shares storage with the caller's variable, so
+ * the rewrite declines and Psalm's `array` stays. The @param-out spells out that out type.
+ *
+ * @param array{a: int, b: string} $data
+ * @param-out array<array-key, mixed> $data
+ */
+function test_pull_on_by_reference_parameter_declines(array &$data): void
+{
+    $_value = Arr::pull($data, 'a');
+    /** @psalm-check-type-exact $data = array<array-key, mixed> */
+}
 ?>
 --EXPECTF--
