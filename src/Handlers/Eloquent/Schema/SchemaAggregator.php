@@ -341,6 +341,8 @@ final class SchemaAggregator
      *
      * Psalm's name resolver skips arrow function signatures, so their class names carry no
      * `resolvedName` attribute. For those, fall back to the written name's last segment.
+     *
+     * @todo-by https://github.com/vimeo/psalm/pull/14134 drop the written-name fallback and compare resolvedName only once the plugin's Psalm floor includes this fix
      */
     private static function isForeignParamType(?PhpParser\Node $type): bool
     {
