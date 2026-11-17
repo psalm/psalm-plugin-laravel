@@ -192,7 +192,7 @@ final class SchemaAggregator
             || !\in_array($expr->name->toLowerString(), ['statement', 'unprepared'], true)
             || !isset($expr->args[0])
             || !$expr->args[0] instanceof PhpParser\Node\Arg
-            || !$this->isFacadeClass($expr->class->getAttribute('resolvedName'), DB::class, 'DB')
+            || !self::isFacadeClass($expr->class->getAttribute('resolvedName'), DB::class, 'DB')
         ) {
             return;
         }
@@ -205,6 +205,8 @@ final class SchemaAggregator
 
     /**
      * A string literal (including nowdoc and heredoc without interpolation) or a concatenation of such literals.
+     *
+     * @psalm-capabilities read-props
      */
     private static function resolveConstantString(PhpParser\Node\Expr $expr): ?string
     {
@@ -274,7 +276,7 @@ final class SchemaAggregator
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
             && $expr->name->name === 'connection'
-            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'));
+            && self::isSchemaClass($expr->class->getAttribute('resolvedName'));
     }
 
     /**
@@ -298,7 +300,7 @@ final class SchemaAggregator
             $expr instanceof PhpParser\Node\Expr\StaticCall
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
-            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'))
+            && self::isSchemaClass($expr->class->getAttribute('resolvedName'))
         ) {
             return $expr;
         }
@@ -312,7 +314,7 @@ final class SchemaAggregator
             && $expr->var->class instanceof PhpParser\Node\Name
             && $expr->var->name instanceof PhpParser\Node\Identifier
             && $expr->var->name->name === 'connection'
-            && $this->isSchemaClass($expr->var->class->getAttribute('resolvedName'))
+            && self::isSchemaClass($expr->var->class->getAttribute('resolvedName'))
         ) {
             return $expr;
         }
@@ -974,15 +976,18 @@ final class SchemaAggregator
      * Psalm requires @psalm-pure here (MissingPureAnnotation) for security analysis.
      * @psalm-pure
      */
-    private function isSchemaClass(mixed $class_name): bool
+    private static function isSchemaClass(mixed $class_name): bool
     {
-        return $this->isFacadeClass($class_name, Schema::class, 'Schema');
+        return self::isFacadeClass($class_name, Schema::class, 'Schema');
     }
 
     /**
+     * Same purity caveat as isSchemaClass(): the is_a() autoload side effect is harmless.
+     *
      * @param class-string $facade
+     * @psalm-pure
      */
-    private function isFacadeClass(mixed $class_name, string $facade, string $root_alias): bool
+    private static function isFacadeClass(mixed $class_name, string $facade, string $root_alias): bool
     {
         if (!\is_string($class_name)) {
             return false;
