@@ -314,7 +314,7 @@ final class SchemaAggregator
             $this->tables[$table_name] = new SchemaTable();
         }
 
-        $update_closure = $call->args[1]->value;
+        $callback = $call->args[1]->value;
 
         if (
             $call->args[1]->value->params[0]->var instanceof PhpParser\Node\Expr\Variable
@@ -322,7 +322,7 @@ final class SchemaAggregator
         ) {
             $call_arg_name = $call->args[1]->value->params[0]->var->name;
 
-            $this->processColumnUpdates($table_name, $call_arg_name, $this->callbackStatements($update_closure));
+            $this->processColumnUpdates($table_name, $call_arg_name, $this->callbackStatements($callback));
         }
     }
 
@@ -330,6 +330,7 @@ final class SchemaAggregator
      * Blueprint callbacks are written as `function (Blueprint $table) {...}` or `fn (Blueprint $table) => ...`.
      *
      * @psalm-assert-if-true PhpParser\Node\Expr\Closure|PhpParser\Node\Expr\ArrowFunction $expr
+     * @psalm-pure
      */
     private function isBlueprintCallback(PhpParser\Node\Expr $expr): bool
     {
@@ -340,7 +341,12 @@ final class SchemaAggregator
      * True when the callback's parameter is typed as a class other than Blueprint.
      *
      * Psalm's name resolver skips arrow function signatures, so their class names carry no
-     * `resolvedName` attribute. For those, fall back to the written name's last segment.
+     * `resolvedName` attribute. For those, a fully qualified name is compared exactly and any other
+     * name falls back to its last segment.
+     *
+     * Known limits of the fallback (pinned by ArrowFunctionBlueprintAliasKnownLimitationTest):
+     * - a foreign class literally named `Blueprint` is treated as Blueprint;
+     * - `use ...\Blueprint as B;` with `fn (B $table)` is declined, which drops the whole table.
      *
      * @todo-by https://github.com/vimeo/psalm/pull/14134 drop the written-name fallback and compare resolvedName only once the plugin's Psalm floor includes this fix
      */
@@ -350,11 +356,18 @@ final class SchemaAggregator
             return false;
         }
 
+        /** @psalm-var ?string $resolved */
         $resolved = $type->getAttribute('resolvedName');
 
-        return \is_string($resolved)
-            ? $resolved !== Blueprint::class
-            : $type->getLast() !== 'Blueprint';
+        if (\is_string($resolved)) {
+            return $resolved !== Blueprint::class;
+        }
+
+        if ($type instanceof PhpParser\Node\Name\FullyQualified) {
+            return $type->toString() !== Blueprint::class;
+        }
+
+        return $type->getLast() !== 'Blueprint';
     }
 
     /**

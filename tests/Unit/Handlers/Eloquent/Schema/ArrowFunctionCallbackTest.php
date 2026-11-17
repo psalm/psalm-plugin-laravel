@@ -98,4 +98,62 @@ final class ArrowFunctionCallbackTest extends AbstractSchemaAggregatorTestCase
 
         $this->assertArrayNotHasKey('tags', $schema->tables);
     }
+
+    #[Test]
+    public function arrow_function_typed_with_another_imported_class_is_declined(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Foo\Bar;
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create('tags', fn (Bar $table) => $table->string('a'));
+                }
+            };
+            PHP);
+
+        $this->assertArrayNotHasKey('tags', $schema->tables);
+    }
+
+    #[Test]
+    public function arrow_function_with_fully_qualified_blueprint_is_accepted(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create('tags', fn (\Illuminate\Database\Schema\Blueprint $table) => $table->string('a'));
+                }
+            };
+            PHP);
+
+        $this->assertTableHasNotNullableColumnOfType('a', 'string', $schema->tables['tags']);
+    }
+
+    #[Test]
+    public function arrow_function_with_fully_qualified_foreign_blueprint_is_declined(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create('tags', fn (\Foo\Blueprint $table) => $table->string('a'));
+                }
+            };
+            PHP);
+
+        $this->assertArrayNotHasKey('tags', $schema->tables);
+    }
 }
