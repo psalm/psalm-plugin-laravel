@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794929172256,
+  "lastUpdate": 1794959349009,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19385,6 +19385,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1233,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b1b5507f816e6ab29b286374c070a495df6419ff",
+          "message": "Type the outer key of higher-order `groupBy` and `keyBy` from the grouped value (#2344)\n\n* fix: type the outer key of higher-order groupBy and keyBy proxies as int when provable\n\nThe direct `groupBy('field')` key resolver now lives in GroupKeyTypeResolver and also\nserves `$collection->groupBy->field` and `->keyBy->field`: bool, int and int-backed\nenum values give an `int` key, everything else stays `array-key`.\n\nFixes #2341\n\n* fix: mark GroupKeyTypeResolver as immutable",
+          "timestamp": "2026-11-18T00:45:09+01:00",
+          "tree_id": "e49e26150ea06877dd92ee76ab034fc938c14ec0",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/b1b5507f816e6ab29b286374c070a495df6419ff"
+        },
+        "date": 1794959347963,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 27.09,
+            "range": "± 0.06",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1232,
             "unit": "MB"
           }
         ]
