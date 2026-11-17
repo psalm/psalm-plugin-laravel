@@ -137,7 +137,7 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface, AfterMet
 
         $default = $defaultType ?? Type::getNull();
 
-        if ($lookup->value === null) {
+        if (!$lookup->value instanceof \Psalm\Type\Union) {
             return $default;
         }
 
