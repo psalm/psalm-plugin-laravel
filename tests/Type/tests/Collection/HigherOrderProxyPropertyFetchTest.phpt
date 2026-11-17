@@ -305,6 +305,18 @@ final class HigherOrderProxyPropertyFetchTest
             /** @psalm-check-type-exact $_narrowed = int */
         }
     }
+
+    /**
+     * A nullsafe OUTER fetch on the never-null proxy resolves like the plain fetch, without a dead short-circuit
+     * null (vimeo/psalm#13936).
+     *
+     * @param Collection<int, PropFetchItem> $p
+     */
+    public function nullsafeOuterFetch(Collection $p): void
+    {
+        $_parent = $p->map?->parent;
+        /** @psalm-check-type-exact $_parent = Collection<int, PropFetchItem|null> */
+    }
 }
 ?>
 --EXPECTF--
@@ -316,3 +328,5 @@ PossiblyNullReference on line %d: Cannot call method number on possibly null val
 TypeDoesNotContainNull on line %d: Cannot resolve types for $parents->map->child[0]->number() - int does not contain null
 RedundantCondition on line %d: Type Illuminate\Support\Collection<int, PropFetchItem> for $p->sortBy->parent is always isset
 TypeDoesNotContainType on line %d: Cannot resolve types for $p->sortBy->parent with type Illuminate\Support\Collection<int, PropFetchItem> and !isset assertion
+RedundantCondition on line %d: Type Illuminate\Support\HigherOrderCollectionProxy<'map', PropFetchItem, Illuminate\Support\Collection<int, PropFetchItem>> for $p->map is never null
+TypeDoesNotContainNull on line %d: Illuminate\Support\HigherOrderCollectionProxy<string, PropFetchItem, Illuminate\Support\Collection<int, PropFetchItem>> does not contain null

@@ -834,7 +834,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      * Remove falsy types and narrow remaining types to their non-empty variants.
      *
      * - Removes `null` and `false` entirely
-     * - Narrows `string` → `non-falsy-string`, `array` → `non-empty-array`
+     * - Narrows `string` and `non-empty-string` → `non-falsy-string`, `array` → `non-empty-array`
      *
      * Returns null if nothing changed or narrowing would leave the union empty.
      *
@@ -870,9 +870,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
     /**
      * Narrow an atomic type to its non-empty variant where possible.
      *
-     * array_filter() removes "", "0", and [] — so `string` becomes `non-falsy-string`
-     * (excludes both "" and "0") and `array` becomes `non-empty-array`.
-     * Already-narrow subtypes are left as-is.
+     * array_filter() removes "", "0", and [] — so `string` and `non-empty-string` (which still admits "0")
+     * become `non-falsy-string`, and `array` becomes `non-empty-array`. Other subtypes are left as-is.
      *
      * Not narrowed: int/float — Psalm has no `non-zero-int` atomic type, and constructing
      * `int<min, -1>|int<1, max>` adds complexity for a rare use case.
@@ -881,8 +880,9 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
      */
     private static function narrowAtomic(Atomic $atomic): Atomic
     {
-        // Narrow TString but not its subclasses (TNonFalsyString, TNonEmptyString, TLiteralString, etc.)
-        if ($atomic::class === TString::class) {
+        // Exact-class checks: TNonFalsyString extends TNonEmptyString, and literal/lowercase/class-string
+        // subtypes would lose information if replaced.
+        if ($atomic::class === TString::class || $atomic::class === TNonEmptyString::class) {
             return new TNonFalsyString();
         }
 

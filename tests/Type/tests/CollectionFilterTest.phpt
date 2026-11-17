@@ -87,8 +87,7 @@ final class CollectionFilterTest
         $_filtered = $collection
             ->map(fn (string $item): ?string => strlen($item) > 3 ? $item : null)
             ->filter();
-        // Psalm 7.9 narrows `$item` on `strlen($item) > 3`; only a plain `string` is tightened to non-falsy-string.
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-string>&static */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string>&static */
     }
 
     /** @param LazyCollection<int, string|null> $collection */
@@ -119,13 +118,13 @@ final class CollectionFilterTest
     }
 
     /**
-     * non-empty-string stays non-empty-string (already a TString subclass, not narrowed further).
+     * non-empty-string narrows to non-falsy-string: it still admits "0", which filter() removes.
      * @param Collection<int, non-empty-string|null> $collection
      */
-    public function filterPreservesNonEmptyString(Collection $collection): void
+    public function filterNarrowsNonEmptyStringToNonFalsy(Collection $collection): void
     {
         $_filtered = $collection->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-string> */
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string> */
     }
 
     /**

@@ -7,7 +7,6 @@ use Illuminate\Support\LazyCollection;
 final class PropFetchLimitItem
 {
     public int $n = 1;
-    public ?PropFetchLimitItem $parent = null;
 }
 
 final class PropFetchLimitOtherItem
@@ -54,21 +53,6 @@ final class HigherOrderProxyPropertyFetchItemTypeKnownLimitation
         $_map = $generic->map->n;
         /** @psalm-check-type-exact $_map = PropFetchLimitGeneric<string, mixed> */
     }
-
-    /**
-     * Not a limitation, kept here as the regression guard for vimeo/psalm#13936 (fixed in Psalm 7.9.0): a nullsafe
-     * OUTER fetch (`$c->map?->parent`) on the never-null proxy resolves like the plain fetch, without a dead
-     * short-circuit null.
-     *
-     * @param Collection<int, PropFetchLimitItem> $p
-     */
-    public function nullsafeOuterFetch(Collection $p): void
-    {
-        $_parent = $p->map?->parent;
-        /** @psalm-check-type-exact $_parent = Collection<int, PropFetchLimitItem|null> */
-    }
 }
 ?>
 --EXPECTF--
-RedundantCondition on line %d: Type Illuminate\Support\HigherOrderCollectionProxy<'map', PropFetchLimitItem, Illuminate\Support\Collection<int, PropFetchLimitItem>> for $p->map is never null
-TypeDoesNotContainNull on line %d: Illuminate\Support\HigherOrderCollectionProxy<string, PropFetchLimitItem, Illuminate\Support\Collection<int, PropFetchLimitItem>> does not contain null
