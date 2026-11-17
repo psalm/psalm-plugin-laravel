@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794863393074,
+  "lastUpdate": 1794926640100,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19315,6 +19315,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1231,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "samsonasik@gmail.com",
+            "name": "Abdul Malik Ikhsan",
+            "username": "samsonasik"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "19c789ce57ef7e92149cf3bbb8cd4b5eb25378f3",
+          "message": "Enable StructArmed MustBeFinalRule and require Psalm 7.9 (#2333)\n\n* Enable StructArmed MustBeFinalRule\n\n* fix psalm notice on psalm 7.9\n\n* fix psalm notice on psalm 7.9",
+          "timestamp": "2026-11-17T15:40:23+01:00",
+          "tree_id": "de10e4daacb6d3654e613a8a7dd1cf2f21aaeb64",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/19c789ce57ef7e92149cf3bbb8cd4b5eb25378f3"
+        },
+        "date": 1794926638311,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.34,
+            "range": "± 0.15",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1232,
             "unit": "MB"
           }
         ]
