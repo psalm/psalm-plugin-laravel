@@ -6,7 +6,7 @@ nav_order: 11
 
 # UnknownModelAttribute
 
-Emitted when an array passed to an Eloquent mass-assignment method, a creation method on a query builder or relation, or a column-naming write such as `upsert()` or `incrementEach()`, names a key that is not a known attribute of the model. This catches typos such as `User::create(['nmae' => $name])`, `$user->roles()->create(['nmae' => $name])`, and `User::upsert($rows, ['emial'])`.
+Emitted when an array passed to an Eloquent mass-assignment method, a creation method on a query builder or relation, or a column-naming write such as `upsert()` or `incrementEach()`, names a key that is not a known attribute of the model. This catches typos such as `User::create(['nmae' => $name])`, `$user->roles()->create(['nmae' => $name])`, and `User::upsert($rows, ['nmae'])`.
 
 ## Why this is a problem
 
