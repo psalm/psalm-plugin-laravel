@@ -79,6 +79,16 @@ function test_suppressed_with_psalm_suppress(array $shape): void
     /** @psalm-check-type-exact $_result = null */
 }
 
+/** A second pull of the same key sees the shape the first one left behind. */
+/** @param array{name: string, age: int} $data */
+function test_second_pull_of_the_same_key(array $data): void
+{
+    $_first = Arr::pull($data, 'name');
+    /** @psalm-check-type-exact $_first = string */
+    $_second = Arr::pull($data, 'name');
+    /** @psalm-check-type-exact $_second = null */
+}
+
 // --- negative: the key can exist ---
 
 /** @param array{a: int, b: string} $shape */
@@ -177,3 +187,4 @@ ArrKeyNotFound on line %d: Key 'a.c' does not exist in array{a: array{b: int}}, 
 ArrKeyNotFound on line %d: Key 'x.y' does not exist in array{a: array{b: int}}, so Arr::get() always returns its default
 ArrKeyNotFound on line %d: Key 'a.c' does not exist in array{a?: array{b: int}}, so Arr::get() always returns its default
 ArrKeyNotFound on line %d: Key 'z' does not exist in array{a: int}, so Arr::get() always returns its default
+ArrKeyNotFound on line %d: Key 'name' does not exist in array{age: int}, so Arr::pull() always returns its default

@@ -6,7 +6,13 @@ namespace Psalm\LaravelPlugin\Handlers\Support;
 
 use Illuminate\Support\Arr;
 use PhpParser\Node\Arg;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
+use PhpParser\Node\Scalar;
 use Psalm\CodeLocation;
 use Psalm\Context;
 use Psalm\IssueBuffer;
@@ -177,6 +183,15 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface, AfterMet
             return;
         }
 
+        // The arg-0 node type is recorded before later args are analysed, so an arg that can write
+        // the variable (`Arr::pull($d, 'a', Arr::pull($d, 'b'))`, `..., $d = []`) would make the
+        // rebuilt shape stale. Only args that cannot have side effects keep it valid.
+        foreach (\array_slice($args, 1) as $laterArg) {
+            if (!self::isSideEffectFree($laterArg->value)) {
+                return;
+            }
+        }
+
         $varId = '$' . $variable->name;
         $context = $event->getContext();
         $current = $context->vars_in_scope[$varId] ?? null;
@@ -230,6 +245,19 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface, AfterMet
         }
 
         return new Union([$atomic->setProperties($properties)]);
+    }
+
+    /**
+     * @psalm-capabilities read-props
+     */
+    private static function isSideEffectFree(Expr $expr): bool
+    {
+        return $expr instanceof Scalar\String_
+            || $expr instanceof Scalar\Int_
+            || $expr instanceof Scalar\Float_
+            || $expr instanceof ConstFetch
+            || $expr instanceof Variable && \is_string($expr->name)
+            || $expr instanceof ClassConstFetch && $expr->class instanceof Name && $expr->name instanceof Identifier;
     }
 
     /**

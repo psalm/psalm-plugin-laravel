@@ -190,5 +190,87 @@ function test_pull_named_arguments_decline(array $data): void
     $_value = Arr::pull(key: 'a', array: $data);
     /** @psalm-check-type-exact $data = array<array-key, mixed> */
 }
+
+// --- by-ref shape: later arguments that write the same variable invalidate the pre-call shape ---
+
+/** @param array{a: int, b: string} $data */
+function test_pull_nested_pull_in_default_declines(array $data): void
+{
+    $_value = Arr::pull($data, 'a', Arr::pull($data, 'b'));
+    /** @psalm-check-type-exact $data = array<array-key, mixed> */
+}
+
+/** @param array{a: int, b: string} $data */
+function test_pull_assignment_in_default_declines(array $data): void
+{
+    $_value = Arr::pull($data, 'a', $data = ['a' => 1]);
+    /** @psalm-check-type-exact $data = array<array-key, mixed> */
+}
+
+/** @param array{a: int, b: string} $data */
+function test_pull_with_side_effect_free_arguments_still_rewrites(array $data, int $fallback): void
+{
+    $_value = Arr::pull($data, 'a', $fallback);
+    /** @psalm-check-type-exact $data = array{b: string} */
+}
+
+// --- by-ref shape: control-flow merges ---
+
+/** @param array{a: int, b: string} $data */
+function test_pull_in_one_branch_merges_to_optional_key(array $data, bool $cond): void
+{
+    if ($cond) {
+        $_value = Arr::pull($data, 'a');
+        /** @psalm-check-type-exact $data = array{b: string} */
+    }
+
+    /** @psalm-check-type-exact $data = array{a?: int, b: string} */
+}
+
+/** @param array{a: int, b: string} $data */
+function test_pull_in_a_loop_merges_to_optional_key(array $data, int $times): void
+{
+    for ($i = 0; $i < $times; $i++) {
+        $_value = Arr::pull($data, 'a');
+    }
+
+    /** @psalm-check-type-exact $data = array{a?: int, b: string} */
+}
+
+// --- by-ref shape: variables sharing storage keep Psalm's `array` ---
+
+/** @param array{a: int, b: string} $data */
+function test_pull_on_reference_source_declines(array $data): void
+{
+    $alias = &$data;
+    $_value = Arr::pull($data, 'a');
+    /** @psalm-check-type-exact $data = array<array-key, mixed> */
+    /** @psalm-check-type-exact $alias = array<array-key, mixed> */
+}
+
+/** @param array{a: int, b: string} $data */
+function test_pull_on_reference_alias_declines(array $data): void
+{
+    $alias = &$data;
+    $_value = Arr::pull($alias, 'a');
+    /** @psalm-check-type-exact $alias = array<array-key, mixed> */
+}
+
+function test_pull_on_variable_captured_by_reference(): void
+{
+    $data = ['a' => 1, 'b' => 'x'];
+    $pull = static function () use (&$data): void {
+        Arr::pull($data, 'a');
+    };
+    $pull();
+    /** @psalm-check-type-exact $data = array<array-key, mixed> */
+}
+
+/** @param array{string} $rest */
+function test_pull_unpacked_arguments_decline(array $data, array $rest): void
+{
+    $_value = Arr::pull($data, ...$rest);
+    /** @psalm-check-type-exact $data = array<array-key, mixed> */
+}
 ?>
 --EXPECTF--
