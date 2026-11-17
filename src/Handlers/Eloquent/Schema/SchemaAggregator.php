@@ -192,7 +192,7 @@ final class SchemaAggregator
             || !\in_array($expr->name->toLowerString(), ['statement', 'unprepared'], true)
             || !isset($expr->args[0])
             || !$expr->args[0] instanceof PhpParser\Node\Arg
-            || !self::isFacadeClass($expr->class->getAttribute('resolvedName'), DB::class, 'DB')
+            || !$this->isFacadeClass($expr->class->getAttribute('resolvedName'), DB::class, 'DB')
         ) {
             return;
         }
@@ -276,7 +276,7 @@ final class SchemaAggregator
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
             && $expr->name->name === 'connection'
-            && self::isSchemaClass($expr->class->getAttribute('resolvedName'));
+            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'));
     }
 
     /**
@@ -300,7 +300,7 @@ final class SchemaAggregator
             $expr instanceof PhpParser\Node\Expr\StaticCall
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
-            && self::isSchemaClass($expr->class->getAttribute('resolvedName'))
+            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'))
         ) {
             return $expr;
         }
@@ -314,7 +314,7 @@ final class SchemaAggregator
             && $expr->var->class instanceof PhpParser\Node\Name
             && $expr->var->name instanceof PhpParser\Node\Identifier
             && $expr->var->name->name === 'connection'
-            && self::isSchemaClass($expr->var->class->getAttribute('resolvedName'))
+            && $this->isSchemaClass($expr->var->class->getAttribute('resolvedName'))
         ) {
             return $expr;
         }
@@ -976,9 +976,9 @@ final class SchemaAggregator
      * Psalm requires @psalm-pure here (MissingPureAnnotation) for security analysis.
      * @psalm-pure
      */
-    private static function isSchemaClass(mixed $class_name): bool
+    private function isSchemaClass(mixed $class_name): bool
     {
-        return self::isFacadeClass($class_name, Schema::class, 'Schema');
+        return $this->isFacadeClass($class_name, Schema::class, 'Schema');
     }
 
     /**
@@ -987,7 +987,7 @@ final class SchemaAggregator
      * @param class-string $facade
      * @psalm-pure
      */
-    private static function isFacadeClass(mixed $class_name, string $facade, string $root_alias): bool
+    private function isFacadeClass(mixed $class_name, string $facade, string $root_alias): bool
     {
         if (!\is_string($class_name)) {
             return false;
