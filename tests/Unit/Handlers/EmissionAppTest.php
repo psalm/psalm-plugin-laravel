@@ -200,7 +200,7 @@ final class EmissionAppTest extends TestCase
         // `incrementEach()`), through builder, relation and Model receivers.
         foreach (self::EXPECTED_COLUMN_WRITE_FINDINGS as $key => [$prefix, $model, $verb]) {
             $this->assertMatchesRegularExpression(
-                '/^' . \preg_quote($prefix, '/') . '\(\) ' . $verb . ' an unknown attribute \'' . \preg_quote($key, '/') . '\'\..* of ' . $model . ' — check for a typo\.$/m',
+                '/^' . \preg_quote($prefix, '/') . '\(\) ' . $verb . " an unknown attribute '" . \preg_quote($key, '/') . '\'\..* of ' . $model . ' — check for a typo\.$/m',
                 $joined,
                 "'{$key}' must be flagged as {$prefix}() against {$model}.",
             );

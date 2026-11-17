@@ -111,8 +111,11 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
      * `withAttributes()`).
      */
     private const ROW = 'row';
+
     private const LIST = 'list';
+
     private const ROWS = 'rows';
+
     private const NAMES = 'names';
 
     /**
@@ -574,7 +577,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
         foreach ($specs as [$paramName, $position, $kind]) {
             $value = self::dataArgument($args, $paramName, $position)?->value;
 
-            if ($value === null) {
+            if (!$value instanceof \PhpParser\Node\Expr) {
                 continue;
             }
 
