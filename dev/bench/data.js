@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794959349009,
+  "lastUpdate": 1794959566614,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19420,6 +19420,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1232,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bbaf61532600b5ffda4f29f25a738543ee993078",
+          "message": "Type `Arr::map()` and `Arr::mapWithKeys()` results from the callback (#2349)\n\n* feat(stubs): add generic signatures to Arr::map() and Arr::mapWithKeys()\n\n- Arr::map() keeps the input keys and types the values by the callback result.\n- Arr::mapWithKeys() returns array<TMapWithKeysKey, TMapWithKeysValue> instead of a bare array.\n\nFixes #2337\n\n* test: cover first-class callables and pin string callable limitation for Arr::map()",
+          "timestamp": "2026-11-18T00:49:06+01:00",
+          "tree_id": "90b9fa1006f6c5defe99298311154358b5d3eeb9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/bbaf61532600b5ffda4f29f25a738543ee993078"
+        },
+        "date": 1794959564981,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.37,
+            "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1233,
             "unit": "MB"
           }
         ]
