@@ -146,9 +146,9 @@ final class AppHiddenAdaptedChild extends AppHiddenAdaptedParent
 {
     public function probe(): void
     {
-        // Protected by the parent's adaptation: tag stays.
+        // Protected by the parent's adaptation, but callable from this scope: the real method wins (Psalm 7.9).
         $_protected = $this->dayOfYear(5);
-        /** @psalm-check-type-exact $_protected = \AppHiddenAdaptedChild */
+        /** @psalm-check-type-exact $_protected = int */
     }
 }
 

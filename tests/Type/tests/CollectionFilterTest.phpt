@@ -87,7 +87,8 @@ final class CollectionFilterTest
         $_filtered = $collection
             ->map(fn (string $item): ?string => strlen($item) > 3 ? $item : null)
             ->filter();
-        /** @psalm-check-type-exact $_filtered = Collection<int, non-falsy-string>&static */
+        // Psalm 7.9 narrows `$item` on `strlen($item) > 3`; only a plain `string` is tightened to non-falsy-string.
+        /** @psalm-check-type-exact $_filtered = Collection<int, non-empty-string>&static */
     }
 
     /** @param LazyCollection<int, string|null> $collection */
