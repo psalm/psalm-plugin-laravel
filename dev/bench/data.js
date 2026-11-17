@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794926640100,
+  "lastUpdate": 1794929172256,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19350,6 +19350,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1232,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2505648e59caa8410f94936572a54308e9da765f",
+          "message": "Narrow `non-empty-string` to `non-falsy-string` in `Collection::filter()` (#2335)\n\n- filter() without a callback removes \"0\", which non-empty-string still admits; only plain string was narrowed.\n- Restores the non-falsy-string result for map(...)->filter() now that Psalm 7.9 infers non-empty-string from strlen() comparisons.\n- Moves the vimeo/psalm#13936 guard (fixed in Psalm 7.9) out of the known-limitation test.",
+          "timestamp": "2026-11-17T16:22:30+01:00",
+          "tree_id": "54753aa6551b385d90ff13b15bfa10370c1958a9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/2505648e59caa8410f94936572a54308e9da765f"
+        },
+        "date": 1794929171147,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.41,
+            "range": "± 0.18",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1233,
             "unit": "MB"
           }
         ]
