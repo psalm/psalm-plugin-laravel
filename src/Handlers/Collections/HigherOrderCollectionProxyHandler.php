@@ -785,10 +785,11 @@ final class HigherOrderCollectionProxyHandler implements
             'flatmap' => new Union([
                 new TGenericObject(self::toBaseClass($collectionClass, $codebase), [Type::getArrayKey(), Type::getMixed()]),
             ]),
-            // groupBy — outer key is array-key, inner is re-indexed (preserveKeys defaults to false)
+            // groupBy — outer key is the group value as an array key (`int` only when provable, like the direct
+            // `groupBy('field')` form), inner is re-indexed (preserveKeys defaults to false)
             'groupby' => new Union([
                 new TGenericObject($collectionClass, [
-                    Type::getArrayKey(),
+                    self::groupKeyType($tValue, $proxied, $codebase),
                     new Union([new TGenericObject($collectionClass, [Type::getInt(), $tValue])]),
                 ]),
             ]),
@@ -800,8 +801,8 @@ final class HigherOrderCollectionProxyHandler implements
                     new Union([new TGenericObject($collectionClass, [$tKey, $tValue])]),
                 ]),
             ]),
-            // keyBy — re-keys by method return value
-            'keyby' => new Union([new TGenericObject($collectionClass, [Type::getArrayKey(), $tValue])]),
+            // keyBy — re-keys by the proxied value, resolved like groupBy's outer key
+            'keyby' => new Union([new TGenericObject($collectionClass, [self::groupKeyType($tValue, $proxied, $codebase), $tValue])]),
         };
     }
 
@@ -814,6 +815,17 @@ final class HigherOrderCollectionProxyHandler implements
     private static function proxiedResult(Union $tValue, string|Union $proxied, Codebase $codebase): ?Union
     {
         return $proxied instanceof Union ? $proxied : self::resolveMethodReturnTypeOnValue($tValue, $proxied, $codebase);
+    }
+
+    /**
+     * Outer key of `groupBy->x` / `keyBy->x`: the shared direct-form resolver on the proxied value, `array-key`
+     * when it is not provably an int key.
+     *
+     * @param lowercase-string|Union $proxied
+     */
+    private static function groupKeyType(Union $tValue, string|Union $proxied, Codebase $codebase): Union
+    {
+        return GroupKeyTypeResolver::resolve(self::proxiedResult($tValue, $proxied, $codebase), $codebase) ?? Type::getArrayKey();
     }
 
     /**
