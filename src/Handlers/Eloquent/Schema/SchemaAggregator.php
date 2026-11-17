@@ -181,7 +181,7 @@ final class SchemaAggregator
 
     /**
      * Feed literal SQL from `DB::statement()` / `DB::unprepared()` to the schema dump parser,
-     * so tables created with raw `CREATE TABLE` are known. Dynamic SQL is skipped.
+     * statement by statement, so tables created with raw `CREATE TABLE` are known. Dynamic SQL is skipped.
      */
     private function addRawSqlTables(PhpParser\Node\Expr $expr): void
     {
@@ -198,8 +198,33 @@ final class SchemaAggregator
         }
 
         $sql = self::resolveConstantString($expr->args[0]->value);
-        if ($sql !== null) {
-            (new SqlSchemaParser())->addToAggregator($sql, $this);
+        if ($sql === null) {
+            return;
+        }
+
+        $parser = new SqlSchemaParser();
+
+        foreach (RawSqlStatementSplitter::split($sql) as $statement) {
+            // Only plain CREATE TABLE (not TEMPORARY, ALTER or INSERT), and not `CREATE TABLE x (LIKE y)`,
+            // which the dump parser would read as a column named LIKE.
+            if (
+                \preg_match('/^CREATE\s+TABLE\b/i', $statement) !== 1
+                || \preg_match('/^[^(]*\(\s*LIKE\b/i', $statement) === 1
+            ) {
+                continue;
+            }
+
+            $parsed = new self();
+            $parser->addToAggregator($statement, $parsed);
+
+            // `IF NOT EXISTS` is a no-op at runtime for a table that is already known.
+            $keep_existing = \preg_match('/^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\b/i', $statement) === 1;
+
+            foreach ($parsed->tables as $name => $table) {
+                if (!$keep_existing || !isset($this->tables[$name])) {
+                    $this->tables[$name] = $table;
+                }
+            }
         }
     }
 
@@ -276,7 +301,7 @@ final class SchemaAggregator
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
             && $expr->name->name === 'connection'
-            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'));
+            && $this->isFacadeClass($expr->class->getAttribute('resolvedName'), Schema::class, 'Schema');
     }
 
     /**
@@ -300,7 +325,7 @@ final class SchemaAggregator
             $expr instanceof PhpParser\Node\Expr\StaticCall
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
-            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'))
+            && $this->isFacadeClass($expr->class->getAttribute('resolvedName'), Schema::class, 'Schema')
         ) {
             return $expr;
         }
@@ -314,7 +339,7 @@ final class SchemaAggregator
             && $expr->var->class instanceof PhpParser\Node\Name
             && $expr->var->name instanceof PhpParser\Node\Identifier
             && $expr->var->name->name === 'connection'
-            && $this->isSchemaClass($expr->var->class->getAttribute('resolvedName'))
+            && $this->isFacadeClass($expr->var->class->getAttribute('resolvedName'), Schema::class, 'Schema')
         ) {
             return $expr;
         }
@@ -968,21 +993,11 @@ final class SchemaAggregator
     }
 
     /**
-     * Check if a class name refers to the Schema facade or a subclass of it.
-     * Handles the FQCN, the root-namespace 'Schema' alias, and custom subclasses.
+     * Check if a class name refers to the given facade, its root-namespace alias, or a custom subclass.
      *
      * Note: is_a() with allow_string=true may trigger autoloading (a side effect),
      * so this method is not truly pure, but the side effect is harmless.
      * Psalm requires @psalm-pure here (MissingPureAnnotation) for security analysis.
-     * @psalm-pure
-     */
-    private function isSchemaClass(mixed $class_name): bool
-    {
-        return $this->isFacadeClass($class_name, Schema::class, 'Schema');
-    }
-
-    /**
-     * Same purity caveat as isSchemaClass(): the is_a() autoload side effect is harmless.
      *
      * @param class-string $facade
      * @psalm-pure
