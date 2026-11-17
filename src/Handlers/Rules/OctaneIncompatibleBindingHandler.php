@@ -28,6 +28,7 @@ use Psalm\FileManipulation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
@@ -191,13 +192,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             return;
         }
 
-        $args = $expr->getArgs();
-
-        if (\count($args) < 2) {
-            return;
-        }
-
-        $closure = $args[1]->value;
+        // `$concrete` is the second parameter, but a named call can reorder it (`singleton(concrete: fn..., abstract: X)`).
+        $closure = ArgUtil::byNameOrPosition(\array_values($expr->getArgs()), 1, 'concrete')?->value;
 
         if (!$closure instanceof Closure && !$closure instanceof ArrowFunction) {
             return;

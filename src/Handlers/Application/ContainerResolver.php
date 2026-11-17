@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Application;
 use PhpParser\Node\Arg;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Bootstrap\ApplicationProvider;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\NodeTypeProvider;
 use Psalm\Storage\ClassLikeStorage;
@@ -129,6 +130,10 @@ final class ContainerResolver
     }
 
     /**
+     * The service is the first parameter of every resolving entry point, under a different name per
+     * method (`make($abstract, $parameters)`, `get($id)`, `offsetGet($offset)`), so a named call
+     * (`make(parameters: [...], abstract: X::class)`) is bound by whichever of them it uses.
+     *
      * @param list<Arg> $call_args
      */
     public static function resolvePsalmTypeFromApplicationContainerViaArgs(
@@ -136,11 +141,21 @@ final class ContainerResolver
         array $call_args,
         Codebase $codebase,
     ): ?Union {
-        if ($call_args === []) {
+        $serviceArg = null;
+
+        foreach (['abstract', 'id', 'offset'] as $paramName) {
+            $serviceArg = ArgUtil::byNameOrPosition($call_args, 0, $paramName);
+
+            if ($serviceArg instanceof Arg) {
+                break;
+            }
+        }
+
+        if (!$serviceArg instanceof Arg) {
             return null;
         }
 
-        $firstArgType = $nodeTypeProvider->getType($call_args[0]->value);
+        $firstArgType = $nodeTypeProvider->getType($serviceArg->value);
         if (!$firstArgType instanceof \Psalm\Type\Union) {
             return null;
         }

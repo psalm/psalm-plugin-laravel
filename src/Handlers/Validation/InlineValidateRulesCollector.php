@@ -17,6 +17,7 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Foreach_;
 use Psalm\Codebase;
 use Psalm\Internal\Analyzer\FunctionLikeAnalyzer;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\AfterFunctionLikeAnalysisInterface;
 use Psalm\Plugin\EventHandler\BeforeExpressionAnalysisInterface;
@@ -522,12 +523,9 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        // array_values normalises Psalm's inferred `array<array-key, Arg>` to
-        // `list<Arg>` (getArgs()'s docblock doesn't promise list-indexing).
-        // array_slice at index 0 returns the list verbatim for `validate` and
-        // trims the bag-name arg for `validateWithBag`.
-        $rulesArgs = \array_values(\array_slice($expr->getArgs(), $rulesArgIndex));
-        $rules = ValidationRuleAnalyzer::getRulesFromValidateArgs($rulesArgs);
+        // array_values normalises Psalm's inferred `array<array-key, Arg>` to `list<Arg>`
+        // (getArgs()'s docblock doesn't promise list-indexing).
+        $rules = ValidationRuleAnalyzer::getRulesFromValidateArgs(\array_values($expr->getArgs()), $rulesArgIndex);
 
         if ($rules === null) {
             return null;
@@ -719,7 +717,7 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        $args = $rhs->getArgs();
+        $args = \array_values($rhs->getArgs());
 
         // Empty: nothing to look up. Has-second-arg: see method docblock.
         if ($args === [] || isset($args[1])) {
@@ -736,7 +734,8 @@ final class InlineValidateRulesCollector implements
             return null;
         }
 
-        $keyArg = $args[0]->value;
+        // `input(default: 'x')` has no key: the default must never be read as the field name.
+        $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key')?->value;
 
         if (!$keyArg instanceof String_) {
             return null;

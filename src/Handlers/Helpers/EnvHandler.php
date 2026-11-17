@@ -50,7 +50,7 @@ final class EnvHandler implements FunctionReturnTypeProviderInterface
     #[\Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): Type\Union
     {
-        $second_arg_type = Arg::typeAt($event->getCallArgs(), $event->getStatementsSource(), 1);
+        $second_arg_type = Arg::typeOf($event->getCallArgs(), $event->getStatementsSource(), 1, 'default');
 
         // Env::get() resolves the default through value(), which calls a \Closure once (a
         // closure returning a closure keeps the inner one, a callable string is not invoked).

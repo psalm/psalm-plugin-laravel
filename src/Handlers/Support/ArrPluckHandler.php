@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Support;
 
 use Illuminate\Support\Arr;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -55,8 +56,16 @@ final class ArrPluckHandler implements MethodReturnTypeProviderInterface
         $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
         $codebase = $event->getSource()->getCodebase();
 
+        // A named call can reorder `Arr::pluck($array, $value, $key = null)`.
+        $arrayArg = ArgUtil::byNameOrPosition($args, 0, 'array');
+        $valueArg = ArgUtil::byNameOrPosition($args, 1, 'value');
+        $keyArg = ArgUtil::byNameOrPosition($args, 2, 'key');
+        if (!$arrayArg instanceof \PhpParser\Node\Arg || !$valueArg instanceof \PhpParser\Node\Arg) {
+            return null;
+        }
+
         $modelClass = ModelPropertyResolver::extractModelFromIterableValueType(
-            $nodeTypeProvider->getType($args[0]->value),
+            $nodeTypeProvider->getType($arrayArg->value),
             $codebase,
         );
         if ($modelClass === null) {
@@ -64,8 +73,8 @@ final class ArrPluckHandler implements MethodReturnTypeProviderInterface
         }
 
         $resolved = ModelPropertyResolver::resolvePluckColumnTypes(
-            valueArg: $args[1],
-            keyArg: $args[2] ?? null,
+            valueArg: $valueArg,
+            keyArg: $keyArg,
             modelClass: $modelClass,
             nodeTypeProvider: $nodeTypeProvider,
             codebase: $codebase,
@@ -78,7 +87,7 @@ final class ArrPluckHandler implements MethodReturnTypeProviderInterface
 
         // No $key argument: Laravel pushes onto $results[] (sequential int keys) —
         // a list, not a general array<int, V>. See Arr::pluck() source.
-        if (!isset($args[2])) {
+        if (!$keyArg instanceof \PhpParser\Node\Arg) {
             return Type::getList($valueType);
         }
 

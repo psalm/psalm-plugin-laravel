@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
+use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
@@ -165,9 +167,12 @@ final class ValidatedFieldReadResolver
      */
     private static function literalKey(AddRemoveTaintsEvent $event, MethodCall $expr): ?string
     {
-        $args = $expr->getArgs();
+        $args = \array_values($expr->getArgs());
 
-        if ($args === [] || isset($args[1])) {
+        // `input(default: 'x')` has no key: the default must never be read as the field name.
+        $keyArg = ArgUtil::byNameOrPosition($args, 0, 'key');
+
+        if (isset($args[1]) || !$keyArg instanceof Arg) {
             return null;
         }
 
@@ -177,7 +182,7 @@ final class ValidatedFieldReadResolver
             return null;
         }
 
-        $type = $analyzer->node_data->getType($args[0]->value);
+        $type = $analyzer->node_data->getType($keyArg->value);
 
         if (!$type instanceof Union || !$type->isSingleStringLiteral()) {
             return null;
