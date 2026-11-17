@@ -8,9 +8,42 @@ namespace Illuminate\Support;
  * laravel/socialite), where every `Arr::` reference would be `UndefinedClass`.
  *
  * `random()` is not stubbed: its reflected conditional already resolves. The `Macroable` trait
- * is copied verbatim per stub convention; every static helper merges from reflection.
+ * is copied verbatim per stub convention; every other static helper merges from reflection.
+ *
+ * `map()` and `mapWithKeys()` are stubbed because Laravel types `map()` as a bare `array` and
+ * `mapWithKeys()` returns a bare `array` too (its own `@template`s only reach the parameters).
  */
 class Arr
 {
     use Traits\Macroable;
+
+    /**
+     * `array_combine($keys, ...)` in the runtime preserves the input keys, and the callback is
+     * retried with the value alone on `ArgumentCountError`, so a one-parameter callback is valid.
+     *
+     * @template TKey of array-key
+     * @template TValue
+     * @template TMapValue
+     *
+     * @param  array<TKey, TValue>  $array
+     * @param  callable(TValue, TKey): TMapValue  $callback
+     * @return array<TKey, TMapValue>
+     */
+    public static function map(array $array, callable $callback)
+    {
+    }
+
+    /**
+     * @template TKey
+     * @template TValue
+     * @template TMapWithKeysKey of array-key
+     * @template TMapWithKeysValue
+     *
+     * @param  array<TKey, TValue>  $array
+     * @param  callable(TValue, TKey): array<TMapWithKeysKey, TMapWithKeysValue>  $callback
+     * @return array<TMapWithKeysKey, TMapWithKeysValue>
+     */
+    public static function mapWithKeys(array $array, callable $callback)
+    {
+    }
 }
