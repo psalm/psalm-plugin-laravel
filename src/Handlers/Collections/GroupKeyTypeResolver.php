@@ -21,6 +21,7 @@ use Psalm\Type\Union;
  * `int` key are resolved.
  *
  * @internal
+ * @psalm-immutable
  */
 final class GroupKeyTypeResolver
 {
