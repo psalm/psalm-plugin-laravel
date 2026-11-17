@@ -13,11 +13,9 @@ use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
-use Psalm\Type\Atomic\TBool;
 use Psalm\Type\Atomic\TCallable;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
-use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
@@ -65,7 +63,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             }
 
             $model = ModelPropertyResolver::resolveExactlyOneModelClass($templates, 1, $lhs, $source->getCodebase());
-            $key = $model === null ? null : self::resolveKeyType(
+            $key = $model === null ? null : GroupKeyTypeResolver::resolve(
                 ModelPropertyHandler::resolveColumnType($source->getCodebase(), $model, $arg->getSingleStringLiteral()->value),
                 $source->getCodebase(),
             );
@@ -239,33 +237,5 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         return true;
-    }
-
-    /** @psalm-mutation-free */
-    private static function resolveKeyType(?Union $type, \Psalm\Codebase $codebase): ?Union
-    {
-        if (!$type instanceof Union) {
-            return null;
-        }
-
-        $atomics = $type->getAtomicTypes();
-        $atomic = reset($atomics);
-        if (\count($atomics) === 1 && $atomic instanceof TNamedObject) {
-            try {
-                return $codebase->classlike_storage_provider->get($atomic->value)->enum_type === 'int'
-                    ? Type::getInt()
-                    : null;
-            } catch (\InvalidArgumentException) {
-                return null;
-            }
-        }
-
-        foreach ($atomics as $atomic) {
-            if (!$atomic instanceof TInt && !$atomic instanceof TBool) {
-                return null;
-            }
-        }
-
-        return Type::getInt();
     }
 }
