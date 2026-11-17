@@ -6,8 +6,12 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 
 /**
  * Splits the SQL string of a migration's `DB::statement()` / `DB::unprepared()` call into
- * statements and drops comments (`-- ...`, `# ...`, `/* ... *\/`), leaving quoted text alone.
+ * statements and drops comments (`-- ...`, `# ...`, `/* ... *\/`), leaving quoted text alone, including
+ * Postgres dollar-quoted bodies (`$$ ... $$`, `$tag$ ... $tag$`).
  * A schema dump parser can then read each statement without phantom tables or lost columns.
+ *
+ * Accepted limits: `#` is always a MySQL comment, so a Postgres `#>>` operator or a SQLite `[x#y]` identifier
+ * drops the rest of its line and can lose that table, never invent one. Backslash escapes in quotes apply to every dialect.
  *
  * @internal
  * @psalm-immutable
@@ -29,6 +33,11 @@ final class RawSqlStatementSplitter
 
             if (in_array($char, ["'", '"', '`'], true)) {
                 $end = self::quoteEnd($sql, $i, $char);
+                $current .= \substr($sql, $i, $end - $i);
+                $i = $end - 1;
+            } elseif ($char === '$' && \preg_match('/\G(?:\$[A-Za-z_][A-Za-z_0-9]*\$|\$\$)/', $sql, $tag, 0, $i) === 1) {
+                $close = \strpos($sql, $tag[0], $i + \strlen($tag[0]));
+                $end = $close === false ? $length : $close + \strlen($tag[0]);
                 $current .= \substr($sql, $i, $end - $i);
                 $i = $end - 1;
             } elseif ($char === '#' || ($char === '-' && ($sql[$i + 1] ?? '') === '-')) {

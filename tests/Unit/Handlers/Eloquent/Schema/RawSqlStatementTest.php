@@ -381,4 +381,26 @@ final class RawSqlStatementTest extends AbstractSchemaAggregatorTestCase
         $this->assertTableHasNullableColumnOfType('note', 'string', $table);
         $this->assertTableHasNotNullableColumnOfType('url', 'string', $table);
     }
+
+    #[Test]
+    public function tables_created_inside_a_postgres_dollar_quoted_body_are_not_registered(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Support\Facades\DB;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    DB::unprepared(<<<'SQL'
+                        CREATE FUNCTION f() RETURNS void AS $$ BEGIN CREATE TABLE tmp1 (id int); CREATE TABLE tmp2 (id int); END; $$ LANGUAGE plpgsql;
+                        CREATE TABLE real (id int)
+                        SQL);
+                }
+            };
+            PHP);
+
+        $this->assertSame(['real'], \array_keys($schema->tables));
+    }
 }
