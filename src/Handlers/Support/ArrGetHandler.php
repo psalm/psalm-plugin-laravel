@@ -48,7 +48,8 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface
         }
 
         $args = $event->getCallArgs();
-        if (\count($args) < 2) {
+        // A spread may supply `$default` (or the key), so the call's shape is unprovable.
+        if (\count($args) < 2 || ArgUtil::hasUnpack($args)) {
             // Missing the required $key argument — not a valid call to narrow.
             return null;
         }

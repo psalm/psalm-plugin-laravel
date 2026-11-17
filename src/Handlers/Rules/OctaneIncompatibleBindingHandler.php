@@ -28,6 +28,7 @@ use Psalm\FileManipulation;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Blade\ShadowEntry;
 use Psalm\LaravelPlugin\Blade\ShadowRegistry;
+use Psalm\LaravelPlugin\Handlers\Application\ContainerResolver;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Issues\OctaneIncompatibleBinding;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
@@ -406,7 +407,8 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
 
     /**
      * From a make() / get() / app() / resolve() call, extract the first
-     * positional argument only, which is the "abstract" in Laravel's container API.
+     * positional argument, or the one named for it (`abstract`, `name`, `id`, wherever a named call put it),
+     * which is the "abstract" in Laravel's container API.
      * Extra arguments (parameters for makeWith) are not relevant to this rule.
      *
      * @psalm-return class-string|string|null
@@ -418,11 +420,9 @@ final class OctaneIncompatibleBindingHandler implements AfterMethodCallAnalysisI
             return null;
         }
 
-        foreach ($call->getArgs() as $arg) {
-            return self::literalAbstractFrom($arg->value);
-        }
+        $serviceArg = ContainerResolver::serviceArgument(\array_values($call->getArgs()));
 
-        return null;
+        return $serviceArg instanceof \PhpParser\Node\Arg ? self::literalAbstractFrom($serviceArg->value) : null;
     }
 
     /**

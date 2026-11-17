@@ -235,7 +235,8 @@ final class ModelPropertyResolver
         // Builder::pluck($column, $key) vs Collection::pluck($value, $key): a named call can reorder them.
         $valueArg = ArgUtil::byNameOrPosition($args, 0, $queryPath ? 'column' : 'value');
 
-        if (!$valueArg instanceof \PhpParser\Node\Arg) {
+        // A spread may supply `$key`, whose absence selects the sequential-key shape.
+        if (!$valueArg instanceof \PhpParser\Node\Arg || ArgUtil::hasUnpack($args)) {
             return null;
         }
 

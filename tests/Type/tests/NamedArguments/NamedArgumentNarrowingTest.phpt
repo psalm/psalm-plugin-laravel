@@ -31,6 +31,28 @@ function cache_key_written_second(): void
     /** @psalm-check-type-exact $_manager = mixed */
 }
 
+/** @param non-empty-list<string> $args */
+function spread_arguments_are_never_bound(array $args): void
+{
+    // A spread may fill any parameter: `cache(...$args)` can be a get, not a set
+    $_cache = cache(...$args);
+    /** @psalm-check-type-exact $_cache = mixed */
+
+    $_env = env(...$args);
+    /** @psalm-check-type-exact $_env = mixed */
+}
+
+/**
+ * @param array{a: int, b: string} $array
+ * @param array<array-key, mixed> $defaults
+ */
+function arr_get_with_spread(array $array, array $defaults): void
+{
+    // The spread may supply the default, which widens the type: the shape cannot be narrowed
+    $_spread = Arr::get($array, 'a', ...$defaults);
+    /** @psalm-check-type-exact $_spread = mixed */
+}
+
 /** @param array{a: int, b: string} $array */
 function arr_get_reordered(array $array): void
 {
@@ -68,6 +90,15 @@ function collection_pluck_reordered(Collection $customers): void
     $_named = $customers->pluck(key: 'id', value: 'email_verified_at');
     /** @psalm-check-type-exact $_positional = Collection<string, \Carbon\CarbonInterface|null> */
     /** @psalm-check-type-exact $_named = Collection<string, \Carbon\CarbonInterface|null> */
+}
+
+/** @param Collection<string, CollectionGroupingModel> $items */
+function key_by_named(Collection $items): void
+{
+    $_named = $items->keyBy(keyBy: 'foreign_id');
+    $_positional = $items->keyBy('foreign_id');
+    /** @psalm-check-type-exact $_named = Collection<int, CollectionGroupingModel> */
+    /** @psalm-check-type-exact $_positional = Collection<int, CollectionGroupingModel> */
 }
 
 function builder_pluck_reordered(): void

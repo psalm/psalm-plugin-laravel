@@ -539,6 +539,11 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         array $callArgs,
         MethodReturnTypeProviderEvent $event,
     ): ?Union {
+        // A spread may supply `$default`, whose absence leaves the bare rule type.
+        if (Arg::hasUnpack($callArgs)) {
+            return null;
+        }
+
         // `validated($key = null, $default = null)`: a named call can put the default first.
         $firstArgType = Arg::typeOf($callArgs, $event->getSource(), 0, 'key');
 

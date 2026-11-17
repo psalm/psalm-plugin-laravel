@@ -17,5 +17,16 @@ function storeWithReorderedNamedArguments(Request $request): RedirectResponse {
 
     return redirect()->to($request->input('email'));
 }
+
+/**
+ * `validateWithBag($errorBag, $rules)`: the rules are the second parameter, however they are written.
+ *
+ * @psalm-suppress MixedArgument
+ */
+function storeWithBagAndNamedRulesFirst(Request $request): RedirectResponse {
+    $request->validateWithBag(rules: ['email' => 'email'], errorBag: 'login');
+
+    return redirect()->to($request->input('email'));
+}
 ?>
 --EXPECTF--

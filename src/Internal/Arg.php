@@ -52,12 +52,16 @@ final class Arg
      * Not annotated mutation-free: `Identifier::toLowerString()` is not, and Psalm 6 rejects the
      * annotation on any caller of a method that lacks it.
      *
+     * An unpacked node (`...$x`) never binds to a parameter: how many parameters it fills is unknown, so the
+     * result is null. Callers that read "no argument" as a default (an absent `$default`, an absent `$key`)
+     * must also check {@see self::hasUnpack()}, since a spread may be supplying the absent parameter.
+     *
      * @param list<\PhpParser\Node\Arg> $args
      */
     public static function byNameOrPosition(array $args, int $index, string $paramName): ?\PhpParser\Node\Arg
     {
         if (isset($args[$index]) && $args[$index]->name === null) {
-            return $args[$index];
+            return $args[$index]->unpack ? null : $args[$index];
         }
 
         foreach ($args as $arg) {
@@ -67,6 +71,23 @@ final class Arg
         }
 
         return null;
+    }
+
+    /**
+     * Whether any argument is unpacked (`...$x`), which hides how many parameters the call supplies.
+     *
+     * @param list<\PhpParser\Node\Arg> $args
+     * @psalm-mutation-free
+     */
+    public static function hasUnpack(array $args): bool
+    {
+        foreach ($args as $arg) {
+            if ($arg->unpack) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

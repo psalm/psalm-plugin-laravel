@@ -41,7 +41,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         $method = $event->getMethodNameLowercase();
         $args = $event->getCallArgs();
         if (!\in_array($method, ['groupby', 'keyby'], true) || $args === []
-            || ($method === 'keyby' && \count($args) !== 1) || \count($args) > 2) {
+            || ($method === 'keyby' && \count($args) !== 1) || \count($args) > 2 || ArgUtil::hasUnpack($args)) {
             return null;
         }
 

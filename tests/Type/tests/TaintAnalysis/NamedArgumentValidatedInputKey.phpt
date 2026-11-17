@@ -19,6 +19,12 @@ final class NamedArgumentAgeRequest extends FormRequest
  * The key is the first parameter of `input($key = null, $default = null)`, not the first written
  * argument: a rule's escape applies to the field named by `$key` only.
  */
+function key_named(NamedArgumentAgeRequest $request): void
+{
+    // `age` is the key even when named, so the integer rule's escape still applies
+    echo $request->input(key: 'age');
+}
+
 function default_is_not_a_key(NamedArgumentAgeRequest $request): void
 {
     // No key: the whole (unvalidated) input is read, so the 'age' escape must not apply

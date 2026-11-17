@@ -48,7 +48,8 @@ final class ArrPluckHandler implements MethodReturnTypeProviderInterface
         }
 
         $args = $event->getCallArgs();
-        if (\count($args) < 2) {
+        // A spread may supply `$key`, whose absence selects the list shape below.
+        if (\count($args) < 2 || ArgUtil::hasUnpack($args)) {
             // Missing the required $value argument — not a valid call to narrow.
             return null;
         }

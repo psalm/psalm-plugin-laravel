@@ -130,10 +130,27 @@ final class ContainerResolver
     }
 
     /**
-     * The service is the first parameter of every resolving entry point, under a different name per
-     * method (`make($abstract, $parameters)`, `get($id)`, `offsetGet($offset)`), so a named call
+     * The service argument of a container call. It is the first parameter of every resolving entry point, under a
+     * different name per method (`make($abstract, $parameters)`, `resolve($name, $parameters)`, `get($id)`,
+     * `offsetGet($offset)`, which is `$key` before Laravel 13), so a named call
      * (`make(parameters: [...], abstract: X::class)`) is bound by whichever of them it uses.
      *
+     * @param list<Arg> $args
+     */
+    public static function serviceArgument(array $args): ?Arg
+    {
+        foreach (['abstract', 'name', 'id', 'offset', 'key'] as $paramName) {
+            $serviceArg = ArgUtil::byNameOrPosition($args, 0, $paramName);
+
+            if ($serviceArg instanceof Arg) {
+                return $serviceArg;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @param list<Arg> $call_args
      */
     public static function resolvePsalmTypeFromApplicationContainerViaArgs(
@@ -141,15 +158,7 @@ final class ContainerResolver
         array $call_args,
         Codebase $codebase,
     ): ?Union {
-        $serviceArg = null;
-
-        foreach (['abstract', 'id', 'offset'] as $paramName) {
-            $serviceArg = ArgUtil::byNameOrPosition($call_args, 0, $paramName);
-
-            if ($serviceArg instanceof Arg) {
-                break;
-            }
-        }
+        $serviceArg = self::serviceArgument($call_args);
 
         if (!$serviceArg instanceof Arg) {
             return null;
