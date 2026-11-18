@@ -24,6 +24,8 @@ final class Mechanic extends Model
     /** @var class-string<MechanicBuilder<static>> */
     protected static string $builder = MechanicBuilder::class;
 
+    public const SPECIALIZATION_ACCESSOR = 'certification';
+
     public function workOrders(): HasMany
     {
         return $this->hasMany(WorkOrder::class);
@@ -132,6 +134,18 @@ final class Mechanic extends Model
     public function workOrderTagsAccessorOnly(): MorphToMany
     {
         return $this->morphedByMany(WorkOrder::class, 'taggable')->as('meta');
+    }
+
+    /** An outer dynamic `as()` replaces the inner literal at runtime, so the accessor is unknown (#2348). */
+    public function specializationsDynamicAccessor(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as('inner')->as($this->getTable());
+    }
+
+    /** A constant accessor is not a literal in the relation body's AST, so the accessor is unknown (#2348). */
+    public function specializationsConstAccessor(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as(self::SPECIALIZATION_ACCESSOR);
     }
 
     /**

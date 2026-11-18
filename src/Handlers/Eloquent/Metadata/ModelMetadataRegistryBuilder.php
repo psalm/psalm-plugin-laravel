@@ -1155,7 +1155,7 @@ final class ModelMetadataRegistryBuilder
                 generics: [],
                 intermediateModel: $parsed['intermediateModel'],
                 pivotClass: $parsed['pivotModel'],
-                pivotAccessor: $parsed['accessor'],
+                pivotAccessor: \is_string($parsed['accessor']) ? $parsed['accessor'] : null,
             );
         }
 

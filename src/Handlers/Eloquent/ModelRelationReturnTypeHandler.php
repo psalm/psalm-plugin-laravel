@@ -296,7 +296,7 @@ final class ModelRelationReturnTypeHandler
      * returns null because its target is runtime-selected. Returns null when no statically
      * known target exists.
      *
-     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
+     * @param array{relationClass: class-string, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: string|false|null, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $parsed
      * @psalm-pure
      */
     private static function resolveRelatedModelType(array $parsed): ?Union
@@ -328,7 +328,7 @@ final class ModelRelationReturnTypeHandler
      *   (TResult) is filled implicitly by Psalm via the Through subclass's @template-extends.
      *
      * @param class-string $relationClass
-     * @param array{pivotModel: ?string, accessor: ?string, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, ...} $pivot
+     * @param array{pivotModel: ?string, accessor: string|false|null, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, ...} $pivot
      */
     private static function buildRelationType(
         Codebase $codebase,
@@ -390,7 +390,8 @@ final class ModelRelationReturnTypeHandler
             }
 
             $typeParams[] = new Union([$pivotType]);
-            $typeParams[] = new Union([TLiteralString::make($pivot['accessor'] ?? 'pivot')]);
+            // An `as()` the parser could not read (false) leaves TAccessor a plain string: no accessor is claimed.
+            $typeParams[] = new Union([$pivot['accessor'] === false ? new Type\Atomic\TString() : TLiteralString::make($pivot['accessor'] ?? 'pivot')]);
         }
 
         return new Union([new TGenericObject($relationClass, $typeParams)]);
