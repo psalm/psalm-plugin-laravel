@@ -107,7 +107,6 @@ final class UnregisteredRouteNameHandler implements FunctionReturnTypeProviderIn
     private static function hasMissingNamedRouteResolver(Application $app): bool
     {
         // ContainerHandler types this as UrlGenerator, but an application may rebind 'url' to any class.
-        /** @var mixed $url */
         $url = $app->make('url');
 
         if (!$url instanceof UrlGenerator) {
