@@ -25,7 +25,7 @@ function storeWildcardIndexed(Request $request): RedirectResponse {
     ]);
 
     (new \Illuminate\Http\Client\PendingRequest())->get($request->input('email.0'));
-    return redirect()->to($request->input('email.0'));
+    return redirect()->to('/')->header('X-Contact', $request->input('email.0'));
 }
 ?>
 --EXPECTF--

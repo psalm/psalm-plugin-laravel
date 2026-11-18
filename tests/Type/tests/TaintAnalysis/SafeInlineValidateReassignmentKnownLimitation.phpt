@@ -31,7 +31,7 @@ function reassignProbe(Request $request): RedirectResponse {
     // this is a very rare pattern — code that re-creates a Request object
     // by hand is almost exclusively in tests or low-level framework code.
     (new \Illuminate\Http\Client\PendingRequest())->get($request->input('contact_email'));
-    return redirect()->to($request->input('contact_email'));
+    return redirect()->to('/')->header('X-Contact', $request->input('contact_email'));
 }
 ?>
 --EXPECTF--

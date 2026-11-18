@@ -24,7 +24,7 @@ final class FluentEmailRequest extends FormRequest
 
 function direct(FluentEmailRequest $request): \Illuminate\Http\RedirectResponse {
     (new \Illuminate\Http\Client\PendingRequest())->get($request->safe()->input('team_email'));
-    return redirect()->to($request->safe()->input('team_email'));
+    return redirect()->to('/')->header('X-Contact', $request->safe()->input('team_email'));
 }
 ?>
 --EXPECTF--

@@ -64,7 +64,7 @@ final class ValidationRuleAnalyzer
         // Mirrors the 'email' string rule: Laravel's email validators reject
         // raw whitespace and control characters, so the value is safe for
         // header/cookie sinks. Other taints (HTML, SQL, …) are preserved.
-        'illuminate\\validation\\rules\\email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE | TaintKind::INPUT_REDIRECT,
+        'illuminate\\validation\\rules\\email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
         // Mirrors the 'numeric' string rule: the value contains no meta-chars.
         'illuminate\\validation\\rules\\numeric' => TaintKind::ALL_INPUT,
         // Mirrors the 'in:' string rule: whitelist-bounded values.
@@ -704,8 +704,9 @@ final class ValidationRuleAnalyzer
             // inside quoted-strings; if that matters, switch the rule to
             // `email:strict` or `email:filter`. The plugin does not yet distinguish
             // these modes, so we take the pragmatic stance.
-            // An email address has no scheme nor `//`: a redirect to it stays on the application.
-            'email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE | TaintKind::INPUT_REDIRECT,
+            // A redirect to an email address can still leave the application: `//evil.example@x.example` is a
+            // valid address and a URL of the server x.example, so the redirect taint stays.
+            'email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
             // URLs: filter_var / RFC validation rejects CRLF and raw whitespace,
             // so it's safe for header/cookie sinks. A validated URL is still the
             // primary SSRF vector, and path / query components may carry HTML,

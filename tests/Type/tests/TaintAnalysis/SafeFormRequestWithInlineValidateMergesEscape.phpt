@@ -40,7 +40,7 @@ function storeMerge(MergeRequest $request): \Illuminate\Http\RedirectResponse {
     ]);
 
     (new \Illuminate\Http\Client\PendingRequest())->get($request->input('email'));
-    return redirect()->to($request->input('email'));
+    return redirect()->to('/')->header('X-Contact', $request->input('email'));
 }
 ?>
 --EXPECTF--
