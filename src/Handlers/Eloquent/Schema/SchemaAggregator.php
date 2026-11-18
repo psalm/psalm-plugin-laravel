@@ -543,7 +543,8 @@ final class SchemaAggregator
                         break;
 
                     case 'remembertoken':
-                        $table->setColumn(new SchemaColumn('remember_token', 'string', $nullable));
+                        // Blueprint::rememberToken() always chains ->nullable() internally.
+                        $table->setColumn(new SchemaColumn('remember_token', 'string', true));
                         break;
 
                     case 'dropremembertoken':
