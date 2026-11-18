@@ -339,8 +339,6 @@ final class SchemaAggregator
 
     /**
      * True when the callback's parameter is typed as a class other than Blueprint.
-     *
-     * @psalm-pure
      */
     private function isForeignParamType(?PhpParser\Node $type): bool
     {
