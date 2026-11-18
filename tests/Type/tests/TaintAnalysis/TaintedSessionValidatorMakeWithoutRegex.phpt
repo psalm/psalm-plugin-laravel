@@ -7,7 +7,7 @@
  * A rule of another key, or none restricting the characters, doesn't validate the value for the session.
  */
 function rememberAgent(\Illuminate\Http\Request $request): void {
-    $agent = trim((string) $request->header('User-Agent', ''));
+    $agent = trim($request->header('User-Agent', ''));
     $validator = \Illuminate\Support\Facades\Validator::make(
         ['agent' => $agent],
         ['agent' => 'required|string', 'name' => ['regex:#^[a-z]+$#']],
