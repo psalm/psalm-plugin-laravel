@@ -37,8 +37,11 @@ use Psalm\Type\Union;
  * and pivot is renamed with the relation's result; callback params (`chunk()`, `each()`, a `chunkMap()` identity)
  * keep `pivot`, since Psalm types a closure before the call resolves; first-class callables skip this hook. Psalm does
  * not track the receiver object: an in-place `as()` on an alias, or after `lazy()` / `cursor()` was called, is not
- * seen, nor is an `as()` inside a registered relation macro in a relation body. `create()` / `save()` results carry
- * the stubs' pivot promise although Laravel loads no pivot there (pre-existing).
+ * seen, nor is an `as()` inside a registered relation macro in a relation body. An accessor named like a relation method
+ * of the related model (`as('mechanics')`) is renamed, but reading `->mechanics` still resolves through that relation
+ * property: Psalm consults an object-shape property only when the ordinary one is absent, while Laravel returns the
+ * loaded pivot. `create()` / `save()` results carry the stubs' pivot promise although Laravel loads no pivot there
+ * (pre-existing).
  *
  * @todo-by https://github.com/vimeo/psalm/issues/14196 remove this handler and its Plugin.php registration once Psalm resolves template-valued shape keys; write object{TAccessor: TPivotModel} in the stubs instead
  *

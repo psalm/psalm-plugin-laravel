@@ -19,6 +19,9 @@ use App\Models\Mechanic;
  * - A registered relation macro (`BelongsToMany::macro()`, run by `Relation::__call` on the relation itself) may call
  *   `as()`: the parser keeps the accessor it read before the macro. Scopes and Builder macros are forwarded to the
  *   query and cannot change it.
+ * - An accessor named like a relation method of the related model types the result's shape, but reading it still
+ *   resolves to that relation's property: Psalm prefers the ordinary property over the object shape, while Laravel
+ *   returns the loaded pivot.
  */
 function accessor_known_limitations(Mechanic $mechanic): void
 {
@@ -53,6 +56,9 @@ function accessor_known_limitations(Mechanic $mechanic): void
 
     $_relation_macro = $mechanic->specializationsAccessorMacro()->firstOrFail();
     /** @psalm-trace $_relation_macro */
+
+    $_relation_named = $mechanic->specializations()->as('mechanics')->firstOrFail()->mechanics;
+    /** @psalm-trace $_relation_named */
 }
 ?>
 --EXPECTF--
@@ -66,3 +72,4 @@ Trace on line %d: $_first_or_nested: App\Models\MechanicSpecialization&object{de
 Trace on line %d: $_through_alias: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}
 Trace on line %d: $_deferred: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}|null
 Trace on line %d: $_relation_macro: App\Models\MechanicSpecialization&object{first:Illuminate\Database\Eloquent\Relations\Pivot}
+Trace on line %d: $_relation_named: Illuminate\Database\Eloquent\Collection<int, App\Models\Mechanic&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}>
