@@ -340,34 +340,12 @@ final class SchemaAggregator
     /**
      * True when the callback's parameter is typed as a class other than Blueprint.
      *
-     * Psalm's name resolver skips arrow function signatures, so their class names carry no
-     * `resolvedName` attribute. For those, a fully qualified name is compared exactly and any other
-     * name falls back to its last segment.
-     *
-     * Known limits of the fallback (pinned by ArrowFunctionBlueprintAliasKnownLimitationTest):
-     * - a foreign class literally named `Blueprint` is treated as Blueprint;
-     * - `use ...\Blueprint as B;` with `fn (B $table)` is declined, which drops the whole table.
-     *
-     * @todo-by https://github.com/vimeo/psalm/pull/14134 drop the written-name fallback and compare resolvedName only once the plugin's Psalm floor includes this fix
+     * @psalm-pure
      */
     private function isForeignParamType(?PhpParser\Node $type): bool
     {
-        if (!$type instanceof PhpParser\Node\Name) {
-            return false;
-        }
-
-        /** @psalm-var ?string $resolved */
-        $resolved = $type->getAttribute('resolvedName');
-
-        if (\is_string($resolved)) {
-            return $resolved !== Blueprint::class;
-        }
-
-        if ($type instanceof PhpParser\Node\Name\FullyQualified) {
-            return $type->toString() !== Blueprint::class;
-        }
-
-        return $type->getLast() !== 'Blueprint';
+        return $type instanceof PhpParser\Node\Name
+            && $type->getAttribute('resolvedName') !== Blueprint::class;
     }
 
     /**

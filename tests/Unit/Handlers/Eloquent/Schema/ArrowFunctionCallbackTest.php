@@ -156,4 +156,44 @@ final class ArrowFunctionCallbackTest extends AbstractSchemaAggregatorTestCase
 
         $this->assertArrayNotHasKey('tags', $schema->tables);
     }
+
+    #[Test]
+    public function arrow_function_with_imported_foreign_blueprint_is_declined(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Foo\Blueprint;
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create('tags', fn (Blueprint $table) => $table->string('a'));
+                }
+            };
+            PHP);
+
+        $this->assertArrayNotHasKey('tags', $schema->tables);
+    }
+
+    #[Test]
+    public function arrow_function_with_aliased_blueprint_is_accepted(): void
+    {
+        $schema = $this->schemaFromMigration(<<<'PHP'
+            <?php
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint as B;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create('tags', fn (B $table) => $table->string('a'));
+                }
+            };
+            PHP);
+
+        $this->assertTableHasNotNullableColumnOfType('a', 'string', $schema->tables['tags']);
+    }
 }
