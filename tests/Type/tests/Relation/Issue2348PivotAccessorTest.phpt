@@ -37,6 +37,8 @@ function accessor_renames_every_result_surface(Mechanic $mechanic): void
     $_find_or_fail = $relation->findOrFail(1);
     /** @psalm-trace $_find_or_fail */
 
+    // The callback's `|1` branch is missing because the stub's findOr($id, Closure) form never binds TValue
+    // (pre-existing stub gap); only the pivot key matters here.
     $_find_or = $relation->findOr(1, static fn (): int => 1);
     /** @psalm-trace $_find_or */
 
@@ -90,7 +92,7 @@ function accessor_renames_every_result_surface(Mechanic $mechanic): void
 }
 
 /** The accessor reaches the result whichever way the relation type got it. */
-function accessor_follows_the_relation_type(Mechanic $mechanic): void
+function accessor_follows_the_relation_type(Mechanic $mechanic, ?Mechanic $maybe): void
 {
     $_delegated = $mechanic->specializationProfiles()->firstOrFail();
     /** @psalm-trace $_delegated */
@@ -121,6 +123,15 @@ function accessor_follows_the_relation_type(Mechanic $mechanic): void
     $in_place->as('subscription');
     $_in_place = $in_place->firstOrFail();
     /** @psalm-trace $_in_place */
+
+    $_nullsafe = $maybe?->specializationsAccessorOnly()->firstOrFail();
+    /** @psalm-trace $_nullsafe */
+
+    $_class_constant = $mechanic->specializationsConstAccessor()->firstOrFail();
+    /** @psalm-trace $_class_constant */
+
+    $_declared = $mechanic->specializationsDeclaredAccessor()->firstOrFail();
+    /** @psalm-trace $_declared */
 }
 ?>
 --EXPECTF--
@@ -159,3 +170,6 @@ Trace on line %d: $_as_then_with_pivot: App\Models\MechanicSpecialization&object
 Trace on line %d: $_with_pivot_then_as: App\Models\MechanicSpecialization&object{subscription:Illuminate\Database\Eloquent\Relations\Pivot&object{active:mixed}}
 Trace on line %d: $_last_as_wins: App\Models\MechanicSpecialization&object{subscription:Illuminate\Database\Eloquent\Relations\Pivot}
 Trace on line %d: $_in_place: App\Models\MechanicSpecialization&object{subscription:Illuminate\Database\Eloquent\Relations\Pivot}
+Trace on line %d: $_nullsafe: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}|null
+Trace on line %d: $_class_constant: App\Models\MechanicSpecialization&object{certification:Illuminate\Database\Eloquent\Relations\Pivot}
+Trace on line %d: $_declared: App\Models\MechanicSpecialization&object{declared:Illuminate\Database\Eloquent\Relations\Pivot}

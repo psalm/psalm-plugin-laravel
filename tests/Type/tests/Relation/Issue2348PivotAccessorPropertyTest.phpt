@@ -1,6 +1,7 @@
 --FILE--
 <?php declare(strict_types=1);
 
+use App\Models\BaseCollectionCustomer;
 use App\Models\Mechanic;
 use App\Models\WorkOrder;
 
@@ -9,7 +10,7 @@ use App\Models\WorkOrder;
  * relation's full pivot type (`using()` class, `withPivot()` columns) and the related model's custom collection
  * (#2348). Traces, not check-type: Psalm compares object shapes inside an intersection by name only.
  */
-function pivot_relation_property_carries_the_accessor(Mechanic $mechanic, WorkOrder $order): void
+function pivot_relation_property_carries_the_accessor(Mechanic $mechanic, WorkOrder $order, BaseCollectionCustomer $child): void
 {
     $_default = $mechanic->specializations;
     /** @psalm-trace $_default */
@@ -37,6 +38,20 @@ function pivot_relation_property_carries_the_accessor(Mechanic $mechanic, WorkOr
 
     $_details = $mechanic->specializationsAccessorOnly->firstOrFail()->details;
     /** @psalm-trace $_details */
+
+    $_class_constant = $mechanic->specializationsConstAccessor;
+    /** @psalm-trace $_class_constant */
+
+    $_declared = $mechanic->specializationsDeclaredAccessor;
+    /** @psalm-trace $_declared */
+
+    // Laravel throws for a relation method that returns null, so the property is the relation's collection.
+    $_nullable = $mechanic->nullableSpecializations;
+    /** @psalm-trace $_nullable */
+
+    // A relation method inherited from the parent model class.
+    $_inherited = $child->bookmarkedAdmins;
+    /** @psalm-trace $_inherited */
 }
 
 /** An unknown accessor invents no key, and other collection relations are untouched. */
@@ -45,8 +60,11 @@ function property_without_a_provable_pivot_key(Mechanic $mechanic): void
     $_dynamic = $mechanic->specializationsDynamicAccessor;
     /** @psalm-trace $_dynamic */
 
-    $_const = $mechanic->specializationsConstAccessor;
-    /** @psalm-trace $_const */
+    $_branch = $mechanic->specializationsBranchAccessor;
+    /** @psalm-trace $_branch */
+
+    $_opaque_link = $mechanic->specializationsOpaqueLink;
+    /** @psalm-trace $_opaque_link */
 
     $_has_many = $mechanic->workOrders;
     /** @psalm-trace $_has_many */
@@ -62,6 +80,11 @@ Trace on line %d: $_custom_collection: App\Collections\PartCollection<int, App\M
 Trace on line %d: $_morph_to_many: App\Collections\WorkOrderCollection<int, App\Models\WorkOrder&object{meta:Illuminate\Database\Eloquent\Relations\MorphPivot}>
 Trace on line %d: $_morph_to_many_default: Illuminate\Database\Eloquent\Collection<int, App\Models\Admin&object{pivot:Illuminate\Database\Eloquent\Relations\MorphPivot}>
 Trace on line %d: $_details: Illuminate\Database\Eloquent\Relations\Pivot
+Trace on line %d: $_class_constant: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization&object{certification:Illuminate\Database\Eloquent\Relations\Pivot}>
+Trace on line %d: $_declared: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization&object{declared:Illuminate\Database\Eloquent\Relations\Pivot}>
+Trace on line %d: $_nullable: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}>
+Trace on line %d: $_inherited: Illuminate\Database\Eloquent\Collection<int, App\Models\Admin&object{pivot:Illuminate\Database\Eloquent\Relations\MorphPivot}>
 Trace on line %d: $_dynamic: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization>
-Trace on line %d: $_const: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization>
+Trace on line %d: $_branch: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization>
+Trace on line %d: $_opaque_link: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization>
 Trace on line %d: $_has_many: App\Collections\WorkOrderCollection<int, App\Models\WorkOrder>

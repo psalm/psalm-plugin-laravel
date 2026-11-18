@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
@@ -133,7 +134,7 @@ final class ModelRelationshipPropertyHandler
         }
 
         $result = self::withPivotShape(
-            $codebase,
+            $source,
             $fq_classlike_name,
             $property_name,
             self::resolvePropertyType($codebase, $fq_classlike_name, $property_name, $cacheKey),
@@ -148,7 +149,7 @@ final class ModelRelationshipPropertyHandler
      * pivot and accessor of the relation a call of the method returns ({@see ModelRelationReturnTypeHandler::callSiteType()},
      * else the declaration). Unchanged when the accessor is not exactly one literal ({@see PivotAccessorHandler::accessor()}).
      */
-    private static function withPivotShape(Codebase $codebase, string $fq_classlike_name, string $property_name, Union $result): Union
+    private static function withPivotShape(\Psalm\StatementsSource $source, string $fq_classlike_name, string $property_name, Union $result): Union
     {
         $collection = $result->isSingle() ? $result->getSingleAtomic() : null;
         if (!$collection instanceof TGenericObject || \count($collection->type_params) !== 2 || !$collection->type_params[1]->isSingle()) {
@@ -160,10 +161,15 @@ final class ModelRelationshipPropertyHandler
             return $result;
         }
 
-        $relationType = ModelRelationReturnTypeHandler::callSiteType($codebase, $fq_classlike_name, $fq_classlike_name, \strtolower($property_name), false)
+        // An inherited relation method parses in the class it appears in, bound to this one, as a call does.
+        $codebase = $source->getCodebase();
+        $methodName = \strtolower($property_name);
+        $appearing = $codebase->methods->getAppearingMethodId(MethodIdentifier::wrap($fq_classlike_name . '::' . $methodName));
+        $relationType = ModelRelationReturnTypeHandler::callSiteType($codebase, $appearing?->fq_class_name ?? $fq_classlike_name, $fq_classlike_name, $methodName, false)
             ?? self::$methodReturnTypeCache[$fq_classlike_name . '::' . $property_name] ?? null;
-        $relation = $relationType?->isSingle() === true ? $relationType->getSingleAtomic() : null;
-        $accessor = $relation instanceof TGenericObject ? PivotAccessorHandler::accessor($relation) : null;
+        // A null return makes Laravel throw on the property, so only the relation branch is its type.
+        $relation = PivotAccessorHandler::relation($relationType);
+        $accessor = $relation instanceof TGenericObject ? PivotAccessorHandler::accessor($codebase, $source, $relation) : null;
         if ($accessor === null || !$relation instanceof TGenericObject) {
             return $result;
         }

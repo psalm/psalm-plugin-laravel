@@ -8,8 +8,12 @@ use App\Models\Mechanic;
  *
  * - Callback params keep `pivot`: Psalm types a closure argument before the call resolves.
  * - A first-class callable skips the after-call hook, so its return keeps `pivot`.
- * - A `firstOr()` callback returning the same model and pivot type is renamed with the relation's own result:
- *   the two branches are one type, and the callback's value really carries `pivot`.
+ * - A `firstOr()` / `findOr()` callback value of the relation's own model with the same pivot type, bare or nested
+ *   (`['cached' => $model]`), is renamed with the relation's result: Psalm returns one type for both branches, so the
+ *   callback's model is indistinguishable, although it really carries `pivot`. Other models keep `pivot`
+ *   (Issue2348PivotAccessorDeclinesTest.phpt).
+ * - Psalm does not track the relation object: an `as()` on an alias, or after `lazy()` / `cursor()` built a deferred
+ *   result, changes the runtime key but not the inferred one.
  */
 function accessor_known_limitations(Mechanic $mechanic): void
 {
@@ -27,6 +31,20 @@ function accessor_known_limitations(Mechanic $mechanic): void
     $_first_or_same_shape = $mechanic->specializationsAccessorOnly()
         ->firstOr(static fn () => $mechanic->specializations()->firstOrFail());
     /** @psalm-trace $_first_or_same_shape */
+
+    $_first_or_nested = $mechanic->specializationsAccessorOnly()
+        ->firstOr(static fn () => ['cached' => $mechanic->specializations()->firstOrFail()]);
+    /** @psalm-trace $_first_or_nested */
+
+    $relation = $mechanic->specializationsAccessorOnly();
+    $alias = $relation;
+    $lazy = $relation->lazy();
+    $alias->as('later');
+    $_through_alias = $relation->firstOrFail();
+    /** @psalm-trace $_through_alias */
+
+    $_deferred = $lazy->first();
+    /** @psalm-trace $_deferred */
 }
 ?>
 --EXPECTF--
@@ -36,3 +54,6 @@ UnusedClosureParam on line %d: Param chunk is never referenced in this method
 Trace on line %d: $chunk: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}>
 Trace on line %d: $_first_class_callable: Closure[impure](%s):App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}
 Trace on line %d: $_first_or_same_shape: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}
+Trace on line %d: $_first_or_nested: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}|array{cached: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}}
+Trace on line %d: $_through_alias: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}
+Trace on line %d: $_deferred: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}|null

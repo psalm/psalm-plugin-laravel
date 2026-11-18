@@ -142,7 +142,7 @@ final class Mechanic extends Model
         return $this->belongsToMany(MechanicSpecialization::class)->as('inner')->as($this->getTable());
     }
 
-    /** A constant accessor is not a literal in the relation body's AST, so the accessor is unknown (#2348). */
+    /** A class constant resolves to its literal accessor (#2348). */
     public function specializationsConstAccessor(): BelongsToMany
     {
         return $this->belongsToMany(MechanicSpecialization::class)->as(self::SPECIALIZATION_ACCESSOR);
@@ -152,6 +152,53 @@ final class Mechanic extends Model
     public function specializationNotes()
     {
         return $this->belongsToMany(MechanicSpecialization::class)->withPivot('notes')->as('note');
+    }
+
+    /** @psalm-return BelongsToMany<MechanicSpecialization, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'details'>|null */
+    public function nullableSpecializations(): ?BelongsToMany
+    {
+        if (!$this->exists) {
+            return null;
+        }
+
+        return $this->belongsToMany(MechanicSpecialization::class)->as('details');
+    }
+
+    /** Returns that differ only in the accessor leave it unknown and keep the related model (#2348). */
+    public function specializationsBranchAccessor(): BelongsToMany
+    {
+        if ($this->exists) {
+            return $this->belongsToMany(MechanicSpecialization::class)->as($this->getTable());
+        }
+
+        return $this->belongsToMany(MechanicSpecialization::class);
+    }
+
+    /**
+     * A dynamic outer `as()` on a delegated relation: the accessor is unknown, the delegate's pivot stays (#2348).
+     * The omitted TAccessor slot is no accessor promise.
+     *
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this, SpecializationPivot>
+     */
+    public function specializationsDelegatedDynamic(): BelongsToMany
+    {
+        return $this->specializationsWithPivot()->as($this->getTable());
+    }
+
+    /**
+     * A declared literal accessor stands in for one the body does not show (#2348).
+     *
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'declared'>
+     */
+    public function specializationsDeclaredAccessor(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as($this->getTable());
+    }
+
+    /** An unknown link (a relation macro) after the last `as()` may set another accessor (#2348). */
+    public function specializationsOpaqueLink(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as('first')->rewriteAccessor();
     }
 
     /**
