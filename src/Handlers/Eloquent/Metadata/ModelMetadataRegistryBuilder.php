@@ -245,12 +245,8 @@ final class ModelMetadataRegistryBuilder
                 $completeSections,
                 $failures,
                 static function () use ($reflection): Model {
-                    $instance = $reflection->newInstanceWithoutConstructor();
-                    if (!$instance instanceof Model) {
-                        throw new \UnexpectedValueException('Reflection did not create an Eloquent model');
-                    }
-
-                    return $instance;
+                    // $reflection is ReflectionClass<Model> (built from a class-string<Model>), so this is a Model.
+                    return $reflection->newInstanceWithoutConstructor();
                 },
                 null,
             );

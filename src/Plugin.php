@@ -975,6 +975,8 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
             return;
         }
 
+        // ContainerHandler types this as Translator, but an application may rebind 'translator' to any class.
+        /** @psalm-var mixed $translator */
         $translator = $app->make('translator');
 
         if (!$translator instanceof \Illuminate\Translation\Translator) {
@@ -1143,6 +1145,8 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         }
 
         try {
+            // ContainerHandler types this as Factory, but an application may rebind 'view' to any class.
+            /** @psalm-var mixed $factory */
             $factory = $app->make('view');
         } catch (\Throwable $throwable) {
             // A throwing 'view' binding (e.g. a closure needing runtime-only state a
