@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794959566614,
+  "lastUpdate": 1794963824369,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19450,6 +19450,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.37,
             "range": "± 0.16",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1233,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ff12588a0cb31c837146255679be5254c034498",
+          "message": "Read migration columns from arrow function `Schema::create()` and `Schema::table()` callbacks (#2350)\n\n* feat(schema): read Blueprint columns from arrow function migration callbacks\n\nSchema::create(), Schema::table() and Blueprint::after() callbacks written as fn (Blueprint $table) => ... were ignored. Psalm's name resolver skips arrow function signatures, so the Blueprint parameter type check falls back to the written class name.\n\nFixes #2338\n\n* docs(schema): link upstream fix for arrow function name resolution\n\nPsalm's SimpleNameResolver skips ArrowFunction signatures; the written-name fallback in isForeignParamType() is a workaround until vimeo/psalm#14134 lands.\n\n* style: apply rector and php-cs-fixer\n\n* fix(schema): compare fully qualified arrow function Blueprint types exactly\n\nPins the written-name fallback limits in a KnownLimitation test and documents them; see vimeo/psalm#14134.\n\n* fix(schema): rely on resolved names for arrow function Blueprint callbacks\n\nPsalm now resolves class names in arrow function signatures (vimeo/psalm#14134), so the written-name fallback and its known limitations are gone: an imported foreign Blueprint is declined and an aliased Blueprint is accepted, exactly like closures.\n\n* chore(deps): require Psalm 7.10 for arrow function name resolution\n\nPsalm 7.10.0 ships vimeo/psalm#14134, which the arrow function Blueprint callback check relies on.\n\n* fix(schema): drop the pure annotation from isForeignParamType\n\n* build: require Psalm 7.10 and fix the findings it surfaces\n\n- Bump vimeo/psalm to ^7.10.0 in composer.json and the tests.yml install step.\n- Psalm 7.10 narrows exhausted instanceof checks to never (vimeo/psalm#14048): widen the container resolutions of url, translator and view to mixed so the runtime guards stay honest, and drop the unreachable Model guard around ReflectionClass<Model>::newInstanceWithoutConstructor().\n- Expect the InvalidArgument 7.10 reports for a numeric-string factory() count in FactoryCountInferenceTest.\n\n* style: apply rector and php-cs-fixer\n\n* fix: keep the mixed container resolutions through Rector with @psalm-var\n\nRector strips a plain @var mixed, which brought back the Psalm 7.10 TypeDoesNotContainType findings.",
+          "timestamp": "2026-11-18T01:59:25+01:00",
+          "tree_id": "7d770c61e8d9257ddab0d8bd70a2e7b7cc782c36",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0ff12588a0cb31c837146255679be5254c034498"
+        },
+        "date": 1794963822166,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.72,
+            "range": "± 0.13",
             "unit": "s"
           },
           {
