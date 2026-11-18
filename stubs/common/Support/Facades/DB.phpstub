@@ -39,6 +39,7 @@ class DB extends Facade
      * @return list<\stdClass>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings rows
      */
     public static function select($query, $bindings = [], $useReadPdo = true) {}
 
@@ -50,6 +51,7 @@ class DB extends Facade
      * @return bool
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public static function statement($query, $bindings = []) {}
 
@@ -61,6 +63,7 @@ class DB extends Facade
      * @return int
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public static function affectingStatement($query, $bindings = []) {}
 
@@ -71,6 +74,7 @@ class DB extends Facade
      * @return bool
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query none
      */
     public static function unprepared($query) {}
 
@@ -83,6 +87,7 @@ class DB extends Facade
      * @return \stdClass|null
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings result
      */
     public static function selectOne($query, $bindings = [], $useReadPdo = true) {}
 
@@ -95,6 +100,7 @@ class DB extends Facade
      * @return \Generator<int, \stdClass>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings rows
      */
     public static function cursor($query, $bindings = [], $useReadPdo = true) {}
 
@@ -106,6 +112,7 @@ class DB extends Facade
      * @return bool
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public static function insert($query, $bindings = []) {}
 
@@ -117,6 +124,7 @@ class DB extends Facade
      * @return int
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public static function update($query, $bindings = []) {}
 
@@ -128,6 +136,7 @@ class DB extends Facade
      * @return int
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public static function delete($query, $bindings = []) {}
 
@@ -140,6 +149,7 @@ class DB extends Facade
      * @return string|int|float|bool|null
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings value
      */
     public static function scalar($query, $bindings = [], $useReadPdo = true) {}
 
@@ -151,6 +161,7 @@ class DB extends Facade
      * @return list<\stdClass>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings rows
      */
     public static function selectFromWriteConnection($query, $bindings = []) {}
 
@@ -163,6 +174,7 @@ class DB extends Facade
      * @return list<list<\stdClass>>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings rows
      */
     public static function selectResultSets($query, $bindings = [], $useReadPdo = true) {}
 
