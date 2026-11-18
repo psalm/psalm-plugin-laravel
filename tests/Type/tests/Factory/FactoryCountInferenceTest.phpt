@@ -135,6 +135,9 @@ $_stateNamed = User::factory(state: ['admin' => true])->make();
 $_three = User::factory(3)->create();
 /** @psalm-check-type-exact $_three = Collection<int, User> */;
 
+// Laravel counts a numeric string at runtime (`is_numeric($count)`), and the plugin infers the plural result for it,
+// but HasFactory::factory() documents `$count` as `int|array|callable|null`. Psalm 7.10 reports the documented
+// contract violation (InvalidArgument below); the inference is pinned regardless.
 $_numericString = User::factory('3')->create();
 /** @psalm-check-type-exact $_numericString = Collection<int, User> */;
 
@@ -266,3 +269,4 @@ $_nativeSelf = User::factory(3)->nativeSelf()->create();
 /** @psalm-check-type-exact $_nativeSelf = User|Collection<int, User> */;
 ?>
 --EXPECTF--
+InvalidArgument on line %d: Argument 1 of App\Sandbox\CountInference\User::factory expects %s, but '3' provided
