@@ -298,10 +298,9 @@ final class SchemaAggregator
         if (
             !isset($call->args[1])
             || !$call->args[1] instanceof PhpParser\Node\Arg
-            || !$call->args[1]->value instanceof PhpParser\Node\Expr\Closure
+            || !$this->isBlueprintCallback($call->args[1]->value)
             || \count($call->args[1]->value->params) < 1
-            || ($call->args[1]->value->params[0]->type instanceof PhpParser\Node\Name
-                && $call->args[1]->value->params[0]->type->getAttribute('resolvedName') !== Blueprint::class)
+            || $this->isForeignParamType($call->args[1]->value->params[0]->type)
         ) {
             return;
         }
@@ -315,7 +314,7 @@ final class SchemaAggregator
             $this->tables[$table_name] = new SchemaTable();
         }
 
-        $update_closure = $call->args[1]->value;
+        $callback = $call->args[1]->value;
 
         if (
             $call->args[1]->value->params[0]->var instanceof PhpParser\Node\Expr\Variable
@@ -323,8 +322,40 @@ final class SchemaAggregator
         ) {
             $call_arg_name = $call->args[1]->value->params[0]->var->name;
 
-            $this->processColumnUpdates($table_name, $call_arg_name, $update_closure->stmts);
+            $this->processColumnUpdates($table_name, $call_arg_name, $this->callbackStatements($callback));
         }
+    }
+
+    /**
+     * Blueprint callbacks are written as `function (Blueprint $table) {...}` or `fn (Blueprint $table) => ...`.
+     *
+     * @psalm-assert-if-true PhpParser\Node\Expr\Closure|PhpParser\Node\Expr\ArrowFunction $expr
+     * @psalm-pure
+     */
+    private function isBlueprintCallback(PhpParser\Node\Expr $expr): bool
+    {
+        return $expr instanceof PhpParser\Node\Expr\Closure || $expr instanceof PhpParser\Node\Expr\ArrowFunction;
+    }
+
+    /**
+     * True when the callback's parameter is typed as a class other than Blueprint.
+     */
+    private function isForeignParamType(?PhpParser\Node $type): bool
+    {
+        return $type instanceof PhpParser\Node\Name
+            && $type->getAttribute('resolvedName') !== Blueprint::class;
+    }
+
+    /**
+     * An arrow function body is a single expression, handled as a closure with one expression statement.
+     *
+     * @return array<array-key, PhpParser\Node\Stmt>
+     */
+    private function callbackStatements(PhpParser\Node\Expr\Closure|PhpParser\Node\Expr\ArrowFunction $callback): array
+    {
+        return $callback instanceof PhpParser\Node\Expr\ArrowFunction
+            ? [new PhpParser\Node\Stmt\Expression($callback->expr)]
+            : $callback->stmts;
     }
 
     private function dropTable(PhpParser\Node\Expr\StaticCall|PhpParser\Node\Expr\MethodCall $call): void
@@ -744,12 +775,13 @@ final class SchemaAggregator
 
                 case 'after':
                     if (
-                        $second_arg instanceof PhpParser\Node\Expr\Closure
+                        $second_arg !== null
+                        && $this->isBlueprintCallback($second_arg)
                         && \count($second_arg->params) >= 1
                         && $second_arg->params[0]->var instanceof PhpParser\Node\Expr\Variable
                         && \is_string($second_arg->params[0]->var->name)
                     ) {
-                        $this->processColumnUpdates($table_name, $second_arg->params[0]->var->name, $second_arg->stmts);
+                        $this->processColumnUpdates($table_name, $second_arg->params[0]->var->name, $this->callbackStatements($second_arg));
                     }
 
                     break;
