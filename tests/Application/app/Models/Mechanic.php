@@ -148,6 +148,12 @@ final class Mechanic extends Model
         return $this->belongsToMany(MechanicSpecialization::class)->as(self::SPECIALIZATION_ACCESSOR);
     }
 
+    /** Untyped relation: related model, pivot columns and accessor come from the body alone (#2348). */
+    public function specializationNotes()
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->withPivot('notes')->as('note');
+    }
+
     /**
      * Admin bookmarks for this mechanic (inverse of Admin::mechanics()).
      *

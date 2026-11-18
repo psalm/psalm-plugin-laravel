@@ -482,6 +482,9 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Eloquent/Support/PivotColumnResolver.php';
         require_once __DIR__ . '/Handlers/Eloquent/BelongsToManyWithPivotHandler.php';
         $registration->registerHooksFromClass(Handlers\Eloquent\BelongsToManyWithPivotHandler::class);
+        // Renames the pivot shape key of BelongsToMany / MorphToMany results to the `as()` accessor (#2348).
+        require_once __DIR__ . '/Handlers/Eloquent/PivotAccessorHandler.php';
+        $registration->registerHooksFromClass(Handlers\Eloquent\PivotAccessorHandler::class);
         // Strips the `sql` taint from a where-family `$column` argument when it is a keyed-MAP
         // (`where(['col' => $v])` binds each value — #734/#733 false positive), scoped to the exact
         // argument nodes recorded by its Before-expression hook. See the handler docblock.
