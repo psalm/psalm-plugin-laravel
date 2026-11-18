@@ -14,6 +14,8 @@ use App\Models\Vehicle;
 use App\Models\WorkOrder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphPivot;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
 /**
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/497
@@ -62,10 +64,10 @@ function test_hasMany_custom_collection(Shop $shop): WorkOrderCollection
     return $workOrders;
 }
 
-/** @return PartCollection<int, Part> */
+/** @return PartCollection<int, Part&object{pivot: Pivot}> */
 function test_belongsToMany_custom_collection(Shop $shop): PartCollection
 {
-    /** @psalm-check-type-exact $parts = PartCollection<int, Part> */
+    /** @psalm-check-type-exact $parts = PartCollection<int, Part&object{pivot: Pivot}> */
     $parts = $shop->parts;
     return $parts;
 }
@@ -88,10 +90,10 @@ function test_hasManyThrough_without_generics(Shop $shop): Collection
     return $mechanics;
 }
 
-/** @return WorkOrderCollection<int, WorkOrder> */
+/** @return WorkOrderCollection<int, WorkOrder&object{pivot: MorphPivot}> */
 function test_morphToMany_custom_collection(Shop $shop): WorkOrderCollection
 {
-    /** @psalm-check-type-exact $allWorkOrders = WorkOrderCollection<int, WorkOrder> */
+    /** @psalm-check-type-exact $allWorkOrders = WorkOrderCollection<int, WorkOrder&object{pivot: MorphPivot}> */
     $allWorkOrders = $shop->allWorkOrders;
     return $allWorkOrders;
 }
@@ -103,10 +105,10 @@ function test_hasOneThrough_without_generics(Shop $shop): ?Customer
     return $vehicleOwner;
 }
 
-/** @return WorkOrderCollection<int, WorkOrder> */
+/** @return WorkOrderCollection<int, WorkOrder&object{pivot: MorphPivot}> */
 function test_morphedByMany_custom_collection(Shop $shop): WorkOrderCollection
 {
-    /** @psalm-check-type-exact $workOrders = WorkOrderCollection<int, WorkOrder> */
+    /** @psalm-check-type-exact $workOrders = WorkOrderCollection<int, WorkOrder&object{pivot: MorphPivot}> */
     $workOrders = $shop->morphedWorkOrders;
     return $workOrders;
 }
@@ -178,10 +180,10 @@ function test_hasMany_with_generics(Customer $customer): Collection
 
 // --- Generics + custom collection: WorkOrder has #[CollectedBy(WorkOrderCollection)] ---
 
-/** @return WorkOrderCollection<int, WorkOrder> */
+/** @return WorkOrderCollection<int, WorkOrder&object{pivot: MorphPivot}> */
 function test_morphToMany_with_generics_custom_collection(\App\Models\Admin $admin): WorkOrderCollection
 {
-    /** @psalm-check-type-exact $workOrders = WorkOrderCollection<int, WorkOrder> */
+    /** @psalm-check-type-exact $workOrders = WorkOrderCollection<int, WorkOrder&object{pivot: MorphPivot}> */
     $workOrders = $admin->workOrders;
     return $workOrders;
 }
