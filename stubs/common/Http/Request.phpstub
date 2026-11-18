@@ -34,6 +34,17 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     public function header($key = null, $default = null) {}
 
     /**
+     * Get the JSON payload for the request.
+     *
+     * @param  string|null  $key
+     * @param  mixed  $default
+     * @return ($key is null ? \Symfony\Component\HttpFoundation\InputBag : mixed)
+     *
+     * @psalm-taint-source input
+     */
+    public function json($key = null, $default = null) {}
+
+    /**
      * Retrieve a file from the request.
      *
      * Stubbed on the class (not the InteractsWithInput trait) because Psalm 7
