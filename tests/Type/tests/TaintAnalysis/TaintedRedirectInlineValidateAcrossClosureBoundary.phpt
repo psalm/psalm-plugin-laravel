@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
  * documented in InlineValidateRulesCollector.
  *
  * @psalm-taint-escape header
+ * @psalm-taint-escape redirect
  * @psalm-taint-escape cookie
  */
 final class ClosureBoundaryRule implements ValidationRule
@@ -42,4 +43,4 @@ function store(Request $request): RedirectResponse {
 }
 ?>
 --EXPECTF--
-TaintedHeader on line %d: Detected tainted header
+TaintedRedirect on line %d: Detected tainted redirect target

@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
  * http-client sink's TaintedSSRF proves the value is still tainted.
  *
  * @psalm-taint-escape header
+ * @psalm-taint-escape redirect
  * @psalm-taint-escape cookie
  */
 final class InlineDnsRule implements ValidationRule

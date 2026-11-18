@@ -20,7 +20,10 @@ final class ContactArrowRequest extends FormRequest
     public function rules(): array
     {
         return ['team_email' => ['required', 'string',
-            /** @psalm-taint-escape header */
+            /**
+             * @psalm-taint-escape header
+             * @psalm-taint-escape redirect
+             */
             fn (string $attribute, mixed $value, \Closure $fail): mixed
                 => $value === $attribute ? $fail('The email is invalid.') : null,
         ]];

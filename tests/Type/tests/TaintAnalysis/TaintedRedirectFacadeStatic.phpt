@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Redirect;
 /**
  * `Redirect::to()` forwards to `Illuminate\Routing\Redirector::to()`, whose `$path`
  * is a header sink (open redirect). The `redirect()` helper form is covered by
- * TaintedHeaderRedirect.phpt; this pins the facade static form.
+ * TaintedRedirect.phpt; this pins the facade static form.
  */
 
 function facadeStaticToIsTainted(Request $request): void
@@ -18,4 +18,4 @@ function facadeStaticToIsTainted(Request $request): void
 }
 ?>
 --EXPECTF--
-TaintedHeader on line %d: Detected tainted header
+TaintedRedirect on line %d: Detected tainted redirect target

@@ -258,7 +258,7 @@ function precognitive($callable = null) {}
  * @param  bool|null  $secure
  * @return ($to is null ? \Illuminate\Routing\Redirector : \Illuminate\Http\RedirectResponse)
  *
- * @psalm-taint-sink header $to
+ * @psalm-taint-sink redirect $to
  */
 function redirect($to = null, $status = 302, $headers = [], $secure = null) {}
 
@@ -339,6 +339,7 @@ function response($content = '', $status = 200, array $headers = []) {}
  * @return ($key is null ? \Illuminate\Session\SessionManager : ($key is array ? null : mixed))
  *
  * @psalm-taint-source input
+ * @psalm-taint-sink session $key
  */
 function session($key = null, $default = null) {}
 

@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
  * get the rule's escape — the cache is empty at the point the read is analyzed.
  *
  * @psalm-taint-escape header
+ * @psalm-taint-escape redirect
  * @psalm-taint-escape cookie
  */
 final class LateDnsRule implements ValidationRule
@@ -35,4 +36,4 @@ function store(Request $request): RedirectResponse {
 }
 ?>
 --EXPECTF--
-TaintedHeader on line %d: Detected tainted header
+TaintedRedirect on line %d: Detected tainted redirect target

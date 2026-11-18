@@ -25,6 +25,7 @@ use Illuminate\Http\Request;
  * test deterministic. The plugin code itself is unaffected.
  *
  * @psalm-taint-escape header
+ * @psalm-taint-escape redirect
  * @psalm-taint-escape cookie
  */
 final class InlineDnsRuleViaVariable implements ValidationRule

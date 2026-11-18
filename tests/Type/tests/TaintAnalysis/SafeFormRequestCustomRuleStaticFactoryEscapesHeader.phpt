@@ -15,6 +15,7 @@ use Illuminate\Foundation\Http\FormRequest;
  * captured from StaticCall nodes too.
  *
  * @psalm-taint-escape header
+ * @psalm-taint-escape redirect
  * @psalm-taint-escape cookie
  */
 final class FactoryDnsEmailRule implements ValidationRule
