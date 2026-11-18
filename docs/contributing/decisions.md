@@ -339,6 +339,23 @@ Known limitation: a date type inferred BEFORE an unproven link survives it. In `
 - A stub-only refinement. The columns are call arguments and their types live in a migration; no docblock form maps a literal argument list to object-shape keys.
 - Leaving the inferred `Pivot` and relying on Psalm accepting a declared shape. Psalm still compares two object shapes inside an intersection by name only (`ObjectComparator::isIntersectionShallowlyContainedBy`), so any `Pivot&object{...}` passes any declared one, but plain `Pivot` never does. The handler still types columns honestly so nothing breaks once Psalm compares the properties.
 
+#### The `as()` accessor renames the pivot key after the call resolves (#2348)
+
+**Decision:** `PivotAccessorHandler` (`AfterMethodCallAnalysisInterface`) rewrites the resolved return of a BelongsToMany / MorphToMany call: a one-property, method-less `object{pivot: P}` or `object{TAccessor: P}` whose `P` is the receiver's TPivotModel becomes `object{<accessor>: P}`. The receiver must be one exact BelongsToMany / MorphToMany atomic whose TAccessor is one string literal that is a plain property name (`isSingleStringLiteral()`, not `isSingle()`, which accepts `'a'|'b'`); the called class must be one of those two and the declaring class one of them or `Relation`, so a user subclass, a userland method of an intersection receiver and a `@mixin Builder` method keep their type. With the default accessor only the raw `TAccessor` key is renamed (to `pivot`). The handler never builds a type, so Psalm's own expansion (templates, `&static`, conditional returns of `find()` / `firstOr()`) stays. `stubs/13.41.0/` keeps the `pivot` key as the decline floor for a non-literal accessor and for first-class callables, which skip the hook.
+
+The relation property gets the same shape for every pivot relation, `pivot` included: `ModelRelationshipPropertyHandler` reads slots 3 and 4 from the relation type a call returns (`ModelRelationReturnTypeHandler::callSiteType()`, else the declared return) and keeps the related model's custom collection. A non-literal accessor keeps `Collection<int, M>`. Cost: Eloquent `Collection`'s TModel is invariant, so the property no longer satisfies a declared `Collection<int, M>`; such signatures declare `Collection<int, M&object{pivot: P}>`. Measured with the prototype on 5 delta-registry apps: no new invariance issue, 2 false positives fixed (`->pivot` on property items), 3 new ones from passing a plain model to `contains()` / `diff()` of the shaped collection (the same calls on `$rel()->get()` already report this on Laravel 13.41+).
+
+The parser reads TAccessor from the OUTERMOST `as()` of a relation body. When that call has a dynamic or constant argument, the accessor is unknown (`string`) rather than an inner literal or `'pivot'`; the related model is still inferred.
+
+Accepted gaps (`Issue2348PivotAccessorKnownLimitation.phpt`): callback params of `chunk()`, `each()`, `chunkById()`, `chunkMap()` keep `pivot` (Psalm types a closure argument before the call resolves); first-class callables keep `pivot`; a `firstOr()` / `findOr()` callback returning the same `M&object{pivot: P}` is renamed with the relation's result. Union receivers and user subclasses keep `pivot`. Surfaces unshaped today stay unshaped (`sole()`).
+
+**Rejected:**
+- Per-method stubs or return-type providers: a method list to keep in sync with Laravel's docblocks, and a provider answer skips Psalm's template expansion (#1753).
+- A 5th class template carrying the shape (`TRelatedModel&TPivotShape`): Psalm 7.10 leaves a template inside another template's intersection unresolved in returns (order dependent) and does not fill a template default that references another template; it would also change Laravel's 4-template arity that `using()`, `as()` and `BelongsToManyWithPivotHandler` rebuild.
+- Re-specializing `firstOr()` / `findOr()` symbolically so the callback branch keeps `pivot`: it re-implements Psalm's template substitution, and the same-model case stays indistinguishable.
+- Typing callback params now: it needs a global `BeforeExpressionAnalysis` stash plus a params provider for a surface that is `pivot` today. Follow-up.
+- Upstream first: the root cause is Psalm's grammar, which reads an object-shape key literally (vimeo/psalm#14196; PHPStan resolves template-valued keys). Without a release the property and parser changes are needed anyway, so the handler ships as the one-step deletable workaround (`@todo-by` on its docblock).
+
 ## Collections
 
 ### In-place writes widen through `@psalm-this-out`; two receiver shapes are an accepted limitation
