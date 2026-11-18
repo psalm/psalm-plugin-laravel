@@ -164,11 +164,21 @@ final class Mechanic extends Model
         return $this->belongsToMany(MechanicSpecialization::class)->as('details');
     }
 
-    /** Returns that differ only in the accessor leave it unknown and keep the related model (#2348). */
+    /** Returns that differ only in the accessor leave it unknown and keep the related model and pivot columns (#2348). */
     public function specializationsBranchAccessor(): BelongsToMany
     {
         if ($this->exists) {
-            return $this->belongsToMany(MechanicSpecialization::class)->as($this->getTable());
+            return $this->belongsToMany(MechanicSpecialization::class)->withPivot('notes')->as($this->getTable());
+        }
+
+        return $this->belongsToMany(MechanicSpecialization::class)->withPivot('notes');
+    }
+
+    /** An omitted `as()` and `as('pivot')` hydrate the same key (#2348). */
+    public function specializationsBranchExplicitPivot(): BelongsToMany
+    {
+        if ($this->exists) {
+            return $this->belongsToMany(MechanicSpecialization::class)->as('pivot');
         }
 
         return $this->belongsToMany(MechanicSpecialization::class);
@@ -192,11 +202,17 @@ final class Mechanic extends Model
      */
     public function specializationsDeclaredAccessor(): BelongsToMany
     {
-        return $this->belongsToMany(MechanicSpecialization::class)->as($this->getTable());
+        return $this->belongsToMany(MechanicSpecialization::class)->as('decl' . 'ared');
     }
 
-    /** An unknown link (a relation macro) after the last `as()` may set another accessor (#2348). */
-    public function specializationsOpaqueLink(): BelongsToMany
+    /** A scope and a Builder macro run on the query, not the relation, so the accessor stays (#2348). */
+    public function workOrderTagsScoped(): MorphToMany
+    {
+        return $this->morphedByMany(WorkOrder::class, 'taggable')->as('meta')->urgent()->withTrashed();
+    }
+
+    /** A registered relation macro (tests/Type/macro-fixtures.php) replaces the accessor the parser read (#2348). */
+    public function specializationsAccessorMacro(): BelongsToMany
     {
         return $this->belongsToMany(MechanicSpecialization::class)->as('first')->rewriteAccessor();
     }

@@ -52,6 +52,12 @@ function pivot_relation_property_carries_the_accessor(Mechanic $mechanic, WorkOr
     // A relation method inherited from the parent model class.
     $_inherited = $child->bookmarkedAdmins;
     /** @psalm-trace $_inherited */
+
+    $_scoped = $mechanic->workOrderTagsScoped;
+    /** @psalm-trace $_scoped */
+
+    $_explicit_pivot_branch = $mechanic->specializationsBranchExplicitPivot;
+    /** @psalm-trace $_explicit_pivot_branch */
 }
 
 /** An unknown accessor invents no key, and other collection relations are untouched. */
@@ -62,9 +68,6 @@ function property_without_a_provable_pivot_key(Mechanic $mechanic): void
 
     $_branch = $mechanic->specializationsBranchAccessor;
     /** @psalm-trace $_branch */
-
-    $_opaque_link = $mechanic->specializationsOpaqueLink;
-    /** @psalm-trace $_opaque_link */
 
     $_has_many = $mechanic->workOrders;
     /** @psalm-trace $_has_many */
@@ -84,7 +87,8 @@ Trace on line %d: $_class_constant: Illuminate\Database\Eloquent\Collection<int,
 Trace on line %d: $_declared: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization&object{declared:Illuminate\Database\Eloquent\Relations\Pivot}>
 Trace on line %d: $_nullable: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}>
 Trace on line %d: $_inherited: Illuminate\Database\Eloquent\Collection<int, App\Models\Admin&object{pivot:Illuminate\Database\Eloquent\Relations\MorphPivot}>
+Trace on line %d: $_scoped: App\Collections\WorkOrderCollection<int, App\Models\WorkOrder&object{meta:Illuminate\Database\Eloquent\Relations\MorphPivot}>
+Trace on line %d: $_explicit_pivot_branch: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}>
 Trace on line %d: $_dynamic: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization>
 Trace on line %d: $_branch: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization>
-Trace on line %d: $_opaque_link: Illuminate\Database\Eloquent\Collection<int, App\Models\MechanicSpecialization>
 Trace on line %d: $_has_many: App\Collections\WorkOrderCollection<int, App\Models\WorkOrder>

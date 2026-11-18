@@ -6,7 +6,8 @@ use App\Models\Mechanic;
 /**
  * Accepted gaps of the accessor rename, see the PivotAccessorHandler docblock (#2348).
  *
- * - Callback params keep `pivot`: Psalm types a closure argument before the call resolves.
+ * - Callback params keep `pivot`: Psalm types a closure argument before the call resolves. So does a callback value the
+ *   method only passes through, `chunkMap(fn ($s) => $s)` included (its declared return is the callback's TReturn).
  * - A first-class callable skips the after-call hook, so its return keeps `pivot`.
  * - A `firstOr()` / `findOr()` callback value of the relation's own model with the same pivot type, bare or nested
  *   (`['cached' => $model]`), is renamed with the relation's result: Psalm returns one type for both branches, so the
@@ -14,6 +15,9 @@ use App\Models\Mechanic;
  *   (Issue2348PivotAccessorDeclinesTest.phpt).
  * - Psalm does not track the relation object: an `as()` on an alias, or after `lazy()` / `cursor()` built a deferred
  *   result, changes the runtime key but not the inferred one.
+ * - A registered relation macro (`BelongsToMany::macro()`, run by `Relation::__call` on the relation itself) may call
+ *   `as()`: the parser keeps the accessor it read before the macro. Scopes and Builder macros are forwarded to the
+ *   query and cannot change it.
  */
 function accessor_known_limitations(Mechanic $mechanic): void
 {
@@ -45,6 +49,12 @@ function accessor_known_limitations(Mechanic $mechanic): void
 
     $_deferred = $lazy->first();
     /** @psalm-trace $_deferred */
+
+    $_chunk_map_identity = $mechanic->specializationsAccessorOnly()->chunkMap(static fn ($specialization) => $specialization);
+    /** @psalm-trace $_chunk_map_identity */
+
+    $_relation_macro = $mechanic->specializationsAccessorMacro()->firstOrFail();
+    /** @psalm-trace $_relation_macro */
 }
 ?>
 --EXPECTF--
@@ -57,3 +67,5 @@ Trace on line %d: $_first_or_same_shape: App\Models\MechanicSpecialization&objec
 Trace on line %d: $_first_or_nested: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}|array{cached: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}}
 Trace on line %d: $_through_alias: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}
 Trace on line %d: $_deferred: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}|null
+Trace on line %d: $_chunk_map_identity: Illuminate\Support\Collection<int, App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}>
+Trace on line %d: $_relation_macro: App\Models\MechanicSpecialization&object{first:Illuminate\Database\Eloquent\Relations\Pivot}

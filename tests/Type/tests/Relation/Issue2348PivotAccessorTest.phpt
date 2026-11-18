@@ -3,6 +3,11 @@
 
 use App\Models\Mechanic;
 use App\Models\MechanicSpecialization;
+use App\Models\WorkOrder;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+
+interface Tagged {}
 
 /**
  * A literal `as()` accessor renames the pivot key on every result of the relation (#2348): the model carries
@@ -91,8 +96,12 @@ function accessor_renames_every_result_surface(Mechanic $mechanic): void
     /** @psalm-trace $_pivot */
 }
 
-/** The accessor reaches the result whichever way the relation type got it. */
-function accessor_follows_the_relation_type(Mechanic $mechanic, ?Mechanic $maybe): void
+/**
+ * The accessor reaches the result whichever way the relation type got it.
+ *
+ * @param BelongsToMany<WorkOrder&Tagged, Mechanic, Pivot, 'details'> $intersected
+ */
+function accessor_follows_the_relation_type(Mechanic $mechanic, ?Mechanic $maybe, BelongsToMany $intersected): void
 {
     $_delegated = $mechanic->specializationProfiles()->firstOrFail();
     /** @psalm-trace $_delegated */
@@ -132,6 +141,21 @@ function accessor_follows_the_relation_type(Mechanic $mechanic, ?Mechanic $maybe
 
     $_declared = $mechanic->specializationsDeclaredAccessor()->firstOrFail();
     /** @psalm-trace $_declared */
+
+    // A scope and a Builder macro (`withTrashed()`) run on the query, so they keep the accessor.
+    $_scoped = $mechanic->workOrderTagsScoped()->firstOrFail();
+    /** @psalm-trace $_scoped */
+
+    $_explicit_pivot_branch = $mechanic->specializationsBranchExplicitPivot();
+    /** @psalm-trace $_explicit_pivot_branch */
+
+    // Other members of the related model's intersection stay on it.
+    $_intersected = $intersected->firstOrFail();
+    /** @psalm-trace $_intersected */
+
+    // A relation method of the related model does not shadow the loaded pivot relation.
+    $_relation_name = $mechanic->specializations()->as('mechanics')->firstOrFail();
+    /** @psalm-trace $_relation_name */
 }
 ?>
 --EXPECTF--
@@ -173,3 +197,7 @@ Trace on line %d: $_in_place: App\Models\MechanicSpecialization&object{subscript
 Trace on line %d: $_nullsafe: App\Models\MechanicSpecialization&object{details:Illuminate\Database\Eloquent\Relations\Pivot}|null
 Trace on line %d: $_class_constant: App\Models\MechanicSpecialization&object{certification:Illuminate\Database\Eloquent\Relations\Pivot}
 Trace on line %d: $_declared: App\Models\MechanicSpecialization&object{declared:Illuminate\Database\Eloquent\Relations\Pivot}
+Trace on line %d: $_scoped: App\Models\WorkOrder&object{meta:Illuminate\Database\Eloquent\Relations\MorphPivot}
+Trace on line %d: $_explicit_pivot_branch: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
+Trace on line %d: $_intersected: App\Models\WorkOrder&object{details:Illuminate\Database\Eloquent\Relations\Pivot}&Tagged
+Trace on line %d: $_relation_name: App\Models\MechanicSpecialization&object{mechanics:Illuminate\Database\Eloquent\Relations\Pivot}

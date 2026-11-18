@@ -8,9 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
 use Psalm\Internal\MethodIdentifier;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
-use Psalm\StatementsSource;
 use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TObjectWithProperties;
@@ -34,10 +34,11 @@ use Psalm\Type\Union;
  * with the receiver's TPivotModel is renamed, so arguments and callback values of other models pass through.
  *
  * Known gaps (Issue2348PivotAccessorKnownLimitation.phpt): a `firstOr()` / `findOr()` callback value of the same model
- * and pivot is renamed with the relation's result; callback params (`chunk()`, `each()`) keep `pivot`, since Psalm
- * types a closure before the call resolves; first-class callables skip this hook. Psalm does not track the receiver
- * object: an in-place `as()` on an alias, or after `lazy()` / `cursor()` was called, is not seen. `create()` / `save()`
- * results carry the stubs' pivot promise although Laravel loads no pivot there (pre-existing).
+ * and pivot is renamed with the relation's result; callback params (`chunk()`, `each()`, a `chunkMap()` identity)
+ * keep `pivot`, since Psalm types a closure before the call resolves; first-class callables skip this hook. Psalm does
+ * not track the receiver object: an in-place `as()` on an alias, or after `lazy()` / `cursor()` was called, is not
+ * seen, nor is an `as()` inside a registered relation macro in a relation body. `create()` / `save()` results carry
+ * the stubs' pivot promise although Laravel loads no pivot there (pre-existing).
  *
  * @todo-by https://github.com/vimeo/psalm/issues/14196 remove this handler and its Plugin.php registration once Psalm resolves template-valued shape keys; write object{TAccessor: TPivotModel} in the stubs instead
  *
@@ -78,7 +79,7 @@ final class PivotAccessorHandler implements AfterMethodCallAnalysisInterface
 
         $source = $event->getStatementsSource();
         $relation = self::relation($source->getNodeTypeProvider()->getType($expr->var));
-        $accessor = $relation instanceof TGenericObject ? self::accessor($event->getCodebase(), $source, $relation) : null;
+        $accessor = $relation instanceof TGenericObject ? self::accessor($event->getCodebase(), $relation) : null;
         if ($accessor !== null && $relation instanceof TGenericObject) {
             $event->setReturnTypeCandidate(self::rename($candidate, $relation, $accessor));
         }
@@ -102,7 +103,7 @@ final class PivotAccessorHandler implements AfterMethodCallAnalysisInterface
      * The single literal TAccessor of an exact BelongsToMany / MorphToMany type, or null when it is not provable or
      * Laravel would read something else under that name.
      */
-    public static function accessor(Codebase $codebase, ?StatementsSource $source, TGenericObject $relation): ?string
+    public static function accessor(Codebase $codebase, TGenericObject $relation): ?string
     {
         if (!isset(self::RELATIONS[\strtolower($relation->value)]) || \count($relation->type_params) !== 4) {
             return null;
@@ -116,13 +117,14 @@ final class PivotAccessorHandler implements AfterMethodCallAnalysisInterface
             return null;
         }
 
-        return $accessor === 'pivot' || !self::shadowed($codebase, $source, $relation->type_params[0], $accessor) ? $accessor : null;
+        return $accessor === 'pivot' || !self::shadowed($codebase, $relation->type_params[0], $accessor) ? $accessor : null;
     }
 
     /**
      * `getAttribute()` returns an attribute, or null for a `Model` method name, before it reads the pivot relation.
+     * A relation method of the same name does not: the loaded pivot relation wins.
      */
-    private static function shadowed(Codebase $codebase, ?StatementsSource $source, Union $model, string $accessor): bool
+    private static function shadowed(Codebase $codebase, Union $model, string $accessor): bool
     {
         if (\method_exists(Model::class, $accessor)) {
             return true;
@@ -131,14 +133,18 @@ final class PivotAccessorHandler implements AfterMethodCallAnalysisInterface
         foreach ($model->getAtomicTypes() as $atomic) {
             $class = $atomic instanceof TTemplateParam ? $atomic->as->getSingleAtomic() : $atomic;
             try {
-                if ($class instanceof TNamedObject && (
-                    isset($codebase->classlike_storage_provider->get($class->value)->pseudo_property_get_types['$' . $accessor])
-                    || $codebase->propertyExists($class->value . '::$' . $accessor, true, $source)
-                )) {
-                    return true;
-                }
+                $storage = $class instanceof TNamedObject ? $codebase->classlike_storage_provider->get($class->value) : null;
             } catch (\InvalidArgumentException) {
                 continue;
+            }
+
+            /** @psalm-var class-string|null $name a class with storage */
+            $name = $storage?->name;
+            $metadata = $name === null ? null : ModelMetadataRegistry::for($name);
+            if (isset($storage->declaring_property_ids[$accessor]) || isset($storage->pseudo_property_get_types['$' . $accessor])
+                || $metadata instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata && ($metadata->schema()->has($accessor) || isset($metadata->casts()[$accessor]) || $metadata->accessor($accessor) instanceof \Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\AccessorInfo)
+            ) {
+                return true;
             }
         }
 
@@ -209,21 +215,27 @@ final class PivotAccessorHandler implements AfterMethodCallAnalysisInterface
             #[\Override]
             protected function enterNode(TypeNode &$type): ?int
             {
-                if (!$type instanceof TNamedObject && !$type instanceof TTemplateParam || $type->extra_types === []
-                    || !isset($this->models[$type->setIntersectionTypes([])->getId()])
-                ) {
+                if (!$type instanceof TNamedObject && !$type instanceof TTemplateParam || $type->extra_types === []) {
                     return null;
                 }
 
+                // Compare the host without the pivot shape only: other intersection members belong to the model.
+                $host = [];
                 $extra = [];
                 foreach ($type->extra_types as $key => $shape) {
                     $value = $shape instanceof TObjectWithProperties ? PivotAccessorHandler::pivotValue($shape) : null;
                     if ($shape instanceof TObjectWithProperties && $value instanceof Union && $value->getId() === $this->pivot) {
                         $shape = $shape->setProperties([$this->accessor => $value]);
                         $key = $shape->getKey();
+                    } else {
+                        $host[$key] = $shape;
                     }
 
                     $extra[$key] = $shape;
+                }
+
+                if (\count($host) === \count($extra) || !isset($this->models[$type->setIntersectionTypes($host)->getId()])) {
+                    return null;
                 }
 
                 $type = $type->setIntersectionTypes($extra);

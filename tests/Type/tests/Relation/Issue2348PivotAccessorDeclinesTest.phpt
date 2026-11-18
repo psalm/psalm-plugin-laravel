@@ -71,9 +71,9 @@ function values_the_relation_did_not_hydrate_keep_pivot(Mechanic $mechanic, Shop
 }
 
 /**
- * A relation body whose accessor the parser cannot prove (dynamic outermost `as()`, returns that differ in it, an
- * unknown link after the last `as()`) leaves TAccessor a plain `string`, never an inner literal or `'pivot'`; the
- * related model and pivot stay inferred.
+ * A relation body whose accessor the parser cannot prove (dynamic outermost `as()`, returns that differ in it) leaves
+ * TAccessor a plain `string`, never an inner literal or `'pivot'`; the related model and pivot (class and
+ * `withPivot()` columns) stay inferred.
  */
 function body_accessor_not_provable(Mechanic $mechanic): void
 {
@@ -88,9 +88,6 @@ function body_accessor_not_provable(Mechanic $mechanic): void
 
     $_delegated = $mechanic->specializationsDelegatedDynamic();
     /** @psalm-trace $_delegated */
-
-    $_opaque_link = $mechanic->specializationsOpaqueLink();
-    /** @psalm-trace $_opaque_link */
 }
 
 interface PeeksPivot
@@ -150,9 +147,8 @@ Trace on line %d: $_other_model: App\Models\MechanicSpecialization&object{detail
 Trace on line %d: $_parent: App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}
 Trace on line %d: $_dynamic: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, Illuminate\Database\Eloquent\Relations\Pivot, string>
 Trace on line %d: $_dynamic_first: App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}
-Trace on line %d: $_branch: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, Illuminate\Database\Eloquent\Relations\Pivot, string>
+Trace on line %d: $_branch: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, Illuminate\Database\Eloquent\Relations\Pivot&object{notes:mixed}, string>
 Trace on line %d: $_delegated: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, App\Models\SpecializationPivot, string>
-Trace on line %d: $_opaque_link: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\MechanicSpecialization, App\Models\Mechanic, Illuminate\Database\Eloquent\Relations\Pivot, string>
 Trace on line %d: $_override: App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}|null
 Trace on line %d: $_inherited: App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}
 Trace on line %d: $_user_method: App\Models\MechanicSpecialization&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}

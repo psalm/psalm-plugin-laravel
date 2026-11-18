@@ -224,3 +224,13 @@ if (\class_exists(\Laravel\Ai\Tools\Request::class)) {
     'hasMacroCollision',
     static fn(string $label): int => \strlen($label),
 );
+
+// A relation macro that replaces the pivot accessor (#2348): `Relation::__call` runs it on the relation itself, so
+// the runtime key is `last`, which the parser cannot see (Issue2348PivotAccessorKnownLimitation.phpt).
+\Illuminate\Database\Eloquent\Relations\BelongsToMany::macro(
+    'rewriteAccessor',
+    function (): \Illuminate\Database\Eloquent\Relations\BelongsToMany {
+        /** @var \Illuminate\Database\Eloquent\Relations\BelongsToMany<\Illuminate\Database\Eloquent\Model, \Illuminate\Database\Eloquent\Model> $this */
+        return $this->as('last');
+    },
+);

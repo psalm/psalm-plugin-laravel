@@ -134,7 +134,7 @@ final class ModelRelationshipPropertyHandler
         }
 
         $result = self::withPivotShape(
-            $source,
+            $codebase,
             $fq_classlike_name,
             $property_name,
             self::resolvePropertyType($codebase, $fq_classlike_name, $property_name, $cacheKey),
@@ -149,7 +149,7 @@ final class ModelRelationshipPropertyHandler
      * pivot and accessor of the relation a call of the method returns ({@see ModelRelationReturnTypeHandler::callSiteType()},
      * else the declaration). Unchanged when the accessor is not exactly one literal ({@see PivotAccessorHandler::accessor()}).
      */
-    private static function withPivotShape(\Psalm\StatementsSource $source, string $fq_classlike_name, string $property_name, Union $result): Union
+    private static function withPivotShape(Codebase $codebase, string $fq_classlike_name, string $property_name, Union $result): Union
     {
         $collection = $result->isSingle() ? $result->getSingleAtomic() : null;
         if (!$collection instanceof TGenericObject || \count($collection->type_params) !== 2 || !$collection->type_params[1]->isSingle()) {
@@ -162,14 +162,13 @@ final class ModelRelationshipPropertyHandler
         }
 
         // An inherited relation method parses in the class it appears in, bound to this one, as a call does.
-        $codebase = $source->getCodebase();
         $methodName = \strtolower($property_name);
         $appearing = $codebase->methods->getAppearingMethodId(MethodIdentifier::wrap($fq_classlike_name . '::' . $methodName));
         $relationType = ModelRelationReturnTypeHandler::callSiteType($codebase, $appearing?->fq_class_name ?? $fq_classlike_name, $fq_classlike_name, $methodName, false)
             ?? self::$methodReturnTypeCache[$fq_classlike_name . '::' . $property_name] ?? null;
         // A null return makes Laravel throw on the property, so only the relation branch is its type.
         $relation = PivotAccessorHandler::relation($relationType);
-        $accessor = $relation instanceof TGenericObject ? PivotAccessorHandler::accessor($codebase, $source, $relation) : null;
+        $accessor = $relation instanceof TGenericObject ? PivotAccessorHandler::accessor($codebase, $relation) : null;
         if ($accessor === null || !$relation instanceof TGenericObject) {
             return $result;
         }

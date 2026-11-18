@@ -259,6 +259,11 @@ final class RelationMethodParser
             }
 
             $parsed = self::parseReturn($codebase, $expr, $methodStorage, $scopeClass, $parentClass, $receiverClass);
+            if ($parsed !== null && $result !== null) {
+                // Returns that differ only in the accessor keep their other facts; the accessor joins on its own.
+                $result['accessor'] = $parsed['accessor'] = self::joinAccessor($result['accessor'], $parsed['accessor']);
+            }
+
             if ($parsed === null || ($result !== null && self::withoutPivotShape($parsed) !== self::withoutPivotShape($result))) {
                 return null;
             }
@@ -291,14 +296,13 @@ final class RelationMethodParser
         $parsed['pivotColumns'] = [];
         $parsed['pivotTable'] = null;
         $parsed['pivotVisible'] = false;
-        $parsed['accessor'] = null;
 
         return $parsed;
     }
 
     /**
-     * Two returns that differ only in their pivot shape: no columns, an accessor only when both name it, but a refusal
-     * on either one stands and the chain is visible only when both are, so a delegating `->withTimestamps()` cannot undo either.
+     * Two returns that differ only in their pivot shape: no columns, but a refusal on either one stands and the
+     * chain is visible only when both are, so a delegating `->withTimestamps()` cannot undo either.
      *
      * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: string|false|null, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $first
      * @param array{relationClass: class-string<Relation>, relatedModel: ?string, intermediateModel: ?string, pivotModel: ?string, accessor: string|false|null, pivotColumns: list<string>, pivotTable: string|false|null, pivotVisible: bool, nullable: bool} $second
@@ -310,9 +314,22 @@ final class RelationMethodParser
         $first['pivotColumns'] = [];
         $first['pivotTable'] = $first['pivotTable'] === false || $second['pivotTable'] === false ? false : null;
         $first['pivotVisible'] = $first['pivotVisible'] && $second['pivotVisible'];
-        $first['accessor'] = $first['accessor'] === $second['accessor'] ? $first['accessor'] : false;
 
         return $first;
+    }
+
+    /**
+     * The accessor two returns share: equal, or both hydrating `pivot` (an omitted `as()` is `'pivot'`); else unknown.
+     *
+     * @psalm-pure
+     */
+    private static function joinAccessor(string|false|null $first, string|false|null $second): string|false|null
+    {
+        if ($first === $second) {
+            return $first;
+        }
+
+        return $first !== false && $second !== false && ($first ?? 'pivot') === ($second ?? 'pivot') ? 'pivot' : false;
     }
 
     /**
@@ -569,22 +586,13 @@ final class RelationMethodParser
      */
     private static function applyDirectChain(Codebase $codebase, array $parsed, array $chain, ?Union $docblockType, ?Union $nativeType): ?array
     {
-        // An unresolved link (a relation macro, a scope) after the last `as()` may set another accessor.
-        $opaque = false;
         foreach (\array_reverse($chain) as $name) {
             $sibling = $name === 'one' ? self::singleResultSibling($parsed['relationClass']) : null;
-            $keeps = $sibling === null ? self::chainCallKeepsRelation($codebase, $parsed['relationClass'], $name) : true;
             if ($sibling !== null) {
                 $parsed['relationClass'] = $sibling;
-            } elseif ($keeps === false) {
+            } elseif (self::chainCallKeepsRelation($codebase, $parsed['relationClass'], $name) === false) {
                 return null;
             }
-
-            $opaque = $name !== 'as' && ($opaque || $keeps === null);
-        }
-
-        if ($opaque && \is_a($parsed['relationClass'], BelongsToMany::class, true)) {
-            $parsed['accessor'] = false;
         }
 
         return self::declarationAdmits($docblockType, $parsed['relationClass']) && self::declarationAdmits($nativeType, $parsed['relationClass']) ? $parsed : null;
@@ -875,7 +883,7 @@ final class RelationMethodParser
 
         try {
             $type = $class === null ? null : $codebase->classlikes->getClassConstantType($class, $value->name->name, \ReflectionProperty::IS_PRIVATE);
-        } catch (\InvalidArgumentException) {
+        } catch (\Throwable) {
             return null;
         }
 
