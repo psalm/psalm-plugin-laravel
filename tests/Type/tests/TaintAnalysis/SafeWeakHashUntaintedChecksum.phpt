@@ -30,3 +30,7 @@ function checksumFileContents(string $path): string {
 }
 ?>
 --EXPECTF--
+WeakHash on line %d: md5() hashes with a weak algorithm: use hash() with a SHA-2 or SHA-3 one, password_hash() for passwords, or xxh3 where only speed matters
+WeakHash on line %d: sha1() hashes with a weak algorithm: use hash() with a SHA-2 or SHA-3 one, password_hash() for passwords, or xxh3 where only speed matters
+WeakHash on line %d: md5() hashes with a weak algorithm: use hash() with a SHA-2 or SHA-3 one, password_hash() for passwords, or xxh3 where only speed matters
+WeakHash on line %d: sha1() hashes with a weak algorithm: use hash() with a SHA-2 or SHA-3 one, password_hash() for passwords, or xxh3 where only speed matters

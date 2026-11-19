@@ -477,7 +477,7 @@ final class ShadowManifest
 
     private function shadowPath(string $templatePath, string $source): string
     {
-        return $this->shadowDir . \DIRECTORY_SEPARATOR . \sha1($templatePath) . '-' . $this->fingerprint($source) . '.php';
+        return $this->shadowDir . \DIRECTORY_SEPARATOR . \hash('xxh3', $templatePath) . '-' . $this->fingerprint($source) . '.php';
     }
 
     /** The OS-level reason for the most recently suppressed warning, if any, as ": <message>". */

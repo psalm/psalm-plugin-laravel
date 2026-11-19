@@ -125,7 +125,7 @@ final class CompilerEnvironment
             return ['class' => $class];
         }
 
-        $hash = @\sha1_file($file);
+        $hash = @\hash_file('xxh3', $file);
 
         if ($hash === false) {
             return ['class' => $class];
@@ -244,7 +244,7 @@ final class CompilerEnvironment
         }
 
         if (!isset($fileHashes[$file])) {
-            $hash = @\sha1_file($file);
+            $hash = @\hash_file('xxh3', $file);
 
             if ($hash === false) {
                 $distrust = 'source file unreadable';
