@@ -12,6 +12,7 @@ use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type\Atomic\TNamedObject;
+use Psalm\Type\Union;
 
 /**
  * `Validator::make($data, $rules)` (`$factory->make()`, `validator($data, $rules)`) checks each value of `$data`
@@ -162,7 +163,7 @@ final class ValidatorMakeTaintHandler implements AfterExpressionAnalysisInterfac
     {
         $type = $source->getNodeTypeProvider()->getType($expr);
 
-        if ($type === null || !$type->isSingleStringLiteral()) {
+        if (!$type instanceof Union || !$type->isSingleStringLiteral()) {
             return null;
         }
 
