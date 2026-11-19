@@ -342,6 +342,6 @@ final readonly class PluginConfig
             // (e.g. during unit tests) — fall back to temp directory
         }
 
-        return \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-' . \md5(\getcwd() ?: __DIR__);
+        return \sys_get_temp_dir() . \DIRECTORY_SEPARATOR . 'psalm-laravel-' . \hash('xxh3', \getcwd() ?: __DIR__);
     }
 }
