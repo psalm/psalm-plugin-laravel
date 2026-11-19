@@ -13,6 +13,7 @@ use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterFunctionCallAnalysisEvent;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 use Psalm\StatementsSource;
+use Psalm\Type\Union;
 
 use function strtolower;
 
@@ -77,7 +78,7 @@ final class InsecureCookieHandler implements AfterFunctionCallAnalysisInterface,
 
         $type = $source->getNodeTypeProvider()->getType($secure->value);
 
-        if ($type === null || !$type->isFalse()) {
+        if (!$type instanceof Union || !$type->isFalse()) {
             return;
         }
 
