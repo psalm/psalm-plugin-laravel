@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794963824369,
+  "lastUpdate": 1795088415906,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19490,6 +19490,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1233,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniil@daniil.it",
+            "name": "Daniil Gentili",
+            "username": "danog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d2c2d917569bcecfc7174126fcf19d3c9de5f1ba",
+          "message": "Require Psalm 7.11 (#2366)",
+          "timestamp": "2026-11-19T12:37:20+01:00",
+          "tree_id": "0a7ece9a195f29271d0acfdf2084c51108b0d5c9",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/d2c2d917569bcecfc7174126fcf19d3c9de5f1ba"
+        },
+        "date": 1795088414561,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.5,
+            "range": "± 1.47",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1245,
             "unit": "MB"
           }
         ]
