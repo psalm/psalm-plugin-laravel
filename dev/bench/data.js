@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795088415906,
+  "lastUpdate": 1795089040939,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19525,6 +19525,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1245,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniil@daniil.it",
+            "name": "Daniil Gentili",
+            "username": "danog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99712db6191cb0a1c7f99d00f5e85970e2e6963f",
+          "message": "Allow psalm/psalm-plugin-api ^0.5 (#2365)",
+          "timestamp": "2026-11-19T12:46:49+01:00",
+          "tree_id": "4e237b71af2702857c3334f9f34df09209ebad69",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/99712db6191cb0a1c7f99d00f5e85970e2e6963f"
+        },
+        "date": 1795089038897,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.7,
+            "range": "± 0.54",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1246,
             "unit": "MB"
           }
         ]
