@@ -329,4 +329,4 @@ TypeDoesNotContainNull on line %d: Cannot resolve types for $parents->map->child
 RedundantCondition on line %d: Type Illuminate\Support\Collection<int, PropFetchItem> for $p->sortBy->parent is always isset
 TypeDoesNotContainType on line %d: Cannot resolve types for $p->sortBy->parent with type Illuminate\Support\Collection<int, PropFetchItem> and !isset assertion
 RedundantCondition on line %d: Type Illuminate\Support\HigherOrderCollectionProxy<'map', PropFetchItem, Illuminate\Support\Collection<int, PropFetchItem>> for $p->map is never null
-TypeDoesNotContainNull on line %d: Illuminate\Support\HigherOrderCollectionProxy<string, PropFetchItem, Illuminate\Support\Collection<int, PropFetchItem>> does not contain null
+TypeDoesNotContainNull on line %d: Illuminate\Support\HigherOrderCollectionProxy<'map', PropFetchItem, Illuminate\Support\Collection<int, PropFetchItem>> does not contain null

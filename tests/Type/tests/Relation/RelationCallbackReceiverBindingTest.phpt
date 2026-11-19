@@ -148,15 +148,10 @@ function test_custom_relation_projects_its_related_model(DecoyRelation $relation
     });
 }
 
-/**
- * Non-exact: `$q` is `Builder<TRelatedModel:fn-...::wherehas as Model>`, an unbound template no docblock type spells.
- *
- * @todo-by https://github.com/vimeo/psalm/issues/13605 make the $q check exact
- */
 function test_trait_override_keeps_its_own_contract(TraitOverrideBuilder $builder): void
 {
     $builder->whereHas('vehicles', function ($q): void {
-        /** @psalm-check-type $q = Builder<Illuminate\Database\Eloquent\Model> */
+        /** @psalm-check-type-exact $q = Builder<Illuminate\Database\Eloquent\Model> */
         $q->where('id', 1);
     });
 }
