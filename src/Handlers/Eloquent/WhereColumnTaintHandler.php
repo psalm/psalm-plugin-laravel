@@ -168,6 +168,11 @@ final class WhereColumnTaintHandler implements
         'illuminate\database\eloquent\relations\relation',
     ];
 
+    /**
+     * What `@psalm-taint-sink sql` reports: SQL syntax both inside and outside of quotes.
+     */
+    private const SQL_TAINTS = TaintKind::INPUT_SQL | TaintKind::INPUT_SQL_UNQUOTED;
+
     private const WHERE_MAP_METHODS = [
         'where' => true,
         'orwhere' => true,
@@ -518,7 +523,7 @@ final class WhereColumnTaintHandler implements
             return 0;
         }
 
-        return TaintKind::INPUT_SQL;
+        return self::SQL_TAINTS;
     }
 
     /**
@@ -552,10 +557,10 @@ final class WhereColumnTaintHandler implements
         }
 
         if (!$position['scalar_gated']) {
-            return TaintKind::INPUT_SQL;
+            return self::SQL_TAINTS;
         }
 
-        return self::isScalarValued($item, $statements_source) ? TaintKind::INPUT_SQL : 0;
+        return self::isScalarValued($item, $statements_source) ? self::SQL_TAINTS : 0;
     }
 
     /**
