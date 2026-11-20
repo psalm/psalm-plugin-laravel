@@ -35,6 +35,7 @@ final readonly class PluginConfig
         public bool $findUnconfiguredFilesystemDisks,
         public bool $findUnregisteredRouteNames,
         public bool $findSerializedQueuedModels,
+        public bool $findArrKeyNotFound,
         /**
          * Tri-state opt-in/out for the OctaneIncompatibleBinding rule.
          *
@@ -96,6 +97,7 @@ final readonly class PluginConfig
         $experimental = $overrides->bool('experimental') ?? $xmlExperimental;
         $findUnconfiguredFilesystemDisks = self::xmlOptionalBoolAttr($config?->findUnconfiguredFilesystemDisks, 'findUnconfiguredFilesystemDisks');
         $findSerializedQueuedModels = self::xmlOptionalBoolAttr($config?->findSerializedQueuedModels, 'findSerializedQueuedModels');
+        $findArrKeyNotFound = self::xmlOptionalBoolAttr($config?->findArrKeyNotFound, 'findArrKeyNotFound');
         $findUnregisteredRouteNames = self::xmlOptionalBoolAttr($config?->findUnregisteredRouteNames, 'findUnregisteredRouteNames');
         $reportImplicitQueryBuilderCalls = self::xmlBoolAttr($config?->reportImplicitQueryBuilderCalls, 'reportImplicitQueryBuilderCalls');
         $findOctaneIncompatibleBinding = self::xmlOptionalBoolAttr($config?->findOctaneIncompatibleBinding, 'findOctaneIncompatibleBinding');
@@ -118,6 +120,7 @@ final readonly class PluginConfig
             findUnconfiguredFilesystemDisks: $overrides->bool('findUnconfiguredFilesystemDisks') ?? $findUnconfiguredFilesystemDisks ?? true,
             findUnregisteredRouteNames: $overrides->bool('findUnregisteredRouteNames') ?? $findUnregisteredRouteNames ?? $experimental,
             findSerializedQueuedModels: $overrides->bool('findSerializedQueuedModels') ?? $findSerializedQueuedModels ?? true,
+            findArrKeyNotFound: $overrides->bool('findArrKeyNotFound') ?? $findArrKeyNotFound ?? $experimental,
             findOctaneIncompatibleBinding: $overrides->bool('findOctaneIncompatibleBinding') ?? $findOctaneIncompatibleBinding,
             findPromptInjection: $overrides->bool('findPromptInjection') ?? $findPromptInjection,
             cachePath: $cachePath,

@@ -90,6 +90,7 @@ final class IssueUrlGenerator
             '- findUnconfiguredFilesystemDisks: ' . self::formatBool($pluginConfig->findUnconfiguredFilesystemDisks),
             '- findUnregisteredRouteNames: ' . self::formatBool($pluginConfig->findUnregisteredRouteNames),
             '- findSerializedQueuedModels: ' . self::formatBool($pluginConfig->findSerializedQueuedModels),
+            '- findArrKeyNotFound: ' . self::formatBool($pluginConfig->findArrKeyNotFound),
             '- findOctaneIncompatibleBinding: ' . self::formatOctaneFlag($pluginConfig->findOctaneIncompatibleBinding),
             '- findPromptInjection: ' . self::formatNullableBool($pluginConfig->findPromptInjection),
             '- laravelAiIntegrationGate: ' . LaravelAiIntegration::diagnostic(),
