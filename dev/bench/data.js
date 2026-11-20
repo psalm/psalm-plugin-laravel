@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795205264727,
+  "lastUpdate": 1795209856602,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19700,6 +19700,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1246,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "orklah@users.noreply.github.com",
+            "name": "orklah",
+            "username": "orklah"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c81580912588220a2c43167ae48ecf39ce68d693",
+          "message": "fix: read and write template argument keys under the lowercase parent name too (#2372)\n\n* fix: read and write template argument keys under the lowercase parent name too\n\nPsalm keys template_type_extends_count and template_extended_offsets by the\nlowercase parent name since vimeo/psalm#14397, by the name as written before.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n* fix: mark explicitExtendsCount read-props\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude Opus 5.5 <noreply@anthropic.com>",
+          "timestamp": "2026-11-20T22:20:29+01:00",
+          "tree_id": "b1ff439a525729190db990fe1e6d7452a0cb0031",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/c81580912588220a2c43167ae48ecf39ce68d693"
+        },
+        "date": 1795209854170,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.45,
+            "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1245,
             "unit": "MB"
           }
         ]
