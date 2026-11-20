@@ -3,6 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
+function storeLastQuery(\Illuminate\Http\Request $request): void {
+    session(['last_query' => $request->input('q')]);
+}
+
 function renderSessionData(): void {
     echo session('last_query');
 }

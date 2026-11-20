@@ -719,8 +719,9 @@ Only mark reads from genuinely external/untrusted sources (HTTP request input, e
 **Why:** Psalm tracks taint within a single analysis pass. It cannot follow data across requests (write in request A, read in request B). Marking `Cache::get()` or `Session::get()` as taint sources is a workaround for this limitation, but in practice 95%+ of cache/session reads contain trusted data (config, computed values, framework state).
 The false positive rate is high enough to cause alert fatigue, which leads developers to either suppress taint issues globally or disable taint analysis, losing coverage on the real vulnerabilities.
 
-**What to do instead:** Use `@psalm-flow` annotations on methods like `Cache::remember()` / `Session::put()` that pass data through callbacks or accept input.
-This catches the most dangerous pattern (user input flowing through storage in the same analysis pass) without false positives.
+**What to do instead:** Use `@psalm-flow` annotations on methods like `Cache::remember()` that pass data through callbacks, and a [keyed store](https://psalm.dev/docs/security_analysis/taint_flow/#keyed-stores) for storage read back by key.
+`Session\Store` writes (`put()`, `push()`, `flash()`, `now()`, `session([...])`) store into `\Illuminate\Contracts\Session\Session::$attributes[$key]`, and its reads (`get()`, `pull()`, `remove()`, `remember()`, `only()`, `all()`, `except()`, `session($key)`) return what is stored under the key, wherever the code storing it is: input stored under a key is reported where that key is read and used, and the values the application stores itself are not.
+`getOldInput()` and `previousUrl()` stay sources: Laravel stores the request's input and URL there itself.
 
 **Applies to:** Cache\Repository, Session\Store, Queue job payloads, and similar internal persistence layers.
 Does NOT apply to genuinely external data, `Http\Client\Response` (external API responses) and `Request::input()` (user input) remain legitimate taint sources.

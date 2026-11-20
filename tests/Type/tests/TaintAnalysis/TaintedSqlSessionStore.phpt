@@ -3,6 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
+function storeSearch(\Illuminate\Http\Request $request, \Illuminate\Session\Store $session): void {
+    $session->put('search', $request->input('search'));
+}
+
 function unsafeSessionQuery(\Illuminate\Session\Store $session): void {
     $builder = new \Illuminate\Database\Query\Builder();
     $searchTerm = $session->get('search');

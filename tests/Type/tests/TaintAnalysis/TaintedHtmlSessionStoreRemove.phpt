@@ -3,6 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
+function storeSessionData(\Illuminate\Http\Request $request, \Illuminate\Session\Store $session): void {
+    $session->push('user_input', $request->input('user_input'));
+}
+
 function renderRemovedSessionData(\Illuminate\Session\Store $session): void {
     echo $session->remove('user_input');
 }
