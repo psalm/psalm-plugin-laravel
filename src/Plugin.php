@@ -630,6 +630,8 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Validation/ValidatedFieldReadResolver.php';
         require_once __DIR__ . '/Handlers/Validation/ValidationTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Validation\ValidationTaintHandler::class);
+        require_once __DIR__ . '/Handlers/Validation/ValidatorMakeTaintHandler.php';
+        $registration->registerHooksFromClass(Handlers\Validation\ValidatorMakeTaintHandler::class);
 
         require_once __DIR__ . '/Handlers/Helpers/CacheHandler.php';
         $registration->registerHooksFromClass(Handlers\Helpers\CacheHandler::class);

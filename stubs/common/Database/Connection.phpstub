@@ -13,6 +13,7 @@ class Connection implements ConnectionInterface
      * @return array
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings rows
      */
     public function select($query, $bindings = [], $useReadPdo = true) {}
 
@@ -25,6 +26,7 @@ class Connection implements ConnectionInterface
      * @return mixed
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings result
      */
     public function selectOne($query, $bindings = [], $useReadPdo = true) {}
 
@@ -37,6 +39,7 @@ class Connection implements ConnectionInterface
      * @return \Generator<int, \stdClass>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings rows
      */
     public function cursor($query, $bindings = [], $useReadPdo = true) {}
 
@@ -48,6 +51,7 @@ class Connection implements ConnectionInterface
      * @return bool
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public function insert($query, $bindings = []) {}
 
@@ -59,6 +63,7 @@ class Connection implements ConnectionInterface
      * @return int
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public function update($query, $bindings = []) {}
 
@@ -70,6 +75,7 @@ class Connection implements ConnectionInterface
      * @return int
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public function delete($query, $bindings = []) {}
 
@@ -81,6 +87,7 @@ class Connection implements ConnectionInterface
      * @return bool
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public function statement($query, $bindings = []) {}
 
@@ -92,6 +99,7 @@ class Connection implements ConnectionInterface
      * @return int
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings none
      */
     public function affectingStatement($query, $bindings = []) {}
 
@@ -102,6 +110,7 @@ class Connection implements ConnectionInterface
      * @return bool
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query none
      */
     public function unprepared($query) {}
 
@@ -124,6 +133,7 @@ class Connection implements ConnectionInterface
      * @return string|int|float|bool|null
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings value
      */
     public function scalar($query, $bindings = [], $useReadPdo = true) {}
 
@@ -135,6 +145,7 @@ class Connection implements ConnectionInterface
      * @return list<\stdClass>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings rows
      */
     public function selectFromWriteConnection($query, $bindings = []) {}
 
@@ -147,6 +158,7 @@ class Connection implements ConnectionInterface
      * @return list<list<\stdClass>>
      *
      * @psalm-taint-sink sql $query
+     * @psalm-database-query $query $bindings rows
      */
     public function selectResultSets($query, $bindings = [], $useReadPdo = true) {}
 
