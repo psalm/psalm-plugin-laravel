@@ -15,8 +15,6 @@ use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 use Psalm\StatementsSource;
 use Psalm\Type\Union;
 
-use function strtolower;
-
 /**
  * Reports a cookie made with the secure flag explicitly off (`secure: false`), which the browser also sends over plain
  * HTTP. Without the flag Laravel uses `config('session.secure')`, which the analysis can't tell, so only a literal
@@ -40,7 +38,7 @@ final class InsecureCookieHandler implements AfterFunctionCallAnalysisInterface,
     #[\Override]
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
-        $offset = self::SECURE_PARAM_OFFSETS[strtolower($event->getDeclaringMethodId())] ?? null;
+        $offset = self::SECURE_PARAM_OFFSETS[\strtolower($event->getDeclaringMethodId())] ?? null;
 
         if ($offset !== null) {
             self::checkSecureFlag($event->getStatementsSource(), $event->getExpr()->getArgs(), $offset);
@@ -50,7 +48,7 @@ final class InsecureCookieHandler implements AfterFunctionCallAnalysisInterface,
     #[\Override]
     public static function afterFunctionCallAnalysis(AfterFunctionCallAnalysisEvent $event): void
     {
-        if (strtolower($event->getFunctionId()) === 'cookie') {
+        if (\strtolower($event->getFunctionId()) === 'cookie') {
             self::checkSecureFlag($event->getStatementsSource(), $event->getExpr()->getArgs(), 5);
         }
     }
