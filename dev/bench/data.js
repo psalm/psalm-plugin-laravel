@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795209856602,
+  "lastUpdate": 1795215084504,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19735,6 +19735,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1245,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniil@daniil.it",
+            "name": "Daniil Gentili",
+            "username": "danog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "093fefdd2488d9b58e8ee6ce16b1bc17f2e689ac",
+          "message": "Require Psalm 7.13.1 (#2373)\n\nRemove both sql taint kinds from the where() array values bound as parameters, key template arguments by the lowercase parent name only, and follow the callback types and when() checks of Psalm 7.13.",
+          "timestamp": "2026-11-20T23:46:58+01:00",
+          "tree_id": "97fed9d38afe5561887c7854361538c04295df6e",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/093fefdd2488d9b58e8ee6ce16b1bc17f2e689ac"
+        },
+        "date": 1795215082892,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.75,
+            "range": "± 0.44",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1246,
             "unit": "MB"
           }
         ]
