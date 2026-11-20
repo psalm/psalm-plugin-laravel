@@ -511,7 +511,7 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 - **An `AfterExpressionAnalysis` hook on `new UserFactory(3)`.** Unneeded: the stub constructor parameter infers it.
 - **Proving "no count" at the call site.** Sound for a chain of `new X()` / `X::new()` / `Model::factory()` followed by calls other than `count`/`times`/`forEachSequence`/`when`/`unless`, but a factory held in a variable or property still gets the union.
 
-**`resolveFactoryName()`:** the stub does not re-declare it, so Laravel's `class-string<Factory<TClass>>` takes the `TCount` default and `(new $class())->create()` is `TClass|Collection<int, TClass>`. Intended: a class-string cannot rule out a subclass that counts itself, the same rule as a factory held as the bare class. Pinned by `FactoryResolveFactoryNameTest`.
+**`resolveFactoryName()`:** the stub does not re-declare it, so Laravel's `class-string<Factory<TClass>>` takes the `TCount` default and `(new $class())->create()` is `Customer|Collection<int, Customer>` for `resolveFactoryName(Customer::class)` (Psalm 7.12 substitutes `TClass` inside the nested `class-string`, vimeo/psalm#14278). Intended: a class-string cannot rule out a subclass that counts itself, the same rule as a factory held as the bare class. Pinned by `FactoryResolveFactoryNameTest`.
 
 ### `has{Relation}()` / `for{Relation}()` are a return-type + params provider pair gated on a proven relation (#2215)
 
