@@ -5,7 +5,7 @@
 
 /** @psalm-taint-source html_url */
 function untrustedAvatarUrl_EOnly(): string {
-    return (string) getenv('AVATAR_URL');
+    return 'https://example.com/avatar.png';
 }
 
 /**
