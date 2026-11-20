@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795215084504,
+  "lastUpdate": 1795215720759,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19765,6 +19765,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.75,
             "range": "± 0.44",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1246,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniil@daniil.it",
+            "name": "Daniil Gentili",
+            "username": "danog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a38a7b6c2257564c1604c3ddf0b35d8e7bbc0c4e",
+          "message": "Track what raw DB queries store in each column and what they read back (#2359)",
+          "timestamp": "2026-11-20T23:59:18+01:00",
+          "tree_id": "3b04ec4b68ae015832d0df65332ab01244c843a4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/a38a7b6c2257564c1604c3ddf0b35d8e7bbc0c4e"
+        },
+        "date": 1795215719236,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 23.11,
+            "range": "± 0.24",
             "unit": "s"
           },
           {
