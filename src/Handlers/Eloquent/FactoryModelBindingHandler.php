@@ -217,6 +217,8 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
     /**
      * The number of arguments `@extends Factory<...>` gives, keyed by the lowercase name since vimeo/psalm#14397, by
      * the name as written before
+     *
+     * @psalm-capabilities read-props
      */
     private static function explicitExtendsCount(ClassLikeStorage $storage): ?int
     {
