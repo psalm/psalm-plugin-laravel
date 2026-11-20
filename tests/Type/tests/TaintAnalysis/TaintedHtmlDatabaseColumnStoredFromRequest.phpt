@@ -1,3 +1,5 @@
+--CONFLICTS--
+taint-TaintedHtmlDatabaseColumnStoredFromRequest
 --ARGS--
 --no-progress --no-diff --config=./tests/Type/psalm.xml --taint-analysis --threads=1
 --FILE--
@@ -7,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * What a raw query stores in a column is what the queries reading that column give, and only that.
+ * The unique CONFLICTS key runs this file in its own Psalm run: the tables are shared by the whole
+ * program, and another fixture's unprepared() statement may write any column.
  */
 function storeComment(\Illuminate\Http\Request $request): void {
     DB::insert('INSERT INTO comments (author, body) VALUES (?, ?)', ['admin', $request->input('body')]);
