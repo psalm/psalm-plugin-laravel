@@ -108,7 +108,9 @@ interface ResponseFactory
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink header $path
+     * @psalm-taint-sink redirect $path
+     * @psalm-taint-sink url_component $path
+     * @psalm-taint-sink url_path $path
      */
     public function redirectTo($path, $status = 302, $headers = [], $secure = null);
 
@@ -121,7 +123,9 @@ interface ResponseFactory
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink header $path
+     * @psalm-taint-sink redirect $path
+     * @psalm-taint-sink url_component $path
+     * @psalm-taint-sink url_path $path
      */
     public function redirectGuest($path, $status = 302, $headers = [], $secure = null);
 
@@ -134,7 +138,9 @@ interface ResponseFactory
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink header $default
+     * @psalm-taint-sink redirect $default
+     * @psalm-taint-sink url_component $default
+     * @psalm-taint-sink url_path $default
      */
     public function redirectToIntended($default = '/', $status = 302, $headers = [], $secure = null);
 }
