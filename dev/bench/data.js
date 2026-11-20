@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795179323535,
+  "lastUpdate": 1795181146272,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19595,6 +19595,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1244,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f1f5eb7b9c77aad5a6005cac9ba518fc137b5bc0",
+          "message": "Require Psalm 7.12 (#2369)\n\n* build: require Psalm 7.12\n\n- Raise the floor in composer.json and the Symfony Console 6.4 CI job.\n- Update type tests to 7.12 output: write-refs in closure capabilities (vimeo/psalm#13688), TClass substitution inside nested class-string (#14278), WrongCaseFunction.\n- Move the invokable-interface case out of GetOrPutClosureDefaultKnownLimitation into a positive pin, since vimeo/psalm#12497 is fixed, and correct the stub docblocks.\n\nRefs #2368\n\n* fix(blade): drop PossiblyUndefinedGlobalVariable on compiled session and context stack pushes\n\n- `@endsession`/`@endcontext` unset the stack when it empties, so Psalm 7.12 (vimeo/psalm#13126) reports the next block's compiled push as possibly undefined.\n- Reuse the compiled value-save predicate, generalized by selection offset; an author-written copy of the statement keeps the finding.\n\nRefs #2368\n\n* docs(stubs): narrow the Closure-conditional limitation to unbounded templates\n\n- vimeo/psalm#12756 (Psalm 7.12) decides `\\Closure` for interfaces, iterables and bounded templates; only an unbounded template stays undecidable.\n\nRefs #2368",
+          "timestamp": "2026-11-20T14:22:04+01:00",
+          "tree_id": "49d9cedb587665340ef36635ce3d99c5a48cae93",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/f1f5eb7b9c77aad5a6005cac9ba518fc137b5bc0"
+        },
+        "date": 1795181144557,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 35.35,
+            "range": "± 0.14",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1245,
             "unit": "MB"
           }
         ]
