@@ -98,10 +98,11 @@ class CookieJar implements QueueingFactory
     /**
      * Get a queued cookie instance.
      *
-     * Psalm cannot decide `\Closure` against interfaces, iterables or templates, so the guards first rule
-     * out non-callable defaults and only then split on `\Closure`. An unbounded template argument stays
-     * silent although it may hold a Closure, and an invokable-interface default gains `|mixed` (Psalm does not treat
-     * `Closure` as final in conditional types); see GetOrPutClosureDefaultKnownLimitation.phpt.
+     * Psalm cannot decide `\Closure` against an unbounded template, so the guards first rule out
+     * non-callable defaults and only then split on `\Closure`. Such an argument stays silent although it
+     * may hold a Closure; see GetOrPutClosureDefaultKnownLimitation.phpt. Interfaces, iterables and
+     * bounded templates are decided since Psalm 7.12 (vimeo/psalm#12497); the invokable-interface case
+     * is pinned by GetOrPutInvokableInterfaceDefaultTest.phpt.
      *
      * @template TQueuedDefault
      * @template TQueuedClosureReturn
