@@ -568,9 +568,9 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $_v has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method count
 MissingClosureParamType on line %d: Parameter $q has no provided type
-MissingClosureParamType on line %d: Parameter $q has no provided type
+InvalidArgument on line %d: Argument 1 of Illuminate\Support\Enumerable::when expects bool, but int|null provided
+ArgumentTypeCoercion on line %d: Argument 2 of Illuminate\Support\Enumerable::when expects callable[impure](Illuminate\Support\Enumerable<array-key, mixed>):null|null, but parent type Closure[write-props|read-globals|write-globals|write-refs|io|time](Illuminate\Support\Enumerable<int, string>&static, mixed):void provided
 MissingClosureParamType on line %d: Parameter $_v has no provided type
-MixedMethodCall on line %d: Cannot determine the type of $q when calling method count
 ArgumentTypeCoercion on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable[impure](Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, Illuminate\Database\Eloquent\Builder<App\Models\Vehicle>):mixed|null, but parent type Closure[pure](Illuminate\Database\Eloquent\Builder, App\Builders\VehicleBuilder):void provided
 MissingClosureParamType on line %d: Parameter $args has no provided type
 MixedAssignment on line %d: Unable to determine the type that $a is being assigned to

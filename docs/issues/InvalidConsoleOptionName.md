@@ -10,7 +10,7 @@ Emitted when `$this->option('name')` references an option that is not defined in
 
 ## Why this is a problem
 
-If you request an option that doesn't exist in your command's `$signature`, Symfony Console throws an `InvalidArgumentException` at runtime.
+If you request an option that doesn't exist in your command's signature (the `#[Signature]` attribute or the `$signature` property), Symfony Console throws an `InvalidArgumentException` at runtime.
 This check catches the mismatch during static analysis.
 
 ## Examples
@@ -43,5 +43,5 @@ class ExportCommand extends Command
 
 ## How to fix
 
-1. Check the `$signature` property of your command for the correct option name
+1. Check the `#[Signature]` attribute or `$signature` property of your command for the correct option name
 2. Either fix the `option()` call to match the signature, or add the missing option to the signature

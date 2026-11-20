@@ -98,9 +98,9 @@ final class CollectionCallbackParamsTest
     }
 
     /**
-     * Since Psalm 7.3 (vimeo/psalm#13494) Laravel's `callable($this)` resolves `static` in the callee
-     * scope, so tap() and pipe() reach a subclass without the stub. The whenEmpty() family does not:
-     * see CollectionCallbackParamsSubclassKnownLimitation.phpt.
+     * Laravel's `callable($this)` resolves `static` in the callee scope, so the callbacks of tap() and
+     * pipe() (since Psalm 7.3, vimeo/psalm#13494) and of the whenEmpty() family (since Psalm 7.13)
+     * reach a subclass without the stub. chunkWhile() is a Collection method, so its chunk is typed too.
      */
     public function subclass(CallbackParamsSubclassList $customers): void
     {
@@ -111,6 +111,18 @@ final class CollectionCallbackParamsTest
 
         $_count = $customers->pipe(fn ($c) => $c->count());
         /** @psalm-check-type-exact $_count = int<0, max> */
+
+        $customers->whenEmpty(function ($_c): void {
+            /** @psalm-check-type-exact $_c = CallbackParamsSubclassList */
+        });
+        $customers->whenNotEmpty(function ($_c): void {
+            /** @psalm-check-type-exact $_c = CallbackParamsSubclassList */
+        });
+
+        $customers->chunkWhile(function (Customer $_customer, int $_key, $chunk): bool {
+            /** @psalm-check-type-exact $chunk = Collection<int, Customer> */
+            return $chunk->isNotEmpty();
+        });
     }
 
     /**
