@@ -85,17 +85,11 @@ final class FactoryCount
      * Names served by `__call` (`for*` / `has*` forwarders, macros) are NOT here: Laravel checks the macro
      * registry first, so a macro named `hasBatch` can change the count.
      *
-     * Keyed for `isset()`: a negated `in_array()` over this many literals inside `||` makes Psalm's analysis of
-     * the caller exponential.
-     *
-     * @todo-by https://github.com/vimeo/psalm/issues/13603 a plain list with in_array() is fine again
-     *
-     * @var array<lowercase-string, true>
+     * @var list<lowercase-string>
      */
     private const COUNT_KEEPING_METHODS = [
-        'state' => true, 'sequence' => true, 'crossjoinsequence' => true, 'set' => true, 'for' => true,
-        'has' => true, 'hasattached' => true, 'aftermaking' => true, 'aftercreating' => true,
-        'connection' => true, 'recycle' => true, 'withoutparents' => true,
+        'state', 'sequence', 'crossjoinsequence', 'set', 'for', 'has', 'hasattached', 'aftermaking',
+        'aftercreating', 'connection', 'recycle', 'withoutparents',
     ];
 
     /**
@@ -279,7 +273,7 @@ final class FactoryCount
         }
 
         foreach ($calls as $call) {
-            if (!isset(self::COUNT_KEEPING_METHODS[$call]) || !self::isFactoryMethod($codebase, $receiver, $call)) {
+            if (!\in_array($call, self::COUNT_KEEPING_METHODS, true) || !self::isFactoryMethod($codebase, $receiver, $call)) {
                 return false;
             }
         }

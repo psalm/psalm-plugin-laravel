@@ -30,3 +30,4 @@ function renderJson(\Illuminate\Http\Request $request): void {
 }
 ?>
 --EXPECTF--
+WrongCaseFunction on line %d: Function JSON_ENCODE is declared as json_encode and has wrong casing

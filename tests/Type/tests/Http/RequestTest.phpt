@@ -9,10 +9,6 @@ function it_returns_one_header(\Illuminate\Http\Request $request): ?string {
     return $request->header('Accept');
 };
 
-function it_returns_route(\Illuminate\Http\Request $request): \Illuminate\Routing\Route {
-    return $request->route();
-};
-
 /**
  * route()'s second parameter used to be constrained `@template TDefault of object`,
  * which false-positived on any ordinary scalar/null default (Argument 2 ... expects
