@@ -14,7 +14,7 @@
  * @psalm-taint-source html_url
  */
 function untrustedAvatarUrl_DualSrc(): string {
-    return (string) getenv('AVATAR_URL');
+    return 'https://example.com/avatar.png';
 }
 
 /**
