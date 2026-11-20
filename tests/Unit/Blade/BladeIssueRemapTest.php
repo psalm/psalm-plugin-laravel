@@ -890,6 +890,24 @@ final class BladeIssueRemapTest extends TestCase
     }
 
     /**
+     * vimeo/psalm#13126: the possibly-undefined stack on a compiled push is dropped, but an author who
+     * writes the push statement verbatim (line 2) keeps it, and so does every compiled push in that
+     * template (line 3).
+     */
+    #[Test]
+    public function an_author_written_stack_push_keeps_reporting_a_possibly_undefined_stack(): void
+    {
+        $issues = $this->analyze('psalm.xml');
+        $template = 'session-stack-push-authored.blade.php';
+
+        $this->assertSame(
+            [2, 3],
+            $this->linesFor($issues, 'PossiblyUndefinedGlobalVariable', $template),
+            \json_encode($issues, \JSON_PRETTY_PRINT | \JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
      * #1810: a `Collection|array` `@foreach`/`@forelse` subject makes Psalm resolve the iterator
      * through a synthetic `$__currentLoopData->getIterator()` call that it suppresses in plain PHP
      * (ForeachAnalyzer.php), positioned on the variable: `PossiblyInvalidMethodCall` for the list

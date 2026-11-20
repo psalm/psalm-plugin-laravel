@@ -394,13 +394,23 @@ final class ShadowIssueRelocator
                 return false;
             }
 
-            if (self::isGeneratedValueSave($issue, $target)) {
+            if (self::isGeneratedValueSave($issue, $target, \strlen('if ('))) {
                 return false;
             }
 
             if (self::isGeneratedAttributesCheck($issue, $target)) {
                 return false;
             }
+        }
+
+        // `@endsession`/`@endcontext` compile to `unset($__sessionPrevious)` when the stack empties, so the
+        // next block's compiled push sees a possibly-undefined stack (vimeo/psalm#13126). PHP creates the
+        // array on append: compiler bookkeeping, never an author bug.
+        if (
+            ($issue instanceof PossiblyUndefinedGlobalVariable || $issue instanceof PossiblyUndefinedVariable)
+            && self::isGeneratedValueSave($issue, $target, \strlen('if (isset($value)) { '))
+        ) {
+            return false;
         }
 
         if ($issue instanceof TooManyArguments && self::isGeneratedArityMismatch($issue, $target)) {
@@ -818,24 +828,25 @@ final class ShadowIssueRelocator
     }
 
     /**
-     * Whether an issue sits on the `isset($value)` of the save `@session`/`@context` compile
-     * (`if (isset($value)) { $__sessionPrevious[] = $value; }`, CompilesSessions/CompilesContexts),
-     * which Psalm judges against whatever `$value` the author has in scope (#1724). The statement
+     * Whether an issue sits inside the save `@session`/`@context` compile
+     * (`if (isset($value)) { $__sessionPrevious[] = $value; }`, CompilesSessions/CompilesContexts):
+     * on its `isset($value)`, which Psalm judges against whatever `$value` the author has in scope
+     * (#1724), or on its stack variable, which a preceding `@endsession`'s `unset()` leaves possibly
+     * undefined. `$selectedAt` is where the selection starts inside the statement. The statement
      * must be absent from the template, so an author who writes it keeps the finding; in that
      * template every compiled save keeps it too.
      *
      * @psalm-mutation-free
      */
-    private static function isGeneratedValueSave(CodeIssue $issue, ShadowTarget $target): bool
+    private static function isGeneratedValueSave(CodeIssue $issue, ShadowTarget $target, int $selectedAt): bool
     {
         $selection = ShadowSelection::of($issue->code_location);
-        $ifLength = \strlen('if (');
 
-        // The statement must open exactly where the selection starts, less its `if (`.
+        // The statement must open exactly where the selection starts, less `$selectedAt`.
         if (
             !$selection instanceof ShadowSelection
-            || $selection->start < $ifLength
-            || \preg_match('/\Gif \(isset\(\$value\)\) \{ \$__(?:session|context)Previous\[\] = \$value; \}/', $selection->snippet, $save, 0, $selection->start - $ifLength) !== 1
+            || $selection->start < $selectedAt
+            || \preg_match('/\Gif \(isset\(\$value\)\) \{ \$__(?:session|context)Previous\[\] = \$value; \}/', $selection->snippet, $save, 0, $selection->start - $selectedAt) !== 1
         ) {
             return false;
         }

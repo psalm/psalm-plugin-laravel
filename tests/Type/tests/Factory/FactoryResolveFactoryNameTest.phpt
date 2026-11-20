@@ -12,7 +12,7 @@ function resolve_factory_name_binds_both_templates(): string
 
 // Intended widening: a `class-string<Factory<TClass>>` cannot rule out `new $class(3)`, so with the `TCount` default
 // (`int|null`) `create()` answers the union, the same soundness rule as an unbound `@extends Factory<X>`.
-// (`TClass` stays unbound in the printed type: Psalm does not bind it through the nested `class-string<Factory<...>>`.)
+// (Psalm substitutes `TClass` inside the nested `class-string<Factory<...>>`, vimeo/psalm#14278.)
 function resolve_factory_name_instantiated_factory_may_be_counted(): void
 {
     $name = Factory::resolveFactoryName(Customer::class);
@@ -22,4 +22,4 @@ function resolve_factory_name_instantiated_factory_may_be_counted(): void
 ?>
 --EXPECTF--
 UnsafeInstantiation on line %d: Cannot safely instantiate class Illuminate\Database\Eloquent\Factories\Factory with "new $class_name" as its constructor might change in child classes
-Trace on line %d: $_made: (Illuminate\Database\Eloquent\Collection<int, TClass:fn-illuminate\database\eloquent\factories\factory::resolvefactoryname as Illuminate\Database\Eloquent\Model>)|(TClass:fn-illuminate\database\eloquent\factories\factory::resolvefactoryname as Illuminate\Database\Eloquent\Model)
+Trace on line %d: $_made: App\Models\Customer|Illuminate\Database\Eloquent\Collection<int, App\Models\Customer>

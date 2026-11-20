@@ -18,4 +18,5 @@ function legacyMd5ApiKey(): string {
 }
 ?>
 --EXPECTF--
+WeakHash on line %d: md5() hashes with a weak algorithm: use hash() with a SHA-2 or SHA-3 one, password_hash() for passwords, or xxh3 where only speed matters
 TaintedSystemSecret on line %d: Detected tainted system secret leaking
