@@ -143,49 +143,4 @@ class Store implements \Illuminate\Contracts\Session\Session
      * @psalm-variadic
      */
     public function keep($keys = null) {}
-
-    /**
-     * Put a key / value pair or array of key / value pairs in the session.
-     *
-     * @param  \UnitEnum|string|array  $key
-     * @param  mixed  $value
-     * @return void
-     *
-     * @psalm-taint-sink session $key
-     * @psalm-taint-sink session $value
-     */
-    public function put($key, $value = null) {}
-
-    /**
-     * Push a value onto a session array.
-     *
-     * @param  \UnitEnum|string  $key
-     * @param  mixed  $value
-     * @return void
-     *
-     * @psalm-taint-sink session $value
-     */
-    public function push($key, $value) {}
-
-    /**
-     * Flash a key / value pair to the session.
-     *
-     * @param  \UnitEnum|string  $key
-     * @param  mixed  $value
-     * @return void
-     *
-     * @psalm-taint-sink session $value
-     */
-    public function flash(\BackedEnum|\UnitEnum|string $key, $value = true) {}
-
-    /**
-     * Flash a key / value pair to the session for immediate use.
-     *
-     * @param  \UnitEnum|string  $key
-     * @param  mixed  $value
-     * @return void
-     *
-     * @psalm-taint-sink session $value
-     */
-    public function now($key, $value) {}
 }

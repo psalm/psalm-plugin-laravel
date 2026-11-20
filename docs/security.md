@@ -41,7 +41,6 @@ Recommendations:
 | SSRF            | A10:2021 | `Http::get()`, `head()`, `post()`, `put()`, `patch()`, `delete()`, `send()` and `query()` (Laravel 13.19+) with user-controlled URLs, on the facade and on `PendingRequest` |
 | File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
 | Open Redirect   | A01:2021 | `redirect()`, `Redirect::to()`, `away()`, `intended()` and `response()->redirectTo()` with user-controlled URLs, reported as `TaintedRedirect` |
-| Trust Boundary Violation | A04:2021 | User input stored in the session: `session([...])`, `Session::put()`, `flash()`, `push()` and `now()`, reported as `TaintedSession` |
 | Insecure Cookie | A05:2021 | `cookie()`, `Cookie::make()`, `forever()` and `$response->cookie()` with `secure: false`, reported as `InsecureCookie` |
 | Crypto misuse   | A02:2021 | Tracks encryption/hashing taint escape and unescape           |
 | Timing attack   | A02:2021 | Secret compared with `===`, `<=>`, `strcmp()` (CWE-208)       |
