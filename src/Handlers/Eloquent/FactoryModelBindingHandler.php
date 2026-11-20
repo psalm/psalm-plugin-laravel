@@ -215,16 +215,13 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
     }
 
     /**
-     * The number of arguments `@extends Factory<...>` gives, keyed by the lowercase name since vimeo/psalm#14397, by
-     * the name as written before
+     * The number of arguments `@extends Factory<...>` gives
      *
      * @psalm-capabilities read-props
      */
     private static function explicitExtendsCount(ClassLikeStorage $storage): ?int
     {
-        return $storage->template_type_extends_count[\strtolower(Factory::class)]
-            ?? $storage->template_type_extends_count[Factory::class]
-            ?? null;
+        return $storage->template_type_extends_count[\strtolower(Factory::class)] ?? null;
     }
 
     /**
@@ -427,7 +424,6 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
 
         $counts = $storage->template_type_extends_count ?? [];
         $counts[\strtolower(Factory::class)] = 2;
-        $counts[Factory::class] = 2;
 
         $storage->template_extended_params = $params;
         $storage->template_type_extends_count = $counts;
