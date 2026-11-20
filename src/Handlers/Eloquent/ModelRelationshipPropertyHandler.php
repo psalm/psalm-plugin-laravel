@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Psalm\Codebase;
+use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\RelationInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
@@ -25,6 +26,7 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
+use Psalm\Type\Atomic\TObjectWithProperties;
 use Psalm\Type\Union;
 
 final class ModelRelationshipPropertyHandler
@@ -131,10 +133,49 @@ final class ModelRelationshipPropertyHandler
             return self::$propertyTypeCache[$cacheKey];
         }
 
-        $result = self::resolvePropertyType($codebase, $fq_classlike_name, $property_name, $cacheKey);
+        $result = self::withPivotShape(
+            $codebase,
+            $fq_classlike_name,
+            $property_name,
+            self::resolvePropertyType($codebase, $fq_classlike_name, $property_name, $cacheKey),
+        );
         self::$propertyTypeCache[$cacheKey] = $result;
 
         return $result;
+    }
+
+    /**
+     * `Collection<int, M>` of a BelongsToMany / MorphToMany becomes `Collection<int, M&object{<accessor>: P}>`, with the
+     * pivot and accessor of the relation a call of the method returns ({@see ModelRelationReturnTypeHandler::callSiteType()},
+     * else the declaration). Unchanged when the accessor is not exactly one literal ({@see PivotAccessorHandler::accessor()}).
+     */
+    private static function withPivotShape(Codebase $codebase, string $fq_classlike_name, string $property_name, Union $result): Union
+    {
+        $collection = $result->isSingle() ? $result->getSingleAtomic() : null;
+        if (!$collection instanceof TGenericObject || \count($collection->type_params) !== 2 || !$collection->type_params[1]->isSingle()) {
+            return $result;
+        }
+
+        $model = $collection->type_params[1]->getSingleAtomic();
+        if (!$model instanceof TNamedObject) {
+            return $result;
+        }
+
+        // An inherited relation method parses in the class it appears in, bound to this one, as a call does.
+        $methodName = \strtolower($property_name);
+        $appearing = $codebase->methods->getAppearingMethodId(MethodIdentifier::wrap($fq_classlike_name . '::' . $methodName));
+        $relationType = ModelRelationReturnTypeHandler::callSiteType($codebase, $appearing?->fq_class_name ?? $fq_classlike_name, $fq_classlike_name, $methodName, false)
+            ?? self::$methodReturnTypeCache[$fq_classlike_name . '::' . $property_name] ?? null;
+        // A null return makes Laravel throw on the property, so only the relation branch is its type.
+        $relation = PivotAccessorHandler::relation($relationType);
+        $accessor = $relation instanceof TGenericObject ? PivotAccessorHandler::accessor($codebase, $relation) : null;
+        if ($accessor === null || !$relation instanceof TGenericObject) {
+            return $result;
+        }
+
+        $shaped = $model->addIntersectionType(new TObjectWithProperties([$accessor => $relation->type_params[2]]));
+
+        return new Union([$collection->setTypeParams([$collection->type_params[0], new Union([$shaped])])]);
     }
 
     /**
