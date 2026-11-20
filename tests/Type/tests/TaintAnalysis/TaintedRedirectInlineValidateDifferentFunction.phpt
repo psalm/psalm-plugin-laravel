@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
  * invoked before the reader.
  *
  * @psalm-taint-escape header
+ * @psalm-taint-escape redirect
  * @psalm-taint-escape cookie
  */
 final class ScopedDnsRule implements ValidationRule
@@ -37,4 +38,4 @@ function read(Request $request): RedirectResponse {
 }
 ?>
 --EXPECTF--
-TaintedHeader on line %d: Detected tainted header
+TaintedRedirect on line %d: Detected tainted redirect target

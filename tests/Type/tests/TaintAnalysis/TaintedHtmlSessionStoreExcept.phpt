@@ -3,6 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
+function storeProfile(\Illuminate\Http\Request $request, \Illuminate\Session\Store $session): void {
+    $session->put(['name' => $request->input('name'), 'password' => 'secret']);
+}
+
 function renderExceptSessionData(\Illuminate\Session\Store $session): void {
     $data = $session->except(['password']);
 

@@ -20,7 +20,7 @@ function storeWithBag(Request $request): RedirectResponse {
     ]);
 
     (new \Illuminate\Http\Client\PendingRequest())->get($request->input('contact_email'));
-    return redirect()->to($request->input('contact_email'));
+    return redirect()->to('/')->header('X-Contact', $request->input('contact_email'));
 }
 ?>
 --EXPECTF--

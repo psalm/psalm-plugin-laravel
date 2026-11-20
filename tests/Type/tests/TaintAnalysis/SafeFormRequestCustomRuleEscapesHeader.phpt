@@ -19,6 +19,9 @@ use Illuminate\Foundation\Http\FormRequest;
  * but removes no taint, isolating the escape to the class-level annotation.
  *
  * @psalm-taint-escape header
+ * @psalm-taint-escape redirect
+ * @psalm-taint-escape url_component
+ * @psalm-taint-escape url_path
  * @psalm-taint-escape cookie
  */
 final class DnsEmailRule implements ValidationRule

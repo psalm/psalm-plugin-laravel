@@ -36,7 +36,7 @@ function storeArrayAccessorWildcard(Request $request): RedirectResponse {
 
     foreach ($request->array('email') as $email) {
         (new \Illuminate\Http\Client\PendingRequest())->get($email);
-        return redirect()->to($email);
+        return redirect()->to('/')->header('X-Contact', $email);
     }
 
     return redirect()->to('/');

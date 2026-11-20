@@ -704,6 +704,8 @@ final class ValidationRuleAnalyzer
             // inside quoted-strings; if that matters, switch the rule to
             // `email:strict` or `email:filter`. The plugin does not yet distinguish
             // these modes, so we take the pragmatic stance.
+            // A redirect to an email address can still leave the application: `//evil.example@x.example` is a
+            // valid address and a URL of the server x.example, so the redirect taint stays.
             'email' => TaintKind::INPUT_HEADER | TaintKind::INPUT_COOKIE,
             // URLs: filter_var / RFC validation rejects CRLF and raw whitespace,
             // so it's safe for header/cookie sinks. A validated URL is still the

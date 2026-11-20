@@ -11,4 +11,4 @@ function loginRedirect(\Illuminate\Http\Request $request): void {
 --EXPECTF--
 MixedAssignment on line %d: Unable to determine the type that $returnUrl is being assigned to
 MixedArgument on line %d: Argument 1 of redirect cannot be mixed, expecting null|string
-TaintedHeader on line %d: Detected tainted header
+TaintedRedirect on line %d: Detected tainted redirect target

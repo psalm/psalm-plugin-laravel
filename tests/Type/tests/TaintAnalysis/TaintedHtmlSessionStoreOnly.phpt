@@ -3,6 +3,10 @@
 --FILE--
 <?php declare(strict_types=1);
 
+function storeProfile(\Illuminate\Http\Request $request, \Illuminate\Session\Store $session): void {
+    $session->now('name', $request->input('name'));
+}
+
 function renderOnlySessionData(\Illuminate\Session\Store $session): void {
     $data = $session->only(['name']);
 

@@ -42,4 +42,4 @@ function reassignToRawInputProbe(Request $request): RedirectResponse {
 }
 ?>
 --EXPECTF--
-TaintedHeader on line %d: Detected tainted header
+TaintedRedirect on line %d: Detected tainted redirect target

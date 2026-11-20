@@ -34,6 +34,9 @@ use Illuminate\Support\Facades\DB;
  * would drop the FIRST bit (header). Either regression is caught.
  *
  * @psalm-taint-escape header
+ * @psalm-taint-escape redirect
+ * @psalm-taint-escape url_component
+ * @psalm-taint-escape url_path
  */
 final class HeaderOnlyMergeRule implements ValidationRule
 {

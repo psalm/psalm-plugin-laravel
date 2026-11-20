@@ -13,4 +13,4 @@ function loginRedirect(\Illuminate\Http\Request $request, \Illuminate\Routing\Re
 }
 ?>
 --EXPECTF--
-TaintedHeader on line %d: Detected tainted header
+TaintedRedirect on line %d: Detected tainted redirect target

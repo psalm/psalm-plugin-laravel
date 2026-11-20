@@ -13,7 +13,9 @@ class Redirector
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink header $path
+     * @psalm-taint-sink redirect $path
+     * @psalm-taint-sink url_component $path
+     * @psalm-taint-sink url_path $path
      */
     public function to($path, $status = 302, $headers = [], $secure = null) {}
 
@@ -25,7 +27,9 @@ class Redirector
      * @param  array  $headers
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink header $path
+     * @psalm-taint-sink redirect $path
+     * @psalm-taint-sink url_component $path
+     * @psalm-taint-sink url_path $path
      */
     public function away($path, $status = 302, $headers = []) {}
 
@@ -37,7 +41,9 @@ class Redirector
      * @param  array  $headers
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink header $path
+     * @psalm-taint-sink redirect $path
+     * @psalm-taint-sink url_component $path
+     * @psalm-taint-sink url_path $path
      */
     public function secure($path, $status = 302, $headers = []) {}
 
@@ -50,7 +56,9 @@ class Redirector
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink header $path
+     * @psalm-taint-sink redirect $path
+     * @psalm-taint-sink url_component $path
+     * @psalm-taint-sink url_path $path
      */
     public function guest($path, $status = 302, $headers = [], $secure = null) {}
 
@@ -63,7 +71,9 @@ class Redirector
      * @param  bool|null  $secure
      * @return \Illuminate\Http\RedirectResponse
      *
-     * @psalm-taint-sink header $default
+     * @psalm-taint-sink redirect $default
+     * @psalm-taint-sink url_component $default
+     * @psalm-taint-sink url_path $default
      */
     public function intended($default = '/', $status = 302, $headers = [], $secure = null) {}
 }

@@ -396,6 +396,9 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Taint/JsonEncodeTaintHandler.php';
         $registration->registerHooksFromClass(Handlers\Taint\JsonEncodeTaintHandler::class);
 
+        require_once __DIR__ . '/Handlers/Http/InsecureCookieHandler.php';
+        $registration->registerHooksFromClass(Handlers\Http\InsecureCookieHandler::class);
+
         require_once __DIR__ . '/Handlers/Application/ContainerHandler.php';
         $registration->registerHooksFromClass(Handlers\Application\ContainerHandler::class);
         require_once __DIR__ . '/Handlers/Application/OffsetHandler.php';

@@ -19,7 +19,7 @@ function store(Request $request): RedirectResponse {
     ]);
 
     (new \Illuminate\Http\Client\PendingRequest())->get($request->input('reply_to'));
-    return redirect()->to($request->input('reply_to'));
+    return redirect()->to('/')->header('X-Contact', $request->input('reply_to'));
 }
 ?>
 --EXPECTF--
