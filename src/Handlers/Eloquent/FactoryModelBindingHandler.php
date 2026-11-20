@@ -149,7 +149,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
             }
 
             $explicitCount = $lcParent === $factoryFqcnLc
-                ? ($storage->template_type_extends_count[Factory::class] ?? 0) >= 2 && !isset($injected[$lcName])
+                ? (self::explicitExtendsCount($storage) ?? 0) >= 2 && !isset($injected[$lcName])
                 : !isset($synthesized[$lcParent]);
 
             // An override of count semantics also ends the chain: descendants fail the `$synthesized` parent test.
@@ -211,7 +211,18 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
         // only when the docblock is present; an omitted docblock leaves it null
         // (the populator then fills TModel with the default bare `Model`, which
         // we DO want to override). Presence => hands off.
-        return ($storage->template_type_extends_count[Factory::class] ?? null) === null;
+        return self::explicitExtendsCount($storage) === null;
+    }
+
+    /**
+     * The number of arguments `@extends Factory<...>` gives, keyed by the lowercase name since vimeo/psalm#14397, by
+     * the name as written before
+     */
+    private static function explicitExtendsCount(ClassLikeStorage $storage): ?int
+    {
+        return $storage->template_type_extends_count[\strtolower(Factory::class)]
+            ?? $storage->template_type_extends_count[Factory::class]
+            ?? null;
     }
 
     /**
@@ -413,6 +424,7 @@ final class FactoryModelBindingHandler implements AfterCodebasePopulatedInterfac
         $params[Factory::class] = $existing;
 
         $counts = $storage->template_type_extends_count ?? [];
+        $counts[\strtolower(Factory::class)] = 2;
         $counts[Factory::class] = 2;
 
         $storage->template_extended_params = $params;
