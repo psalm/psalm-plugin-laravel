@@ -6,7 +6,7 @@
 /**
  * A field the validator may exclude, or a rule of a nested attribute, doesn't validate the value under the key.
  */
-function rememberExcluded(\Illuminate\Http\Request $request): void {
+function showExcluded(\Illuminate\Http\Request $request): void {
     $agent = trim($request->header('User-Agent', ''));
     $validator = \Illuminate\Support\Facades\Validator::make(
         ['agent' => $agent, 'guest' => '1'],
@@ -15,10 +15,10 @@ function rememberExcluded(\Illuminate\Http\Request $request): void {
     if ($validator->fails()) {
         return;
     }
-    session(['agent' => $agent]);
+    echo $agent;
 }
 
-function rememberNested(\Illuminate\Http\Request $request): void {
+function showNested(\Illuminate\Http\Request $request): void {
     $agent = trim($request->header('User-Agent', ''));
     $validator = \Illuminate\Support\Facades\Validator::make(
         ['agent' => $agent],
@@ -27,9 +27,11 @@ function rememberNested(\Illuminate\Http\Request $request): void {
     if ($validator->fails()) {
         return;
     }
-    session(['agent' => $agent]);
+    echo $agent;
 }
 ?>
 --EXPECTF--
-TaintedSession on line %d: Detected tainted session data
-TaintedSession on line %d: Detected tainted session data
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes

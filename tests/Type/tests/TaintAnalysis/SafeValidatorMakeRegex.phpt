@@ -4,10 +4,10 @@
 <?php declare(strict_types=1);
 
 /**
- * A value Validator::make() (or validator()) checked against a `regex:` rule of its key can be kept in the session
- * once the validator doesn't fail.
+ * A value Validator::make() (or validator()) checked against a `regex:` rule of its key can be echoed once
+ * the validator doesn't fail.
  */
-function rememberAgent(\Illuminate\Http\Request $request): void {
+function showAgent(\Illuminate\Http\Request $request): void {
     $agent = trim($request->header('User-Agent', ''));
     $validator = \Illuminate\Support\Facades\Validator::make(
         ['agent' => $agent],
@@ -16,14 +16,14 @@ function rememberAgent(\Illuminate\Http\Request $request): void {
     if ($validator->fails()) {
         return;
     }
-    session(['agent' => $agent]);
+    echo $agent;
 }
 
-function rememberAgentWithHelper(\Illuminate\Http\Request $request): void {
+function showAgentWithHelper(\Illuminate\Http\Request $request): void {
     $agent = trim($request->header('User-Agent', ''));
     $validator = validator(['agent' => $agent], ['agent' => 'required|regex:#^[a-z]+$#']);
     if (!$validator->fails()) {
-        session(['agent' => $agent]);
+        echo $agent;
     }
 }
 ?>

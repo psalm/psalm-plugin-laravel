@@ -4,9 +4,9 @@
 <?php declare(strict_types=1);
 
 /**
- * A rule of another key, or none restricting the characters, doesn't validate the value for the session.
+ * A rule of another key, or none restricting the characters, doesn't validate the value for HTML.
  */
-function rememberAgent(\Illuminate\Http\Request $request): void {
+function showAgent(\Illuminate\Http\Request $request): void {
     $agent = trim($request->header('User-Agent', ''));
     $validator = \Illuminate\Support\Facades\Validator::make(
         ['agent' => $agent],
@@ -15,8 +15,9 @@ function rememberAgent(\Illuminate\Http\Request $request): void {
     if ($validator->fails()) {
         return;
     }
-    session(['agent' => $agent]);
+    echo $agent;
 }
 ?>
 --EXPECTF--
-TaintedSession on line %d: Detected tainted session data
+TaintedHtml on line %d: Detected tainted HTML
+TaintedTextWithQuotes on line %d: Detected tainted text with possible quotes
