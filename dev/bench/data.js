@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795215720759,
+  "lastUpdate": 1795216089259,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19800,6 +19800,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 23.11,
             "range": "± 0.24",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1246,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniil@daniil.it",
+            "name": "Daniil Gentili",
+            "username": "danog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "974ec42d0a689e08b404bd59fc070e88e5801195",
+          "message": "Report open redirects and cookies without the secure flag, and read the session back from what is stored (#2357)",
+          "timestamp": "2026-11-21T00:04:53+01:00",
+          "tree_id": "fdbd3f597e15d00941f6a4f5ee877f4634d1b364",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/974ec42d0a689e08b404bd59fc070e88e5801195"
+        },
+        "date": 1795216087370,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.46,
+            "range": "± 0.35",
             "unit": "s"
           },
           {
