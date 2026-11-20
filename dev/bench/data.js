@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795181146272,
+  "lastUpdate": 1795200786336,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19630,6 +19630,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1245,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniil@daniil.it",
+            "name": "Daniil Gentili",
+            "username": "danog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3ac3d33886594b8d86649b1c7af7f164a2e154ce",
+          "message": "Mark the environment variables naming the plugin's files as chosen by the operator (#2370)\n\n* Mark the environment variables naming the plugin's files as chosen by the operator\n\nPsalm 7.13 makes getenv() a taint source, which reports the cache directory, the annotate control file and the application base path the plugin reads from the environment as tainted file paths in its own analysis.\n\n* Give the html_url test sources a literal URL, not one read from the environment\n\ngetenv() is an input source in Psalm 7.13: what it returns would also carry the HTML taints these tests don't expect.\n\n* Keep the Config layer free of Internal: mark the cache path in PluginConfig itself",
+          "timestamp": "2026-11-20T19:48:24+01:00",
+          "tree_id": "b91c8cabcc096a7b0d1521061ef9e3c920abd846",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3ac3d33886594b8d86649b1c7af7f164a2e154ce"
+        },
+        "date": 1795200784730,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.85,
+            "range": "± 0.62",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1246,
             "unit": "MB"
           }
         ]
