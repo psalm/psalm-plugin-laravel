@@ -29,6 +29,7 @@ final readonly class PluginOverrides
         'resolveConfigReturnTypes' => self::BOOL,
         'reportImplicitQueryBuilderCalls' => self::BOOL,
         'findMissingTranslations' => self::BOOL,
+        'findMissingTranslations.keys' => ['all', 'short'],
         'findMissingViews' => self::BOOL,
         'findUnconfiguredFilesystemDisks' => self::BOOL,
         'findUnregisteredRouteNames' => self::BOOL,

@@ -21,7 +21,7 @@
     <plugins>
         <pluginClass class="Psalm\LaravelPlugin\Plugin">
             <reportImplicitQueryBuilderCalls value="true" />
-            <findMissingTranslations value="true" />
+            <findMissingTranslations value="true" keys="short" />
             <findMissingViews value="true" />
             <findUnconfiguredFilesystemDisks value="true" />
             <findSerializedQueuedModels value="true" />
