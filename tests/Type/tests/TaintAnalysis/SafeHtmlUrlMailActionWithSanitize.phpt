@@ -5,7 +5,7 @@
 
 /** @psalm-taint-source html_url */
 function untrustedAvatarUrl_Safe(): string {
-    return (string) ini_get('user_agent');
+    return 'https://example.com/avatar.png';
 }
 
 /**

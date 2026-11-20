@@ -14,6 +14,7 @@ use Illuminate\View\Engines\PhpEngine;
 use Illuminate\View\Factory;
 use Illuminate\View\FileViewFinder;
 use Orchestra\Testbench\Concerns\CreatesApplication;
+use Psalm\LaravelPlugin\Internal\OperatorEnvironment;
 use Psalm\LaravelPlugin\Internal\VendorDirectory;
 
 final class ApplicationProvider
@@ -591,14 +592,14 @@ final class ApplicationProvider
      */
     private function resolveProjectRoot(): ?string
     {
-        $envOverride = $this->firstNonEmptyString(
+        $envOverride = OperatorEnvironment::chosen($this->firstNonEmptyString(
             $_ENV['APP_BASE_PATH'] ?? null,
             $_SERVER['APP_BASE_PATH'] ?? null,
             \getenv('APP_BASE_PATH'),
             $_ENV['TESTBENCH_APP_BASE_PATH'] ?? null,
             $_SERVER['TESTBENCH_APP_BASE_PATH'] ?? null,
             \getenv('TESTBENCH_APP_BASE_PATH'),
-        );
+        ));
 
         if ($envOverride !== null) {
             return $envOverride;
