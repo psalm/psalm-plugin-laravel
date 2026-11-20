@@ -439,8 +439,8 @@ class Collection implements ArrayAccess, CanBeEscapedWhenCastToString, Enumerabl
      * Laravel's `callable($this)` gives an untyped closure param the unresolved `static` (the
      * enclosing class inside a class body), so every untyped closure was rejected. The callbacks
      * below name the class with its templates instead. These stubs reach `Collection` itself only:
-     * a subclass keeps the `EnumeratesValues` declaration, so its `whenEmpty()`
-     * family params stay `mixed`; `tap()`/`pipe()` params resolve to the subclass since Psalm 7.3.
+     * a subclass keeps the `EnumeratesValues` declaration, whose `callable($this)` params resolve to
+     * the subclass (`tap()`/`pipe()` since Psalm 7.3, the `whenEmpty()` family since Psalm 7.13).
      *
      * @param  callable(\Illuminate\Support\Collection<TKey, TValue>): mixed  $callback
      * @return $this

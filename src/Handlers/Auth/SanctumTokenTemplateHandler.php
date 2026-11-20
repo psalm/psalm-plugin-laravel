@@ -28,14 +28,14 @@ final class SanctumTokenTemplateHandler implements AfterClassLikeVisitInterface
 
         if ($has_api_tokens === null
             || isset($storage->template_type_uses_count[self::HAS_API_TOKENS_LC])
-            || isset($storage->template_extended_offsets[$has_api_tokens])
+            || isset($storage->template_extended_offsets[self::HAS_API_TOKENS_LC])
         ) {
             return;
         }
 
         $token_type = new Union([new TNamedObject(self::PERSONAL_ACCESS_TOKEN)]);
         $storage->template_type_uses_count[self::HAS_API_TOKENS_LC] = 1;
-        $storage->template_extended_offsets[$has_api_tokens] = [$token_type];
+        $storage->template_extended_offsets[self::HAS_API_TOKENS_LC] = [$token_type];
 
         $file_storage = $event->getCodebase()->file_storage_provider->get(
             $event->getStatementsSource()->getFilePath(),

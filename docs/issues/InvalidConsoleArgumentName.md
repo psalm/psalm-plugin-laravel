@@ -10,7 +10,7 @@ Emitted when `$this->argument('name')` references an argument that is not define
 
 ## Why this is a problem
 
-If you request an argument that doesn't exist in your command's `$signature`, Symfony Console throws an `InvalidArgumentException` at runtime.
+If you request an argument that doesn't exist in your command's signature (the `#[Signature]` attribute or the `$signature` property), Symfony Console throws an `InvalidArgumentException` at runtime.
 This check catches the mismatch during static analysis.
 
 ## Examples
@@ -43,5 +43,5 @@ class GreetCommand extends Command
 
 ## How to fix
 
-1. Check the `$signature` property of your command for the correct argument name
+1. Check the `#[Signature]` attribute or `$signature` property of your command for the correct argument name
 2. Either fix the `argument()` call to match the signature, or add the missing argument to the signature

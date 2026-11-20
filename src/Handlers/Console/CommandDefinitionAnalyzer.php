@@ -7,23 +7,27 @@ namespace Psalm\LaravelPlugin\Handlers\Console;
 use Illuminate\Console\Parser;
 use PhpParser\Node;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\Storage\ClassLikeStorage;
 use Symfony\Component\Console\Exception\LogicException;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputDefinition;
 use Symfony\Component\Console\Input\InputOption;
 
 /**
- * Resolves Artisan command input definitions by reading the $signature property
- * from the analyzed source's AST and parsing it with Laravel's {@see Parser}.
+ * Resolves Artisan command input definitions by reading the #[Signature] attribute or the
+ * $signature property from the analyzed source's AST and parsing it with Laravel's {@see Parser}.
  *
  * This works statically — the analyzed command class does not need to be loaded
- * into PHP's runtime. We read the literal string default value of the $signature
- * property from the AST and parse it with Laravel's own signature parser.
+ * into PHP's runtime. We read the literal string from the AST and parse it with
+ * Laravel's own signature parser.
  *
  * Cached per command class — each signature is parsed at most once per Psalm run.
  */
 final class CommandDefinitionAnalyzer
 {
+    /** Laravel 13+; a string, so the plugin still loads against Laravel 12. */
+    private const SIGNATURE_ATTRIBUTE = 'Illuminate\Console\Attributes\Signature';
+
     /** @var array<string, InputDefinition|null> */
     private static array $cache = [];
 
@@ -102,10 +106,11 @@ final class CommandDefinitionAnalyzer
     }
 
     /**
-     * Extract the $signature property's literal string default value from the AST.
+     * Extract the command's signature string from the AST.
      *
-     * Walks up the class hierarchy (child → parent) to find the first class
-     * that declares $signature with a string literal default.
+     * Mirrors Command::__construct(): a #[Signature] attribute on the concrete class wins
+     * (configureFromAttributes() reflects only static::class, so a parent's attribute is
+     * ignored), otherwise the first class up the hierarchy declaring a literal $signature.
      *
      * @param class-string $commandClass
      */
@@ -120,6 +125,7 @@ final class CommandDefinitionAnalyzer
 
         // Walk the class hierarchy to find $signature's literal value
         $currentClass = \strtolower($commandClass);
+        $isConcreteClass = true;
 
         while ($currentClass !== '') {
             try {
@@ -128,8 +134,11 @@ final class CommandDefinitionAnalyzer
                 break;
             }
 
-            // Only check this class if it declares the $signature property
-            if (!isset($storage->properties['signature'])) {
+            $readAttribute = $isConcreteClass && self::declaresSignatureAttribute($storage);
+            $isConcreteClass = false;
+
+            // Only check this class if it carries the attribute or declares the $signature property
+            if (!$readAttribute && !isset($storage->properties['signature'])) {
                 $currentClass = \strtolower($storage->parent_class ?? '');
 
                 continue;
@@ -153,9 +162,10 @@ final class CommandDefinitionAnalyzer
                 continue;
             }
 
-            $value = self::findSignatureDefaultInStatements($statements, $storage->name);
+            $value = self::findSignatureDefaultInStatements($statements, $storage->name, $readAttribute);
 
-            if ($value !== null) {
+            // An unresolvable #[Signature] still overrides any inherited $signature, so decline
+            if ($value !== null || $readAttribute) {
                 return $value;
             }
 
@@ -166,18 +176,31 @@ final class CommandDefinitionAnalyzer
         return null;
     }
 
+    /** @psalm-mutation-free */
+    private static function declaresSignatureAttribute(ClassLikeStorage $storage): bool
+    {
+        foreach ($storage->attributes as $attribute) {
+            if (\strtolower($attribute->fq_class_name) === \strtolower(self::SIGNATURE_ATTRIBUTE)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
-     * Walk AST statements to find the $signature property default in the given class.
+     * Walk AST statements to find the signature of the given class.
+     *
+     * Not mutation-free: reading an attribute's `resolvedName` goes through the unannotated Node::getAttribute().
      *
      * @param list<Node\Stmt> $statements
-     * @psalm-mutation-free
      */
-    private static function findSignatureDefaultInStatements(array $statements, string $className): ?string
+    private static function findSignatureDefaultInStatements(array $statements, string $className, bool $readAttribute): ?string
     {
         foreach ($statements as $stmt) {
             // Track namespace for building FQCN
             if ($stmt instanceof Node\Stmt\Namespace_) {
-                $result = self::findSignatureInNamespace($stmt, $className);
+                $result = self::findSignatureInNamespace($stmt, $className, $readAttribute);
 
                 if ($result !== null) {
                     return $result;
@@ -201,18 +224,14 @@ final class CommandDefinitionAnalyzer
                 continue;
             }
 
-            return self::findSignaturePropertyDefault($stmt);
+            return self::findSignatureInClass($stmt, $readAttribute);
         }
 
         return null;
     }
 
-    /**
-     * Search within a namespace statement for the target class's $signature default.
-     *
-     * @psalm-mutation-free
-     */
-    private static function findSignatureInNamespace(Node\Stmt\Namespace_ $namespace, string $className): ?string
+    /** Search within a namespace statement for the target class's signature. */
+    private static function findSignatureInNamespace(Node\Stmt\Namespace_ $namespace, string $className, bool $readAttribute): ?string
     {
         $namespaceName = $namespace->name?->toString() ?? '';
 
@@ -228,7 +247,46 @@ final class CommandDefinitionAnalyzer
                 continue;
             }
 
-            return self::findSignaturePropertyDefault($stmt);
+            return self::findSignatureInClass($stmt, $readAttribute);
+        }
+
+        return null;
+    }
+
+    private static function findSignatureInClass(Node\Stmt\Class_ $class, bool $readAttribute): ?string
+    {
+        if ($readAttribute) {
+            return self::findSignatureAttributeValue($class);
+        }
+
+        return self::findSignaturePropertyDefault($class);
+    }
+
+    /** Read the signature argument (positional or named) of the class's #[Signature] attribute. */
+    private static function findSignatureAttributeValue(Node\Stmt\Class_ $class): ?string
+    {
+        foreach ($class->attrGroups as $attrGroup) {
+            foreach ($attrGroup->attrs as $attr) {
+                /** @psalm-var string|null $resolved */
+                $resolved = $attr->name->getAttribute('resolvedName');
+                $attributeClass = \ltrim($resolved ?? $attr->name->toString(), '\\');
+
+                if (\strtolower($attributeClass) !== \strtolower(self::SIGNATURE_ATTRIBUTE)) {
+                    continue;
+                }
+
+                foreach ($attr->args as $position => $arg) {
+                    $isSignatureArg = $arg->name instanceof Node\Identifier
+                        ? $arg->name->toString() === 'signature'
+                        : $position === 0;
+
+                    if ($isSignatureArg) {
+                        return self::resolveStringValue($arg->value);
+                    }
+                }
+
+                return null;
+            }
         }
 
         return null;
