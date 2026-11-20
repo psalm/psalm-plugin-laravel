@@ -315,12 +315,31 @@ final readonly class PluginConfig
         return $cachePath . \DIRECTORY_SEPARATOR . 'blade';
     }
 
+    /**
+     * The environment variable is chosen by the person running Psalm, as Internal\OperatorEnvironment::chosen()
+     * marks it, which the Config layer can't depend on.
+     *
+     * @psalm-pure
+     * @psalm-taint-escape file
+     * @psalm-taint-escape ssrf
+     * @psalm-taint-escape include
+     * @psalm-taint-escape callable
+     * @psalm-taint-escape html
+     * @psalm-taint-escape has_quotes
+     * @psalm-taint-escape url_component
+     * @psalm-taint-escape url_path
+     */
+    private static function chosenByOperator(string|false $value): string|false
+    {
+        return $value;
+    }
+
     /** @param list<string> $deprecations */
     private static function resolveCachePath(array &$deprecations): string
     {
         // Deprecated env var override — still works, but users should rely on
         // the automatic Psalm cache directory instead
-        $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
+        $env = self::chosenByOperator(\getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH'));
 
         if (\is_string($env) && $env !== '') {
             $deprecations[] = 'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '

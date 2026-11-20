@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Blade\Annotate;
 
+use Psalm\LaravelPlugin\Internal\OperatorEnvironment;
+
 /**
  * The control file `psalm-laravel blade:annotate` puts in the child Psalm process's environment,
  * and the channel the run reports back through.
@@ -38,7 +40,7 @@ final class AnnotateRequest
     /** Null — the only safe answer — for anything but a marked control file this CLI wrote. */
     public static function fromEnvironment(): ?self
     {
-        $path = \getenv(self::ENV_VAR);
+        $path = OperatorEnvironment::chosen(\getenv(self::ENV_VAR));
 
         if (!\is_string($path) || $path === '') {
             return null;
