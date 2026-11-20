@@ -35,6 +35,8 @@ use Illuminate\Support\Facades\DB;
  *
  * @psalm-taint-escape header
  * @psalm-taint-escape redirect
+ * @psalm-taint-escape url_component
+ * @psalm-taint-escape url_path
  */
 final class HeaderOnlyMergeRule implements ValidationRule
 {

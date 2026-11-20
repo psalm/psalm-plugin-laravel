@@ -23,6 +23,8 @@ final class ContactArrowRequest extends FormRequest
             /**
              * @psalm-taint-escape header
              * @psalm-taint-escape redirect
+             * @psalm-taint-escape url_component
+             * @psalm-taint-escape url_path
              */
             fn (string $attribute, mixed $value, \Closure $fail): mixed
                 => $value === $attribute ? $fail('The email is invalid.') : null,

@@ -16,6 +16,8 @@ use Illuminate\Foundation\Http\FormRequest;
  *
  * @psalm-taint-escape header
  * @psalm-taint-escape redirect
+ * @psalm-taint-escape url_component
+ * @psalm-taint-escape url_path
  * @psalm-taint-escape cookie
  */
 final class FactoryDnsEmailRule implements ValidationRule

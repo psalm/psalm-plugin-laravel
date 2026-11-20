@@ -4,7 +4,7 @@
 <?php declare(strict_types=1);
 
 function pageRedirect(\Illuminate\Http\Request $request): void {
-    redirect('https://example.com/' . $request->string('page')->toString());
+    redirect('https://example.com/' . (string) $request->input('page'));
 }
 ?>
 --EXPECTF--
