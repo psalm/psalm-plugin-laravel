@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Psalm\LaravelPlugin\Config;
 
 use Psalm\Config;
+use Psalm\LaravelPlugin\Internal\OperatorEnvironment;
 
 /**
  * Immutable value object holding all plugin configuration.
@@ -320,7 +321,7 @@ final readonly class PluginConfig
     {
         // Deprecated env var override — still works, but users should rely on
         // the automatic Psalm cache directory instead
-        $env = \getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH');
+        $env = OperatorEnvironment::chosen(\getenv('PSALM_LARAVEL_PLUGIN_CACHE_PATH'));
 
         if (\is_string($env) && $env !== '') {
             $deprecations[] = 'Laravel plugin: PSALM_LARAVEL_PLUGIN_CACHE_PATH is deprecated and will be removed in v5. '
