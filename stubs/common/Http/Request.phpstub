@@ -73,9 +73,10 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      * $default is not constrained to object: Laravel accepts any type as the fallback
      * value (route()->parameter() returns it verbatim when the named parameter is
      * unbound), so `of object` false-positived on ordinary scalar/null defaults.
-     * The no-arg branch stays non-nullable Route, matching Laravel's own docblock and
-     * the existing RequestTest.phpt lock-in; the with-args branch already carried a
-     * bare `null` (kept, now also covering the object-parameter-binding case below).
+     * The non-null no-arg branch matches Laravel's own docblock below 13.39 only; 13.39+
+     * returns `Route|null` and is overridden in stubs/13.39.0/Http/Request.phpstub.
+     * The with-args branch already carried a bare `null` (kept, now also covering the
+     * object-parameter-binding case below).
      *
      * @template TDefault
      *

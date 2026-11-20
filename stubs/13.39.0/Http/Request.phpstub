@@ -1,0 +1,41 @@
+<?php
+
+namespace Illuminate\Http;
+
+use ArrayAccess;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Traits\Conditionable;
+use Illuminate\Support\Traits\Macroable;
+use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
+
+/**
+ * Laravel 13.39 made the no-arg `route()` nullable (laravel/framework#62191). The class header is copied
+ * verbatim: a re-declaration without it drops the interfaces. The common stub's other methods survive.
+ *
+ * @implements ArrayAccess<string, mixed>
+ */
+class Request extends SymfonyRequest implements Arrayable, ArrayAccess
+{
+    use Concerns\CanBePrecognitive,
+        Concerns\InteractsWithContentTypes,
+        Concerns\InteractsWithFlashData,
+        Concerns\InteractsWithInput,
+        Conditionable,
+        Macroable;
+
+    /**
+     * Get the route handling the request.
+     *
+     * The route resolver returns null when no route matched (error pages, console, queue), so the
+     * no-arg branch is nullable. The with-args branch is identical to the common stub.
+     *
+     * @template TDefault
+     *
+     * @param string|null $param
+     * @param TDefault $default
+     * @psalm-return ($param is null ? \Illuminate\Routing\Route|null : TDefault|object|string|null)
+     *
+     * @psalm-taint-source input
+     */
+    public function route($param = null, $default = null) {}
+}
