@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795089040939,
+  "lastUpdate": 1795179323535,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19560,6 +19560,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1246,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "19d2fe9fcdd5ef8dc276c165b7b45e42845ca808",
+          "message": "Type `Request::route()` without arguments as nullable (#2367)\n\n* fix(stubs): type Request::route() without arguments as nullable on Laravel 13.39+\n\nLaravel 13.39 (laravel/framework#62191) declares the no-arg branch as\nRoute|null; the resolver returns null when no route matched. Override\nroute() in stubs/13.39.0 and keep the non-null branch for older versions.\n\nRefs #1926\n\n* fix(stubs): type Request::route() without arguments as nullable on all Laravel versions\n\nThe route resolver returns null when no route matched (error pages,\nconsole, queue), and the body is identical on every supported Laravel.\nOnly the PHPDoc changed in 13.39 (laravel/framework#62191), so the\nnon-null Route on 12.x contradicted runtime. Move the nullable return\ninto the common stub and drop the stubs/13.39.0 override.\n\nRefs #1926",
+          "timestamp": "2026-11-20T13:52:37+01:00",
+          "tree_id": "1898b6f51085b7c49a15a06dfe8930ee99684152",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/19d2fe9fcdd5ef8dc276c165b7b45e42845ca808"
+        },
+        "date": 1795179322263,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.35,
+            "range": "± 0.27",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1244,
             "unit": "MB"
           }
         ]
