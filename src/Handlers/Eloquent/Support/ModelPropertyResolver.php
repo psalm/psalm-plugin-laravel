@@ -19,6 +19,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ColumnInfo;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Schema\ColumnTypeMapper;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\NodeTypeProvider;
 use Psalm\Type;
@@ -231,9 +232,17 @@ final class ModelPropertyResolver
             return null;
         }
 
+        // Builder::pluck($column, $key) vs Collection::pluck($value, $key): a named call can reorder them.
+        $valueArg = ArgUtil::byNameOrPosition($args, 0, $queryPath ? 'column' : 'value');
+
+        // A spread may supply `$key`, whose absence selects the sequential-key shape.
+        if (!$valueArg instanceof \PhpParser\Node\Arg || ArgUtil::hasUnpack($args)) {
+            return null;
+        }
+
         $resolved = self::resolvePluckColumnTypes(
-            valueArg: $args[0],
-            keyArg: $args[1] ?? null,
+            valueArg: $valueArg,
+            keyArg: ArgUtil::byNameOrPosition($args, 1, 'key'),
             modelClass: $modelClass,
             nodeTypeProvider: $nodeTypeProvider,
             codebase: $codebase,
@@ -256,8 +265,8 @@ final class ModelPropertyResolver
      * {@see \Psalm\LaravelPlugin\Handlers\Support\ArrPluckHandler}, which differ only in
      * how $modelClass is resolved (template parameter vs. argument element type).
      *
-     * $valueArg/$keyArg are positional — named-argument reordering (pluck(key: 'k', ...))
-     * would misindex here; deliberate scope cut, same as the rest of this class.
+     * $valueArg/$keyArg are the arguments the caller already bound to the value and key parameters
+     * ({@see self::resolvePluckReturnType()} and ArrPluckHandler do so, honouring named arguments).
      *
      * $queryPath: Eloquent `Builder::pluck()` runs the query and hydrates ONLY the value column through the
      * model, so its key column is the raw driver value: a date key (the implicit date cast of a `getDates()`

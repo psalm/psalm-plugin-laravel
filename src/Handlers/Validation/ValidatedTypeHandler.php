@@ -214,8 +214,8 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
 
         // Cheap literal-key check first — avoids the rules() AST walk for
         // the common dynamic-key case.
-        $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
-        $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
+        // `input($key = null, $default = null)`: a named call can put the default first.
+        $firstArgType = Arg::typeOf($callArgs, $event->getSource(), 0, 'key');
 
         if (!$firstArgType instanceof Union || !$firstArgType->isSingleStringLiteral()) {
             return null;
@@ -476,8 +476,7 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         array $callArgs,
         MethodReturnTypeProviderEvent $event,
     ): ?Union {
-        $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
-        $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
+        $firstArgType = Arg::typeOf($callArgs, $event->getSource(), 0, 'key');
 
         if (!$firstArgType instanceof Union || !$firstArgType->isSingleStringLiteral()) {
             return null;
@@ -540,8 +539,13 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
         array $callArgs,
         MethodReturnTypeProviderEvent $event,
     ): ?Union {
-        $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
-        $firstArgType = $nodeTypeProvider->getType($callArgs[0]->value);
+        // A spread may supply `$default`, whose absence leaves the bare rule type.
+        if (Arg::hasUnpack($callArgs)) {
+            return null;
+        }
+
+        // `validated($key = null, $default = null)`: a named call can put the default first.
+        $firstArgType = Arg::typeOf($callArgs, $event->getSource(), 0, 'key');
 
         if ($firstArgType instanceof Union && $firstArgType->isSingleStringLiteral()) {
             $key = $firstArgType->getSingleStringLiteral()->value;
@@ -552,8 +556,8 @@ final class ValidatedTypeHandler implements MethodReturnTypeProviderInterface
                 // If a default value is provided — validated($key, $default) —
                 // the return type can be either the validated rule type or
                 // the type of the default expression.
-                if (isset($callArgs[1])) {
-                    $defaultType = $nodeTypeProvider->getType($callArgs[1]->value);
+                if (Arg::byNameOrPosition($callArgs, 1, 'default') instanceof \PhpParser\Node\Arg) {
+                    $defaultType = Arg::typeOf($callArgs, $event->getSource(), 1, 'default');
 
                     if ($defaultType instanceof Union) {
                         $fieldType = Type::combineUnionTypes($fieldType, $defaultType);

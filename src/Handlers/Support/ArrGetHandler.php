@@ -6,6 +6,7 @@ namespace Psalm\LaravelPlugin\Handlers\Support;
 
 use Illuminate\Support\Arr;
 use Psalm\Codebase;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type;
@@ -47,19 +48,28 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface
         }
 
         $args = $event->getCallArgs();
-        if (\count($args) < 2) {
+        // A spread may supply `$default` (or the key), so the call's shape is unprovable.
+        if (\count($args) < 2 || ArgUtil::hasUnpack($args)) {
             // Missing the required $key argument — not a valid call to narrow.
             return null;
         }
 
         $nodeTypeProvider = $event->getSource()->getNodeTypeProvider();
 
-        $atomic = self::asSealedKeyedArray($nodeTypeProvider->getType($args[0]->value));
+        // A named call can reorder `Arr::get($array, $key, $default = null)`.
+        $arrayArg = ArgUtil::byNameOrPosition($args, 0, 'array');
+        $keyArg = ArgUtil::byNameOrPosition($args, 1, 'key');
+        $defaultArg = ArgUtil::byNameOrPosition($args, 2, 'default');
+        if (!$arrayArg instanceof \PhpParser\Node\Arg || !$keyArg instanceof \PhpParser\Node\Arg) {
+            return null;
+        }
+
+        $atomic = self::asSealedKeyedArray($nodeTypeProvider->getType($arrayArg->value));
         if (!$atomic instanceof TKeyedArray) {
             return null;
         }
 
-        $keyType = $nodeTypeProvider->getType($args[1]->value);
+        $keyType = $nodeTypeProvider->getType($keyArg->value);
         if (!$keyType instanceof Union || !$keyType->isSingleStringLiteral()) {
             // Also declines a null or int-literal $key: neither is a string literal,
             // and Arr::get(..., null) returns the whole array — not worth narrowing.
@@ -69,8 +79,8 @@ final class ArrGetHandler implements MethodReturnTypeProviderInterface
         $key = $keyType->getSingleStringLiteral()->value;
 
         $defaultType = null;
-        if (isset($args[2])) {
-            $defaultType = $nodeTypeProvider->getType($args[2]->value);
+        if ($defaultArg instanceof \PhpParser\Node\Arg) {
+            $defaultType = $nodeTypeProvider->getType($defaultArg->value);
             if (!$defaultType instanceof Union) {
                 return null;
             }

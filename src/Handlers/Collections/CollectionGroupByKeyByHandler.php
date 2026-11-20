@@ -9,6 +9,7 @@ use Illuminate\Support\Collection;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -38,12 +39,18 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         $method = $event->getMethodNameLowercase();
         $args = $event->getCallArgs();
         if (!\in_array($method, ['groupby', 'keyby'], true) || $args === []
-            || ($method === 'keyby' && \count($args) !== 1) || \count($args) > 2) {
+            || ($method === 'keyby' && \count($args) !== 1) || \count($args) > 2 || ArgUtil::hasUnpack($args)) {
             return null;
         }
 
         $source = $event->getSource();
-        $arg = $source->getNodeTypeProvider()->getType($args[0]->value);
+        // `groupBy($groupBy, $preserveKeys = false)` / `keyBy($keyBy)`: a named call can reorder them.
+        $groupArg = ArgUtil::byNameOrPosition($args, 0, $method === 'keyby' ? 'keyby' : 'groupby');
+        if (!$groupArg instanceof \PhpParser\Node\Arg) {
+            return null;
+        }
+
+        $arg = $source->getNodeTypeProvider()->getType($groupArg->value);
         if (!$arg instanceof Union) {
             return null;
         }
@@ -102,7 +109,8 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         $innerKey = $templates[0] ?? null;
-        $preserve = isset($args[1]) ? $source->getNodeTypeProvider()->getType($args[1]->value) : null;
+        $preserveArg = ArgUtil::byNameOrPosition($args, 1, 'preservekeys');
+        $preserve = $preserveArg instanceof \PhpParser\Node\Arg ? $source->getNodeTypeProvider()->getType($preserveArg->value) : null;
         if (!$innerKey instanceof Union) {
             return null;
         }
