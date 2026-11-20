@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795200786336,
+  "lastUpdate": 1795205264727,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19660,6 +19660,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 39.85,
             "range": "± 0.62",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1246,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "distinct": true,
+          "id": "7613608c513770b9a902a3e4f5806550575b991c",
+          "message": "feat(console): read the command signature from the #[Signature] attribute\n\nLaravel 13 lets a command declare its signature with #[Signature] instead of the\n$signature property. CommandDefinitionAnalyzer read only the property, so argument()\nand option() on such commands fell back to array|scalar|null and every name was\nreported as InvalidConsoleArgumentName/InvalidConsoleOptionName.\n\n- Read #[Signature] (positional or named argument) from the concrete class first,\n  mirroring Command::configureFromAttributes(): it overrides $signature, and a\n  parent's attribute is ignored because Laravel reflects only static::class.\n- Decline when the attribute is present but its value is not a literal string.",
+          "timestamp": "2026-11-20T21:03:59+01:00",
+          "tree_id": "547e572130b7ab8a6a6a91a15b6d737b65678ca1",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/7613608c513770b9a902a3e4f5806550575b991c"
+        },
+        "date": 1795205263218,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 34.91,
+            "range": "± 0.39",
             "unit": "s"
           },
           {
