@@ -70,11 +70,13 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
     /**
      * Get the route handling the request.
      *
+     * Nullable on every supported Laravel: the resolver returns null when no route matched
+     * (error pages, console, queue). Laravel's own docblock said non-null `Route` until 13.39
+     * (laravel/framework#62191), but the body is the same on all supported versions.
+     *
      * $default is not constrained to object: Laravel accepts any type as the fallback
      * value (route()->parameter() returns it verbatim when the named parameter is
      * unbound), so `of object` false-positived on ordinary scalar/null defaults.
-     * The non-null no-arg branch matches Laravel's own docblock below 13.39 only; 13.39+
-     * returns `Route|null` and is overridden in stubs/13.39.0/Http/Request.phpstub.
      * The with-args branch already carried a bare `null` (kept, now also covering the
      * object-parameter-binding case below).
      *
@@ -82,7 +84,7 @@ class Request extends SymfonyRequest implements Arrayable, ArrayAccess
      *
      * @param string|null $param
      * @param TDefault $default
-     * @psalm-return ($param is null ? \Illuminate\Routing\Route : TDefault|object|string|null)
+     * @psalm-return ($param is null ? \Illuminate\Routing\Route|null : TDefault|object|string|null)
      *
      * @psalm-taint-source input
      */

@@ -1,7 +1,3 @@
---SKIPIF--
-<?php
-require getcwd() . '/vendor/autoload.php';
-\Tests\Psalm\LaravelPlugin\Type\LaravelVersion::skipBelow('13.39.0');
 --FILE--
 <?php declare(strict_types=1);
 
@@ -9,9 +5,9 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 
 /**
- * Laravel 13.39.0 (laravel/framework#62191) made the no-arg `route()` nullable: the resolver
- * returns null when no route matched (error pages, console, queue). The stubs/13.39.0 override
- * must not type it as a non-null Route, or `?->` and `instanceof` guards report redundant checks.
+ * The no-arg `route()` is nullable on every supported Laravel: the resolver returns null when no
+ * route matched (error pages, console, queue). Typing it as a non-null Route makes `?->` and
+ * `instanceof` guards report redundant checks.
  */
 function request_route_is_nullable(Request $request): void
 {
