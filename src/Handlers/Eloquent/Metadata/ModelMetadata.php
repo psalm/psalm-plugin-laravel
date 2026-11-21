@@ -58,6 +58,7 @@ final readonly class ModelMetadata
      * @param list<non-empty-string>                        $appends
      * @param list<string>                                  $with      Eager-load relation names from `$with`.
      * @param list<string>                                  $withCount Eager-load-count relation names from `$withCount`.
+     * @param bool                                          $hasDefaultCounts Whether `$withCount` has any entry, a keyed constraint map included (it is dropped from `$withCount`): Laravel then seeds a select on every query of the model.
      * @param list<non-empty-string>                        $hidden
      * @param list<non-empty-string>                        $visible   Serialization allow-list from `$visible`; when non-empty it limits `toArray()`/`toJson()` to these keys (consumed by #923).
      * @param class-string<Builder>|null                    $customBuilder    Detected via #[UseEloquentBuilder] / newEloquentBuilder() / $builder; non-templated because detection cannot recover the model type param.
@@ -92,6 +93,7 @@ final readonly class ModelMetadata
         private array $relationsData,
         private array $knownPropertiesData,
         private int $completeSections,
+        public bool $hasDefaultCounts = false,
     ) {}
 
     /**

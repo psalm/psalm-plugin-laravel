@@ -157,6 +157,131 @@ final class UnknownModelAttributeHandlerTest extends TestCase
     }
 
     /**
+     * @param array{string, list<string>}|null $expected root method and link names, or null (declined)
+     */
+    #[Test]
+    #[DataProvider('queryChains')]
+    public function fresh_query_chain_accepts_only_a_class_named_static_root_and_shape_preserving_links(string $code, ?array $expected): void
+    {
+        $call = $this->parse($code);
+        $this->assertTrue($call instanceof MethodCall || $call instanceof StaticCall);
+
+        $chain = UnknownModelAttributeHandler::freshQueryChain($call);
+        $root = $chain[0]->name ?? null;
+
+        $this->assertSame(
+            $expected,
+            $chain === null || !$root instanceof Identifier ? null : [$root->name, \array_keys($chain[1])],
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, array{string, list<string>}|null}>
+     */
+    public static function queryChains(): iterable
+    {
+        yield 'static forward is its own root' => ['Post::find(1, ["a"])', ['find', []]];
+        yield 'query() root' => ['Post::query()->first(["a"])', ['query', ['query']]];
+        yield 'static link root and links' => ['Post::where("a", 1)->orderBy("a")->limit(1)->get(["a"])', ['where', ['limit', 'orderby', 'where']]];
+        yield 'method names are case-insensitive' => ['Post::QUERY()->WhereIn("a", [1])->get(["a"])', ['QUERY', ['wherein', 'query']]];
+        yield 'join link' => ['Post::query()->join("t", "a", "=", "b")->get(["a"])', null];
+        yield 'select makes the argument dead' => ['Post::query()->select("a")->get(["b"])', null];
+        yield 'conditional closure' => ['Post::query()->when($f, fn ($q) => $q)->get(["a"])', null];
+        yield 'local scope or macro' => ['Post::query()->published()->get(["a"])', null];
+        yield 'query() is a root only' => ['Post::where("a", 1)->query()->get(["a"])', null];
+        yield 'variable receiver' => ['$builder->get(["a"])', null];
+        yield 'variable root of a chain' => ['$builder->where("a", 1)->get(["a"])', null];
+        yield 'property receiver' => ['$this->query->get(["a"])', null];
+        yield 'relation receiver' => ['$user->posts()->get(["a"])', null];
+        yield 'new receiver' => ['(new Post())->newQuery()->get(["a"])', null];
+        yield 'nullsafe link' => ['Post::query()?->where("a", 1)->get(["a"])', null];
+        yield 'dynamic link' => ['Post::query()->$method()->get(["a"])', null];
+        yield 'dynamic class' => ['$class::query()->get(["a"])', null];
+        yield 'dynamic static method' => ['Post::$method()->get(["a"])', null];
+    }
+
+    /**
+     * @param list<string> $expected
+     */
+    #[Test]
+    #[DataProvider('columnArguments')]
+    public function column_literals_keeps_only_plain_literal_columns(string $code, array $expected): void
+    {
+        $literals = UnknownModelAttributeHandler::columnLiterals($this->parse($code));
+
+        $this->assertSame($expected, \array_map(static fn(\PhpParser\Node\Scalar\String_ $s): string => $s->value, $literals));
+    }
+
+    /**
+     * @return iterable<string, array{string, list<string>}>
+     */
+    public static function columnArguments(): iterable
+    {
+        yield 'list of identifiers' => ['["id", "full_name", "_private", "col2"]', ['id', 'full_name', '_private', 'col2']];
+        yield 'single string' => ['"name"', ['name']];
+        yield 'JSON path keeps the whole literal' => ['["options->theme->color"]', ['options->theme->color']];
+        yield 'wildcards' => ['["*", "posts.*"]', []];
+        yield 'qualified names' => ['["posts.title", "db.posts.title"]', []];
+        yield 'aliases' => ['["title as t", "title AS t", "options->theme as theme"]', []];
+        yield 'raw-looking strings' => ['["count(*)", "`title`", "", " title", "title "]', []];
+        yield 'non-literals' => ['[$column, DB::raw("x"), "a" . $b, self::COLUMN]', []];
+        yield 'unpacked item is skipped alone' => ['[...$more, "kept"]', ['kept']];
+        yield 'any explicit key may overwrite an entry' => ['["dropped", 0 => "kept"]', []];
+        yield 'a dynamic key may overwrite an entry' => ['["dropped", $offset => "kept"]', []];
+        yield 'closure passed as $columns' => ['fn () => null', []];
+        yield 'variable' => ['$columns', []];
+    }
+
+    #[Test]
+    #[DataProvider('scopeStorages')]
+    public function scope_may_extend_builder_trusts_only_laravels_soft_deleting_scope_itself(\Psalm\Storage\ClassLikeStorage $storage, bool $expected): void
+    {
+        $this->assertSame($expected, UnknownModelAttributeHandler::scopeMayExtendBuilder($storage));
+    }
+
+    /**
+     * @return iterable<string, array{\Psalm\Storage\ClassLikeStorage, bool}>
+     */
+    public static function scopeStorages(): iterable
+    {
+        $soft = \Illuminate\Database\Eloquent\SoftDeletingScope::class;
+
+        yield 'SoftDeletingScope itself' => [self::scopeStorage($soft, $soft), false];
+        // Inherits extend(), which calls $this->addRestore() and siblings an override may turn into a join.
+        yield 'subclass of SoftDeletingScope' => [self::scopeStorage('App\JoiningSoftDeletes', $soft), true];
+        yield 'userland extend()' => [self::scopeStorage('App\ExtendingScope', 'App\ExtendingScope'), true];
+        yield 'inherited userland extend()' => [self::scopeStorage('App\ChildScope', 'App\BaseScope'), true];
+        yield 'scope without extend()' => [self::scopeStorage('App\TeamScope', null), false];
+        yield 'extend() outside a Scope' => [self::scopeStorage('App\Macroable', 'App\Macroable', scope: false), false];
+        yield 'unpopulated storage' => [self::scopeStorage('App\Unknown', null, populated: false), true];
+    }
+
+    private static function scopeStorage(string $name, ?string $extendDeclarer, bool $scope = true, bool $populated = true): \Psalm\Storage\ClassLikeStorage
+    {
+        $storage = new \Psalm\Storage\ClassLikeStorage($name);
+        $storage->populated = $populated;
+
+        if ($scope) {
+            $storage->class_implements = [\strtolower(\Illuminate\Database\Eloquent\Scope::class) => \Illuminate\Database\Eloquent\Scope::class];
+        }
+
+        if ($extendDeclarer !== null) {
+            $storage->declaring_method_ids = ['extend' => new \Psalm\Internal\MethodIdentifier($extendDeclarer, 'extend')];
+        }
+
+        return $storage;
+    }
+
+    private function parse(string $code): \PhpParser\Node\Expr
+    {
+        $statements = (new \PhpParser\ParserFactory())->createForNewestSupportedVersion()->parse('<?php ' . $code . ';');
+        $statement = $statements[0] ?? null;
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $statement);
+
+        return $statement->expr;
+    }
+
+    /**
      * @param array<lowercase-string, string> $declaring
      * @param list<lowercase-string>          $scanned
      */

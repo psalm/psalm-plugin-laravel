@@ -426,6 +426,7 @@ final class ModelMetadataRegistryBuilder
             relationsData: $relations,
             knownPropertiesData: self::computeKnownProperties($tableSchema, $casts, $accessors, $mutators, $relations, $runtime['appends']),
             completeSections: $completeSections,
+            hasDefaultCounts: $runtime['hasDefaultCounts'],
         );
     }
 
@@ -522,6 +523,7 @@ final class ModelMetadataRegistryBuilder
             relationsData: $relations,
             knownPropertiesData: self::computeKnownProperties($schema, [], $accessors, $mutators, $relations, $appends),
             completeSections: $completeSections,
+            hasDefaultCounts: self::asArray($defaults['withCount'] ?? null) !== [],
         );
     }
 
@@ -587,6 +589,7 @@ final class ModelMetadataRegistryBuilder
             relationsData: $relations,
             knownPropertiesData: self::computeKnownProperties($schema, [], $accessors, $mutators, $relations, $appends),
             completeSections: $completeSections,
+            hasDefaultCounts: self::asArray($defaults['withCount'] ?? null) !== [],
         );
     }
 
@@ -598,6 +601,7 @@ final class ModelMetadataRegistryBuilder
      *     appends: list<non-empty-string>,
      *     with: list<string>,
      *     withCount: list<string>,
+     *     hasDefaultCounts: bool,
      *     hidden: list<non-empty-string>,
      *     visible: list<non-empty-string>,
      *     connection: string|null,
@@ -622,6 +626,7 @@ final class ModelMetadataRegistryBuilder
             'appends' => self::filterStringList($instance->getAppends()),
             'with' => self::readStringList($instance, 'with'),
             'withCount' => self::readStringList($instance, 'withCount'),
+            'hasDefaultCounts' => self::readArray($instance, 'withCount') !== [],
             'hidden' => self::filterStringList($instance->getHidden()),
             'visible' => self::filterStringList($instance->getVisible()),
             'connection' => self::asConnectionName($instance->getConnectionName()),
@@ -664,6 +669,7 @@ final class ModelMetadataRegistryBuilder
      *     appends: list<non-empty-string>,
      *     with: list<string>,
      *     withCount: list<string>,
+     *     hasDefaultCounts: false,
      *     hidden: list<non-empty-string>,
      *     visible: list<non-empty-string>,
      *     connection: null,
@@ -680,6 +686,7 @@ final class ModelMetadataRegistryBuilder
             'appends' => [],
             'with' => [],
             'withCount' => [],
+            'hasDefaultCounts' => false,
             'hidden' => [],
             'visible' => [],
             'connection' => null,
@@ -1719,16 +1726,7 @@ final class ModelMetadataRegistryBuilder
      */
     private static function readStringList(Model $instance, string $propertyName): array
     {
-        try {
-            $property = new \ReflectionProperty($instance, $propertyName);
-            $value = $property->getValue($instance);
-        } catch (\ReflectionException) {
-            return [];
-        }
-
-        if (!\is_array($value)) {
-            return [];
-        }
+        $value = self::readArray($instance, $propertyName);
 
         foreach (\array_keys($value) as $key) {
             if (\is_string($key)) {
@@ -1737,6 +1735,18 @@ final class ModelMetadataRegistryBuilder
         }
 
         return self::filterStringList($value);
+    }
+
+    /**
+     * @return array<array-key, mixed>
+     */
+    private static function readArray(Model $instance, string $propertyName): array
+    {
+        try {
+            return self::asArray((new \ReflectionProperty($instance, $propertyName))->getValue($instance));
+        } catch (\ReflectionException) {
+            return [];
+        }
     }
 
     /**

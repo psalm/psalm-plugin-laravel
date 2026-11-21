@@ -84,6 +84,48 @@ final class EmissionAppTest extends TestCase
     ];
 
     /**
+     * UnknownModelColumn (#2346): flagged column literal => ["Receiver::method" the message must start
+     * with, short name of the model it must name]. The first three are the examples of the issue.
+     *
+     * @var array<string, array{string, string}>
+     */
+    private const EXPECTED_COLUMN_LIST_FINDINGS = [
+        'typocol_findsole' => ['PostBuilder::findSole', 'Post'],
+        'typocol_findor' => ['Post::findOr', 'Post'],
+        'typocol_first' => ['PostBuilder::first', 'Post'],
+        'typocol_find' => ['KnownThing::find', 'KnownThing'],
+        'typocol_findorfail' => ['KnownThing::findOrFail', 'KnownThing'],
+        'typocol_findornew' => ['KnownThing::findOrNew', 'KnownThing'],
+        'typocol_findmany' => ['KnownThing::findMany', 'KnownThing'],
+        'typocol_staticfirst' => ['KnownThing::first', 'KnownThing'],
+        'typocol_firstorfail' => ['KnownThing::firstOrFail', 'KnownThing'],
+        'typocol_firstor' => ['KnownThing::firstOr', 'KnownThing'],
+        'typocol_sole' => ['KnownThing::sole', 'KnownThing'],
+        'typocol_staticget' => ['KnownThing::get', 'KnownThing'],
+        'typocol_all' => ['KnownThing::all', 'KnownThing'],
+        'typocol_staticpaginate' => ['KnownThing::paginate', 'KnownThing'],
+        'typocol_get' => ['Builder::get', 'KnownThing'],
+        'typocol_paginate' => ['Builder::paginate', 'KnownThing'],
+        'typocol_simplepaginate' => ['Builder::simplePaginate', 'KnownThing'],
+        'typocol_cursorpaginate' => ['Builder::cursorPaginate', 'KnownThing'],
+        'typocol_chain' => ['Builder::get', 'KnownThing'],
+        'typocol_longchain' => ['Builder::get', 'KnownThing'],
+        'typocol_named' => ['Builder::find', 'KnownThing'],
+        'typocol_string' => ['Builder::first', 'KnownThing'],
+        'typocol_json->theme' => ['Builder::get', 'KnownThing'],
+        'typocol_twice_a' => ['Builder::get', 'KnownThing'],
+        'typocol_twice_b' => ['Builder::get', 'KnownThing'],
+        'typocol_lockforupdate' => ['Builder::first', 'KnownThing'],
+        'typocol_sharedlock' => ['Builder::get', 'KnownThing'],
+        'typocol_mixed' => ['Builder::get', 'KnownThing'],
+        'typocol_softdeletes' => ['Builder::first', 'TrashedPost'],
+        'typocol_unrelated_attribute' => ['Builder::get', 'AuditedPost'],
+        'typocol_paginate_beside_scope_limit' => ['Builder::paginate', 'ScopeLimitPost'],
+        'typocol_self' => ['Builder::first', 'PlainPost'],
+        'typocol_static' => ['Builder::first', 'PlainPost'],
+    ];
+
+    /**
      * DynamicWhereSchemaColumns: issue types a failed dynamic `where{Column}` resolution surfaces as.
      */
     private const DYNAMIC_WHERE_ISSUES = [
@@ -118,8 +160,8 @@ final class EmissionAppTest extends TestCase
         '::published',            // direct #[Scope]
     ];
 
-    /** @var array{findings: list<array{type: string, message: string, severity: string, file_name: string}>, stdout: string, stderr: string}|null */
-    private static ?array $run = null;
+    /** @var array<string, array{findings: list<array{type: string, message: string, severity: string, file_name: string}>, stdout: string, stderr: string}> one run per analyzed path ('' = the whole app) */
+    private static array $runs = [];
 
     #[Test]
     public function unknown_model_attribute_is_reported_through_every_receiver_form_and_stays_silent_on_clean_calls(): void
@@ -153,6 +195,45 @@ final class EmissionAppTest extends TestCase
 
         $this->assertCount(3 + \count(self::EXPECTED_CREATION_PATH_FINDINGS), $findings, "Unexpected UnknownModelAttribute finding count, got:\n{$joined}");
         // Experimental mode enforces the rule, so every finding is an error rather than the default info.
+        $this->assertSame(\array_fill(0, \count($findings), 'error'), \array_column($findings, 'severity'));
+    }
+
+    #[Test]
+    public function a_bare_without_global_scopes_lifts_the_scope_veto_only_when_no_scope_of_the_run_declares_extend(): void
+    {
+        // The whole-app run holds a scope declaring `extend()` (`silentcol_scope_extend`), so there the lift is off.
+        $this->assertSame([], $this->scenarioFindings('UnknownModelColumnUnscoped', 'UnknownModelAttribute'));
+
+        // Analyzed alone, the scenario holds no such scope: the trait's plain where scope is dropped.
+        $findings = \array_values(\array_filter(
+            $this->psalmRun('app/UnknownModelColumnUnscoped')['findings'],
+            static fn(array $finding): bool => $finding['type'] === 'UnknownModelAttribute',
+        ));
+
+        $this->assertSame(
+            ["Builder::get() selects an unknown column 'typocol_unscoped_team'. It matches no column, cast, accessor, relation, \$appends entry, or @property of TeamPost — check for a typo."],
+            $this->messages($findings),
+        );
+    }
+
+    #[Test]
+    public function unknown_column_in_a_literal_column_list_is_reported_only_on_a_fresh_static_query_chain(): void
+    {
+        $messages = $this->messages($findings = $this->scenarioFindings('UnknownModelColumn', 'UnknownModelAttribute'));
+        $joined = \implode("\n", $messages);
+
+        foreach (self::EXPECTED_COLUMN_LIST_FINDINGS as $column => [$prefix, $model]) {
+            $this->assertMatchesRegularExpression(
+                '/^' . \preg_quote($prefix, '/') . '\(\) selects an unknown column \'' . \preg_quote($column, '/') . '\'\..* of ' . $model . ' — check for a typo\.$/m',
+                $joined,
+                "'{$column}' must be flagged as {$prefix}() against {$model}.",
+            );
+        }
+
+        // Every declined shape carries a `silentcol_` literal: aliases, qualifiers, expressions, joins,
+        // FROM changes, dead arguments after a select, unproven receivers, global scopes, overrides.
+        $this->assertStringNotContainsString('silentcol_', $joined, 'A declined shape must not be flagged.');
+        $this->assertCount(\count(self::EXPECTED_COLUMN_LIST_FINDINGS), $findings, "Unexpected column finding count, got:\n{$joined}");
         $this->assertSame(\array_fill(0, \count($findings), 'error'), \array_column($findings, 'severity'));
     }
 
@@ -355,10 +436,10 @@ final class EmissionAppTest extends TestCase
     /**
      * @return array{findings: list<array{type: string, message: string, severity: string, file_name: string}>, stdout: string, stderr: string}
      */
-    private function psalmRun(): array
+    private function psalmRun(string $path = ''): array
     {
-        if (self::$run !== null) {
-            return self::$run;
+        if (isset(self::$runs[$path])) {
+            return self::$runs[$path];
         }
 
         $projectRoot = \dirname(__DIR__, 3);
@@ -368,7 +449,7 @@ final class EmissionAppTest extends TestCase
 
         $cacheDir = \sys_get_temp_dir() . '/psalm-laravel-emission-app-' . \bin2hex(\random_bytes(6));
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--scan-threads=1', '--no-progress', '--show-info=true', '--output-format=json'],
+            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--scan-threads=1', '--no-progress', '--show-info=true', '--output-format=json', ...($path === '' ? [] : [$path])],
             __DIR__ . '/Fixtures/EmissionApp',
             ['XDG_CACHE_HOME' => $cacheDir, 'TMPDIR' => $cacheDir . '/'],
         );
@@ -403,6 +484,6 @@ final class EmissionAppTest extends TestCase
             }
         }
 
-        return self::$run = ['findings' => $findings, 'stdout' => $stdout, 'stderr' => $stderr];
+        return self::$runs[$path] = ['findings' => $findings, 'stdout' => $stdout, 'stderr' => $stderr];
     }
 }

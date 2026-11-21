@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\HasCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Traits\ForwardsCalls;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
@@ -31,6 +30,7 @@ use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelQueryPath;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationPath;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelationResolver;
 use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
@@ -103,8 +103,8 @@ use Psalm\Type\Union;
  * array, a computed key or spread anywhere in the literal, a generic (templated) model anywhere on the path, a Relation
  * that is not exactly one of Laravel's own ({@see LARAVEL_RELATIONS}: the receiver and every segment of the path), and every
  * class whose own code the constraint passes through not being Laravel's ({@see modelRunsLaravelsEagerLoad()}): the
- * builder (an unknown one, see {@see hasUnknownBuilder()}, or one overriding any method of BUILDER_EAGER_PATH), the model
- * (MODEL_QUERY_PATH, or an unknown collection for `loadMissing()`, see {@see hasUnknownCollection()}) and the collection
+ * builder (an unknown one, see {@see ModelQueryPath::hasUnknownBuilder()}, or one overriding any method of BUILDER_EAGER_PATH),
+ * the model ({@see ModelQueryPath::isLaravels()}, or an unknown collection for `loadMissing()`, see {@see hasUnknownCollection()}) and the collection
  * (COLLECTION_EAGER_PATH), for the receiver, a forwarded receiver and every intermediate model of a dot path. Every pass restores a closure param to its declaration
  * before restating it ({@see beforeExpressionAnalysis()} covers receivers no provider dispatches on), so a declined
  * pass revokes earlier inference.
@@ -238,21 +238,6 @@ final class RelationCallbackParamsHandler implements
         'createselectwithconstraint',
         'combineconstraints',
         'addnestedwiths',
-    ];
-
-    /**
-     * The Model methods that build the query `with()`/`load()` run on, each declared by Model itself (its magic
-     * forwarding is checked next to them, see {@see modelForwardingIsLaravels()}).
-     *
-     * @var non-empty-list<lowercase-string>
-     */
-    private const MODEL_QUERY_PATH = [
-        'query',
-        'newquery',
-        'newquerywithoutscopes',
-        'newmodelquery',
-        'newquerywithoutrelationships',
-        'registerglobalscopes',
     ];
 
     /**
@@ -427,7 +412,7 @@ final class RelationCallbackParamsHandler implements
         $modelBuilder = ModelMethodHandler::getBuilderClassForModel($model);
         $declaring = self::builderDeclaring($codebase, $dispatched, $method, $model, $forwards);
         if (!$declaring instanceof MethodIdentifier
-            || (($forwards || $kind === self::MORPH) && self::hasUnknownBuilder($codebase, $model))
+            || (($forwards || $kind === self::MORPH) && ModelQueryPath::hasUnknownBuilder($codebase, $model))
         ) {
             return null;
         }
@@ -661,7 +646,7 @@ final class RelationCallbackParamsHandler implements
             [$model, $forwards] = $receiver;
 
             // The receiver runs on its own class; a static or Relation-forwarded call runs on the model's builder.
-            if (self::hasUnknownBuilder($codebase, $model)
+            if (ModelQueryPath::hasUnknownBuilder($codebase, $model)
                 || ($forwards && $atomic instanceof TNamedObject && !self::isLaravelRelation($atomic->value))
                 || !self::builderIsLaravels($codebase, $dispatched)
                 || ($forwards && !self::modelRunsLaravelsEagerLoad($codebase, $model))
@@ -676,7 +661,7 @@ final class RelationCallbackParamsHandler implements
         }
 
         $model = self::declaredReceiverModel($source, $call, $dispatched, $method, $host);
-        $declaring = $model === null ? null : self::declaredBy($codebase, $dispatched, $method, $host);
+        $declaring = $model === null ? null : ModelQueryPath::declaredBy($codebase, $dispatched, $method, $host);
         $collection = $host === Model::class ? CustomCollectionHandler::getCollectionClassForModel($model ?? '') ?? EloquentCollection::class : $dispatched;
 
         return $model !== null
@@ -695,7 +680,7 @@ final class RelationCallbackParamsHandler implements
     private static function collectionIsLaravels(Codebase $codebase, string $class): bool
     {
         foreach (self::COLLECTION_EAGER_PATH as $method) {
-            if (!self::declaredBy($codebase, $class, $method, EloquentCollection::class) instanceof MethodIdentifier) {
+            if (!ModelQueryPath::declaredBy($codebase, $class, $method, EloquentCollection::class) instanceof MethodIdentifier) {
                 return false;
             }
         }
@@ -714,32 +699,6 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * Whether `$model` forwards calls to its builder through Laravel's own `__call()`/`__callStatic()` and the
-     * `ForwardsCalls` helpers they use: an override may hand the constraint the Builder instead of the Relation.
-     *
-     * @param class-string<Model> $model
-     * @psalm-pure
-     */
-    private static function modelForwardingIsLaravels(Codebase $codebase, string $model): bool
-    {
-        foreach (['__call', '__callstatic'] as $method) {
-            if (!self::declaredBy($codebase, $model, $method, Model::class) instanceof MethodIdentifier) {
-                return false;
-            }
-        }
-
-        foreach (['forwardcallto', 'forwarddecoratedcallto'] as $method) {
-            $declaring = $codebase->getDeclaringMethodId($model . '::' . $method);
-
-            if ($declaring === null || !\in_array(\strtolower(MethodIdentifier::wrap($declaring)->fq_class_name), [\strtolower(Model::class), \strtolower(ForwardsCalls::class)], true)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
      * Whether every Builder method of the eager-load path is Laravel's own on `$builder`. An unknown class declines.
      *
      * @psalm-pure
@@ -747,7 +706,7 @@ final class RelationCallbackParamsHandler implements
     private static function builderIsLaravels(Codebase $codebase, string $builder): bool
     {
         foreach (self::BUILDER_EAGER_PATH as $method) {
-            if (!self::declaredBy($codebase, $builder, $method, Builder::class) instanceof MethodIdentifier) {
+            if (!ModelQueryPath::declaredBy($codebase, $builder, $method, Builder::class) instanceof MethodIdentifier) {
                 return false;
             }
         }
@@ -764,23 +723,13 @@ final class RelationCallbackParamsHandler implements
      */
     private static function modelRunsLaravelsEagerLoad(Codebase $codebase, string $model): bool
     {
-        if (self::hasUnknownBuilder($codebase, $model) || !self::builderIsLaravels($codebase, ModelMethodHandler::getBuilderClassForModel($model))) {
-            return false;
-        }
-
-        foreach (self::MODEL_QUERY_PATH as $method) {
-            if (!self::declaredBy($codebase, $model, $method, Model::class) instanceof MethodIdentifier) {
-                return false;
-            }
-        }
-
-        // A static `Model::withOnly()` reaches the builder through the model's magic forwarding.
-        return self::modelForwardingIsLaravels($codebase, $model);
+        return ModelQueryPath::isLaravels($codebase, $model)
+            && self::builderIsLaravels($codebase, ModelMethodHandler::getBuilderClassForModel($model));
     }
 
     /**
      * Whether the collection a model builds in `newCollection()` is one the plugin does not know, like
-     * {@see hasUnknownBuilder()} for builders: no custom collection is registered yet `newCollection()` is overridden
+     * {@see ModelQueryPath::hasUnknownBuilder()} for builders: no custom collection is registered yet `newCollection()` is overridden
      * (a docblock-only return type is invisible to the detector), so it resolves to the base collection and its
      * `loadMissing()` could be anything. A legitimate base collection is an override whose EFFECTIVE declared type
      * (docblock over native) is exactly Eloquent's Collection. Unreadable storage counts as unknown.
@@ -862,20 +811,6 @@ final class RelationCallbackParamsHandler implements
         return $host === Model::class
             ? (ClassLineage::isA($codebase, $atomic->value, Model::class) ? $atomic->value : null)
             : self::projectedModel($codebase, $atomic, EloquentCollection::class, 'TModel', true);
-    }
-
-    /**
-     * Whether `$class::$method` is declared by `$declaringClass` itself: a userland override, or a trait that
-     * supplies one, makes another class the declaring one.
-     *
-     * @psalm-pure
-     */
-    private static function declaredBy(Codebase $codebase, string $class, string $method, string $declaringClass): ?MethodIdentifier
-    {
-        $declaring = $codebase->getDeclaringMethodId($class . '::' . $method);
-        $declaring = $declaring === null ? null : MethodIdentifier::wrap($declaring);
-
-        return $declaring instanceof MethodIdentifier && \strcasecmp($declaring->fq_class_name, $declaringClass) === 0 ? $declaring : null;
     }
 
     /**
@@ -1380,11 +1315,11 @@ final class RelationCallbackParamsHandler implements
      * closure with it.
      *
      * @param class-string<Model> $related
-     * @return list<Union>|null null: the builder is unknown, see {@see hasUnknownBuilder()}
+     * @return list<Union>|null null: the builder is unknown, see {@see ModelQueryPath::hasUnknownBuilder()}
      */
     private static function relationSlots(Codebase $codebase, string $related, ?TGenericObject $relation): ?array
     {
-        if (self::hasUnknownBuilder($codebase, $related)) {
+        if (ModelQueryPath::hasUnknownBuilder($codebase, $related)) {
             return null;
         }
 
@@ -1394,56 +1329,15 @@ final class RelationCallbackParamsHandler implements
     }
 
     /**
-     * Whether the builder a model's queries run on is one the plugin does not know: `newEloquentBuilder()` is
-     * overridden (it wins over `#[UseEloquentBuilder]` and `$builder`) yet {@see ModelMethodHandler} holds no custom
-     * builder for the model, so it resolves to base `Builder` and would reject the real one. The detector's own result
-     * is asked instead of re-deriving its rule from Psalm storage, which cannot see its interface/nullable
-     * outcomes. The one legitimate base builder is an override whose EFFECTIVE declared type
-     * (docblock over native) is exactly `Builder`, optionally nullable or generic, with no intersection. Unreadable
-     * storage counts as unknown.
-     */
-    private static function hasUnknownBuilder(Codebase $codebase, string $model): bool
-    {
-        if (ModelMethodHandler::getBuilderClassForModel($model) !== Builder::class) {
-            return false;
-        }
-
-        try {
-            $declaring = $codebase->getDeclaringMethodId($model . '::neweloquentbuilder');
-            $declaring = $declaring === null ? null : MethodIdentifier::wrap($declaring);
-
-            if (!$declaring instanceof MethodIdentifier) {
-                return true;
-            }
-
-            if (\strtolower($declaring->fq_class_name) === \strtolower(Model::class)) {
-                return false;
-            }
-
-            $type = $codebase->methods->getStorage($declaring)->return_type;
-        } catch (\UnexpectedValueException|\InvalidArgumentException|UnpopulatedClasslikeException) {
-            return true;
-        }
-
-        $atomics = \array_values(\array_filter($type?->getAtomicTypes() ?? [], static fn(\Psalm\Type\Atomic $atomic): bool => !$atomic instanceof TNull));
-        $base = $atomics[0] ?? null;
-
-        return \count($atomics) !== 1
-            || !$base instanceof TNamedObject
-            || \strcasecmp($codebase->classlikes->getUnAliasedName($base->value), Builder::class) !== 0
-            || $base->extra_types !== [];
-    }
-
-    /**
      * `($q, $type)`: one builder and one class-string per literal type.
      *
      * @param non-empty-list<class-string<Model>> $types
-     * @return list<Union>|null null: the builder is unknown, see {@see hasUnknownBuilder()}
+     * @return list<Union>|null null: the builder is unknown, see {@see ModelQueryPath::hasUnknownBuilder()}
      */
     private static function morphSlots(Codebase $codebase, array $types): ?array
     {
         foreach ($types as $type) {
-            if (self::hasUnknownBuilder($codebase, $type)) {
+            if (ModelQueryPath::hasUnknownBuilder($codebase, $type)) {
                 return null;
             }
         }

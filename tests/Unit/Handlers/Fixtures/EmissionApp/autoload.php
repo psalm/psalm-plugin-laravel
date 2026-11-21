@@ -9,6 +9,8 @@ declare(strict_types=1);
 // stays unloaded until something autoloads it (UndefinedRelationAutoloadCrash relies on that).
 const EMISSION_APP_NAMESPACES = [
     'KnownAttributeFixture\\' => 'UnknownModelAttribute',
+    'ColumnListFixture\\' => 'UnknownModelColumn',
+    'UnscopedColumnFixture\\' => 'UnknownModelColumnUnscoped',
     'RelationDefaultsFixture\\' => 'UndefinedModelRelationDefaults',
     'AutoloadCrashFixture\\' => 'UndefinedRelationAutoloadCrash',
     'ScopeUnusedCodeFixture\\' => 'SuppressScopeUnusedCode',
