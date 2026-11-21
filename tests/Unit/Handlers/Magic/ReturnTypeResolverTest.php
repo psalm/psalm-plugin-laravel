@@ -40,9 +40,9 @@ final class ReturnTypeResolverTest extends TestCase
     }
 
     #[Test]
-    public function resolve_returns_null_when_template_params_are_null(): void
+    public function resolve_returns_null_without_a_receiver(): void
     {
-        $result = ReturnTypeResolver::resolve('App\\Source', null, $this->createCodebaseStub(), 'where');
+        $result = ReturnTypeResolver::resolve(null, $this->createCodebaseStub(), 'where');
 
         $this->assertNotInstanceOf(\Psalm\Type\Union::class, $result);
     }

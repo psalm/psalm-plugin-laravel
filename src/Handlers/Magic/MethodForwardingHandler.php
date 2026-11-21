@@ -177,14 +177,13 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             return null;
         }
 
-        $templateParams = $event->getTemplateTypeParameters() ?? self::extractTemplateParamsFromCaller(
-            $source,
-            $event,
-            $fqClassName,
-        );
+        // The receiver atomic, not the event's template params, carries a `*` marker: rebuilding the
+        // relation from a bare param list would turn `HasMany<*, X>` into `HasMany<Bound, X>`.
+        $receiver = self::findReceiverAtomic($source, $event, $fqClassName);
+        $templateParams = $event->getTemplateTypeParameters() ?? $receiver?->type_params;
 
         $relationAtomic = $templateParams !== null
-            ? new TGenericObject($fqClassName, $templateParams)
+            ? self::forwardedRelation($fqClassName, $templateParams, $receiver)
             : null;
 
         // A real method introduced by the related model's custom builder wins over
@@ -204,7 +203,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             }
         }
 
-        $resolved = ReturnTypeResolver::resolve($fqClassName, $templateParams, $codebase, $methodName);
+        $resolved = ReturnTypeResolver::resolve($relationAtomic, $codebase, $methodName);
 
         if ($resolved instanceof \Psalm\Type\Union) {
             return $resolved;
@@ -227,7 +226,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
 
         // Scope method fallback for Path 2: check if the method is a scope on the related model.
         // Handles $relation->published() where the related model has scopePublished() or #[Scope] published().
-        $scopeResult = self::resolveScopeOnRelation($codebase, $methodName, $fqClassName, $templateParams);
+        $scopeResult = self::resolveScopeOnRelation($codebase, $methodName, $relationAtomic);
 
         if ($scopeResult instanceof Union) {
             return $scopeResult;
@@ -237,10 +236,10 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         // This handles the case where the method arrives via __call rather than @mixin.
         if (
             DynamicWhereResolver::isEnabled()
-            && $templateParams !== null
+            && $relationAtomic instanceof TGenericObject
             && DynamicWhereResolver::isDynamicWhereMethod($methodName)
         ) {
-            return self::resolveDynamicWhereOnRelation($event, $codebase, $methodName, $fqClassName, $templateParams);
+            return self::resolveDynamicWhereOnRelation($event, $codebase, $methodName, $relationAtomic);
         }
 
         return null;
@@ -399,6 +398,8 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
+            $relation = self::forwardedRelation($atomicType->value, $atomicType->type_params, $atomicType);
+
             // The Relation's @mixin only exposes the base Builder surface. Look through
             // the related model first so a declared custom-builder override follows PHP's
             // real method dispatch and so custom-only methods do not collapse to mixed.
@@ -416,12 +417,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             }
 
             // Try declared fluent-method resolution first (e.g. where(), orderBy()).
-            $resolved = ReturnTypeResolver::resolve(
-                $atomicType->value,
-                $atomicType->type_params,
-                $codebase,
-                $methodName,
-            );
+            $resolved = ReturnTypeResolver::resolve($relation, $codebase, $methodName);
 
             if ($resolved instanceof \Psalm\Type\Union) {
                 return $resolved;
@@ -441,12 +437,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             // Scope method fallback: check if the method is a scope on the related model.
             // Handles $relation->published() where Post::scopePublished() or #[Scope] published() exists.
             // TRelatedModel is always the first template parameter on Relation subclasses.
-            $scopeResult = self::resolveScopeOnRelation(
-                $codebase,
-                $methodName,
-                $atomicType->value,
-                $atomicType->type_params,
-            );
+            $scopeResult = self::resolveScopeOnRelation($codebase, $methodName, $relation);
 
             if ($scopeResult instanceof Union) {
                 return $scopeResult;
@@ -457,13 +448,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
             // Pre-check the pattern here (mirrors Path 2 guard) to avoid entering the function
             // for non-where* methods (orderBy, limit, etc.) when dynamic where is enabled.
             if (DynamicWhereResolver::isEnabled() && DynamicWhereResolver::isDynamicWhereMethod($methodName)) {
-                return self::resolveDynamicWhereOnRelation(
-                    $event,
-                    $codebase,
-                    $methodName,
-                    $atomicType->value,
-                    $atomicType->type_params,
-                );
+                return self::resolveDynamicWhereOnRelation($event, $codebase, $methodName, $relation);
             }
 
             // First matching source class found but method is non-fluent — let Psalm resolve.
@@ -592,18 +577,17 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * Extract template parameters from the caller's node type.
+     * The generic atomic of the caller's node type that is an instance of $expectedClass.
      *
      * Falls back to node type provider when event->getTemplateTypeParameters()
-     * returns null (Path 2 __call dispatch doesn't always populate template params).
-     *
-     * @return non-empty-list<Union>|null
+     * returns null (Path 2 __call dispatch doesn't always populate template params), and it is
+     * the only place the `*` markers of the receiver's type arguments are still visible.
      */
-    private static function extractTemplateParamsFromCaller(
+    private static function findReceiverAtomic(
         StatementsAnalyzer $source,
         MethodReturnTypeProviderEvent $event,
         string $expectedClass,
-    ): ?array {
+    ): ?TGenericObject {
         $stmt = $event->getStmt();
 
         if (!$stmt instanceof MethodCall) {
@@ -623,11 +607,36 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
 
         foreach ($varType->getAtomicTypes() as $atomic) {
             if ($atomic instanceof TGenericObject && \strtolower($atomic->value) === $expectedLower) {
-                return $atomic->type_params;
+                return $atomic;
             }
         }
 
         return null;
+    }
+
+    /**
+     * The relation a forwarded fluent call returns: $class over $typeParams.
+     *
+     * Transforms the $receiver atomic when it is that class instead of constructing a new
+     * TGenericObject, because a `*` type argument (`HasMany<*, Post>`) is a marker on the atomic
+     * that is not part of $typeParams: a fresh object would turn it into its template bound and
+     * accept writes the receiver rejects. `setTypeParams()` keeps the marker of every slot whose
+     * type is unchanged. The late-static and intersection state of the receiver is dropped, as it
+     * was when the object was always built from scratch.
+     *
+     * @param non-empty-list<Union> $typeParams
+     * @psalm-pure
+     */
+    private static function forwardedRelation(string $class, array $typeParams, ?TGenericObject $receiver): TGenericObject
+    {
+        if (!$receiver instanceof TGenericObject || \strtolower($receiver->value) !== \strtolower($class)) {
+            return new TGenericObject($class, $typeParams);
+        }
+
+        return $receiver
+            ->setValueIsStatic($class, false, false)
+            ->setIntersectionTypes([])
+            ->setTypeParams($typeParams);
     }
 
     /**
@@ -671,19 +680,14 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * Arguments stay `mixed` (see {@see DynamicWhereResolver::variadicMixedParams}), so no
      * column type is handed to {@see getMethodParams}.
      *
-     * @param non-empty-list<Union>|list<Union>|null $templateParams Relation's template type parameters
+     * @param TGenericObject $relation the receiver relation, as built by {@see forwardedRelation()}
      */
     private static function resolveDynamicWhereOnRelation(
         MethodReturnTypeProviderEvent $event,
         Codebase $codebase,
         string $methodName,
-        string $relationClass,
-        ?array $templateParams,
+        TGenericObject $relation,
     ): ?Union {
-        if ($templateParams === null || $templateParams === []) {
-            return null;
-        }
-
         // Narrow only a single-atomic receiver: `HasMany<A,P>|HasMany<B,P>` would otherwise be
         // validated from whichever alternative comes first.
         $stmt = $event->getStmt();
@@ -697,14 +701,12 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         // model alternative of a union must accept the suffix.
         $originalMethodName = DynamicWhereResolver::originalMethodName($stmt, $methodName);
 
-        if (!DynamicWhereResolver::relatedModelsAcceptDynamicWhere($codebase, $templateParams[0], $originalMethodName)) {
+        if (!DynamicWhereResolver::relatedModelsAcceptDynamicWhere($codebase, $relation->type_params[0], $originalMethodName)) {
             return null;
         }
 
         // Every segment matched → method is fluent, return the full Relation type.
-        return new Union([
-            new TGenericObject($relationClass, $templateParams),
-        ]);
+        return new Union([$relation]);
     }
 
     /**
@@ -715,20 +717,19 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * (e.g. scopePublished → published()) or a modern #[Scope] attribute method.
      * Returns null otherwise, letting Psalm fall through to its default handling.
      *
-     * @param non-empty-list<Union>|list<Union>|null $templateParams Relation's template type parameters
+     * @param TGenericObject|null $relation the receiver relation, as built by {@see forwardedRelation()}
      */
     private static function resolveScopeOnRelation(
         Codebase $codebase,
         string $methodName,
-        string $relationClass,
-        ?array $templateParams,
+        ?TGenericObject $relation,
     ): ?Union {
-        if ($templateParams === null || $templateParams === []) {
+        if (!$relation instanceof TGenericObject) {
             return null;
         }
 
         // TRelatedModel is always the first template parameter on Relation subclasses.
-        $modelClass = ModelPropertyResolver::extractModelFromUnion($templateParams[0], $codebase);
+        $modelClass = ModelPropertyResolver::extractModelFromUnion($relation->type_params[0], $codebase);
 
         if ($modelClass === null) {
             return null;
@@ -740,7 +741,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
 
         // Populate params cache so getMethodParams() can provide params without crashing.
         // Keyed by lowercase relation class + method to match the params provider lookup.
-        $cacheKey = \strtolower($relationClass) . '::' . $methodName;
+        $cacheKey = \strtolower($relation->value) . '::' . $methodName;
         self::$scopeParamsCache[$cacheKey] = $modelClass;
 
         // Scope exists on the related model → method is fluent: the Relation type is the
@@ -748,9 +749,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         // query for a null result, and Relation::__call maps that back to $this (the Relation),
         // so a value-returning scope surfaces `declared | Relation` while a void/fluent scope
         // keeps the full Relation type (issue #1053).
-        $relationFallback = new Union([
-            new TGenericObject($relationClass, $templateParams),
-        ]);
+        $relationFallback = new Union([$relation]);
 
         return BuilderScopeHandler::forwardedScopeReturnType($codebase, $modelClass, $methodName, $relationFallback);
     }
