@@ -7,12 +7,9 @@ use Illuminate\Support\Facades\Cookie;
 use Symfony\Component\HttpFoundation\Cookie as CookieInstance;
 
 /**
- * Known limitation (see the `getOrPut()` docblock in stubs/common/Support/Collection.phpstub, and the
- * `queued()` docblocks in stubs/common/Support/Facades/Cookie.phpstub and stubs/common/Cookie/CookieJar.phpstub):
- *
- * An unbounded template argument may hold a Closure that Laravel invokes, but Psalm resolves
- * `$default is callable` to false for it, so the result stays the bare template and no issue is raised.
- * A `T of callable` bound or a `mixed` argument resolves to `T|mixed` instead.
+ * An unbounded template argument may hold a Closure that Laravel invokes, and Psalm cannot decide `\Closure`
+ * against it. Since Psalm 7.14 (vimeo/psalm#12672) the result is therefore widened with `mixed`, so returning it
+ * as the bare template is reported as MixedReturnStatement (before, the possible Closure result stayed silent).
  *
  * @template T
  * @param Collection<string, T> $items
@@ -45,3 +42,6 @@ function cookie_jar_queued_unbounded_template(CookieJar $jar, mixed $fallback): 
 }
 ?>
 --EXPECTF--
+MixedReturnStatement on line %d: Possibly-mixed return value
+MixedReturnStatement on line %d: Possibly-mixed return value
+MixedReturnStatement on line %d: Possibly-mixed return value

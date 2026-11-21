@@ -103,4 +103,34 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * @return ($default is \Closure ? TGetClosureReturn|TValue : (TGetDefault | TValue))
      */
     public function get($key, $default = null);
+
+    /**
+     * Laravel's interface docblock types the callbacks as `callable($this)` and `$value` as `bool`, but every
+     * implementation (`Conditionable`) calls `$callback($this, $value)` and accepts any value or a
+     * `Closure($this)` resolving to one. Same shape as the `Conditionable` trait declaration.
+     *
+     * @todo-by https://github.com/laravel/framework/pull/62566 drop the when()/unless() overrides once the Enumerable docblocks ship
+     *
+     * @template TWhenParameter
+     * @template TWhenReturnType
+     *
+     * @param  (\Closure($this): TWhenParameter)|TWhenParameter  $value
+     * @param  (callable($this, TWhenParameter): TWhenReturnType)|null  $callback
+     * @param  (callable($this, TWhenParameter): TWhenReturnType)|null  $default
+     * @return $this|TWhenReturnType
+     */
+    public function when($value, ?callable $callback = null, ?callable $default = null);
+
+    /**
+     * See {@see Enumerable::when()}.
+     *
+     * @template TUnlessParameter
+     * @template TUnlessReturnType
+     *
+     * @param  (\Closure($this): TUnlessParameter)|TUnlessParameter  $value
+     * @param  (callable($this, TUnlessParameter): TUnlessReturnType)  $callback
+     * @param  (callable($this, TUnlessParameter): TUnlessReturnType)|null  $default
+     * @return $this|TUnlessReturnType
+     */
+    public function unless($value, callable $callback, ?callable $default = null);
 }

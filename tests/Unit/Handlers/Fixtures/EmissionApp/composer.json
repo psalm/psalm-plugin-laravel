@@ -1,0 +1,10 @@
+{
+    "name": "psalm-laravel-plugin/emission-app-fixture",
+    "description": "Declares the Laravel dependency Psalm 7.14+ requires before it counts a vendor function (route(), to_route(), url()) as defined",
+    "require": {
+        "laravel/framework": "*"
+    },
+    "config": {
+        "vendor-dir": "../../../../../vendor"
+    }
+}

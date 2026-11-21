@@ -307,15 +307,21 @@ function test_single_argument_form_unchanged(?int $n): void
 }
 
 /**
- * Enumerable declares its own when(), so it is not a Conditionable host.
+ * Enumerable declares its own when()/unless(), so it is not a Conditionable host. Its stub mirrors the
+ * Conditionable signature (Laravel's interface docblock types the callbacks as `callable($this)` and
+ * `$value` as `bool`), so a callback taking `($receiver, $value)` is accepted.
  *
  * @param Enumerable<int, string> $e
  */
-function test_enumerable_receiver_unchanged(Enumerable $e, ?int $n): void
+function test_enumerable_receiver_accepts_value_argument(Enumerable $e, ?int $n): void
 {
-    $e->when($n, function ($q, $_v): void {
+    $_when = $e->when($n, function (Enumerable $q, ?int $_v): void {
         $q->count();
     });
+    /** @psalm-check-type-exact $_when = Enumerable<int, string>&static|null */
+
+    $_unless = $e->unless($n, fn (Enumerable $_q, ?int $_v) => null, fn (Enumerable $q, ?int $_v) => $q->count());
+    /** @psalm-check-type-exact $_unless = Enumerable<int, string>&static|int|null */
 }
 
 /** $value is analyzed on a cloned context: its side effects run once, so `$i` is 1 afterwards. */
@@ -568,9 +574,6 @@ MissingClosureParamType on line %d: Parameter $q has no provided type
 MissingClosureParamType on line %d: Parameter $_v has no provided type
 MixedMethodCall on line %d: Cannot determine the type of $q when calling method count
 MissingClosureParamType on line %d: Parameter $q has no provided type
-InvalidArgument on line %d: Argument 1 of Illuminate\Support\Enumerable::when expects bool, but int|null provided
-ArgumentTypeCoercion on line %d: Argument 2 of Illuminate\Support\Enumerable::when expects callable[impure](Illuminate\Support\Enumerable<array-key, mixed>):null|null, but parent type Closure[write-props|read-globals|write-globals|write-refs|io|time](Illuminate\Support\Enumerable<int, string>&static, mixed):void provided
-MissingClosureParamType on line %d: Parameter $_v has no provided type
 ArgumentTypeCoercion on line %d: Argument 2 of Illuminate\Database\Eloquent\Builder::when expects callable[impure](Illuminate\Database\Eloquent\Builder<Illuminate\Database\Eloquent\Model>, Illuminate\Database\Eloquent\Builder<App\Models\Vehicle>):mixed|null, but parent type Closure[pure](Illuminate\Database\Eloquent\Builder, App\Builders\VehicleBuilder):void provided
 MissingClosureParamType on line %d: Parameter $args has no provided type
 MixedAssignment on line %d: Unable to determine the type that $a is being assigned to
