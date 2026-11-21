@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795219504506,
+  "lastUpdate": 1795220890379,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19870,6 +19870,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 35.97,
             "range": "± 0.13",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1246,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "daniil@daniil.it",
+            "name": "Daniil Gentili",
+            "username": "danog"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3349f83c2e6e3ea99f03298e05cc8c1785b53c8e",
+          "message": "Carry the taint of a Stringable through the methods whose result holds its string (#2374)",
+          "timestamp": "2026-11-21T01:24:24+01:00",
+          "tree_id": "06387c28f23427c0ced57288a06fad3632574b79",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/3349f83c2e6e3ea99f03298e05cc8c1785b53c8e"
+        },
+        "date": 1795220888757,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.68,
+            "range": "± 0.83",
             "unit": "s"
           },
           {
