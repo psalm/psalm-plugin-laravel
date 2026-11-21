@@ -8,14 +8,14 @@ nav_order: 11
 
 Emitted when an array passed to an Eloquent mass-assignment method, or to a creation method on a query builder or relation, names a key that is not a known attribute of the model being filled. This catches typos such as `User::create(['nmae' => $name])` and `$user->roles()->create(['nmae' => $name])`.
 
-It is also emitted for a literal column name in the column list of a query read, such as `get()`, `first()` or `find()`, that is not a known attribute of the model the query reads: `Post::query()->first(['titel'])`. See [Column lists of query reads](#column-lists-of-query-reads).
+It is also emitted for a literal column name in the column list of a query read, such as `get()`, `first()` or `find()`, that is not a known attribute of the model the query reads: `User::query()->first(['nmae'])`. See [Column lists of query reads](#column-lists-of-query-reads).
 
 ## Why this is a problem
 
 Mass assignment is key-based, so a misspelled key is silently dropped instead of writing the intended attribute.
 `User::create(['nmae' => $value])` persists a `User` with no name and raises no runtime error when the model uses a `$fillable` allowlist, which makes the mistake easy to miss.
 On a `$guarded = []` model, or via `forceFill()` / `forceCreate()`, the key is instead written and `save()` fails with an unknown-column database error.
-A typo in a column list compiles to `select "titel" from "posts"`, which fails with an unknown column error on MySQL and PostgreSQL. SQLite with double-quoted string literals enabled (its default) reads the unknown name as a string, so the query runs and every row carries the literal text `titel` instead of a value.
+A typo in a column list compiles to `select "nmae" from "users"`, which fails with an unknown column error on MySQL and PostgreSQL. SQLite with double-quoted string literals enabled (its default) reads the unknown name as a string, so the query runs and every row carries the literal text `nmae` instead of a value.
 
 ## What is flagged
 
@@ -86,9 +86,9 @@ A string literal in the `$columns` argument of an Eloquent read method is checke
 A named `columns:` argument is checked wherever it sits, unless an unpacked argument (`...$args`) precedes it. The argument may be one string or a literal array.
 
 ```php
-Post::query()->findSole(1, ['id', 'titel']);   // Builder::findSole() selects an unknown column 'titel'. ...
-Post::findOr(1, ['titel'], fn () => null);     // Post::findOr() selects an unknown column 'titel'. ...
-Post::where('published', true)->get(['titel']); // Builder::get() selects an unknown column 'titel'. ...
+User::query()->findSole(1, ['id', 'nmae']);   // Builder::findSole() selects an unknown column 'nmae'. ... of User
+User::findOr(1, ['nmae'], fn () => null);     // User::findOr() selects an unknown column 'nmae'. ... of User
+User::where('active', true)->get(['nmae']);   // Builder::get() selects an unknown column 'nmae'. ... of User
 ```
 
 ### Which calls are checked
@@ -118,7 +118,7 @@ Each entry of the list is judged on its own. These entries are skipped and never
 - `DB::raw()` and other expressions, variables, constants and spread items;
 - a closure passed in the `$columns` position (`Post::findOr($id, fn () => null)`).
 
-A list with any explicit key (`['titel', 0 => 'title']`, `[$i => 'title']`) is skipped as a whole: the key may overwrite another entry before the list reaches SQL.
+A list with any explicit key (`['nmae', 0 => 'name']`, `[$i => 'name']`) is skipped as a whole: the key may overwrite another entry before the list reaches SQL.
 
 ### When a column list stays silent
 
