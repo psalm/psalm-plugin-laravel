@@ -118,3 +118,12 @@ Hard-won rules. Each of these has silently produced a test that passes while ass
    that a shared batch drops); reserve `all` for a fixture that must not run at the same time as
    anything else in the suite, which should be rare. Picking `all` by habit serializes the whole
    suite behind those runs for no benefit.
+
+8. **`composer.fixture.json` stands in for the `composer.json` Psalm looks for next to the config.** Since
+   Psalm 7.14 a function counts as defined only if the project's `composer.json` (in the config's directory)
+   requires the package declaring it, and `tests/Type` has none: without a stand-in, every Laravel helper the
+   stubs do not declare (`now()`, `cache()`, `env()`, `trans()`) is an `UndefinedFunction` and its result `mixed`.
+   `PsalmTest` selects the file with `COMPOSER=composer.fixture.json`, and its `vendor-dir` points at the
+   repository's `vendor`. It is not named `composer.json` on purpose: the plugin treats a directory with a
+   `composer.json` as the project root and would boot Laravel from `tests/Type` instead. Psalm reading the
+   `composer.json` from the config's directory rather than the project root is vimeo/psalm#14555.

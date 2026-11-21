@@ -1,0 +1,10 @@
+{
+    "name": "psalm/plugin-laravel-type-tests",
+    "description": "The composer.json Psalm sees for the type tests (see PsalmTest and tests/Type/README.md)",
+    "require-dev": {
+        "laravel/framework": "*"
+    },
+    "config": {
+        "vendor-dir": "../../vendor"
+    }
+}

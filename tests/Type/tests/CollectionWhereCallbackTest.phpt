@@ -316,7 +316,8 @@ final class CollectionWhereCallbackTest
     }
 
     /**
-     * is_a() rejects strings unless the third argument is true.
+     * is_a() rejects strings unless the third argument is true. The call stays as written although PHP 8.6
+     * deprecates it (reported as DeprecatedFunction, see --EXPECTF--): the narrowing is what is tested.
      * @param Collection<int, Countable|string> $items
      */
     public function whereWithIsADropsStrings(Collection $items): void
@@ -477,3 +478,4 @@ final class CollectionWhereCallbackTestLabel implements Stringable
 }
 ?>
 --EXPECTF--
+DeprecatedFunction on line %d: Calling is_a() with a class name when allow_string is false is deprecated since PHP 8.6, check class_exists() first and pass true for allow_string
