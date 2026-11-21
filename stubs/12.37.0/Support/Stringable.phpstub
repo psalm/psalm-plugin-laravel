@@ -1,0 +1,22 @@
+<?php
+
+namespace Illuminate\Support;
+
+use ArrayAccess;
+use JsonSerializable;
+use Stringable as BaseStringable;
+
+/**
+ * Laravel 12.37.0 added `ucwords()`. Only these methods are declared: the rest merges from `common`.
+ *
+ * @psalm-taint-specialize
+ */
+class Stringable implements JsonSerializable, ArrayAccess, BaseStringable
+{
+    /**
+     * @param  string  $separators
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function ucwords($separators = " \t\r\n\f\v") {}
+}

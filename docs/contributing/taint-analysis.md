@@ -526,16 +526,13 @@ Never add `@psalm-taint-escape sql` to `whereRaw()`, `orWhereRaw()`, `selectRaw(
 
 ## Known limitations of `@psalm-flow`
 
-### `$this` is not supported as a flow source
+### `$this` as a flow source needs a specialized class
 
-`@psalm-flow ($this) -> return` **does not work**. Psalm's flow parser only matches named method parameters, and `$this` is never in that list. The annotation is silently ignored with no error.
-
-This means you cannot declare taint flow from an object instance to a method's return value via stubs. For fluent/builder classes like `Stringable`, taint entering via `Str::of($tainted)` will not automatically propagate through chained methods like `->trim()->lower()->toString()`.
-
-**Workarounds:**
-- Annotate the **entry point** (`Str::of()`, `str()`) with `@psalm-flow ($param) -> return` so the returned object carries taint
-- Annotate methods that accept **additional tainted parameters** (like `append($values)`) with `@psalm-flow ($values) -> return`
-- For full `$this` → return propagation, a handler using `AfterMethodCallAnalysisInterface` is needed (not yet implemented)
+`@psalm-flow ($this) -> return` carries the taint of the object a method is called on to its result, which is how
+`Stringable` chains (`Str::of($tainted)->trim()->lower()->toString()`) keep the taint. Without
+`@psalm-taint-specialize` on the class, every instance shares one node per method, so one tainted `->upper()` taints
+every other `->upper()` result in the project. Declare it on the class stub, as `Stringable.phpstub` does, and pin the
+isolation with a test calling the same method on a safe instance (`SafeStringableChain.phpt`).
 
 ### Flow-through factories need `@psalm-taint-specialize`
 
