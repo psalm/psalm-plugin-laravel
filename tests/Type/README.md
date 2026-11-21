@@ -125,4 +125,5 @@ Hard-won rules. Each of these has silently produced a test that passes while ass
    stubs do not declare (`now()`, `cache()`, `env()`, `trans()`) is an `UndefinedFunction` and its result `mixed`.
    `PsalmTest` selects the file with `COMPOSER=composer.fixture.json`, and its `vendor-dir` points at the
    repository's `vendor`. It is not named `composer.json` on purpose: the plugin treats a directory with a
-   `composer.json` as the project root and would boot Laravel from `tests/Type` instead.
+   `composer.json` as the project root and would boot Laravel from `tests/Type` instead. Psalm reading the
+   `composer.json` from the config's directory rather than the project root is vimeo/psalm#14555.

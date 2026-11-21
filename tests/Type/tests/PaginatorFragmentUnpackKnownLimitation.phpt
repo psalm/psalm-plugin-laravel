@@ -9,6 +9,8 @@ use Illuminate\Pagination\LengthAwarePaginator;
  * Psalm resolved both branches for a sealed `array{0?: string}` until 7.13.2; since 7.14 that shape unpacks
  * like a `list<string>` (vimeo/psalm#14415 changed how an array shape with integer keys is unpacked).
  *
+ * @todo-by https://github.com/vimeo/psalm/issues/14556 convert this test to assert both branches (`...|null|string`) once fixed
+ *
  * @param LengthAwarePaginator<int, string> $p
  * @param array{0?: string} $args
  */
