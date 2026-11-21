@@ -7,82 +7,756 @@ use JsonSerializable;
 use Stringable as BaseStringable;
 
 /**
- * Taint flow stubs for Illuminate\Support\Stringable.
+ * Taint flow stubs for Illuminate\Support\Stringable: each method whose result holds the string (or part of it)
+ * carries its taint, and the parameters adding to it carry theirs. The methods whose result can't hold the string's
+ * characters (`hash()`, `encrypt()`, `toBase64()`, `numbers()`, the predicates and counts) keep Laravel's declaration
+ * and drop the taint, like `base64_encode()` in Psalm.
  *
- * Methods that accept additional string parameters (append, prepend, replace, etc.)
- * can inject tainted data into the chain. The @psalm-flow annotations below ensure
- * taint from those parameters reaches the return value.
+ * Methods added or changed after Laravel 12.27 are declared in the stubs of the version that has them.
  *
- * Note: taint propagation from $this through chains (e.g. Str::of($tainted)->trim())
- * is a Psalm limitation — @psalm-flow does not support $this as a source.
+ * @psalm-taint-specialize
  */
 class Stringable implements JsonSerializable, ArrayAccess, BaseStringable
 {
     /**
+     * @param  string  $search
      * @return static
-     * @psalm-flow ($values) -> return
+     * @psalm-flow ($this) -> return
      */
-    public function append(...$values) {}
+    public function after($search) {}
+
+    /**
+     * @param  string  $search
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function afterLast($search) {}
+
+    /**
+     * @param  string  $language
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function ascii($language = 'en') {}
+
+    /**
+     * @param  string  $suffix
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function basename($suffix = '') {}
+
+    /**
+     * @param  string|array  $needle
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function chopStart($needle) {}
+
+    /**
+     * @param  string|array  $needle
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function chopEnd($needle) {}
 
     /**
      * @return static
-     * @psalm-flow ($values) -> return
+     * @psalm-flow ($this) -> return
      */
-    public function prepend(...$values) {}
+    public function classBasename() {}
+
+    /**
+     * @param  string  $search
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function before($search) {}
+
+    /**
+     * @param  string  $search
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function beforeLast($search) {}
+
+    /**
+     * @param  string  $from
+     * @param  string  $to
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function between($from, $to) {}
+
+    /**
+     * @param  string  $from
+     * @param  string  $to
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function betweenFirst($from, $to) {}
 
     /**
      * @return static
-     * @psalm-flow ($before, $after) -> return
+     * @psalm-flow ($this) -> return
+     */
+    public function camel() {}
+
+    /**
+     * @param  int  $mode
+     * @param  string|null  $encoding
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function convertCase(int $mode = MB_CASE_FOLD, ?string $encoding = 'UTF-8') {}
+
+    /**
+     * @param  string  $character
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function deduplicate(string $character = ' ') {}
+
+    /**
+     * @param  int  $levels
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function dirname($levels = 1) {}
+
+    /**
+     * @param  string  $cap
+     * @return static
+     * @psalm-flow ($this, $cap) -> return
+     */
+    public function finish($cap) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function kebab() {}
+
+    /**
+     * @param  int  $limit
+     * @param  string  $end
+     * @param  bool  $preserveWords
+     * @return static
+     * @psalm-flow ($this, $end) -> return
+     */
+    public function limit($limit = 100, $end = '...', $preserveWords = false) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function lower() {}
+
+    /**
+     * @param  array  $options
+     * @param  array  $extensions
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function markdown(array $options = [], array $extensions = []) {}
+
+    /**
+     * @param  array  $options
+     * @param  array  $extensions
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function inlineMarkdown(array $options = [], array $extensions = []) {}
+
+    /**
+     * @param  string  $character
+     * @param  int  $index
+     * @param  int|null  $length
+     * @param  string  $encoding
+     * @return static
+     * @psalm-flow ($this, $character) -> return
+     */
+    public function mask($character, $index, $length = null, $encoding = 'UTF-8') {}
+
+    /**
+     * @param  string  $pattern
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function match($pattern) {}
+
+    /**
+     * @param  int  $length
+     * @param  string  $pad
+     * @return static
+     * @psalm-flow ($this, $pad) -> return
+     */
+    public function padBoth($length, $pad = ' ') {}
+
+    /**
+     * @param  int  $length
+     * @param  string  $pad
+     * @return static
+     * @psalm-flow ($this, $pad) -> return
+     */
+    public function padLeft($length, $pad = ' ') {}
+
+    /**
+     * @param  int  $length
+     * @param  string  $pad
+     * @return static
+     * @psalm-flow ($this, $pad) -> return
+     */
+    public function padRight($length, $pad = ' ') {}
+
+    /**
+     * @param  int|array|\Countable  $count
+     * @param  bool  $prependCount
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function plural($count = 2, $prependCount = false) {}
+
+    /**
+     * @param  int|array|\Countable  $count
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function pluralStudly($count = 2) {}
+
+    /**
+     * @param  int|array|\Countable  $count
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function pluralPascal($count = 2) {}
+
+    /**
+     * @param  string|iterable<string>  $search
+     * @param  bool  $caseSensitive
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function remove($search, $caseSensitive = true) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function reverse() {}
+
+    /**
+     * @param  int  $times
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function repeat(int $times) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function squish() {}
+
+    /**
+     * @param  string  $prefix
+     * @return static
+     * @psalm-flow ($this, $prefix) -> return
+     */
+    public function start($prefix) {}
+
+    /**
+     * @param  string[]|string|null  $allowedTags
+     * @return static
+     * @psalm-taint-escape html
+     * @psalm-flow ($this) -> return
+     */
+    public function stripTags($allowedTags = null) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function upper() {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function title() {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function headline() {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function apa() {}
+
+    /**
+     * @param  string|null  $unknown
+     * @param  bool|null  $strict
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function transliterate($unknown = '?', $strict = false) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function singular() {}
+
+    /**
+     * @param  string  $separator
+     * @param  string|null  $language
+     * @param  array<string, string>  $dictionary
+     * @return static
+     * @psalm-taint-escape html
+     * @psalm-taint-escape has_quotes
+     * @psalm-flow ($this) -> return
+     */
+    public function slug($separator = '-', $language = 'en', $dictionary = ['@' => 'at']) {}
+
+    /**
+     * @param  string  $delimiter
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function snake($delimiter = '_') {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function studly() {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function pascal() {}
+
+    /**
+     * @param  int  $start
+     * @param  int|null  $length
+     * @param  string  $encoding
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function substr($start, $length = null, $encoding = 'UTF-8') {}
+
+    /**
+     * @param  string|string[]  $replace
+     * @param  int|int[]  $offset
+     * @param  int|int[]|null  $length
+     * @return static
+     * @psalm-flow ($this, $replace) -> return
+     */
+    public function substrReplace($replace, $offset = 0, $length = null) {}
+
+    /**
+     * @param  array  $map
+     * @return static
+     * @psalm-flow ($this, $map) -> return
+     */
+    public function swap(array $map) {}
+
+    /**
+     * @param  int  $limit
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function take(int $limit) {}
+
+    /**
+     * @param  string  $characters
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function trim($characters = null) {}
+
+    /**
+     * @param  string  $characters
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function ltrim($characters = null) {}
+
+    /**
+     * @param  string  $characters
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function rtrim($characters = null) {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function lcfirst() {}
+
+    /**
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function ucfirst() {}
+
+    /**
+     * @param  int  $words
+     * @param  string  $end
+     * @return static
+     * @psalm-flow ($this, $end) -> return
+     */
+    public function words($words = 100, $end = '...') {}
+
+    /**
+     * @param  int  $characters
+     * @param  string  $break
+     * @param  bool  $cutLongWords
+     * @return static
+     * @psalm-flow ($this, $break) -> return
+     */
+    public function wordWrap($characters = 75, $break = "\n", $cutLongWords = false) {}
+
+    /**
+     * @param  string  $before
+     * @param  string|null  $after
+     * @return static
+     * @psalm-flow ($this, $before, $after) -> return
      */
     public function wrap($before, $after = null) {}
 
     /**
+     * @param  string  $before
+     * @param  string|null  $after
      * @return static
-     * @psalm-flow ($replace) -> return
+     * @psalm-flow ($this) -> return
+     */
+    public function unwrap($before, $after = null) {}
+
+    /**
+     * @param  bool  $strict
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function fromBase64($strict = false) {}
+
+    /**
+     * @param  bool  $serialize
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function decrypt(bool $serialize = false) {}
+
+    /**
+     * @param  array|string  ...$values
+     * @return static
+     * @psalm-flow ($this, $values) -> return
+     */
+    public function append(...$values) {}
+
+    /**
+     * @param  string  ...$values
+     * @return static
+     * @psalm-flow ($this, $values) -> return
+     */
+    public function prepend(...$values) {}
+
+    /**
+     * @param  string|iterable<string>  $search
+     * @param  string|iterable<string>  $replace
+     * @param  bool  $caseSensitive
+     * @return static
+     * @psalm-flow ($this, $replace) -> return
      */
     public function replace($search, $replace, $caseSensitive = true) {}
 
     /**
+     * @param  string  $search
+     * @param  iterable<string>  $replace
      * @return static
-     * @psalm-flow ($replace) -> return
+     * @psalm-flow ($this, $replace) -> return
      */
     public function replaceArray($search, $replace) {}
 
     /**
+     * @param  string  $search
+     * @param  string  $replace
      * @return static
-     * @psalm-flow ($replace) -> return
+     * @psalm-flow ($this, $replace) -> return
      */
     public function replaceFirst($search, $replace) {}
 
     /**
+     * @param  string  $search
+     * @param  string  $replace
      * @return static
-     * @psalm-flow ($replace) -> return
+     * @psalm-flow ($this, $replace) -> return
      */
     public function replaceStart($search, $replace) {}
 
     /**
+     * @param  string  $search
+     * @param  string  $replace
      * @return static
-     * @psalm-flow ($replace) -> return
+     * @psalm-flow ($this, $replace) -> return
      */
     public function replaceLast($search, $replace) {}
 
     /**
+     * @param  string  $search
+     * @param  string  $replace
      * @return static
-     * @psalm-flow ($replace) -> return
+     * @psalm-flow ($this, $replace) -> return
      */
     public function replaceEnd($search, $replace) {}
 
     /**
+     * @param  array|string  $pattern
+     * @param  \Closure|string[]|string  $replace
+     * @param  int  $limit
      * @return static
-     * @psalm-flow ($replace) -> return
+     * @psalm-flow ($this, $replace) -> return
      */
     public function replaceMatches($pattern, $replace, $limit = -1) {}
 
     /**
-     * @return static
-     * @psalm-flow ($replace) -> return
+     * @param  int  $count
+     * @return $this
+     * @psalm-flow ($this) -> return
      */
-    public function substrReplace($replace, $offset = 0, $length = null) {}
+    public function newLine($count = 1) {}
+
+    /**
+     * @param  int  $index
+     * @return string|false
+     * @psalm-flow ($this) -> return
+     */
+    public function charAt($index) {}
+
+    /**
+     * @param  string  $phrase
+     * @param  array  $options
+     * @return string|null
+     * @psalm-flow ($this) -> return
+     */
+    public function excerpt($phrase = '', $options = []) {}
+
+    /**
+     * @return string
+     * @psalm-flow ($this) -> return
+     */
+    public function value() {}
+
+    /**
+     * @return string
+     * @psalm-flow ($this) -> return
+     */
+    public function toString() {}
+
+    /**
+     * @return string
+     * @psalm-flow ($this) -> return
+     */
+    public function jsonSerialize() : string {}
+
+    /**
+     * @param  string  $delimiter
+     * @param  int  $limit
+     * @return \Illuminate\Support\Collection<int, string>
+     * @psalm-flow ($this) -> return
+     */
+    public function explode($delimiter, $limit = PHP_INT_MAX) {}
+
+    /**
+     * @param  string|int  $pattern
+     * @param  int  $limit
+     * @param  int  $flags
+     * @return \Illuminate\Support\Collection<int, string>
+     * @psalm-flow ($this) -> return
+     */
+    public function split($pattern, $limit = -1, $flags = 0) {}
+
+    /**
+     * @return \Illuminate\Support\Collection<int, string>
+     * @psalm-flow ($this) -> return
+     */
+    public function ucsplit() {}
+
+    /**
+     * @param  string  $pattern
+     * @return \Illuminate\Support\Collection
+     * @psalm-flow ($this) -> return
+     */
+    public function matchAll($pattern) {}
+
+    /**
+     * @param  string  $format
+     * @return \Illuminate\Support\Collection
+     * @psalm-flow ($this) -> return
+     */
+    public function scan($format) {}
+
+    /**
+     * @return \Illuminate\Support\HtmlString
+     * @psalm-flow ($this) -> return
+     */
+    public function toHtmlString() {}
+
+    /**
+     * @return \Illuminate\Support\Uri
+     * @psalm-flow ($this) -> return
+     */
+    public function toUri() {}
+
+    /**
+     * @param  mixed  $offset
+     * @return string
+     * @psalm-flow ($this) -> return
+     */
+    public function offsetGet(mixed $offset) : string {}
+
+    /**
+     * @param  mixed  ...$args
+     * @return $this
+     * @psalm-flow ($this) -> return
+     */
+    public function dump(...$args) {}
+
+    /**
+     * @param  string|iterable<string>  $needles
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenContains($needles, $callback, $default = null) {}
+
+    /**
+     * @param  iterable<string>  $needles
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenContainsAll(array $needles, $callback, $default = null) {}
+
+    /**
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenEmpty($callback, $default = null) {}
+
+    /**
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenNotEmpty($callback, $default = null) {}
+
+    /**
+     * @param  string|iterable<string>  $needles
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenEndsWith($needles, $callback, $default = null) {}
+
+    /**
+     * @param  string|iterable<string>  $needles
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenDoesntEndWith($needles, $callback, $default = null) {}
+
+    /**
+     * @param  string  $value
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenExactly($value, $callback, $default = null) {}
+
+    /**
+     * @param  string  $value
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenNotExactly($value, $callback, $default = null) {}
+
+    /**
+     * @param  string|iterable<string>  $pattern
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenIs($pattern, $callback, $default = null) {}
+
+    /**
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenIsAscii($callback, $default = null) {}
+
+    /**
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenIsUuid($callback, $default = null) {}
+
+    /**
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenIsUlid($callback, $default = null) {}
+
+    /**
+     * @param  string|iterable<string>  $needles
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenStartsWith($needles, $callback, $default = null) {}
+
+    /**
+     * @param  string|iterable<string>  $needles
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenDoesntStartWith($needles, $callback, $default = null) {}
+
+    /**
+     * @param  string  $pattern
+     * @param  callable  $callback
+     * @param  callable|null  $default
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function whenTest($pattern, $callback, $default = null) {}
 
     /**
      * Determine if a given string contains a given substring.

@@ -1,0 +1,22 @@
+<?php
+
+namespace Illuminate\Support;
+
+use ArrayAccess;
+use JsonSerializable;
+use Stringable as BaseStringable;
+
+/**
+ * Laravel 12.55.0 added `initials()`. Only these methods are declared: the rest merges from `common`.
+ *
+ * @psalm-taint-specialize
+ */
+class Stringable implements JsonSerializable, ArrayAccess, BaseStringable
+{
+    /**
+     * @param  bool  $capitalize
+     * @return static
+     * @psalm-flow ($this) -> return
+     */
+    public function initials($capitalize = false) {}
+}
