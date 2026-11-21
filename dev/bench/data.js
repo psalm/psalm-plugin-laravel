@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795220890379,
+  "lastUpdate": 1795305339815,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19910,6 +19910,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1246,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "83b21d62726dce5bd2af2c8a01ace954d4a841a0",
+          "message": "Support Psalm 7.14 and 7.15 (#2377)\n\n* build: require Psalm 7.14\n\n- Psalm 7.14 changes what the type fixtures report (PHP deprecations, unrequired-package functions, mixed-widened templates), and the fixtures updated in this PR no longer pass on 7.13.\n- Raise the floor in composer.json and in the Symfony Console job of tests.yml.\n\n* test: give the type and emission fixtures the composer.json Psalm 7.14 needs\n\n- Psalm 7.14 counts a vendor function as defined only if the composer.json next to the config requires its package (vimeo/psalm#14413); tests/Type and the EmissionApp fixture have none, so `now()`, `cache()`, `env()`, `trans()`, `route()` and `to_route()` became UndefinedFunction and `mixed` (22 type tests and `EmissionAppTest`).\n- The type tests select a differently named `composer.fixture.json` through `COMPOSER`, which leaves the plugin's project-root detection (a `composer.json` in the working directory) untouched.\n\n* test: expect the PHP deprecations Psalm 7.14 reports in collection callback fixtures\n\n- `is_a($string, Class::class)` is deprecated since PHP 8.6 (DeprecatedFunction) and an implicitly nullable parameter since PHP 8.4 (DeprecatedSyntax); Psalm reports both regardless of the analysed PHP version (vimeo/psalm#14413).\n- The fixtures keep those shapes because the narrowing of the two-argument `is_a()` and of a `= null` closure parameter is what they pin; the deprecation is now part of `--EXPECTF--`.\n\n* test: pin that an unbounded template given to getOrPut() and queued() now resolves to mixed\n\n- Psalm 7.14 no longer treats a bare template as decidably not a Closure for the `$value is callable` guard (vimeo/psalm#12672), so the result is widened with `mixed` and returning it as the template reports MixedReturnStatement; before, a possible Closure result stayed silent.\n- Rename GetOrPutClosureDefaultKnownLimitation.phpt to GetOrPutClosureDefaultUnboundedTemplateTest.phpt (positive coverage) and rewrite the three stub docblocks that cited the limitation.\n\n* test: pin the possibly-empty array-shape unpack of Paginator::fragment() as a known limitation\n\n- Psalm 7.14 unpacks `array{0?: string}` like a `list<string>` (vimeo/psalm#14415), so the call no longer resolves both the getter and the setter branch of `fragment()`; 7.13.2 did.\n- Rename PaginatorFragmentUnpackTest.phpt to PaginatorFragmentUnpackKnownLimitation.phpt and rewrite the docblocks of the stub and of RouteDomainKnownLimitation.phpt that cited the old behavior.\n\n* test: suppress Psalm 7.14's static-call false positive on a trait constructor in the Blade taint fixture\n\n- Psalm 7.14 analyses the synthetic constructor call for uninitialised properties as a static call on the parent's trait and reports InvalidStaticInvocation (a regression of vimeo/psalm#14413, reproducible without the plugin).\n- `BladeComponentTaintTest::the_bridge_adds_no_non_taint_issue` asserts no other issue, so the fixture class suppresses it.\n\n* fix: accept the value argument in Enumerable::when() and unless() callbacks\n\n- Laravel's Enumerable interface docblock types the callbacks as callable($this) and $value as bool, but Conditionable calls $callback($this, $value) and accepts any value\n- Psalm 7.13.2 keeps the concrete $this type in callable($this) (vimeo/psalm#14423), which surfaced the arity mismatch as InvalidScalarArgument\n- Stub Enumerable::when() and unless() with the Conditionable signature\n\n* docs: link the upstream Enumerable docblock fix from the when()/unless() stub\n\n* test: link the filed Psalm issues from the workarounds and known limitations\n\n- vimeo/psalm#14554 (trait constructor InvalidStaticInvocation), #14556 (array-shape unpack), #14555 (composer.json next to the config).",
+          "timestamp": "2026-11-22T00:52:51+01:00",
+          "tree_id": "a88a9c50bb2508ca64a83d40a821aa24be650beb",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/83b21d62726dce5bd2af2c8a01ace954d4a841a0"
+        },
+        "date": 1795305338226,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 26.29,
+            "range": "± 0.34",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1237,
             "unit": "MB"
           }
         ]
