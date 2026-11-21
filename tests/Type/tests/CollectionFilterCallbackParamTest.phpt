@@ -76,6 +76,8 @@ final class CollectionFilterCallbackParamTest extends CfcpAnimal
         /** @psalm-check-type-exact $_result = Collection<int, CfcpDog> */
     }
 
+    // The implicit nullable (`CfcpDog $_d = null`) is deprecated since PHP 8.4 (reported as DeprecatedSyntax, see
+    // --EXPECTF--); it is still the shape being tested, since the closure param keeps `null` through its default.
     /** @param Collection<int, CfcpDog|null> $dogs */
     public function defaultNullParamKeepsNull(Collection $dogs): void
     {
@@ -381,6 +383,7 @@ ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::fi
 MixedArgumentTypeCoercion on line %d: Type mixed should be a subtype of CfcpDog|null
 InvalidArgument on line %d: Type CfcpDog|null should be a subtype of CfcpDog
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::filter expects callable[impure](CfcpDog|null, int):bool|null, but Closure[pure](CfcpDog):true provided
+DeprecatedSyntax on line %d: Making the type of $_d nullable with its null default is deprecated since PHP 8.4, declare the type nullable
 ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog
 ArgumentTypeCoercion on line %d: Argument 1 of Illuminate\Support\Collection::reject expects CfcpAnimal|bool|callable[impure](CfcpAnimal, int):bool, but parent type Closure[pure](CfcpDog):false provided
 ArgumentTypeCoercion on line %d: Type CfcpAnimal should be a subtype of CfcpDog

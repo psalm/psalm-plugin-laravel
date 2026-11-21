@@ -49,6 +49,8 @@ namespace CollectionWhereCallbackShadowedFunctionTest {
             /** @psalm-check-type-exact $_result = Collection<int, int|string>&static */
         }
 
+        // The two-argument is_a() on a string is deprecated since PHP 8.6 (reported as DeprecatedFunction,
+        // see --EXPECTF--); the call stays because the narrowing of the unshadowed builtin is what is tested.
         /** @param Collection<int, string|\stdClass> $items */
         public function fullyQualifiedBuiltinNarrows(Collection $items): void
         {
@@ -73,3 +75,4 @@ namespace CollectionWhereCallbackShadowedFunctionTest {
 }
 ?>
 --EXPECTF--
+DeprecatedFunction on line %d: Calling is_a() with a class name when allow_string is false is deprecated since PHP 8.6, check class_exists() first and pass true for allow_string
