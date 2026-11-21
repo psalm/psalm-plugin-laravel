@@ -80,9 +80,9 @@ abstract class AbstractPaginator implements CanBeEscapedWhenCastToString, \Illum
      * explicitly templated stub resolves on every Laravel version. The setter branch is `$this`
      * (as in Laravel 13.18.0+), which resolves to the receiver with its `<TKey, TValue>`.
      *
-     * Known limitation: a possibly-empty `list<string>` unpack (`fragment(...$args)`) misses the
-     * getter branch, as on `Route::domain()` (RouteDomainKnownLimitation.phpt); a sealed
-     * `array{0?: string}` resolves both (PaginatorFragmentUnpackTest.phpt).
+     * Known limitation: a possibly-empty unpack (`fragment(...$args)` with a `list<string>` or a sealed
+     * `array{0?: string}`) misses the getter branch, as on `Route::domain()` (RouteDomainKnownLimitation.phpt);
+     * the array shape resolved both branches until Psalm 7.13.2 (PaginatorFragmentUnpackKnownLimitation.phpt).
      *
      * @template TFragment of string|null
      *
