@@ -160,8 +160,8 @@ final class EmissionAppTest extends TestCase
         '::published',            // direct #[Scope]
     ];
 
-    /** @var array<string, array{findings: list<array{type: string, message: string, severity: string, file_name: string}>, stdout: string, stderr: string}> one run per analyzed path ('' = the whole app) */
-    private static array $runs = [];
+    /** @var array{findings: list<array{type: string, message: string, severity: string, file_name: string}>, stdout: string, stderr: string}|null */
+    private static ?array $run = null;
 
     #[Test]
     public function unknown_model_attribute_is_reported_through_every_receiver_form_and_stays_silent_on_clean_calls(): void
@@ -196,24 +196,6 @@ final class EmissionAppTest extends TestCase
         $this->assertCount(3 + \count(self::EXPECTED_CREATION_PATH_FINDINGS), $findings, "Unexpected UnknownModelAttribute finding count, got:\n{$joined}");
         // Experimental mode enforces the rule, so every finding is an error rather than the default info.
         $this->assertSame(\array_fill(0, \count($findings), 'error'), \array_column($findings, 'severity'));
-    }
-
-    #[Test]
-    public function a_bare_without_global_scopes_lifts_the_scope_veto_only_when_no_scope_of_the_run_declares_extend(): void
-    {
-        // The whole-app run holds a scope declaring `extend()` (`silentcol_scope_extend`), so there the lift is off.
-        $this->assertSame([], $this->scenarioFindings('UnknownModelColumnUnscoped', 'UnknownModelAttribute'));
-
-        // Analyzed alone, the scenario holds no such scope: the trait's plain where scope is dropped.
-        $findings = \array_values(\array_filter(
-            $this->psalmRun('app/UnknownModelColumnUnscoped')['findings'],
-            static fn(array $finding): bool => $finding['type'] === 'UnknownModelAttribute',
-        ));
-
-        $this->assertSame(
-            ["Builder::get() selects an unknown column 'typocol_unscoped_team'. It matches no column, cast, accessor, relation, \$appends entry, or @property of TeamPost — check for a typo."],
-            $this->messages($findings),
-        );
     }
 
     #[Test]
@@ -436,10 +418,10 @@ final class EmissionAppTest extends TestCase
     /**
      * @return array{findings: list<array{type: string, message: string, severity: string, file_name: string}>, stdout: string, stderr: string}
      */
-    private function psalmRun(string $path = ''): array
+    private function psalmRun(): array
     {
-        if (isset(self::$runs[$path])) {
-            return self::$runs[$path];
+        if (self::$run !== null) {
+            return self::$run;
         }
 
         $projectRoot = \dirname(__DIR__, 3);
@@ -449,7 +431,7 @@ final class EmissionAppTest extends TestCase
 
         $cacheDir = \sys_get_temp_dir() . '/psalm-laravel-emission-app-' . \bin2hex(\random_bytes(6));
         $process = new Process(
-            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--scan-threads=1', '--no-progress', '--show-info=true', '--output-format=json', ...($path === '' ? [] : [$path])],
+            [\PHP_BINARY, $psalmBinary, '-c', 'psalm.xml', '--no-cache', '--threads=1', '--scan-threads=1', '--no-progress', '--show-info=true', '--output-format=json'],
             __DIR__ . '/Fixtures/EmissionApp',
             ['XDG_CACHE_HOME' => $cacheDir, 'TMPDIR' => $cacheDir . '/'],
         );
@@ -484,6 +466,6 @@ final class EmissionAppTest extends TestCase
             }
         }
 
-        return self::$runs[$path] = ['findings' => $findings, 'stdout' => $stdout, 'stderr' => $stderr];
+        return self::$run = ['findings' => $findings, 'stdout' => $stdout, 'stderr' => $stderr];
     }
 }

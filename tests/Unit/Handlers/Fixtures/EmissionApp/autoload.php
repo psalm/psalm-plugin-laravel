@@ -10,7 +10,6 @@ declare(strict_types=1);
 const EMISSION_APP_NAMESPACES = [
     'KnownAttributeFixture\\' => 'UnknownModelAttribute',
     'ColumnListFixture\\' => 'UnknownModelColumn',
-    'UnscopedColumnFixture\\' => 'UnknownModelColumnUnscoped',
     'RelationDefaultsFixture\\' => 'UndefinedModelRelationDefaults',
     'AutoloadCrashFixture\\' => 'UndefinedRelationAutoloadCrash',
     'ScopeUnusedCodeFixture\\' => 'SuppressScopeUnusedCode',

@@ -13,8 +13,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOneOrMany;
-use Illuminate\Database\Eloquent\Scope;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
@@ -27,7 +25,6 @@ use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
-use Psalm\Internal\Provider\ClassLikeStorageProvider;
 use Psalm\IssueBuffer;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
@@ -39,7 +36,6 @@ use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterExpressionAnalysisEvent;
 use Psalm\StatementsSource;
-use Psalm\Storage\ClassLikeStorage;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
 
@@ -158,12 +154,6 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
 
     /** @var list<class-string> */
     private const TRUSTED_MODEL_DECLARERS = [Model::class, GuardsAttributes::class];
-
-    /**
-     * Per run: no class implementing `Scope` other than Laravel's `SoftDeletingScope` declares or inherits
-     * `extend()`. Null until a chain with a bare `withoutGlobalScopes()` first needs it.
-     */
-    private static ?bool $scopesNeverExtend = null;
 
     /**
      * Eloquent read methods taking a `$columns` select list (#2346) => that parameter's position.
@@ -637,7 +627,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return;
         }
 
-        $names = [...\array_keys($chainNames), $lowerMethod];
+        $names = [...$chainNames, $lowerMethod];
         $called = [...$names, ...self::READ_FORWARDED_CALLS[$lowerMethod] ?? []];
         $builderClass = $metadata->customBuilder;
 
@@ -661,13 +651,8 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             static fn(String_ $column): bool => self::unknownKeys($allowedKeys, [$column->value]) !== [],
         );
 
-        // The lineage scan reads files, so it runs last and only when there is something to report. A bare
-        // `withoutGlobalScopes()` drops every registered scope, but not what a scope's `extend()` did to the
-        // builder at registration, so it lifts the veto only when no scope of the run has a userland `extend()`.
-        // The language server reloads files without a plugin reset, so the cached run-wide fact could be stale there.
-        $unscoped = ($chainNames['withoutglobalscopes'] ?? false) && !$codebase->server_mode && self::scopesNeverExtend();
-
-        if ($unknown === [] || (!$unscoped && self::mayRegisterGlobalScope($modelClass, $codebase))) {
+        // The lineage scan reads files, so it runs last and only when there is something to report.
+        if ($unknown === [] || self::mayRegisterGlobalScope($modelClass, $codebase)) {
             return;
         }
 
@@ -688,13 +673,13 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
     }
 
     /**
-     * Pure syntax verdict: the static call a read call is, or chains from, plus the lowercase names of
-     * every link on the way (root included) mapped to "called at least once without arguments". Null
-     * unless the root is a class-named static call (`Post::query()`, `Post::where()`, `Post::find()`) and
-     * every link is a named {@see self::SHAPE_PRESERVING_METHODS} method call: a variable, property,
-     * `new`, function result, nullsafe or dynamic call has unknown provenance.
+     * Pure syntax verdict: the static call a read call is, or chains from, plus the unique lowercase names
+     * of every link on the way (root included). Null unless the root is a class-named static call
+     * (`Post::query()`, `Post::where()`, `Post::find()`) and every link is a named
+     * {@see self::SHAPE_PRESERVING_METHODS} method call: a variable, property, `new`, function result,
+     * nullsafe or dynamic call has unknown provenance.
      *
-     * @return array{StaticCall, array<lowercase-string, bool>}|null
+     * @return array{StaticCall, list<lowercase-string>}|null
      *
      * @psalm-capabilities read-props
      */
@@ -716,10 +701,10 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
                 return null;
             }
 
-            $names[$name] = ($names[$name] ?? false) || $node->args === [];
+            $names[$name] = true;
         }
 
-        return $node->class instanceof Name && $node->name instanceof Identifier ? [$node, $names] : null;
+        return $node->class instanceof Name && $node->name instanceof Identifier ? [$node, \array_keys($names)] : null;
     }
 
     /**
@@ -853,51 +838,6 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
         }
 
         return false;
-    }
-
-    /**
-     * `Builder::withGlobalScope()` calls `$scope->extend($this)` at registration, and what it adds (a join,
-     * a select, a macro) outlives `withoutGlobalScopes()`. Laravel's `SoftDeletingScope::extend()` only
-     * registers its own macros. Read once per run from every class Psalm holds, so an unpopulated class
-     * leaves the fact unproven.
-     */
-    private static function scopesNeverExtend(): bool
-    {
-        if (self::$scopesNeverExtend !== null) {
-            return self::$scopesNeverExtend;
-        }
-
-        foreach (ClassLikeStorageProvider::getAll() as $storage) {
-            if (self::scopeMayExtendBuilder($storage)) {
-                return self::$scopesNeverExtend = false;
-            }
-        }
-
-        return self::$scopesNeverExtend = true;
-    }
-
-    /**
-     * Does this class possibly change the builder in `extend()` at scope registration? Only Laravel's own
-     * `SoftDeletingScope` is trusted, by its own name: a subclass inherits `extend()`, which calls methods
-     * (`addRestore()`, ...) the subclass may override to join or select.
-     *
-     * @psalm-mutation-free
-     */
-    public static function scopeMayExtendBuilder(ClassLikeStorage $storage): bool
-    {
-        if (!$storage->populated) {
-            return true;
-        }
-
-        return isset($storage->declaring_method_ids['extend'])
-            && !$storage->is_interface
-            && isset($storage->class_implements[\strtolower(Scope::class)])
-            && \strcasecmp($storage->name, SoftDeletingScope::class) !== 0;
-    }
-
-    public static function reset(): void
-    {
-        self::$scopesNeverExtend = null;
     }
 
     /**

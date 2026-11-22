@@ -11,7 +11,6 @@ use ColumnListFixture\Models\ConstrainedCountPost;
 use ColumnListFixture\Models\CountedPost;
 use ColumnListFixture\Models\DocumentedPost;
 use ColumnListFixture\Models\EntityPost;
-use ColumnListFixture\Models\ExtendedPost;
 use ColumnListFixture\Models\FactoryBuilderPost;
 use ColumnListFixture\Models\FactoryPost;
 use ColumnListFixture\Models\GlobalScopesPost;
@@ -205,8 +204,6 @@ function silent_model_level_gates(): void
     AttributeScopedPost::query()->get(['silentcol_scope_attribute']);
     SubAttributeScopedPost::query()->get(['silentcol_scope_attribute_subclass']);
     GlobalScopesPost::query()->get(['silentcol_get_global_scopes_override']);
-    // A scope's `extend()` ran at registration; removing the scope does not undo it.
-    ExtendedPost::withoutGlobalScopes()->get(['silentcol_scope_extend']);
     ScopedPost::withoutGlobalScopes()->get(['silentcol_unscoped']);
     // `$withCount` seeds a select, so `$columns` is dead.
     CountedPost::query()->get(['silentcol_withcount_property']);

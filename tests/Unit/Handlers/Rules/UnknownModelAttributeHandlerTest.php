@@ -171,7 +171,7 @@ final class UnknownModelAttributeHandlerTest extends TestCase
 
         $this->assertSame(
             $expected,
-            $chain === null || !$root instanceof Identifier ? null : [$root->name, \array_keys($chain[1])],
+            $chain === null || !$root instanceof Identifier ? null : [$root->name, $chain[1]],
         );
     }
 
@@ -230,46 +230,6 @@ final class UnknownModelAttributeHandlerTest extends TestCase
         yield 'a dynamic key may overwrite an entry' => ['["dropped", $offset => "kept"]', []];
         yield 'closure passed as $columns' => ['fn () => null', []];
         yield 'variable' => ['$columns', []];
-    }
-
-    #[Test]
-    #[DataProvider('scopeStorages')]
-    public function scope_may_extend_builder_trusts_only_laravels_soft_deleting_scope_itself(\Psalm\Storage\ClassLikeStorage $storage, bool $expected): void
-    {
-        $this->assertSame($expected, UnknownModelAttributeHandler::scopeMayExtendBuilder($storage));
-    }
-
-    /**
-     * @return iterable<string, array{\Psalm\Storage\ClassLikeStorage, bool}>
-     */
-    public static function scopeStorages(): iterable
-    {
-        $soft = \Illuminate\Database\Eloquent\SoftDeletingScope::class;
-
-        yield 'SoftDeletingScope itself' => [self::scopeStorage($soft, $soft), false];
-        // Inherits extend(), which calls $this->addRestore() and siblings an override may turn into a join.
-        yield 'subclass of SoftDeletingScope' => [self::scopeStorage('App\JoiningSoftDeletes', $soft), true];
-        yield 'userland extend()' => [self::scopeStorage('App\ExtendingScope', 'App\ExtendingScope'), true];
-        yield 'inherited userland extend()' => [self::scopeStorage('App\ChildScope', 'App\BaseScope'), true];
-        yield 'scope without extend()' => [self::scopeStorage('App\TeamScope', null), false];
-        yield 'extend() outside a Scope' => [self::scopeStorage('App\Macroable', 'App\Macroable', scope: false), false];
-        yield 'unpopulated storage' => [self::scopeStorage('App\Unknown', null, populated: false), true];
-    }
-
-    private static function scopeStorage(string $name, ?string $extendDeclarer, bool $scope = true, bool $populated = true): \Psalm\Storage\ClassLikeStorage
-    {
-        $storage = new \Psalm\Storage\ClassLikeStorage($name);
-        $storage->populated = $populated;
-
-        if ($scope) {
-            $storage->class_implements = [\strtolower(\Illuminate\Database\Eloquent\Scope::class) => \Illuminate\Database\Eloquent\Scope::class];
-        }
-
-        if ($extendDeclarer !== null) {
-            $storage->declaring_method_ids = ['extend' => new \Psalm\Internal\MethodIdentifier($extendDeclarer, 'extend')];
-        }
-
-        return $storage;
     }
 
     private function parse(string $code): \PhpParser\Node\Expr

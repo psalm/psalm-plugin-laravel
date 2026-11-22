@@ -267,7 +267,6 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         Handlers\Magic\MacroRegistry::reset();
         Handlers\Producers\ProducerReturnTypeHandler::reset();
         Handlers\Rules\UnregisteredRouteNameHandler::reset();
-        Handlers\Rules\UnknownModelAttributeHandler::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
         Handlers\Support\ConditionableCallbackParamsHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
