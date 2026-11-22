@@ -614,6 +614,16 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return;
         }
 
+        $allowedKeys = self::allowedKeys($metadata, $modelClass, $codebase);
+        $unknown = \array_filter(
+            $columns,
+            static fn(String_ $column): bool => self::unknownKeys($allowedKeys, [$column->value]) !== [],
+        );
+
+        if ($unknown === []) {
+            return;
+        }
+
         $called = [...$chainNames, $lowerMethod, ...self::READ_INTERNAL_CALLS];
         $builderClass = $metadata->customBuilder;
 
@@ -633,18 +643,9 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
                 $codebase,
             )
             || ($builderClass !== null && self::redeclaresBuilderMethod($builderClass, $called, $codebase))
+            // Reads files, so it goes last.
+            || self::mayRegisterGlobalScope($modelClass, $codebase)
         ) {
-            return;
-        }
-
-        $allowedKeys = self::allowedKeys($metadata, $modelClass, $codebase);
-        $unknown = \array_filter(
-            $columns,
-            static fn(String_ $column): bool => self::unknownKeys($allowedKeys, [$column->value]) !== [],
-        );
-
-        // The lineage scan reads files, so it runs last and only when there is something to report.
-        if ($unknown === [] || self::mayRegisterGlobalScope($modelClass, $codebase)) {
             return;
         }
 
