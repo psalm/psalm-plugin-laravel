@@ -110,15 +110,22 @@ function higher_order_proxy(Collection $starKey, Collection $starValue): void
 }
 
 /**
- * A `*` stays in its slot of the receiver's own class; another class or arity answers a new object.
+ * A `*` stays in its slot of the receiver's own class; another class or arity answers a new object, and so does an
+ * answer that recomputes a slot of a class whose layout is not proven `<TKey, TValue>`.
  *
  * @param EloquentCollection<*, Customer> $eloquent
  * @param KeyLast<Customer, *> $keyLast
+ * @param KeyLast<*, int> $valueFirst
  * @param WithMeta<*, Customer, string> $withMeta
  * @param Collection<*, Customer>|EloquentCollection<int, Customer> $union
  */
-function receiver_matrix(EloquentCollection $eloquent, KeyLast $keyLast, WithMeta $withMeta, Collection $union): void
-{
+function receiver_matrix(
+    EloquentCollection $eloquent,
+    KeyLast $keyLast,
+    KeyLast $valueFirst,
+    WithMeta $withMeta,
+    Collection $union,
+): void {
     $_filter = $eloquent->filter->isDirty();
     /** @psalm-check-type-exact $_filter = EloquentCollection<*, Customer> */
 
@@ -130,6 +137,12 @@ function receiver_matrix(EloquentCollection $eloquent, KeyLast $keyLast, WithMet
 
     $_keyLast = $keyLast->filter->isDirty();
     /** @psalm-check-type-exact $_keyLast = KeyLast<Customer, *> */
+
+    $_keyLastKeyBy = $keyLast->keyBy->getKey();
+    /** @psalm-check-type-exact $_keyLastKeyBy = KeyLast<array-key, array-key> */
+
+    $_valueFirstMap = $valueFirst->map->isDirty();
+    /** @psalm-check-type-exact $_valueFirstMap = KeyLast<mixed, mixed> */
 
     $_withMeta = $withMeta->filter->isDirty();
     /** @psalm-check-type-exact $_withMeta = WithMeta<array-key, Customer> */

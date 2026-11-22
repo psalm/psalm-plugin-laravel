@@ -562,7 +562,13 @@ final class FactoryCount
             $params[] = $param;
         }
 
-        return new Union([GenericReceiver::rebuild($receiver instanceof TGenericObject ? $receiver : null, $storage->name, $params)
+        // A union receiver has no single atomic, but the branch this call answers for still carries its `*`;
+        // the late-static and intersection flags stay those of the single receiver only.
+        $markers = $receiver instanceof TGenericObject
+            ? $receiver
+            : ($event instanceof MethodReturnTypeProviderEvent ? GenericReceiver::of($event, $storage->name) : null);
+
+        return new Union([GenericReceiver::rebuild($markers, $storage->name, $params)
             ->setIntersectionTypes($receiver?->extra_types ?? [])
             ->setIsStatic($receiver?->is_static ?? false, $receiver?->is_static_resolved ?? false)]);
     }

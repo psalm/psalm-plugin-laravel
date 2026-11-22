@@ -40,8 +40,9 @@ function takes_model_factory(Factory $_factory): void {}
 /**
  * @param Factory<*, *> $base
  * @param AbstractStarFactory<*, null> $synthesized
+ * @param AbstractStarFactory<*, null>|AbstractStarFactory<Model, int> $union
  */
-function star_model_is_kept(Factory $base, AbstractStarFactory $synthesized): void
+function star_model_is_kept(Factory $base, AbstractStarFactory $synthesized, AbstractStarFactory $union): void
 {
     $_base = $base->count(3);
     /** @psalm-check-type-exact $_base = Factory<*, int<2, max>> */
@@ -51,6 +52,13 @@ function star_model_is_kept(Factory $base, AbstractStarFactory $synthesized): vo
 
     $_replaced = $synthesized->replaced();
     /** @psalm-check-type-exact $_replaced = AbstractStarFactory<*, int<2, max>|null> */
+
+    // No single receiver atomic: the `*` comes from the union branch the provider answers for.
+    $_union = $union->count(3);
+    /** @psalm-check-type-exact $_union = AbstractStarFactory<*, int<2, max>>|AbstractStarFactory<Model, int<2, max>> */
+
+    $_unionReplaced = $union->replaced();
+    /** @psalm-check-type-exact $_unionReplaced = AbstractStarFactory<*, int<2, max>|null>|AbstractStarFactory<Model, int<2, max>|null> */
 
     takes_model_factory($base->count(3));
 }

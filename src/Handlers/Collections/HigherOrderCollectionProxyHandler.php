@@ -765,7 +765,7 @@ final class HigherOrderCollectionProxyHandler implements
             // returns static only when mapped values are Model instances, otherwise Support\Collection (via toBase()).
             // Since proxy maps extract plain values (e.g. ->map->getKey()), Eloquent always gives the base Collection.
             'map' => new Union([
-                GenericReceiver::rebuild($collection, self::toBaseClass($collectionClass, $codebase), [
+                GenericReceiver::rebuild(self::reshapedFrom($collection, $codebase), self::toBaseClass($collectionClass, $codebase), [
                     $tKey,
                     self::proxiedResult($tValue, $proxied, $codebase) ?? Type::getMixed(),
                 ]),
@@ -780,7 +780,7 @@ final class HigherOrderCollectionProxyHandler implements
             'groupby' => new Union([
                 new TGenericObject($collectionClass, [
                     self::groupKeyType($tValue, $proxied, $codebase),
-                    new Union([GenericReceiver::rebuild($collection, $collectionClass, [Type::getInt(), $tValue])]),
+                    new Union([GenericReceiver::rebuild(self::reshapedFrom($collection, $codebase), $collectionClass, [Type::getInt(), $tValue])]),
                 ]),
             ]),
             // partition — always two buckets (truthy/falsy), keyed 0 and 1. EloquentCollection::partition() calls
@@ -793,9 +793,21 @@ final class HigherOrderCollectionProxyHandler implements
             ]),
             // keyBy — re-keys by the proxied value, resolved like groupBy's outer key
             'keyby' => new Union([
-                GenericReceiver::rebuild($collection, $collectionClass, [self::groupKeyType($tValue, $proxied, $codebase), $tValue]),
+                GenericReceiver::rebuild(self::reshapedFrom($collection, $codebase), $collectionClass, [self::groupKeyType($tValue, $proxied, $codebase), $tValue]),
             ]),
         };
+    }
+
+    /**
+     * The marker source for an answer that recomputes one of TKey / TValue, or null. Slots 0 and 1 are read as
+     * TKey and TValue, so on a subclass that reorders its templates an identity pass-through would keep the `*` of
+     * the slot Laravel recomputes; answers that hand both slots through unchanged need no such proof.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function reshapedFrom(TGenericObject $collection, Codebase $codebase): ?TGenericObject
+    {
+        return self::bindsKeyAndValuePositionally($collection, $codebase) ? $collection : null;
     }
 
     /**
@@ -976,7 +988,7 @@ final class HigherOrderCollectionProxyHandler implements
 
     /**
      * `Enumerable<TKey, TValue>` rebuilt from the proxy's own type params, for receivers that
-     * {@see extractCollectionInfoFromType()} cannot read (a non-generic subclass, whose proxy
+     * {@see extractCollectionFromType()} cannot read (a non-generic subclass, whose proxy
      * comes from the vendor trait annotation).
      *
      * @param Union|null $tCollection absent when the vendor annotation is the pre-13.31 `<TKey, TValue>`

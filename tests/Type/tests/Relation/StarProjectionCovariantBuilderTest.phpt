@@ -13,9 +13,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * `getQuery()` of a `HasMany<*, X>` is `Builder<Model>`, not `Builder<*>`, and no handler is involved:
  * the stub declares `@return Builder<TRelatedModel>` and `Builder::TModel` covariant, and Psalm reads a
- * `*` bound to a covariant argument as the bound of its template (#2380, item 4). Nothing is lost:
- * `Builder<*>` and `Builder<Model>` accept each other, and the stub has no parameter typed `TModel`
- * that a `*` could reject.
+ * `*` bound to a covariant argument as the bound of its template (#2380, item 4). The cost is the
+ * hole every upcast `Builder<Customer>` already has: `mergeConstraintsFrom(Builder<TModel>)` accepts
+ * any model's builder, where `Builder<*>` would reject it. Closing it needs an invariant `TModel`.
  *
  * Skipped on a Psalm without star projections.
  */
