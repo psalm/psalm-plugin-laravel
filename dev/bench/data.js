@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795305339815,
+  "lastUpdate": 1795306233130,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19940,6 +19940,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 26.29,
             "range": "± 0.34",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1237,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b5050418c3ee28e29e15d26c24e17265be1c0a6",
+          "message": "fix: keep `*` type arguments when forwarding a relation call to its builder (#2378)\n\n- `MethodForwardingHandler` and `ReturnTypeResolver` returned `new TGenericObject($class, $receiver->type_params)`, which turns a `*` slot into its template bound\n- Return the receiver atomic (`setTypeParams()` of it) instead, so Psalm's star projection survives `where()`, `limit()`, scope and dynamic-where forwarding\n- Add a type test, skipped on a Psalm without star projections",
+          "timestamp": "2026-11-22T01:06:53+01:00",
+          "tree_id": "b5471b46e0f1a5f02cf688438ed8610853a41135",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/0b5050418c3ee28e29e15d26c24e17265be1c0a6"
+        },
+        "date": 1795306231505,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.94,
+            "range": "± 0.51",
             "unit": "s"
           },
           {
