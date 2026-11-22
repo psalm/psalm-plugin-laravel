@@ -62,29 +62,25 @@ final class ReturnTypeResolver
     /**
      * Resolve the return type for a forwarded method call (Decorated style).
      *
-     * If the target method returns self (Builder, static, $this), returns
-     * the source's generic type. Otherwise returns null to let Psalm resolve.
-     *
-     * @param list<Union>|null $sourceTemplateParams
+     * If the target method returns self (Builder, static, $this), returns the receiver
+     * itself. It is returned as the atomic it already is, never rebuilt from its type
+     * arguments, so that a `*` argument stays a `*`. Otherwise returns null to let Psalm
+     * resolve.
      */
     public static function resolve(
-        string $sourceClass,
-        ?array $sourceTemplateParams,
+        ?TGenericObject $source,
         Codebase $codebase,
         string $methodNameLowercase,
     ): ?Union {
         if (
             !self::$rule instanceof \Psalm\LaravelPlugin\Handlers\Magic\ForwardingRule
-            || $sourceTemplateParams === null
-            || $sourceTemplateParams === []
+            || !$source instanceof TGenericObject
         ) {
             return null;
         }
 
         if (self::anyTargetClassMethodReturnsSelf($codebase, $methodNameLowercase)) {
-            return new Union([
-                new TGenericObject($sourceClass, $sourceTemplateParams),
-            ]);
+            return new Union([$source]);
         }
 
         // Non-self-returning (first, get, count, etc.): let Psalm resolve naturally
