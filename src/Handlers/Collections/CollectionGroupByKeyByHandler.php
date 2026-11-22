@@ -9,6 +9,7 @@ use Illuminate\Support\Collection;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\LaravelPlugin\Handlers\Eloquent\ModelPropertyHandler;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Internal\GenericReceiver;
 use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -96,9 +97,10 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         $isStatic = !LateStatic::isPlainReceiver($event, $class);
+        $receiver = GenericReceiver::of($event, $class);
 
         if ($method === 'keyby') {
-            return new Union([(new TGenericObject($class, [$key, $value], is_static: $isStatic))->setIsStatic($isStatic, $isStatic)]);
+            return new Union([GenericReceiver::rebuild($receiver, $class, [$key, $value])->setIsStatic($isStatic, $isStatic)]);
         }
 
         $innerKey = $templates[0] ?? null;
@@ -112,7 +114,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
 
         // Laravel builds the inner groups with `new static` as well, so they follow the outer flag.
         return new Union([(new TGenericObject($class, [$key,
-            new Union([(new TGenericObject($class, [$innerKey, $value], is_static: $isStatic))->setIsStatic($isStatic, $isStatic)]),
+            new Union([GenericReceiver::rebuild($receiver, $class, [$innerKey, $value])->setIsStatic($isStatic, $isStatic)]),
         ], is_static: $isStatic))->setIsStatic($isStatic, $isStatic)]);
     }
 

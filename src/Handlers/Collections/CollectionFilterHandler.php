@@ -29,6 +29,7 @@ use Psalm\Codebase;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Internal\Type\Comparator\TypeComparisonResult;
 use Psalm\Internal\Type\Comparator\UnionTypeComparator;
+use Psalm\LaravelPlugin\Internal\GenericReceiver;
 use Psalm\LaravelPlugin\Internal\LateStatic;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -42,7 +43,6 @@ use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TFalse;
 use Psalm\Type\Atomic\TFloat;
-use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TInt;
 use Psalm\Type\Atomic\TIterable;
 use Psalm\Type\Atomic\TKeyedArray;
@@ -459,6 +459,7 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 
     /**
      * Build the narrowed return type with the same Collection subclass, plain only for a receiver proven plain.
+     * $tKey must stay the event's own Union: {@see GenericReceiver::rebuild()} keeps a `*` only by identity.
      */
     private static function buildNarrowedReturn(
         MethodReturnTypeProviderEvent $event,
@@ -470,7 +471,8 @@ final class CollectionFilterHandler implements MethodReturnTypeProviderInterface
 
         // `&static` already bound to the receiver, matching `return static`; unbound, it binds again on later calls.
         return new Union([
-            (new TGenericObject($className, [$tKey, $narrowedValue], is_static: $isStatic))->setIsStatic($isStatic, $isStatic),
+            GenericReceiver::rebuild(GenericReceiver::of($event, $className), $className, [$tKey, $narrowedValue])
+                ->setIsStatic($isStatic, $isStatic),
         ]);
     }
 

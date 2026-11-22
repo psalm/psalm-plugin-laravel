@@ -22,6 +22,7 @@ use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\Analyzer\Statements\Expression\ExpressionIdentifier;
 use Psalm\Internal\Analyzer\Statements\Expression\NullsafeChainState;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\LaravelPlugin\Internal\GenericReceiver;
 use Psalm\Node\Expr\VirtualMethodCall;
 use Psalm\Node\VirtualNode;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
@@ -256,22 +257,18 @@ final class HigherOrderCollectionProxyHandler implements
                 return;
             }
 
-            // Resolve TKey, TValue, and the concrete collection class from the
+            // The collection atomic itself (its TKey, TValue, class and `*` markers) from the
             // collection expression (the receiver of the property fetch).
-            $collectionInfo = self::extractCollectionInfoFromExpr($expr, $source);
-            if ($collectionInfo === null) {
+            $collection = self::extractCollectionFromExpr($expr, $source);
+            if (!$collection instanceof TGenericObject) {
                 // Couldn't find the collection — fall back to Enumerable.
                 $event->setReturnTypeCandidate(self::enumerableFallback($typeParams[1], $typeParams[2] ?? null, $source->getCodebase()));
                 return;
             }
 
-            [$tKey, $tValue, $collectionClass] = $collectionInfo;
-
             $returnType = self::resolveProxyReturnType(
                 $proxyMethod,
-                $tKey,
-                $tValue,
-                $collectionClass,
+                $collection,
                 $source->getCodebase(),
                 self::extractCalledMethodName($expr),
             );
@@ -340,18 +337,14 @@ final class HigherOrderCollectionProxyHandler implements
             );
         }
 
-        $collectionInfo = self::extractCollectionInfoFromType($collectionType, $source->getCodebase());
-        if ($collectionInfo === null) {
+        $collection = self::extractCollectionFromType($collectionType, $source->getCodebase());
+        if (!$collection instanceof TGenericObject) {
             return null;
         }
 
-        [$tKey, $tValue, $collectionClass] = $collectionInfo;
-
         return self::resolveProxyReturnType(
             $proxyMethod,
-            $tKey,
-            $tValue,
-            $collectionClass,
+            $collection,
             $source->getCodebase(),
             $event->getMethodNameLowercase(),
         );
@@ -597,23 +590,14 @@ final class HigherOrderCollectionProxyHandler implements
 
         $receiver = $receiverType instanceof Union ? self::readableCollection($receiverType, $codebase) : null;
         if ($receiver instanceof TGenericObject) {
-            return self::resolveProxyReturnType(
-                $proxyMethod,
-                $receiver->type_params[0],
-                $receiver->type_params[1],
-                $receiver->value,
-                $codebase,
-                $itemType,
-            );
+            return self::resolveProxyReturnType($proxyMethod, $receiver, $codebase, $itemType);
         }
 
         $combined = null;
         foreach ($proxies as [$tValue, $tCollection]) {
             $branch = self::resolveProxyReturnType(
                 $proxyMethod,
-                self::enumerableKey($tCollection, $codebase),
-                $tValue,
-                Enumerable::class,
+                new TGenericObject(Enumerable::class, [self::enumerableKey($tCollection, $codebase), $tValue]),
                 $codebase,
                 $itemType,
             );
@@ -732,28 +716,34 @@ final class HigherOrderCollectionProxyHandler implements
     /**
      * Resolve the return type based on which proxy property was accessed.
      *
+     * Every answer that holds the collection's own type arguments is built from the $collection atomic
+     * ({@see GenericReceiver::rebuild()}), so a `*` argument stays a `*` where the argument passes through.
+     *
      * @param lowercase-string $proxyMethod  The proxy property name (e.g. "each", "map")
+     * @param TGenericObject $collection     The collection the proxy was read from: class, TKey and TValue
+     *                                        (its first two type arguments)
      * @param lowercase-string|Union $proxied The method called through the proxy (e.g. "delete"), or the
      *                                        item-level value of a property fetched through it
-     * @param string $collectionClass        The concrete collection class
      */
     private static function resolveProxyReturnType(
         string $proxyMethod,
-        Union $tKey,
-        Union $tValue,
-        string $collectionClass,
+        TGenericObject $collection,
         Codebase $codebase,
         string|Union $proxied,
     ): ?Union {
         $kind = self::PROXY_KINDS[$proxyMethod] ?? null;
-        if ($kind === null) {
+        $tValue = $collection->type_params[1] ?? null;
+        if ($kind === null || !$tValue instanceof Union) {
             // Unknown proxy method — defer to Psalm's default
             return null;
         }
 
+        $collectionClass = $collection->value;
+        $tKey = $collection->type_params[0];
+
         return match ($kind) {
             // The same collection type (preserves the concrete subtype)
-            'passthrough' => new Union([new TGenericObject($collectionClass, [$tKey, $tValue])]),
+            'passthrough' => new Union([GenericReceiver::rebuild($collection, $collectionClass, [$tKey, $tValue])]),
             'boolean' => Type::getBool(),
             // avg/average: $reduced[0] / $reduced[1] → float|int|null (div of two ints yields int when exact).
             'average' => new Union([new Type\Atomic\TFloat(), new Type\Atomic\TInt(), new Type\Atomic\TNull()]),
@@ -775,7 +765,7 @@ final class HigherOrderCollectionProxyHandler implements
             // returns static only when mapped values are Model instances, otherwise Support\Collection (via toBase()).
             // Since proxy maps extract plain values (e.g. ->map->getKey()), Eloquent always gives the base Collection.
             'map' => new Union([
-                new TGenericObject(self::toBaseClass($collectionClass, $codebase), [
+                GenericReceiver::rebuild($collection, self::toBaseClass($collectionClass, $codebase), [
                     $tKey,
                     self::proxiedResult($tValue, $proxied, $codebase) ?? Type::getMixed(),
                 ]),
@@ -790,7 +780,7 @@ final class HigherOrderCollectionProxyHandler implements
             'groupby' => new Union([
                 new TGenericObject($collectionClass, [
                     self::groupKeyType($tValue, $proxied, $codebase),
-                    new Union([new TGenericObject($collectionClass, [Type::getInt(), $tValue])]),
+                    new Union([GenericReceiver::rebuild($collection, $collectionClass, [Type::getInt(), $tValue])]),
                 ]),
             ]),
             // partition — always two buckets (truthy/falsy), keyed 0 and 1. EloquentCollection::partition() calls
@@ -798,11 +788,13 @@ final class HigherOrderCollectionProxyHandler implements
             'partition' => new Union([
                 new TGenericObject(self::toBaseClass($collectionClass, $codebase), [
                     Type::getInt(),
-                    new Union([new TGenericObject($collectionClass, [$tKey, $tValue])]),
+                    new Union([GenericReceiver::rebuild($collection, $collectionClass, [$tKey, $tValue])]),
                 ]),
             ]),
             // keyBy — re-keys by the proxied value, resolved like groupBy's outer key
-            'keyby' => new Union([new TGenericObject($collectionClass, [self::groupKeyType($tValue, $proxied, $codebase), $tValue])]),
+            'keyby' => new Union([
+                GenericReceiver::rebuild($collection, $collectionClass, [self::groupKeyType($tValue, $proxied, $codebase), $tValue]),
+            ]),
         };
     }
 
@@ -877,9 +869,7 @@ final class HigherOrderCollectionProxyHandler implements
             // An unreadable branch still resolves, with placeholders, so an unknown proxy name declines.
             $branchType = self::resolveProxyReturnType(
                 $proxyMethod,
-                $readable ? $branch->type_params[0] : Type::getMixed(),
-                $readable ? $branch->type_params[1] : Type::getMixed(),
-                $branch->value,
+                $readable ? $branch : new TGenericObject($branch->value, [Type::getMixed(), Type::getMixed()]),
                 $codebase,
                 $proxied,
             );
@@ -940,12 +930,10 @@ final class HigherOrderCollectionProxyHandler implements
     }
 
     /**
-     * Extract TKey, TValue, and the collection class from a MethodCall expression.
+     * The collection atomic a proxied MethodCall expression reads its proxy from.
      * Used in the AfterMethodCallAnalysis path where we have the full AST.
-     *
-     * @return array{Union, Union, string}|null [TKey, TValue, collectionClassName]
      */
-    private static function extractCollectionInfoFromExpr(MethodCall $expr, \Psalm\StatementsSource $source): ?array
+    private static function extractCollectionFromExpr(MethodCall $expr, \Psalm\StatementsSource $source): ?TGenericObject
     {
         // $expr->var is the proxy expression (e.g., $collection->each)
         $proxyExpr = $expr->var;
@@ -961,20 +949,19 @@ final class HigherOrderCollectionProxyHandler implements
             return null;
         }
 
-        return self::extractCollectionInfoFromType($collectionType, $source->getCodebase());
+        return self::extractCollectionFromType($collectionType, $source->getCodebase());
     }
 
     /**
-     * Extract TKey, TValue, and the collection class from a Union type.
+     * The only collection atomic of a Union type, when it is generic over at least TKey and TValue.
      *
      * Declines (null) when the union holds more than one collection atomic, generic or not:
      * taking one would silently drop the other branches' item types. Such receivers go through
      * {@see resolveProxyReturnTypeForUnion()} instead.
      *
-     * @return array{Union, Union, string}|null [TKey, TValue, collectionClassName]
      * @psalm-mutation-free
      */
-    private static function extractCollectionInfoFromType(Union $collectionType, Codebase $codebase): ?array
+    private static function extractCollectionFromType(Union $collectionType, Codebase $codebase): ?TGenericObject
     {
         $atomics = self::collectionAtomics($collectionType, $codebase);
 
@@ -983,11 +970,8 @@ final class HigherOrderCollectionProxyHandler implements
         }
 
         $atomic = $atomics[0];
-        if (!$atomic instanceof TGenericObject || \count($atomic->type_params) < 2) {
-            return null;
-        }
 
-        return [$atomic->type_params[0], $atomic->type_params[1], $atomic->value];
+        return $atomic instanceof TGenericObject && \count($atomic->type_params) >= 2 ? $atomic : null;
     }
 
     /**
