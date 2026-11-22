@@ -17,8 +17,10 @@ use ColumnListFixture\Models\GlobalScopesPost;
 use ColumnListFixture\Models\HookedPost;
 use ColumnListFixture\Models\LimitBuilderPost;
 use ColumnListFixture\Models\LinkPost;
+use ColumnListFixture\Models\LowercaseScopePost;
 use ColumnListFixture\Models\OverriddenPost;
 use ColumnListFixture\Models\PlainPost;
+use ColumnListFixture\Models\ScopeAliasPost;
 use ColumnListFixture\Models\ScopedPost;
 use ColumnListFixture\Models\ScopeLimitPost;
 use ColumnListFixture\Models\ScopeNamedPost;
@@ -214,6 +216,8 @@ function silent_model_level_gates(): void
     TypedQueryPost::query()->get(['silentcol_query_override']);
     SettingPost::get('silentcol_setting_key');
     ScopeNamedPost::query()->orderBy('title')->get(['silentcol_scope_named_like_link']);
+    LowercaseScopePost::orderBy('title')->get(['silentcol_lowercase_scope']);
+    ScopeAliasPost::orderBy('title')->get(['silentcol_named_scope_override']);
     // `first()` calls `limit(1)` through `Builder::__call`.
     ScopeLimitPost::query()->first(['silentcol_scope_limit']);
     DynamicSchemaThing::query()->get(['silentcol_empty_schema']);

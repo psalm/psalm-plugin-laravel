@@ -206,8 +206,9 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
 
     /**
      * Model hooks beside {@see ModelQueryPath::isLaravels()} that decide what a column-list query looks like:
-     * the builder factory and base query builder (an override may return a joined or selected query), and
-     * the global-scope providers of `HasGlobalScopes` (an override may supply scopes nothing registers).
+     * the builder factory and base query builder (an override may return a joined or selected query), the
+     * global-scope providers of `HasGlobalScopes` (an override may supply scopes nothing registers), and the
+     * named-scope dispatch `Builder::__call()` asks before forwarding (an override may route any name).
      *
      * @var list<lowercase-string>
      */
@@ -217,6 +218,8 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
         'getglobalscopes',
         'boothasglobalscopes',
         'resolveglobalscopeattributes',
+        'hasnamedscope',
+        'callnamedscope',
     ];
 
     /**
@@ -627,19 +630,24 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return;
         }
 
-        $names = [...$chainNames, $lowerMethod];
-        $called = [...$names, ...self::READ_FORWARDED_CALLS[$lowerMethod] ?? []];
+        $called = [...$chainNames, $lowerMethod, ...self::READ_FORWARDED_CALLS[$lowerMethod] ?? []];
         $builderClass = $metadata->customBuilder;
 
         if (
             // `$withCount` (a name list or a constraint map) seeds a select on every query, so `$columns` is dead.
             $metadata->hasDefaultCounts
-            // `Builder::__call()` runs a local scope before forwarding a query-builder method of that name.
-            || \array_intersect_key($metadata->scopes(), \array_flip($called)) !== []
             // The query is not built by Laravel's own Model code on a known builder (`newQuery()` override, ...).
             || !ModelQueryPath::isLaravels($codebase, $modelClass)
-            // The model itself declares the root or a link (`Setting::get($key)`), or a query hook.
-            || self::declaresUserlandMethod($modelClass, null, [...$names, ...self::COLUMN_QUERY_HOOKS], [...self::TRUSTED_MODEL_DECLARERS, HasGlobalScopes::class], $codebase)
+            // The model declares a called name (`Setting::get($key)`, a `#[Scope]` method) or a query hook. A legacy
+            // `scope{Name}()` runs first in `Builder::__call()`, found by a case-insensitive `method_exists()`, which
+            // Psalm's lowercase method keys mirror.
+            || self::declaresUserlandMethod(
+                $modelClass,
+                null,
+                [...$called, ...\array_map(static fn(string $name): string => 'scope' . $name, $called), ...self::COLUMN_QUERY_HOOKS],
+                [...self::TRUSTED_MODEL_DECLARERS, HasGlobalScopes::class],
+                $codebase,
+            )
             || ($builderClass !== null && self::redeclaresBuilderMethod($builderClass, $called, $codebase))
         ) {
             return;
