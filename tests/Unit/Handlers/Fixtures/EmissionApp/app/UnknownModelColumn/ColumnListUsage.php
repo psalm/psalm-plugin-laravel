@@ -22,7 +22,6 @@ use ColumnListFixture\Models\OverriddenPost;
 use ColumnListFixture\Models\PlainPost;
 use ColumnListFixture\Models\ScopeAliasPost;
 use ColumnListFixture\Models\ScopedPost;
-use ColumnListFixture\Models\ScopeLimitPost;
 use ColumnListFixture\Models\ScopeNamedPost;
 use ColumnListFixture\Models\SettingPost;
 use ColumnListFixture\Models\SubAttributeScopedPost;
@@ -96,12 +95,6 @@ function unrelated_class_attribute(): void
 {
     // The scope veto reads attributes from Psalm's storage and never loads the attribute class.
     AuditedPost::query()->get(['typocol_unrelated_attribute']);
-}
-
-function internal_calls_of_the_read_method(): void
-{
-    // `paginate()` reaches `forPage()`, never the Eloquent `limit()` the model's scope overrides.
-    ScopeLimitPost::query()->paginate(15, ['typocol_paginate_beside_scope_limit']);
 }
 
 // ---- must stay silent: literal shapes ----------------------------------------------------------
@@ -218,8 +211,9 @@ function silent_model_level_gates(): void
     ScopeNamedPost::query()->orderBy('title')->get(['silentcol_scope_named_like_link']);
     LowercaseScopePost::orderBy('title')->get(['silentcol_lowercase_scope']);
     ScopeAliasPost::orderBy('title')->get(['silentcol_named_scope_override']);
-    // `first()` calls `limit(1)` through `Builder::__call`.
-    ScopeLimitPost::query()->first(['silentcol_scope_limit']);
+    // Every read is checked against one list of internal calls, so a scope named like any of them skips the model.
+    ScopeNamedPost::query()->first(['silentcol_scope_named_like_internal_call']);
+    ScopeNamedPost::query()->paginate(15, ['silentcol_paginate_beside_scope']);
     DynamicSchemaThing::query()->get(['silentcol_empty_schema']);
 }
 

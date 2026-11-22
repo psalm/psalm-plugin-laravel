@@ -180,29 +180,13 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
     ];
 
     /**
-     * Methods a read method calls on itself that Eloquent's Builder does not declare, so they reach
-     * `Builder::__call()`, where a local scope of that name runs first, and a custom builder may declare
-     * them. Same on the 12.27 and 13.20 floors: `first()` calls `limit(1)` (`Concerns\BuildsQueries`), the
-     * `find*` / `first*` family reaches `first()` or `sole()` (`limit(2)`) through the declared `whereKey()`
-     * / `find()` / `first()`, `paginate()` calls `forPage()`, `simplePaginate()` `offset()` and `limit()`,
-     * and `cursorPaginate()` `limit()`, `orderBy()` (in `enforceOrderBy()`) and the union bindings setters.
+     * What the read methods call on the builder internally that Eloquent's Builder does not declare, so it
+     * reaches `Builder::__call()`, where a local scope of that name runs first, and a custom builder may
+     * declare it (`first()` calls `limit(1)`, `paginate()` calls `forPage()`, ...). One list for every read.
      *
-     * @var array<lowercase-string, non-empty-list<lowercase-string>>
+     * @var list<lowercase-string>
      */
-    private const READ_FORWARDED_CALLS = [
-        'find' => ['limit'],
-        'findorfail' => ['limit'],
-        'findornew' => ['limit'],
-        'findsole' => ['limit'],
-        'findor' => ['limit'],
-        'first' => ['limit'],
-        'firstorfail' => ['limit'],
-        'firstor' => ['limit'],
-        'sole' => ['limit'],
-        'paginate' => ['forpage'],
-        'simplepaginate' => ['offset', 'limit'],
-        'cursorpaginate' => ['limit', 'orderby', 'setbindings', 'addbinding'],
-    ];
+    private const READ_INTERNAL_CALLS = ['limit', 'forpage', 'offset', 'orderby', 'setbindings', 'addbinding'];
 
     /**
      * Model hooks beside {@see ModelQueryPath::isLaravels()} that decide what a column-list query looks like:
@@ -630,7 +614,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return;
         }
 
-        $called = [...$chainNames, $lowerMethod, ...self::READ_FORWARDED_CALLS[$lowerMethod] ?? []];
+        $called = [...$chainNames, $lowerMethod, ...self::READ_INTERNAL_CALLS];
         $builderClass = $metadata->customBuilder;
 
         if (

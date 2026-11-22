@@ -120,7 +120,6 @@ final class EmissionAppTest extends TestCase
         'typocol_mixed' => ['Builder::get', 'KnownThing'],
         'typocol_softdeletes' => ['Builder::first', 'TrashedPost'],
         'typocol_unrelated_attribute' => ['Builder::get', 'AuditedPost'],
-        'typocol_paginate_beside_scope_limit' => ['Builder::paginate', 'ScopeLimitPost'],
         'typocol_self' => ['Builder::first', 'PlainPost'],
         'typocol_static' => ['Builder::first', 'PlainPost'],
     ];
