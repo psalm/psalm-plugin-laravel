@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795306233130,
+  "lastUpdate": 1795552054131,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -19980,6 +19980,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1237,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "samsonasik@gmail.com",
+            "name": "Abdul Malik Ikhsan",
+            "username": "samsonasik"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6697fdd16dacb54aeadbf203864a96fd8e43360f",
+          "message": "Bump StructArmed to ^0.22 (#2385)",
+          "timestamp": "2026-11-24T21:23:41+01:00",
+          "tree_id": "619f2f5af1b342742441248bf82338e1c6765bc2",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/6697fdd16dacb54aeadbf203864a96fd8e43360f"
+        },
+        "date": 1795552052138,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 38.49,
+            "range": "± 0.25",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1241,
             "unit": "MB"
           }
         ]
