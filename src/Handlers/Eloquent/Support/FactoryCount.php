@@ -23,6 +23,7 @@ use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Storage\ClassLikeStorage;
 use Psalm\Storage\MethodStorage;
+use Psalm\Type;
 use Psalm\Type\Atomic\Scalar;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TBool;
@@ -38,6 +39,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TNull;
 use Psalm\Type\Atomic\TNumeric;
 use Psalm\Type\Atomic\TNumericString;
+use Psalm\Type\Atomic\TTemplateParam;
 use Psalm\Type\Union;
 
 /**
@@ -654,13 +656,21 @@ final class FactoryCount
      * The TModel a class binds `Factory` to, when it is a Model type (walks `template_extended_params`). Null if
      * the class isn't a Factory subclass or the binding can't be resolved.
      *
+     * A binding that names the class's own template (`@template TModel of Model` + `@extends Factory<TModel>`) is
+     * only meaningful with the arguments the receiver carries: `$classArguments` are the receiver's template
+     * arguments, matched to the CLASS's template list by position (never to `Factory`'s), and a missing one falls
+     * back to the template's bound. Without `$classArguments` such a binding is declined, because the template
+     * has no meaning outside its class.
+     *
      * `ClassLikeStorageProvider::get()` lowercases internally, so the FQCN is passed through untouched.
      * `template_extended_params` is keyed on the canonical class name (`$parent_storage->name`), which matches
      * `Factory::class` for any vendor-stable Laravel install.
      *
+     * @param list<Union>|null $classArguments
+     *
      * @psalm-mutation-free
      */
-    public static function modelBoundBy(string $factoryClass, Codebase $codebase): ?Union
+    public static function modelBoundBy(string $factoryClass, Codebase $codebase, ?array $classArguments = null): ?Union
     {
         try {
             $storage = $codebase->classlike_storage_provider->get($factoryClass);
@@ -674,23 +684,81 @@ final class FactoryCount
         }
 
         $modelType = $extended['TModel'] ?? null;
+        if (!$modelType instanceof Union) {
+            return null;
+        }
 
-        return self::isModelType($modelType, $codebase) ? $modelType : null;
+        if ($classArguments !== null) {
+            $modelType = self::withClassArguments($modelType, $storage, $classArguments);
+        }
+
+        return self::isModelType($modelType, $codebase, $classArguments !== null) ? $modelType : null;
+    }
+
+    /**
+     * `$type` with every template resolved to the receiver's argument at the same position in the class's own
+     * template list, or to its bound when the receiver gave none. A template of an ancestor
+     * (`Base<T> extends Factory<T>`, `Child<U> extends Base<U>`) is first followed through the class's
+     * `template_extended_params` to what the class passes for it, until it reaches a template of the class.
+     *
+     * @param list<Union> $classArguments
+     * @param int<0, max> $depth bounds a self-referential mapping
+     *
+     * @psalm-mutation-free
+     */
+    private static function withClassArguments(Union $type, ClassLikeStorage $class, array $classArguments, int $depth = 0): Union
+    {
+        $slots = \array_keys($class->template_types ?? []);
+        $atomics = [];
+
+        foreach ($type->getAtomicTypes() as $atomic) {
+            $replacement = $atomic;
+            if ($atomic instanceof TTemplateParam) {
+                $replacement = $atomic->as;
+                $position = \strtolower($atomic->defining_class) === \strtolower($class->name)
+                    ? \array_search($atomic->param_name, $slots, true)
+                    : false;
+                $forwarded = $class->template_extended_params[$atomic->defining_class][$atomic->param_name] ?? null;
+
+                if ($position !== false) {
+                    $replacement = $classArguments[$position] ?? $atomic->as;
+                } elseif ($forwarded instanceof Union && $depth < 8) {
+                    $replacement = self::withClassArguments($forwarded, $class, $classArguments, $depth + 1);
+                }
+            }
+
+            foreach ($replacement instanceof Union ? $replacement->getAtomicTypes() : [$replacement] as $resolved) {
+                $atomics[$resolved->getId()] = $resolved;
+            }
+        }
+
+        return new Union(\array_values($atomics));
     }
 
     /**
      * Every atomic is Model or a Model subclass. Lineage from Psalm's storage ({@see ClassLineage}):
      * PHPT fixture models declared inline are scanned but not autoloadable.
      *
+     * `$allowTemplates` also accepts a template param bounded by a model: a receiver's own argument
+     * (`Factory<TModel>`, or the `TModel` of a generic factory subclass inside its class).
+     *
      * @psalm-mutation-free
      */
-    public static function isModelType(?Union $type, Codebase $codebase): bool
+    public static function isModelType(?Union $type, Codebase $codebase, bool $allowTemplates = false): bool
     {
         if (!$type instanceof Union) {
             return false;
         }
 
         foreach ($type->getAtomicTypes() as $atomic) {
+            if ($atomic instanceof TTemplateParam && $allowTemplates) {
+                if (!self::isModelType($atomic->as, $codebase, true)) {
+                    return false;
+                }
+
+                continue;
+            }
+
             if (!$atomic instanceof TNamedObject || !ClassLineage::isA($codebase, $atomic->value, Model::class)) {
                 return false;
             }
