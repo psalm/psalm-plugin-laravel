@@ -192,15 +192,13 @@ final class MissingViewHandler implements AfterExpressionAnalysisInterface, Func
             return self::narrowedUnion($narrowedClass);
         }
 
-        $viewName = self::extractLiteralStringArg($callArgs[0]);
-
-        if ($viewName !== null) {
-            self::checkViewExists(
-                $viewName,
-                $event->getCodeLocation(),
-                $event->getStatementsSource()->getSuppressedIssues(),
-            );
-        }
+        self::checkArgViewName(
+            $callArgs,
+            0,
+            'view',
+            $event->getCodeLocation(),
+            $event->getStatementsSource()->getSuppressedIssues(),
+        );
 
         $narrowedClass = self::narrowedHelperReturn(\count($callArgs));
 

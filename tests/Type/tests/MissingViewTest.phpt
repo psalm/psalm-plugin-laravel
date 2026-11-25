@@ -13,6 +13,16 @@ view('emails.welcom');
 $spreadData = [];
 view('missing-with-spread', ...$spreadData);
 
+// Reordered named arguments: the view name is not the first written argument
+view(data: ['a' => 1], view: 'named-reordered-missing');
+view(mergeData: [], view: 'named-reordered-missing-2', data: []);
+
+// The same named order with an existing view — reading the wrong slot must not emit
+view(data: ['a' => 1], view: 'welcome');
+
+// A named argument the handler does not read, placed first, with the view positional
+view('named-positional-missing', mergeData: ['a' => 1]);
+
 // No arguments — returns factory, should not emit
 view();
 
@@ -44,6 +54,9 @@ view(' welcome ');
 MissingView on line %d: View 'nonexistent' not found in any of the registered view paths
 MissingView on line %d: View 'emails.welcom' not found in any of the registered view paths
 MissingView on line %d: View 'missing-with-spread' not found in any of the registered view paths
+MissingView on line %d: View 'named-reordered-missing' not found in any of the registered view paths
+MissingView on line %d: View 'named-reordered-missing-2' not found in any of the registered view paths
+MissingView on line %d: View 'named-positional-missing' not found in any of the registered view paths
 MissingView on line %d: View 'nonexistent-direct' not found in any of the registered view paths
 MissingView on line %d: View 'nonexistent-facade' not found in any of the registered view paths
 MissingView on line %d: View 'nonexistent-fqcn' not found in any of the registered view paths

@@ -52,12 +52,16 @@ final class Arg
      * Not annotated mutation-free: `Identifier::toLowerString()` is not, and Psalm 6 rejects the
      * annotation on any caller of a method that lacks it.
      *
+     * An unpacked node (`...$x`) never binds to a parameter: how many parameters it fills is unknown, so the
+     * result is null. Callers that read "no argument" as a default (an absent `$default`, an absent `$key`)
+     * must also check {@see self::hasUnpack()}, since a spread may be supplying the absent parameter.
+     *
      * @param list<\PhpParser\Node\Arg> $args
      */
     public static function byNameOrPosition(array $args, int $index, string $paramName): ?\PhpParser\Node\Arg
     {
         if (isset($args[$index]) && $args[$index]->name === null) {
-            return $args[$index];
+            return $args[$index]->unpack ? null : $args[$index];
         }
 
         foreach ($args as $arg) {
@@ -67,6 +71,23 @@ final class Arg
         }
 
         return null;
+    }
+
+    /**
+     * Whether any argument is unpacked (`...$x`), which hides how many parameters the call supplies.
+     *
+     * @param list<\PhpParser\Node\Arg> $args
+     * @psalm-mutation-free
+     */
+    public static function hasUnpack(array $args): bool
+    {
+        foreach ($args as $arg) {
+            if ($arg->unpack) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -92,6 +113,10 @@ final class Arg
      * Return the inferred Psalm type of the argument at $index, or null if
      * the argument is missing or its type is unknown.
      *
+     * Written-order index: only for a target with a single parameter, or one whose caller already proved
+     * every argument positional. A multi-parameter target must use {@see self::typeOf()}, since named
+     * arguments may appear in any order (`env(default: 1, key: 'X')` writes the default first).
+     *
      * Both null cases collapse intentionally: callers that need to distinguish
      * "no arg" from "arg of unknown type" should fetch the node via
      * {@see self::nodeAt()} and call `getNodeTypeProvider()->getType()` themselves.
@@ -107,5 +132,19 @@ final class Arg
         }
 
         return $source->getNodeTypeProvider()->getType($node);
+    }
+
+    /**
+     * Name-aware {@see self::typeAt()}: the inferred type of the argument bound to the parameter `$paramName`
+     * (lowercase) at `$index`, however a named call ordered its arguments. {@see self::byNameOrPosition()}
+     * documents the binding; prefer this over `typeAt()` whenever the target takes more than one parameter.
+     *
+     * @param list<\PhpParser\Node\Arg> $args
+     */
+    public static function typeOf(array $args, StatementsSource $source, int $index, string $paramName): ?Union
+    {
+        $arg = self::byNameOrPosition($args, $index, $paramName);
+
+        return $arg instanceof \PhpParser\Node\Arg ? $source->getNodeTypeProvider()->getType($arg->value) : null;
     }
 }

@@ -8,6 +8,7 @@ use PhpParser\Node;
 use Psalm\DocComment;
 use Psalm\Exception\DocblockParseException;
 use Psalm\Internal\Analyzer\ProjectAnalyzer;
+use Psalm\LaravelPlugin\Internal\Arg as ArgUtil;
 use Psalm\Type;
 use Psalm\Type\Atomic\TArray;
 use Psalm\Type\Atomic\TFalse;
@@ -161,20 +162,17 @@ final class ValidationRuleAnalyzer
     }
 
     /**
-     * Parse rules from an inline validate() call's first argument.
+     * Parse rules from an inline validate() call's `$rules` argument: the one at `$rulesPosition` (0 for
+     * `validate()`, 1 for `validateWithBag()`) or the one named `rules`, wherever a named call put it.
      *
-     * Expects the first argument to be an array literal with string keys.
+     * Expects the argument to be an array literal with string keys.
      *
      * @param list<Node\Arg> $args
      * @return array<string, ResolvedRule>|null
      */
-    public static function getRulesFromValidateArgs(array $args): ?array
+    public static function getRulesFromValidateArgs(array $args, int $rulesPosition = 0): ?array
     {
-        if ($args === []) {
-            return null;
-        }
-
-        $rulesExpr = $args[0]->value;
+        $rulesExpr = ArgUtil::byNameOrPosition($args, $rulesPosition, 'rules')?->value;
 
         if (!$rulesExpr instanceof Node\Expr\Array_) {
             return null;
