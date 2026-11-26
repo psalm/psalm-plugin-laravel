@@ -30,6 +30,7 @@ class Bookshelf extends Model
 final class BookshelfFactory extends Factory
 {
     /** @var class-string<Bookshelf> */
+    #[\Override]
     protected $model = Bookshelf::class;
 
     /** @return array<string, mixed> */

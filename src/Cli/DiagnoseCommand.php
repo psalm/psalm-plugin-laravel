@@ -73,7 +73,7 @@ final class DiagnoseCommand extends Command
         $tips = (bool) $input->getOption('tips') ? ($this->tipsProvider ?? new TipsProvider())->collect() : [];
         $io = new SymfonyStyle($input, $output);
 
-        $this->renderReport($io, $report, $tips, (bool) $input->getOption('providers'));
+        $this->renderReport($io, $report, $tips, $input->getOption('providers'));
 
         return $report->hardFailures === [] ? Command::SUCCESS : Command::FAILURE;
     }

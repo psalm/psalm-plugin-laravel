@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 class UndefinedArgCommand extends Command
 {
     /** @var string */
+    #[\Override]
     protected $signature = 'test:undefined {email}';
 
     public function handle(): int

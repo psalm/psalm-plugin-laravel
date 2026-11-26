@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 final class CustomerFactory extends Factory
 {
     /** @var class-string<Customer> */
+    #[\Override]
     protected $model = Customer::class;
 
     /** @return array<string, mixed> */
@@ -29,6 +30,7 @@ final class CustomerFactory extends Factory
 final class MechanicFactory extends Factory
 {
     /** @var class-string<Mechanic> */
+    #[\Override]
     protected $model = Mechanic::class;
 
     /** @return array<string, mixed> */

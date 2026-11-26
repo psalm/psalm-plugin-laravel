@@ -18,6 +18,7 @@ final class Gadget extends Model
 final class GadgetFactory extends Factory
 {
     /** @var class-string<Gadget> */
+    #[\Override]
     protected $model = Gadget::class;
 
     /** @return array<string, mixed> */

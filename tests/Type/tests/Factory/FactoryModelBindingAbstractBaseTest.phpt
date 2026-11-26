@@ -58,6 +58,7 @@ namespace Database\Factories {
      */
     final class CitadelFactory extends AbstractBastionFactory
     {
+        #[\Override]
         protected $model = \App\Models\Citadel::class;
 
         /** @return array<string, mixed> */

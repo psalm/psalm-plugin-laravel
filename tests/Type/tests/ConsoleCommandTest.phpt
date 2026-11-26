@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 class ExampleCommand extends Command
 {
     /** @var string */
+    #[\Override]
     protected $signature = 'example:run
         {email : The user email}
         {role? : Optional role}

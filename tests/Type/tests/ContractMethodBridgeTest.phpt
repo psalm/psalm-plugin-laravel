@@ -17,6 +17,7 @@ use Illuminate\Support\ServiceProvider;
 class DatabasePrune extends Command
 {
     /** @var string */
+    #[\Override]
     protected $signature = 'db:prune';
 
     public function handle(): int

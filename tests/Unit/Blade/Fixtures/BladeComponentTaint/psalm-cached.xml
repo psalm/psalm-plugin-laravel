@@ -20,5 +20,8 @@
         <!-- The fixture classes are type-only shapes; purity suggestions are not what these tests pin. -->
         <MissingPureAnnotation errorLevel="suppress" />
         <MissingImmutableAnnotation errorLevel="suppress" />
+        <!-- Psalm asks for `#[\Override]` on an overriding property on PHP 8.5, but PHP 8.3/8.4 reject it at compile
+             time, and the fixture app loads its components on every unit test PHP. -->
+        <MissingOverrideAttribute errorLevel="suppress" />
     </issueHandlers>
 </psalm>
