@@ -413,6 +413,38 @@ The `App::make(...)` facade form does **not** propagate taint, see
 Use the `app()` / `resolve()` helpers or an instance typed as
 `Illuminate\Container\Container` for analyzable code.
 
+#### Unsafe reflection (CWE-470): relation names
+
+Eloquent resolves a relation name by calling it on a new model (`Builder::getRelation()`) and
+checks for a `Relation` only afterwards. A name that is not a relation reaches `Model::__call()`
+and runs the Builder method of that name (`truncate`), so every relation-name parameter carries
+`@psalm-taint-sink callable`. The user-facing list is in `docs/security.md`
+("Relation names"); the annotations live in `Eloquent/Builder.phpstub`, `Eloquent/Model.phpstub`,
+`Eloquent/Collection.phpstub`, `Concerns/QueriesRelationships.phpstub` and
+`Concerns/HasRelationships.phpstub` under `stubs/common/Database/`. Pinned by
+`TaintedCallableRelationName.phpt` and `SafeRelationNameAllowlist.phpt`.
+
+- **Membership was measured, not read off signatures.** Each candidate was called with
+  `'truncate'` on Laravel 13.43 against SQLite: every method in the list emptied the table;
+  `without()`, `withoutRelation()`, `touches()` did not, so they carry no sink.
+- **Methods the stubs did not declare yet are re-declared with Laravel's docblock verbatim**
+  (`withOnly()`, the `load*()` / `loadMorph*()` family, `fresh()`, `where*Relation()`,
+  `where*MorphedTo()`, `through()`), because a sink needs a stub method. Their signatures are
+  identical from Laravel 12.0 to 13.x, so a `common` copy changes no type. Remember `@psalm-variadic`
+  where Laravel reads `func_get_args()`: the stub body is empty, so Psalm cannot infer it.
+- **Left out on purpose:** `whereAttachedTo()` / `orWhereAttachedTo()` (added in 12.7.0, `$related`
+  widened in 13.37.0) and `PendingHasThroughRelationship::has()` (callback type widened during 13.x).
+  Each would need one copy per signature in version dirs, for a relation name that is a second
+  argument and rarely request-derived.
+- **Allowlists clear the taint with no escape annotation.** Psalm 7 drops input taint from a value
+  whose type is only literal strings (`Union::getTaintsToRemove()`), so `in_array(..., true)`,
+  `match`, a backed enum's `->value` and `array_intersect($allowlist, $input)` all pass. The
+  validation `in:` rule escapes through `ValidationTaintHandler`.
+- **Known gap: extra positional names.** Laravel reads `load('a', $name)` as two names, but
+  `@psalm-variadic` binds no parameter to the second argument, so it has no sink
+  (`TaintedCallableRelationNameVariadicKnownLimitation.phpt`). `Builder::with()` sinks its
+  `$callback` to cover the second position there.
+
 ### Escape stubs (with flow)
 
 Mark functions that sanitize specific taint kinds. **Always pair with `@psalm-flow`**:

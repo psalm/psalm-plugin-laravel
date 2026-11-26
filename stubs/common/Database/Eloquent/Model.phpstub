@@ -69,6 +69,8 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
      * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
      * @return \Illuminate\Database\Eloquent\Builder<static>
      *
+     * @psalm-taint-sink callable $relations
+     *
      * @psalm-variadic
      */
     public static function with($relations) {}
@@ -170,6 +172,8 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
      * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
      * @return $this
      *
+     * @psalm-taint-sink callable $relations
+     *
      * @psalm-variadic
      */
     public function load($relations) {}
@@ -179,6 +183,8 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
      *
      * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
      * @return $this
+     *
+     * @psalm-taint-sink callable $relations
      *
      * @psalm-variadic
      */
@@ -195,9 +201,182 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
      * @param  array<array-key, array|(callable(\Illuminate\Database\Eloquent\Builder): mixed)|string>|string  $relations
      * @return $this
      *
+     * @psalm-taint-sink callable $relations
+     *
      * @psalm-variadic
      */
     public function loadCount($relations) {}
+
+    /**
+     * Eager load relation's column aggregations on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @param  string|null  $function
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadAggregate($relations, $column, $function = null) {}
+
+    /**
+     * Eager load relation max column values on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMax($relations, $column) {}
+
+    /**
+     * Eager load relation min column values on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMin($relations, $column) {}
+
+    /**
+     * Eager load relation's column summations on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadSum($relations, $column) {}
+
+    /**
+     * Eager load relation average column values on the model.
+     *
+     * @param  array|string  $relations
+     * @param  string  $column
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadAvg($relations, $column) {}
+
+    /**
+     * Eager load related model existence values on the model.
+     *
+     * @param  array|string  $relations
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadExists($relations) {}
+
+    /**
+     * Eager load relationships on the polymorphic relation of a model.
+     *
+     * `$relation` is read as a property: a name that is not an attribute calls the model method
+     * of that name, so it carries the same sink as the nested relation names.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMorph($relation, $relations) {}
+
+    /**
+     * Eager load relationship column aggregation on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @param  string|null  $function
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMorphAggregate($relation, $relations, $column, $function = null) {}
+
+    /**
+     * Eager load relationship counts on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMorphCount($relation, $relations) {}
+
+    /**
+     * Eager load relationship max column values on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMorphMax($relation, $relations, $column) {}
+
+    /**
+     * Eager load relationship min column values on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMorphMin($relation, $relations, $column) {}
+
+    /**
+     * Eager load relationship column summations on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMorphSum($relation, $relations, $column) {}
+
+    /**
+     * Eager load relationship average column values on the polymorphic relation of a model.
+     *
+     * @param  string  $relation
+     * @param  array  $relations
+     * @param  string  $column
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     * @psalm-taint-sink callable $relations
+     */
+    public function loadMorphAvg($relation, $relations, $column) {}
+
+    /**
+     * Reload a fresh model instance from the database.
+     *
+     * @param  array|string  $with
+     * @return static|null
+     *
+     * @psalm-taint-sink callable $with
+     *
+     * @psalm-variadic
+     */
+    public function fresh($with = []) {}
 
     /**
      * Make the given, typically hidden, attributes visible.

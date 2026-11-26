@@ -175,4 +175,24 @@ trait HasRelationships
     public function morphedByMany($related, $name, $table = null, $foreignPivotKey = null,
                                   $relatedPivotKey = null, $parentKey = null,
                                   $relatedKey = null, $relation = null) {}
+
+    /**
+     * Create a pending has-many-through or has-one-through relationship.
+     *
+     * @template TIntermediateModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  string|\Illuminate\Database\Eloquent\Relations\HasMany<TIntermediateModel, covariant $this>|\Illuminate\Database\Eloquent\Relations\HasOne<TIntermediateModel, covariant $this>  $relationship
+     * @return (
+     *     $relationship is string
+     *     ? \Illuminate\Database\Eloquent\PendingHasThroughRelationship<\Illuminate\Database\Eloquent\Model, $this>
+     *     : (
+     *          $relationship is \Illuminate\Database\Eloquent\Relations\HasMany<TIntermediateModel, $this>
+     *          ? \Illuminate\Database\Eloquent\PendingHasThroughRelationship<TIntermediateModel, $this, \Illuminate\Database\Eloquent\Relations\HasMany<TIntermediateModel, $this>>
+     *          : \Illuminate\Database\Eloquent\PendingHasThroughRelationship<TIntermediateModel, $this, \Illuminate\Database\Eloquent\Relations\HasOne<TIntermediateModel, $this>>
+     *     )
+     * )
+     *
+     * @psalm-taint-sink callable $relationship
+     */
+    public function through($relationship) {}
 }
