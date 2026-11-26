@@ -545,6 +545,8 @@ class Builder implements BuilderContract
     /**
      * @param  string  $name
      * @return \Illuminate\Database\Eloquent\Relations\Relation
+     *
+     * @psalm-taint-sink callable $name
      */
     public function getRelation($name) {}
 
@@ -765,6 +767,8 @@ class Builder implements BuilderContract
     /**
      * @param array $eagerLoad
      * @return $this
+     *
+     * @psalm-taint-sink callable $eagerLoad
      */
     public function setEagerLoads(array $eagerLoad) {}
 

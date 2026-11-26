@@ -8,6 +8,11 @@
 // TaintedCallable: Psalm drops input taint from a value typed as literal strings, and the
 // validation `in:` rule escapes it. Request input elsewhere in the call (a constraint closure
 // body, a column) is not a relation name.
+//
+// The stub sinks are shared with the rest of the batch, so an empty expectation against them
+// alone proves nothing (docs/contributing/taint-analysis.md, "Testing-time pitfall"). Each
+// allowlisted value also reaches srnSink(), a per-file sink specialized per call, and the
+// unguarded control below shows that the same input reports through it.
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -30,6 +35,17 @@ enum SrnInclude: string
     case Comments = 'comments';
 }
 
+/**
+ * @psalm-taint-specialize
+ * @psalm-taint-sink callable $name
+ */
+function srnSink(mixed $name): bool { return $name !== null; }
+
+function srnUnguardedControl(Request $request): void
+{
+    srnSink((string) $request->input('include'));
+}
+
 /** @param Builder<SrnAuthor> $query */
 function literalNames(Request $request, Builder $query, SrnAuthor $author): void
 {
@@ -46,6 +62,7 @@ function inArrayAllowlist(Request $request, Builder $query): void
     $include = (string) $request->input('include');
     if (in_array($include, ['comments'], true)) {
         $query->with($include);
+        srnSink($include);
     }
 }
 
@@ -57,13 +74,16 @@ function filteredListAllowlist(Request $request, Builder $query): void
         static fn (string $name): bool => in_array($name, ['comments'], true),
     );
     $query->with($includes);
+    srnSink($includes);
 }
 
 /** @param Builder<SrnAuthor> $query */
 function intersectAllowlist(Request $request, Builder $query): void
 {
     // The allowlist goes first: array_intersect() keeps the values (and the type) of its first argument.
-    $query->with(array_values(array_intersect(['comments'], explode(',', (string) $request->input('include')))));
+    $includes = array_values(array_intersect(['comments'], explode(',', (string) $request->input('include'))));
+    $query->with($includes);
+    srnSink($includes);
 }
 
 /** @param Builder<SrnAuthor> $query */
@@ -74,12 +94,15 @@ function matchAllowlist(Request $request, Builder $query): void
         default => throw new \InvalidArgumentException('Unknown include.'),
     };
     $query->with($include);
+    srnSink($include);
 }
 
 /** @param Builder<SrnAuthor> $query */
 function enumAllowlist(Request $request, Builder $query): void
 {
-    $query->with(SrnInclude::from((string) $request->input('include'))->value);
+    $include = SrnInclude::from((string) $request->input('include'))->value;
+    $query->with($include);
+    srnSink($include);
 }
 
 /** @param Builder<SrnAuthor> $query */
@@ -87,6 +110,8 @@ function validatedAllowlist(Request $request, Builder $query): void
 {
     $data = $request->validate(['include' => 'required|string|in:comments']);
     $query->with($data['include']);
+    srnSink($data['include']);
 }
 ?>
 --EXPECTF--
+TaintedCallable on line %d: Detected tainted text

@@ -425,8 +425,12 @@ and runs the Builder method of that name (`truncate`), so every relation-name pa
 `TaintedCallableRelationName.phpt` and `SafeRelationNameAllowlist.phpt`.
 
 - **Membership was measured, not read off signatures.** Each candidate was called with
-  `'truncate'` on Laravel 13.43 against SQLite: every method in the list emptied the table;
-  `without()`, `withoutRelation()`, `touches()` did not, so they carry no sink.
+  `'truncate'` on Laravel 13.43 against SQLite: every relation-name argument in the list emptied
+  the table; `without()`, `withoutRelation()`, `touches()` did not, so they carry no sink. The
+  morph relation name of `loadMorph*()` is the exception: it is read as a property, and
+  `getAttribute()` calls a method of that name only when the model's own class or one of its
+  traits declares it (not the `Model` base class, not the query builder), so `'truncate'` does
+  nothing there, while a method such as `MustVerifyEmail::markEmailAsVerified()` runs.
 - **Methods the stubs did not declare yet are re-declared with Laravel's docblock**
   (`withOnly()`, the `load*()` / `loadMorph*()` family, `fresh()`, `where*Relation()`,
   `where*MorphedTo()`, `through()`), because a sink needs a stub method. Their signatures are

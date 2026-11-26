@@ -53,6 +53,8 @@ function eagerLoading(Request $request, Builder $query): void
     $query->with('comments', includes($request));
     $query->with([includes($request) => static fn (HasMany $q): HasMany => $q]);
     $query->withOnly(includes($request));
+    $query->getRelation(includes($request));
+    $query->setEagerLoads([includes($request) => static fn (HasMany $q): HasMany => $q]);
 }
 
 /** @param Builder<RnAuthor> $query */
@@ -172,6 +174,8 @@ function collectionLoading(Request $request, Collection $authors, Collection $co
 }
 ?>
 --EXPECTF--
+TaintedCallable on line %d: Detected tainted text
+TaintedCallable on line %d: Detected tainted text
 TaintedCallable on line %d: Detected tainted text
 TaintedCallable on line %d: Detected tainted text
 TaintedCallable on line %d: Detected tainted text

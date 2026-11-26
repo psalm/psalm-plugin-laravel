@@ -276,8 +276,12 @@ abstract class Model implements ArrayAccess, Arrayable, CanBeEscapedWhenCastToSt
     /**
      * Eager load relationships on the polymorphic relation of a model.
      *
-     * `$relation` is read as a property: a name that is not an attribute calls the model method
-     * of that name, so it carries the same sink as the nested relation names.
+     * `$relation` is read as a property: a name that is not an attribute calls the method of that
+     * name when the model's own class or a trait declares it (not the Model base class, not the
+     * query builder), so it carries the same sink as the nested relation names. The `$relations`
+     * sink also takes the taint of its keys, which only look up a morph class: a request-chosen
+     * key is a false positive (TaintedCallableRelationNameMorphKeyKnownLimitation.phpt). The
+     * `loadMorph*()` variants below and on Eloquent\Collection share both.
      *
      * @param  string  $relation
      * @param  array  $relations

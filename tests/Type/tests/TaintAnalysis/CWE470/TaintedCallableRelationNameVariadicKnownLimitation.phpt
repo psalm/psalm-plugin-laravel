@@ -8,7 +8,8 @@
 // stubs mark these methods `@psalm-variadic` without a parameter to bind them to, so Psalm has no
 // parameter sink for them: a tainted name in the second (or later) position is not reported.
 // Builder::with() is the exception for the second position, whose `$callback` carries the sink.
-// Flip to TaintedCallable once these arguments are sunk.
+// Flip to TaintedCallable once these arguments are sunk. The control routes the same input
+// through a per-file sink, so the silence above is not a source that never reached anything.
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -21,5 +22,14 @@ function extraRelationNames(Request $request, RnvAuthor $author): void
     RnvAuthor::with('comments', (string) $request->input('include'));
     RnvAuthor::query()->withCount('comments', (string) $request->input('include'));
 }
+
+/** @psalm-taint-sink callable $name */
+function rnvSink(string $name): bool { return $name !== ''; }
+
+function rnvControl(Request $request): void
+{
+    rnvSink((string) $request->input('include'));
+}
 ?>
 --EXPECTF--
+TaintedCallable on line %d: Detected tainted text
