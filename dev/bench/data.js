@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795717922796,
+  "lastUpdate": 1795723443708,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -20085,6 +20085,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1174,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "890a30765b0938aa401d2dae11c3def116404fd7",
+          "message": "Fix: Mark `Request::get()` as a taint source (#2394)\n\n* Taint what Request::get() returns\n\nLaravel declares get() on Illuminate\\Http\\Request, and no stub of the plugin made it a taint source: a parameter read with it reached any sink unreported. With psalm/plugin-symfony it inherited one from the stub of Symfony's Request::get(), which Symfony 8 removes.\n\n* Apply validation rules to fields read with get()\n\nNow that get() is a taint source, a field read with it kept its taint after a FormRequest or an inline validate() covered it, as in m3u-editor's `$request->get('sort', 'id')` after an `in:` rule. get() joins the keyed accessors whose rule escapes the read.\n\nA literal default no longer drops the escape either: it carries no taint, unlike the `$default` expression the single-argument check guards against.",
+          "timestamp": "2026-11-26T21:00:16+01:00",
+          "tree_id": "48203deb269d2b4c0daa18180b9140f25fd9fd56",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/890a30765b0938aa401d2dae11c3def116404fd7"
+        },
+        "date": 1795723441351,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 39.36,
+            "range": "± 0.27",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1175,
             "unit": "MB"
           }
         ]
