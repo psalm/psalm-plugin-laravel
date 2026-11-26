@@ -427,11 +427,15 @@ and runs the Builder method of that name (`truncate`), so every relation-name pa
 - **Membership was measured, not read off signatures.** Each candidate was called with
   `'truncate'` on Laravel 13.43 against SQLite: every method in the list emptied the table;
   `without()`, `withoutRelation()`, `touches()` did not, so they carry no sink.
-- **Methods the stubs did not declare yet are re-declared with Laravel's docblock verbatim**
+- **Methods the stubs did not declare yet are re-declared with Laravel's docblock**
   (`withOnly()`, the `load*()` / `loadMorph*()` family, `fresh()`, `where*Relation()`,
   `where*MorphedTo()`, `through()`), because a sink needs a stub method. Their signatures are
-  identical from Laravel 12.0 to 13.x, so a `common` copy changes no type. Remember `@psalm-variadic`
-  where Laravel reads `func_get_args()`: the stub body is empty, so Psalm cannot infer it.
+  identical from Laravel 12.0 to 13.x, so a `common` copy changes no type. One exception: Laravel's
+  `*` type arguments (`Relation<*, *, *>`) are a Psalm star projection that the plugin's Psalm 7.14
+  floor reports as `InvalidDocblock` in every analysed app, so the stubs spell them as a bare class
+  or a leading template (`Relation<TRelatedModel>`), like the older relation stubs. Remember
+  `@psalm-variadic` where Laravel reads `func_get_args()`: the stub body is empty, so Psalm cannot
+  infer it.
 - **Left out on purpose:** `whereAttachedTo()` / `orWhereAttachedTo()` (added in 12.7.0, `$related`
   widened in 13.37.0) and `PendingHasThroughRelationship::has()` (callback type widened during 13.x).
   Each would need one copy per signature in version dirs, for a relation name that is a second

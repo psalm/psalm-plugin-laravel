@@ -129,7 +129,7 @@ trait QueriesRelationships
     /**
      * Add a basic where clause to a relationship query and eager-load the relationship with the same conditions.
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\Relation<*, *, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation|string  $relation
      * @param  \Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
@@ -144,7 +144,7 @@ trait QueriesRelationships
      *
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel, *, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
@@ -159,7 +159,7 @@ trait QueriesRelationships
      *
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel, *, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
      * @param  mixed  $value
@@ -174,7 +174,7 @@ trait QueriesRelationships
      *
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel>|string  $relation
      * @param  string|array<int, string>  $types
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
@@ -190,7 +190,7 @@ trait QueriesRelationships
      *
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel>|string  $relation
      * @param  string|array<int, string>  $types
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
@@ -206,7 +206,7 @@ trait QueriesRelationships
      *
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel>|string  $relation
      * @param  string|array<int, string>  $types
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
@@ -222,7 +222,7 @@ trait QueriesRelationships
      *
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel>|string  $relation
      * @param  string|array<int, string>  $types
      * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
      * @param  mixed  $operator
@@ -236,7 +236,7 @@ trait QueriesRelationships
     /**
      * Add a morph-to relationship condition to the query.
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<*, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo|string  $relation
      * @param  \Illuminate\Database\Eloquent\Model|iterable<int, \Illuminate\Database\Eloquent\Model>|string|null  $model
      * @param  string  $boolean
      * @return $this
@@ -250,7 +250,7 @@ trait QueriesRelationships
     /**
      * Add a not morph-to relationship condition to the query.
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<*, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo|string  $relation
      * @param  \Illuminate\Database\Eloquent\Model|iterable<int, \Illuminate\Database\Eloquent\Model>|string  $model
      * @param  string  $boolean
      * @return $this
@@ -264,7 +264,7 @@ trait QueriesRelationships
     /**
      * Add a morph-to relationship condition to the query with an "or where" clause.
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<*, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo|string  $relation
      * @param  \Illuminate\Database\Eloquent\Model|iterable<int, \Illuminate\Database\Eloquent\Model>|string|null  $model
      * @return $this
      *
@@ -275,7 +275,7 @@ trait QueriesRelationships
     /**
      * Add a not morph-to relationship condition to the query with an "or where" clause.
      *
-     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<*, *>|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo|string  $relation
      * @param  \Illuminate\Database\Eloquent\Model|iterable<int, \Illuminate\Database\Eloquent\Model>|string  $model
      * @return $this
      *

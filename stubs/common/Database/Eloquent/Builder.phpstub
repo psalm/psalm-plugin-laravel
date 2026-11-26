@@ -730,7 +730,7 @@ class Builder implements BuilderContract
     public function with($relations, $callback = null) {}
 
     /**
-     * @param  array<array-key, array|(\Closure(\Illuminate\Database\Eloquent\Relations\Relation<*,*,*>): mixed)|string>|string  $relations
+     * @param  array<array-key, array|(\Closure(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
      * @return $this
      *
      * @psalm-taint-sink callable $relations
