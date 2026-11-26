@@ -20,6 +20,8 @@ return RectorConfig::configure()
         // `use A, B { A::m insteadof B; }` must stay one block: splitting it fatals and drops the precedence under test.
         \Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector::class => ['tests/Application/app/Services/ReversedForwardingService.php'],
         \Rector\DeadCode\Rector\ClassMethod\RemoveParentDelegatingClassMethodRector::class => ['tests/*'], // GetKeyOverrideModel
+        // Drops the empty `bootstrap()` of the anonymous no-op HandleExceptions bootstrapper; Laravel calls it at boot.
+        \Rector\DeadCode\Rector\ClassMethod\RemoveEmptyClassMethodRector::class => ['src/Bootstrap/ApplicationProvider.php'],
     ])
     ->withPhpVersion(PhpVersion::PHP_82)
     ->withDowngradeSets(php82: true)
