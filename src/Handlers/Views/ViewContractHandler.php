@@ -65,10 +65,14 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
     /** @var array<string, array<string, true>|null> view name => include-chain read set, null when unprovable */
     private static array $readSets = [];
 
+    /** @var array<string, list<string>> view name => declarations nothing in its include chain reads */
+    private static array $staleDeclarations = [];
+
     public static function reset(): void
     {
         self::$declaredTypes = [];
         self::$readSets = [];
+        self::$staleDeclarations = [];
     }
 
     /** Resolved here, before Psalm forks its workers, so each one inherits the result. */
@@ -249,6 +253,11 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
             return;
         }
 
+        // A declaration nothing reads asks no call site for anything: "pass it" would be the wrong fix.
+        if (\in_array($var->name, self::staleFor($chain->viewName), true)) {
+            return;
+        }
+
         $templatePath = ViewReferenceRegistry::templatePathFor($chain->viewName);
         $declaredAt = $templatePath === null
             ? ''
@@ -335,6 +344,16 @@ final class ViewContractHandler implements AfterCodebasePopulatedInterface, Afte
         }
 
         return self::$readSets[$viewName] = ReadSetResolver::reads($viewName);
+    }
+
+    /**
+     * Cached for the same reason as {@see self::readsFor()}.
+     *
+     * @return list<string>
+     */
+    private static function staleFor(string $viewName): array
+    {
+        return self::$staleDeclarations[$viewName] ??= ReadSetResolver::staleDeclarations($viewName);
     }
 
     /**

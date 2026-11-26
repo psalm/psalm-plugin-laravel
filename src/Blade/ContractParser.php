@@ -62,6 +62,15 @@ final class ContractParser
      */
     private const DIRECTIVE_PATTERN = '/\B@(?<name>@?\w+(?:::\w+)?)(?:[ \t]*' . MarkerPrePass::ARGUMENT_PATTERN . ')?/is';
 
+    /**
+     * Functions that reach the template's data through the call stack (the template runs inside
+     * `PhpEngine::evaluatePath($path, $data)`). A direct call and a callable string naming one are
+     * both scope reads, so the walk's two checks share this list.
+     *
+     * @internal
+     */
+    public const INTROSPECTION_FUNCTIONS = ['func_get_args', 'func_get_arg', 'debug_backtrace', 'debug_print_backtrace'];
+
     private ?Parser $parser = null;
 
     /**
@@ -73,7 +82,7 @@ final class ContractParser
     public function parseDataContract(string $source, string $compiled): ViewDataContract
     {
         [$vars, $propsUnknown] = $this->parseSource($source);
-        [$reads, $readsUnknown, $localVariables] = $this->parseReads($compiled);
+        [$reads, $readsUnknown, $localVariables, $readsScope] = $this->parseReads($compiled);
 
         $vars += $this->rawContractVars($source, $localVariables);
 
@@ -81,7 +90,7 @@ final class ContractParser
         // a Blade-owned name, a non-docblock comment, or a name-first `@var $x T`.
         $rawDeclared = \array_values(\array_diff(self::rawDeclaredNames($source), \array_keys($vars)));
 
-        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared);
+        return new ViewDataContract($vars, $propsUnknown, $reads, $readsUnknown, $localVariables, $rawDeclared, $readsScope);
     }
 
     /**
@@ -668,14 +677,29 @@ final class ContractParser
      * "does the template use this name at all", and dropping them would report the very name a
      * `@foreach` binds), and an unknowable body is flagged rather than reported as an empty set.
      *
-     * @return array{0: list<string>, 1: bool, 2: list<string>} names read, whether the set is only a
-     *         lower bound, and the names the template binds for itself
+     * @return array{0: list<string>, 1: bool, 2: list<string>, 3: bool} names read, whether the set is
+     *         only a lower bound, the names the template binds for itself, and whether it reads the
+     *         whole scope outside a compiled include
      */
     private function parseReads(string $compiled): array
     {
-        [$names, $locals, $unknown] = $this->walkReads($compiled);
+        [$names, $locals, $unknown, $scopeRead] = $this->walkReads($compiled);
 
-        return [$this->filterNames($names), $unknown, $this->filterNames($locals)];
+        return [$this->filterNames($names), $unknown, $this->filterNames($locals), $scopeRead];
+    }
+
+    /**
+     * Names the read set never carries: `$this`, the `__`-prefixed internals Blade compiles into every
+     * template, and Blade's own ambient names. A declaration of one is still a contract var (`$this`
+     * typed for a Livewire view, `$__label`), so a check that compares declarations with reads must skip them.
+     *
+     * @psalm-pure
+     */
+    public static function readSetOmits(string $name): bool
+    {
+        return $name === 'this'
+            || \str_starts_with($name, '__')
+            || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name]);
     }
 
     /**
@@ -690,14 +714,9 @@ final class ContractParser
         $filtered = [];
 
         foreach (\array_keys($names) as $name) {
-            if ($name === 'this'
-                || \str_starts_with($name, '__')
-                || isset(PreludeBuilder::BLADE_OWNED_NAMES[$name])
-            ) {
-                continue;
+            if (!self::readSetOmits($name)) {
+                $filtered[] = $name;
             }
-
-            $filtered[] = $name;
         }
 
         \sort($filtered);
@@ -708,8 +727,9 @@ final class ContractParser
     /**
      * One walk of the compiled body.
      *
-     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool} names read, the names
-     *         the body binds for itself, and whether it hides which names it reads
+     * @return array{0: array<string, true>, 1: array<string, true>, 2: bool, 3: bool} names read, the
+     *         names the body binds for itself, whether it hides which names it reads, and whether it
+     *         reads the whole scope outside a compiled include
      */
     private function walkReads(string $compiled): array
     {
@@ -720,7 +740,7 @@ final class ContractParser
         } catch (\Throwable) {
             // Unparseable, not empty: an empty read set reads as "the template reads nothing", which
             // would turn every key a call site passes into a false positive.
-            return [[], [], true];
+            return [[], [], true, true];
         }
 
         $visitor = new class extends NodeVisitorAbstract {
@@ -731,6 +751,12 @@ final class ContractParser
             public array $locals = [];
 
             public bool $unknown = false;
+
+            /**
+             * A `get_defined_vars()` that is not the compiled scope argument of an include: it reads
+             * names this walk cannot enumerate, yet leaves `$unknown` alone (see {@see self::enterCall()}).
+             */
+            public bool $scopeRead = false;
 
             #[\Override]
             public function enterNode(Node $node): null
@@ -775,11 +801,107 @@ final class ContractParser
                     }
                 }
 
+                // `$__data` is Laravel's original data array: a read of it reads any supplied key, yet the
+                // read set drops every `__`-prefixed name.
+                if ($node instanceof Node\Expr\Variable && $node->name === '__data') {
+                    $this->scopeRead = true;
+                }
+
+                if ($node instanceof Node\Expr\MethodCall) {
+                    $this->markCompiledScopePass($node);
+                }
+
+                // Scope reads the walk cannot model: the scope reaches code it never sees (a native
+                // include, an `eval()`), or `get_defined_vars()` is called under another name (an
+                // imported function alias, a computed callee, a callable string).
+                if ($node instanceof Node\Expr\Include_
+                    || $node instanceof Node\Expr\Eval_
+                    || ($node instanceof Node\Expr\FuncCall && !$node->name instanceof Node\Name)
+                    || ($node instanceof Node\Scalar\String_ && $this->namesScopeFunction($node->value))
+                    || (($node instanceof Node\Stmt\Use_ || $node instanceof Node\Stmt\GroupUse) && $this->importsFunction($node))
+                ) {
+                    $this->scopeRead = true;
+                }
+
                 if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
-                    $this->enterCall(\strtolower($node->name->toString()), $node->args);
+                    $this->enterCall(\strtolower($node->name->toString()), $node->args, $node);
                 }
 
                 return null;
+            }
+
+            /**
+             * Whether a string is the name of a function that reads or alters its caller's scope. Used as
+             * a callable (`array_map('compact', ...)`, `call_user_func('compact', ...)`) it does so
+             * without the direct call this walk models.
+             *
+             * @psalm-pure
+             */
+            private function namesScopeFunction(string $value): bool
+            {
+                $name = \ltrim(\strtolower($value), '\\');
+
+                return \in_array($name, ['compact', 'extract', 'get_defined_vars'], true)
+                    || \in_array($name, ContractParser::INTROSPECTION_FUNCTIONS, true);
+            }
+
+            /** @psalm-mutation-free */
+            private function importsFunction(Node\Stmt\Use_|Node\Stmt\GroupUse $use): bool
+            {
+                if ($use->type === Node\Stmt\Use_::TYPE_FUNCTION) {
+                    return true;
+                }
+
+                foreach ($use->uses as $item) {
+                    if ($item->type === Node\Stmt\Use_::TYPE_FUNCTION) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            /**
+             * Tags the `get_defined_vars()` of the `array_diff_key(get_defined_vars(), [...])` argument
+             * every Blade include directive compiles (`$__env->make()`, `first()`, `renderWhen()`,
+             * `renderUnless()`), the one scope hand-over `ViewReferenceCollector` resolves to a named
+             * view. A look-alike anywhere else (`@php`, `{{ }}`), or in a call with a named or spread
+             * argument, is not tagged. The traverser enters a call before its arguments, so the tag is
+             * in place when the inner call is reached.
+             */
+            private function markCompiledScopePass(Node\Expr\MethodCall $call): void
+            {
+                if (!$call->var instanceof Node\Expr\Variable
+                    || $call->var->name !== '__env'
+                    || !$call->name instanceof Node\Identifier
+                    || !\in_array($call->name->toLowerString(), ['make', 'first', 'renderwhen', 'renderunless'], true)
+                ) {
+                    return;
+                }
+
+                // `ViewReferenceCollector` reads the include by position, so a named or spread argument
+                // makes the call unresolvable: its scope hand-over stays an unmodelled read.
+                foreach ($call->args as $arg) {
+                    if (!$arg instanceof Node\Arg || $arg->name instanceof Node\Identifier || $arg->unpack) {
+                        return;
+                    }
+                }
+
+                foreach ($call->args as $arg) {
+                    if (!$arg instanceof Node\Arg
+                        || !$arg->value instanceof Node\Expr\FuncCall
+                        || !$arg->value->name instanceof Node\Name
+                        || \strtolower($arg->value->name->toString()) !== 'array_diff_key'
+                    ) {
+                        continue;
+                    }
+
+                    $inner = $arg->value->args[0] ?? null;
+
+                    if ($inner instanceof Node\Arg && $inner->value instanceof Node\Expr\FuncCall) {
+                        $inner->value->setAttribute('compiledScopePass', true);
+                    }
+                }
             }
 
             /**
@@ -817,10 +939,8 @@ final class ContractParser
 
             /**
              * @param array<array-key, Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
-             *
-             * @psalm-external-mutation-free
              */
-            private function enterCall(string $name, array $args): void
+            private function enterCall(string $name, array $args, Node\Expr\FuncCall $node): void
             {
                 if ($name === 'extract') {
                     $this->unknown = true;
@@ -828,8 +948,27 @@ final class ContractParser
                     return;
                 }
 
-                // `get_defined_vars()` is deliberately not in this list: Blade compiles it into every
-                // `@include`, so reading it as unknown would turn the rule off almost everywhere.
+                // `get_defined_vars()` never sets `$unknown`: Blade compiles it into every `@include`, so
+                // reading it as unknown would turn UnusedViewData off almost everywhere. Outside that
+                // compiled shape it is a read of every name in scope, which only the stale-declaration
+                // check cares about (see `$scopeRead`).
+                if ($name === 'get_defined_vars' && $node->getAttribute('compiledScopePass') !== true) {
+                    $this->scopeRead = true;
+                }
+
+                // A callback runs in the caller's scope, so `call_user_func('compact', 'x')` reads a
+                // template variable: any such call is a scope read, whatever its callback (the callback
+                // string itself is also caught by `namesScopeFunction()`).
+                if (\in_array($name, ['call_user_func', 'call_user_func_array', 'forward_static_call', 'forward_static_call_array'], true)) {
+                    $this->scopeRead = true;
+                }
+
+                // The included template runs inside `PhpEngine::evaluatePath($path, $data)`, so the call's
+                // own arguments (the original data array) are reachable by introspection.
+                if (\in_array($name, ContractParser::INTROSPECTION_FUNCTIONS, true)) {
+                    $this->scopeRead = true;
+                }
+
                 if ($name !== 'compact') {
                     return;
                 }
@@ -853,6 +992,6 @@ final class ContractParser
         $traverser->addVisitor($visitor);
         $traverser->traverse($ast);
 
-        return [$visitor->names, $visitor->locals, $visitor->unknown];
+        return [$visitor->names, $visitor->locals, $visitor->unknown, $visitor->scopeRead];
     }
 }

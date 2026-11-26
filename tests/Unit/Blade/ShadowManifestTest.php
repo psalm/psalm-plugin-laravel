@@ -238,7 +238,7 @@ final class ShadowManifestTest extends TestCase
             '/app/views/foo.blade.php',
             'source',
             new ShadowResult('<?php ?>', []),
-            new ViewDataContract([], false, ['name', 'title'], false),
+            new ViewDataContract([], false, ['name', 'title'], false, [], [], true),
             [['partial'], false],
         );
         $manifest->flush();
@@ -253,6 +253,7 @@ final class ShadowManifestTest extends TestCase
         $this->assertNotNull($contract);
         $this->assertSame(['name', 'title'], $contract->readVariables);
         $this->assertFalse($contract->readsUnknown);
+        $this->assertTrue($contract->readsScope);
         $this->assertSame([['partial'], false], $reloaded->dataIncludesFor($shadowPath));
     }
 

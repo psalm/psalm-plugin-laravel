@@ -43,6 +43,10 @@ $app->booted(static function () use ($app): void {
     $view->composer('composer-dynamic', $composers . 'LiteralComposer');
     $view->composer('composer-dynamic', $composers . 'MethodComposer@dynamic');
     $view->composer('composer-compact', $composers . 'MethodComposer@compacted');
+    // The stale-declaration walk reaches the partial's composer: one that reads `$view->getData()` may read
+    // the host's declared variable, a literal `with()` one cannot.
+    $view->composer('stale-composer-reading-partial', $composers . 'MethodComposer@reads');
+    $view->composer('stale-composer-literal-partial', $composers . 'MethodComposer@build');
 
     // Observers registered straight on the dispatcher, as Ray, Telescope or Debugbar do: they reach
     // every view and supply nothing.

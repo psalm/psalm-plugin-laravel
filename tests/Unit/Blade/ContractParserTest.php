@@ -334,6 +334,69 @@ final class ContractParserTest extends TestCase
         $this->assertSame(['name'], $contract->readVariables);
     }
 
+    /** The scope argument of every include directive is no scope read; a call anywhere else is, yet never makes the set unknown. */
+    #[Test]
+    public function a_get_defined_vars_outside_a_compiled_include_is_a_scope_read(): void
+    {
+        $include = $this->dataContract("@include('a')\n@includeFirst(['a'])\n@includeWhen(true, 'a')\n@includeUnless(false, 'a')\n@extends('a')\n");
+        $echo = $this->dataContract("{{ get_defined_vars()['title'] }}\n");
+        $php = $this->dataContract("@php(\$all = array_diff_key(get_defined_vars(), ['__data' => 1]))\n");
+
+        $this->assertFalse($include->readsScope);
+        $this->assertTrue($echo->readsScope);
+        $this->assertTrue($php->readsScope);
+        $this->assertFalse($echo->readsUnknown);
+    }
+
+    /**
+     * Anything that can hand the scope to code this walk cannot read is a scope read: a native
+     * include/require/eval, a function-import alias or a computed callee of `get_defined_vars()`, a
+     * callable string naming it.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function unmodelledScopeReads(): iterable
+    {
+        yield 'original data array' => ["{{ \$__data['title'] }}\n"];
+        yield 'func_get_args' => ["{{ func_get_args()[1]['title'] }}\n"];
+        yield 'debug_backtrace' => ["{{ debug_backtrace()[0]['args'][1]['title'] }}\n"];
+        yield 'call_user_func compact' => ["{{ call_user_func('compact', 'title')['title'] }}\n"];
+        yield 'call_user_func_array compact' => ["{{ call_user_func_array('compact', ['title'])['title'] }}\n"];
+        yield 'call_user_func with any callback' => ["{{ call_user_func('strtoupper', 'x') }}\n"];
+        yield 'compact as a callable string' => ["{{ implode(array_map('compact', ['title'])) }}\n"];
+        yield 'namespaced extract string' => ["{{ is_callable('\\Extract') }}\n"];
+        yield 'debug_backtrace as a callable' => ["{{ implode(array_map('debug_backtrace', [])) }}\n"];
+        yield 'namespaced debug_print_backtrace as a callable' => ["{{ is_callable('\\Debug_Print_Backtrace') }}\n"];
+        yield 'include' => ["@php(include resource_path('views/legacy.php'))\n"];
+        yield 'require_once' => ["@php(require_once __DIR__ . '/legacy.php')\n"];
+        yield 'eval' => ["@php(eval('echo 1;'))\n"];
+        yield 'function import alias' => ["@php\nuse function get_defined_vars as scope;\n@endphp\n{{ scope()['title'] }}\n"];
+        yield 'computed callee' => ["@php(\$f = 'get_' . 'defined_vars')\n{{ \$f()['title'] }}\n"];
+        yield 'callable string' => ["{{ call_user_func('get_defined_vars')['title'] }}\n"];
+        yield 'call_user_func with a built name' => ["{{ call_user_func('get_defined_' . 'vars')['title'] }}\n"];
+    }
+
+    #[Test]
+    #[DataProvider('unmodelledScopeReads')]
+    public function an_unmodelled_scope_read_sets_reads_scope(string $source): void
+    {
+        $this->assertTrue($this->dataContract($source)->readsScope, $source);
+    }
+
+    /** A compiled include whose call the collector cannot resolve (a named argument, a spread) keeps the uncertainty. */
+    #[Test]
+    public function a_scope_argument_the_collector_cannot_resolve_is_a_scope_read(): void
+    {
+        $scope = "array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1])";
+        $positional = $this->parser->parseDataContract('', "<?php echo \$__env->make('partial', {$scope})->render(); ?>");
+        $named = $this->parser->parseDataContract('', "<?php echo \$__env->make(view: 'partial', data: [], mergeData: {$scope})->render(); ?>");
+        $spread = $this->parser->parseDataContract('', "<?php echo \$__env->make(...['partial'], mergeData: {$scope})->render(); ?>");
+
+        $this->assertFalse($positional->readsScope);
+        $this->assertTrue($named->readsScope);
+        $this->assertTrue($spread->readsScope);
+    }
+
     #[Test]
     public function collects_a_destructured_loop_binding_as_a_local_variable(): void
     {

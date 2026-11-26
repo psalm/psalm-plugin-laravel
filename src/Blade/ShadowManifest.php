@@ -34,7 +34,7 @@ final class ShadowManifest
     public const SLOT_DATA_INCLUDES = 1;
 
     /**
-     * @var array<string, array{0: string, 1: array<int, int>, 2: string, 3: array<int, list<string>>, 4: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 5: array{0: list<string>, 1: bool}|null}>
+     * @var array<string, array{0: string, 1: array<int, int>, 2: string, 3: array<int, list<string>>, 4: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>, 6: bool}, 5: array{0: list<string>, 1: bool}|null}>
      *      shadow path => [template path, lineMap, fingerprint, suppressions, contract,
      *      dataIncludes]. The final slot is null when its collection pass was disabled.
      */
@@ -87,7 +87,7 @@ final class ShadowManifest
      * file was corrupted mid-write. Individually malformed entries are
      * dropped rather than failing the whole load.
      *
-     * @return array<string, array{0: string, 1: array<int, int>, 2: string, 3: array<int, list<string>>, 4: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}, 5: array{0: list<string>, 1: bool}|null}>
+     * @return array<string, array{0: string, 1: array<int, int>, 2: string, 3: array<int, list<string>>, 4: array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>, 6: bool}, 5: array{0: list<string>, 1: bool}|null}>
      *
      * @psalm-mutation-free
      */
@@ -192,21 +192,21 @@ final class ShadowManifest
      * An entry written by a plugin version with a different slot count is dropped rather than
      * migrated, which recompiles the template — the cheap, correct answer for a derived cache.
      *
-     * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>}|null
+     * @return array{0: array<string, array{0: string, 1: int, 2: bool}>, 1: bool, 2: list<string>, 3: bool, 4: list<string>, 5: list<string>, 6: bool}|null
      *         null when the shape is wrong, which drops the entry
      *
      * @psalm-mutation-free
      */
     private function normalizeContract(mixed $data): ?array
     {
-        if (!\is_array($data) || \count($data) !== 6) {
+        if (!\is_array($data) || \count($data) !== 7) {
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared] = \array_values($data);
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared, $readsScope] = \array_values($data);
 
         if (!\is_array($vars) || !\is_bool($propsUnknown) || !\is_array($readVariables)
-            || !\is_bool($readsUnknown) || !\is_array($localVariables) || !\is_array($rawDeclared)
+            || !\is_bool($readsUnknown) || !\is_array($localVariables) || !\is_array($rawDeclared) || !\is_bool($readsScope)
         ) {
             return null;
         }
@@ -236,7 +236,7 @@ final class ShadowManifest
             $validVars[$name] = [$typeString, $line, $optional];
         }
 
-        return [$validVars, $propsUnknown, $validReads, $readsUnknown, $validLocals, $validRaw];
+        return [$validVars, $propsUnknown, $validReads, $readsUnknown, $validLocals, $validRaw, $readsScope];
     }
 
     /**
@@ -357,7 +357,7 @@ final class ShadowManifest
             return null;
         }
 
-        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared] = $entry[4];
+        [$vars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared, $readsScope] = $entry[4];
 
         $contractVars = [];
 
@@ -365,7 +365,7 @@ final class ShadowManifest
             $contractVars[$name] = new ContractVar($name, $typeString, $line, $optional);
         }
 
-        return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared);
+        return new ViewDataContract($contractVars, $propsUnknown, $readVariables, $readsUnknown, $localVariables, $rawDeclared, $readsScope);
     }
 
     /**
@@ -410,7 +410,7 @@ final class ShadowManifest
             $shadow->lineMap,
             $this->fingerprint($source),
             $shadow->suppressions,
-            [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables, $contract->rawDeclaredVariables],
+            [$vars, $contract->propsUnknown, $contract->readVariables, $contract->readsUnknown, $contract->localVariables, $contract->rawDeclaredVariables, $contract->readsScope],
             $dataIncludes,
         ];
 

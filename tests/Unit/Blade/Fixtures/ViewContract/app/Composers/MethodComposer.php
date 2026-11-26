@@ -18,6 +18,11 @@ final class MethodComposer
         $view->with('count', 1);
     }
 
+    public function reads(View $view): void
+    {
+        $view->with('heading', \strtoupper((string) $view->getData()['label']));
+    }
+
     public function dynamic(View $view): void
     {
         $view->with(\strtolower('TITLE'), 'x');
