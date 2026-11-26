@@ -7,6 +7,7 @@ require getcwd() . '/vendor/autoload.php';
 
 use App\Models\Customer;
 use App\Models\Vehicle;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -84,6 +85,24 @@ function star_write_is_rejected(HasMany $relation): void
     takes_model_relation($relation);
     takes_model_relation($relation->where('id', 1));
 }
+
+/**
+ * Builder's `TModel` is covariant, and Psalm used to bind a covariant `@mixin Builder<TRelatedModel>`
+ * of `HasMany<*, Customer>` to `Builder<Model>` (a read of the bound), so the builder's parameters
+ * accepted any `Builder<Vehicle>`. The bound mixin is a receiver: writes through it take `never`,
+ * while what is read from it keeps the bound.
+ *
+ * @param HasMany<*, Customer> $relation
+ * @param Builder<Vehicle> $vehicles
+ */
+function star_write_through_covariant_mixin_is_rejected(HasMany $relation, Builder $vehicles): void
+{
+    $relation->mergeConstraintsFrom($vehicles);
+
+    $_model = $relation->getModel();
+    /** @psalm-check-type-exact $_model = Model */
+}
 --EXPECTF--
 ArgumentTypeCoercion on line %d: Argument 1 of takes_model_relation expects Illuminate\Database\Eloquent\Relations\HasMany<Illuminate\Database\Eloquent\Model, App\Models\Customer>, but parent type Illuminate\Database\Eloquent\Relations\HasMany<*, App\Models\Customer> provided
 ArgumentTypeCoercion on line %d: Argument 1 of takes_model_relation expects Illuminate\Database\Eloquent\Relations\HasMany<Illuminate\Database\Eloquent\Model, App\Models\Customer>, but parent type Illuminate\Database\Eloquent\Relations\HasMany<*, App\Models\Customer> provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::mergeConstraintsFrom expects Illuminate\Database\Eloquent\Builder<never>, but Illuminate\Database\Eloquent\Builder<App\Models\Vehicle> provided
