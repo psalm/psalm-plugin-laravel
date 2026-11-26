@@ -51,5 +51,5 @@ Trace on line %d: $_stamped: Illuminate\Database\Eloquent\Relations\BelongsToMan
 Trace on line %d: $_renamed_stamp: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot&object{quantity:mixed, unit_price:mixed, made_at:mixed, changed_at:mixed}, 'pivot'>
 Trace on line %d: $_branch_table: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
 Trace on line %d: $_branch_columns: Illuminate\Database\Eloquent\Relations\BelongsToMany<App\Models\Part, App\Models\WorkOrder, Illuminate\Database\Eloquent\Relations\Pivot, 'pivot'>
-Trace on line %d: $_branch_table_property: App\Collections\PartCollection<int, App\Models\Part>
-Trace on line %d: $_branch_columns_property: App\Collections\PartCollection<int, App\Models\Part>
+Trace on line %d: $_branch_table_property: App\Collections\PartCollection<int, App\Models\Part&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}>
+Trace on line %d: $_branch_columns_property: App\Collections\PartCollection<int, App\Models\Part&object{pivot:Illuminate\Database\Eloquent\Relations\Pivot}>

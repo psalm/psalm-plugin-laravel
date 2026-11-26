@@ -24,6 +24,8 @@ final class Mechanic extends Model
     /** @var class-string<MechanicBuilder<static>> */
     protected static string $builder = MechanicBuilder::class;
 
+    public const SPECIALIZATION_ACCESSOR = 'certification';
+
     public function workOrders(): HasMany
     {
         return $this->hasMany(WorkOrder::class);
@@ -132,6 +134,87 @@ final class Mechanic extends Model
     public function workOrderTagsAccessorOnly(): MorphToMany
     {
         return $this->morphedByMany(WorkOrder::class, 'taggable')->as('meta');
+    }
+
+    /** An outer dynamic `as()` replaces the inner literal at runtime, so the accessor is unknown (#2348). */
+    public function specializationsDynamicAccessor(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as('inner')->as($this->getTable());
+    }
+
+    /** A class constant resolves to its literal accessor (#2348). */
+    public function specializationsConstAccessor(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as(self::SPECIALIZATION_ACCESSOR);
+    }
+
+    /** Untyped relation: related model, pivot columns and accessor come from the body alone (#2348). */
+    public function specializationNotes()
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->withPivot('notes')->as('note');
+    }
+
+    /** @psalm-return BelongsToMany<MechanicSpecialization, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'details'>|null */
+    public function nullableSpecializations(): ?BelongsToMany
+    {
+        if (!$this->exists) {
+            return null;
+        }
+
+        return $this->belongsToMany(MechanicSpecialization::class)->as('details');
+    }
+
+    /** Returns that differ only in the accessor leave it unknown and keep the related model and pivot columns (#2348). */
+    public function specializationsBranchAccessor(): BelongsToMany
+    {
+        if ($this->exists) {
+            return $this->belongsToMany(MechanicSpecialization::class)->withPivot('notes')->as($this->getTable());
+        }
+
+        return $this->belongsToMany(MechanicSpecialization::class)->withPivot('notes');
+    }
+
+    /** An omitted `as()` and `as('pivot')` hydrate the same key (#2348). */
+    public function specializationsBranchExplicitPivot(): BelongsToMany
+    {
+        if ($this->exists) {
+            return $this->belongsToMany(MechanicSpecialization::class)->as('pivot');
+        }
+
+        return $this->belongsToMany(MechanicSpecialization::class);
+    }
+
+    /**
+     * A dynamic outer `as()` on a delegated relation: the accessor is unknown, the delegate's pivot stays (#2348).
+     * The omitted TAccessor slot is no accessor promise.
+     *
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this, SpecializationPivot>
+     */
+    public function specializationsDelegatedDynamic(): BelongsToMany
+    {
+        return $this->specializationsWithPivot()->as($this->getTable());
+    }
+
+    /**
+     * A declared literal accessor stands in for one the body does not show (#2348).
+     *
+     * @psalm-return BelongsToMany<MechanicSpecialization, $this, \Illuminate\Database\Eloquent\Relations\Pivot, 'declared'>
+     */
+    public function specializationsDeclaredAccessor(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as('decl' . 'ared');
+    }
+
+    /** A scope and a Builder macro run on the query, not the relation, so the accessor stays (#2348). */
+    public function workOrderTagsScoped(): MorphToMany
+    {
+        return $this->morphedByMany(WorkOrder::class, 'taggable')->as('meta')->urgent()->withTrashed();
+    }
+
+    /** A registered relation macro (tests/Type/macro-fixtures.php) replaces the accessor the parser read (#2348). */
+    public function specializationsAccessorMacro(): BelongsToMany
+    {
+        return $this->belongsToMany(MechanicSpecialization::class)->as('first')->rewriteAccessor();
     }
 
     /**
