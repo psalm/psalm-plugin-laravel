@@ -5,7 +5,7 @@ Psalm 7.6 hops to the @mixin for an inaccessible method before consulting the ca
 
 use App\Models\CollidingScopeModel;
 
-// @todo-by https://github.com/vimeo/psalm/issues/13769 restore the protected-method scope case once Psalm consults the called class's providers before the mixin hop
+// vimeo/psalm#13769 is fixed by vimeo/psalm#15020 (merged after 7.21.1): the XFAIL fails once a release carries it.
 /**
  * Protected-method collision: Eloquent\Builder::enforceOrderBy() is protected, so __call fires
  * and the scope wins. The params provider must NOT skip the hand-off write for non-public methods.

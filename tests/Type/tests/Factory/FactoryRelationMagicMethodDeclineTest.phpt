@@ -156,7 +156,7 @@ UndefinedMagicMethod on line %d: Magic method App\Sandbox\FactoryRelationMagicDe
 TooFewArguments on line %d: Too few arguments for App\Sandbox\FactoryRelationMagicDecline\UserFactory::hasLinks - expecting extra to be passed
 TooFewArguments on line %d: Too few arguments for method App\Sandbox\FactoryRelationMagicDecline\UserFactory::haslinks saw 1
 UndefinedMagicMethod on line %d: Magic method App\Sandbox\FactoryRelationMagicDecline\ForwardingUserFactory::hastags does not exist
-InvalidScalarArgument on line %d: Argument 1 of App\Sandbox\FactoryRelationMagicDecline\UserFactory::hastags expects Illuminate\Database\Eloquent\Factories\Sequence|array<string, mixed>|callable[impure]|int|null, but true provided
+InvalidArgument on line %d: Argument 1 of App\Sandbox\FactoryRelationMagicDecline\UserFactory::hastags expects Illuminate\Database\Eloquent\Factories\Sequence|array<string, mixed>|callable[impure]|int|null, but true provided
 InvalidArgument on line %d: Argument 2 of App\Sandbox\FactoryRelationMagicDecline\UserFactory::hastags expects Illuminate\Database\Eloquent\Factories\Sequence|array<string, mixed>|callable[impure]|null, but stdClass provided
 InvalidArgument on line %d: Argument 1 of App\Sandbox\FactoryRelationMagicDecline\UserFactory::fortags expects Illuminate\Database\Eloquent\Factories\Sequence|array<string, mixed>|callable[impure]|null, but 2 provided
 InvalidArgument on line %d: Argument 3 of App\Sandbox\FactoryRelationMagicDecline\UserFactory::hastags expects array<string, mixed>, but 'c' provided

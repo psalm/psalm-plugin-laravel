@@ -468,8 +468,6 @@ final class SchemaAggregator
 
             $root_var = $stmt->expr;
 
-            $first_method_call = $root_var;
-
             $nullable = false;
             /** @var SchemaColumnDefault|null $default */
             $default = null;
