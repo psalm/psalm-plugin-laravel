@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Validation;
 
+use PhpParser\Node\Arg;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Scalar\Float_;
+use PhpParser\Node\Scalar\Int_;
+use PhpParser\Node\Scalar\String_;
 use Psalm\Internal\Analyzer\StatementsAnalyzer;
 use Psalm\Plugin\EventHandler\Event\AddRemoveTaintsEvent;
 use Psalm\Type\Atomic\TGenericObject;
@@ -21,7 +26,7 @@ use Psalm\Type\Union;
  * taint behaviour cannot drift apart.
  *
  * Three front doors feed {@see resolve}:
- *   - keyed accessor — `validated|input|string|str|array|collect('key')` on a
+ *   - keyed accessor — `validated|input|get|string|str|array|collect('key')` on a
  *     FormRequest, `ValidatedInput<FormRequest>`, or a Request that ran inline
  *     `validate([...])` in the same function;
  *   - magic property — `$req->email`, gated by
@@ -44,14 +49,14 @@ final class ValidatedFieldReadResolver
      *
      * @internal shared only with {@see InlineValidateRulesCollector}.
      */
-    public const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'string', 'str', 'array', 'collect'];
+    public const KEYED_ACCESSOR_METHODS = ['validated', 'input', 'get', 'string', 'str', 'array', 'collect'];
 
     /**
      * Every method name relevant to a validated read — the source names
      * (validated/validate/safe/input) unioned with {@see KEYED_ACCESSOR_METHODS}.
      * Lets {@see fromMethodCall} bail on name before resolving the caller type.
      */
-    private const ACCESSOR_METHODS = ['validated', 'validate', 'safe', 'input', 'string', 'str', 'array', 'collect'];
+    private const ACCESSOR_METHODS = ['validated', 'validate', 'safe', 'input', 'get', 'string', 'str', 'array', 'collect'];
 
     /**
      * Recognise the taint event's expression as a validated read. Null for the
@@ -159,15 +164,14 @@ final class ValidatedFieldReadResolver
     }
 
     /**
-     * Single literal-string key of a keyed accessor call, or null. A default
-     * arg (input('k', $default)) bails: the default can carry its own taint
-     * that the rule's escape must not strip.
+     * Single literal-string key of a keyed accessor call, or null. See
+     * {@see readsOneKey} for the default argument.
      */
     private static function literalKey(AddRemoveTaintsEvent $event, MethodCall $expr): ?string
     {
         $args = $expr->getArgs();
 
-        if ($args === [] || isset($args[1])) {
+        if (!self::readsOneKey($args)) {
             return null;
         }
 
@@ -184,6 +188,33 @@ final class ValidatedFieldReadResolver
         }
 
         return $type->getSingleStringLiteral()->value;
+    }
+
+    /**
+     * Whether a keyed accessor call reads one key with no default, or with a
+     * default written as a literal (`input('sort', 'id')`). Any other default
+     * can carry its own taint, which the rule's escape must not strip.
+     *
+     * @internal shared only with {@see InlineValidateRulesCollector}.
+     *
+     * @param array<array-key, Arg> $args
+     */
+    public static function readsOneKey(array $args): bool
+    {
+        if ($args === [] || isset($args[2])) {
+            return false;
+        }
+
+        if (!isset($args[1])) {
+            return true;
+        }
+
+        $default = $args[1]->value;
+
+        return $default instanceof String_
+            || $default instanceof Int_
+            || $default instanceof Float_
+            || ($default instanceof ConstFetch && \in_array($default->name->toLowerString(), ['null', 'true', 'false'], true));
     }
 
     /**

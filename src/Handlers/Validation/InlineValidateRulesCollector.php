@@ -693,9 +693,8 @@ final class InlineValidateRulesCollector implements
      * `BeforeStatementAnalysis` callsite):
      *
      *   - `MethodCall` with a recognised accessor method name
-     *   - exactly one argument (a default arg can carry independent taint
-     *     and would be stripped by the rule's escape, masking real taint —
-     *     bail out)
+     *   - one argument, or a literal default as a second one (see
+     *     {@see ValidatedFieldReadResolver::readsOneKey})
      *   - first argument is a literal string at the AST level (matches the
      *     simple-string case; constants resolved by Psalm's type inference
      *     are deliberately not handled here, as type info isn't available
@@ -721,8 +720,7 @@ final class InlineValidateRulesCollector implements
 
         $args = $rhs->getArgs();
 
-        // Empty: nothing to look up. Has-second-arg: see method docblock.
-        if ($args === [] || isset($args[1])) {
+        if (!ValidatedFieldReadResolver::readsOneKey($args)) {
             return null;
         }
 
