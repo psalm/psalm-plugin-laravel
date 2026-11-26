@@ -16,13 +16,15 @@ use Psalm\Type\Atomic\TNamedObject;
  * for a literal `return $this;` body and never for `return $this->where(...);`. Setting the flag
  * from the declared return type (`self`, `static`, `$this`, the own class name) covers that shape.
  *
+ * Since 7.17.0 (vimeo/psalm#14337) Psalm exempts a verified `@return $this` method itself, but it
+ * deliberately keeps reporting a delegating method declared `: self`, `: static` or `@return static`.
+ *
  * A union return (`self|Collection`) is declined: the flag exempts the whole method, and the
  * non-builder arm is a result a caller can lose by discarding it.
  *
  * Accepted soundness gap: the body is never inspected, so a method returning a fresh builder
  * (`return clone $this;`) is exempted too.
  *
- * @todo-by https://github.com/vimeo/psalm/issues/13989 verified `@return $this` methods are then exempt upstream; delete this handler (and its Plugin.php registration) unless bare `: self`/`: static` builder methods still need it
  * @see https://github.com/psalm/psalm-plugin-laravel/issues/1448
  */
 final class BuilderFluentReturnHandler implements AfterCodebasePopulatedInterface
