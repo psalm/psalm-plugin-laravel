@@ -22,6 +22,10 @@
         }
     ],
     "homepage": "https://github.com/psalm/psalm-plugin-laravel",
+    "support": {
+        "issues": "https://github.com/psalm/psalm-plugin-laravel/issues",
+        "source": "https://github.com/psalm/psalm-plugin-laravel"
+    },
     "require": {
         "php": "^8.2",
         "ext-libxml": "*",
@@ -33,9 +37,6 @@
         "symfony/console": "^6.4 || ^7.0 || ^8.0",
         "vimeo/psalm": "^7.18.0@stable"
     },
-    "bin": [
-        "bin/psalm-laravel"
-    ],
     "require-dev": {
         "alies-dev/psalm-tester": "^0.4",
         "boundwize/structarmed": "^0.22",
@@ -66,6 +67,9 @@
             "Tests\\Psalm\\LaravelPlugin\\": "tests"
         }
     },
+    "bin": [
+        "bin/psalm-laravel"
+    ],
     "config": {
         "allow-plugins": {
             "dealerdirect/phpcodesniffer-composer-installer": true
