@@ -113,18 +113,18 @@ function test_protected_scope_attribute_static_is_forwarded(): void
 // See https://github.com/psalm/psalm-plugin-laravel/issues/631
 // -----------------------------------------------------------------------
 
-/** SoftDeletes withTrashed on standard builder returns Builder<Customer&static>. */
+/** SoftDeletes withTrashed on standard builder returns Builder<Customer>. */
 function test_soft_deletes_with_trashed_standard_builder(): void
 {
     $_result = Customer::withTrashed();
-    /** @psalm-check-type-exact $_result = Builder<Customer&static> */
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
 }
 
-/** SoftDeletes onlyTrashed on standard builder returns Builder<Customer&static>. */
+/** SoftDeletes onlyTrashed on standard builder returns Builder<Customer>. */
 function test_soft_deletes_only_trashed_standard_builder(): void
 {
     $_result = Customer::onlyTrashed();
-    /** @psalm-check-type-exact $_result = Builder<Customer&static> */
+    /** @psalm-check-type-exact $_result = Builder<Customer> */
 }
 
 // -----------------------------------------------------------------------
