@@ -19,6 +19,7 @@ use Psalm\Codebase;
 use Psalm\Exception\UnpopulatedClasslikeException;
 use Psalm\Internal\MethodIdentifier;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
+use Psalm\LaravelPlugin\Internal\GenericReceiver;
 use Psalm\NodeTypeProvider;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Storage\ClassLikeStorage;
@@ -561,7 +562,14 @@ final class FactoryCount
             $params[] = $param;
         }
 
-        return new Union([(new TGenericObject($storage->name, $params, false, $receiver?->is_static ?? false, $receiver?->extra_types ?? []))
+        // A union receiver has no single atomic, but the branch this call answers for still carries its `*`;
+        // the late-static and intersection flags stay those of the single receiver only.
+        $markers = $receiver instanceof TGenericObject
+            ? $receiver
+            : ($event instanceof MethodReturnTypeProviderEvent ? GenericReceiver::of($event, $storage->name) : null);
+
+        return new Union([GenericReceiver::rebuild($markers, $storage->name, $params)
+            ->setIntersectionTypes($receiver?->extra_types ?? [])
             ->setIsStatic($receiver?->is_static ?? false, $receiver?->is_static_resolved ?? false)]);
     }
 
@@ -626,11 +634,13 @@ final class FactoryCount
      * synthesized `TCount`): an explicit `@extends Factory<M, X>`, a user's own `@template TCount`, or a class that
      * owns its count and whose receiver {@see provenReceiver()} cannot prove.
      *
+     * @param TGenericObject|null $receiver the receiver when the call is on a base `Factory<...>` itself, whose
+     *                                      `*` model stays a `*` ({@see GenericReceiver::rebuild()})
      * @psalm-pure
      */
-    public static function baseFactory(Union $model, Union $count): Union
+    public static function baseFactory(Union $model, Union $count, ?TGenericObject $receiver = null): Union
     {
-        return new Union([new TGenericObject(Factory::class, [$model, $count])]);
+        return new Union([GenericReceiver::rebuild($receiver, Factory::class, [$model, $count])]);
     }
 
     /**

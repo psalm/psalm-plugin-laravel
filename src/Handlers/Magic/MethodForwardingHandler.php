@@ -14,6 +14,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Support\DynamicWhereResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\RelatedBuilderMethodResolver;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ResolvedForwardedMethod;
+use Psalm\LaravelPlugin\Internal\GenericReceiver;
 use Psalm\Plugin\EventHandler\Event\MethodParamsProviderEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodParamsProviderInterface;
@@ -178,12 +179,13 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
         }
 
         // The receiver atomic, not the event's template params, carries a `*` marker: rebuilding the
-        // relation from a bare param list would turn `HasMany<*, X>` into `HasMany<Bound, X>`.
-        $receiver = self::findReceiverAtomic($source, $event, $fqClassName);
+        // relation from a bare param list would turn `HasMany<*, X>` into `HasMany<Bound, X>`. It also
+        // supplies the params when the event has none (Path 2 `__call` dispatch does not always pass them).
+        $receiver = GenericReceiver::of($event, $fqClassName);
         $templateParams = $event->getTemplateTypeParameters() ?? $receiver?->type_params;
 
         $relationAtomic = $templateParams !== null
-            ? self::forwardedRelation($fqClassName, $templateParams, $receiver)
+            ? GenericReceiver::rebuild($receiver, $fqClassName, $templateParams)
             : null;
 
         // A real method introduced by the related model's custom builder wins over
@@ -398,7 +400,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
                 continue;
             }
 
-            $relation = self::forwardedRelation($atomicType->value, $atomicType->type_params, $atomicType);
+            $relation = GenericReceiver::rebuild($atomicType, $atomicType->value, $atomicType->type_params);
 
             // The Relation's @mixin only exposes the base Builder surface. Look through
             // the related model first so a declared custom-builder override follows PHP's
@@ -577,69 +579,6 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
     }
 
     /**
-     * The generic atomic of the caller's node type that is an instance of $expectedClass.
-     *
-     * Falls back to node type provider when event->getTemplateTypeParameters()
-     * returns null (Path 2 __call dispatch doesn't always populate template params), and it is
-     * the only place the `*` markers of the receiver's type arguments are still visible.
-     */
-    private static function findReceiverAtomic(
-        StatementsAnalyzer $source,
-        MethodReturnTypeProviderEvent $event,
-        string $expectedClass,
-    ): ?TGenericObject {
-        $stmt = $event->getStmt();
-
-        if (!$stmt instanceof MethodCall) {
-            return null;
-        }
-
-        // Node type provider always has the type of $stmt->var — Psalm analyzes
-        // left-to-right, inner-to-outer, so the receiver is analyzed before
-        // the method call's return type provider fires.
-        $varType = $source->getNodeTypeProvider()->getType($stmt->var);
-
-        if (!$varType instanceof \Psalm\Type\Union) {
-            return null;
-        }
-
-        $expectedLower = \strtolower($expectedClass);
-
-        foreach ($varType->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TGenericObject && \strtolower($atomic->value) === $expectedLower) {
-                return $atomic;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * The relation a forwarded fluent call returns: $class over $typeParams.
-     *
-     * Transforms the $receiver atomic when it is that class instead of constructing a new
-     * TGenericObject, because a `*` type argument (`HasMany<*, Post>`) is a marker on the atomic
-     * that is not part of $typeParams: a fresh object would turn it into its template bound and
-     * accept writes the receiver rejects. `setTypeParams()` keeps the marker of every slot whose
-     * type is unchanged. The late-static and intersection state of the receiver is dropped, as it
-     * was when the object was always built from scratch.
-     *
-     * @param non-empty-list<Union> $typeParams
-     * @psalm-pure
-     */
-    private static function forwardedRelation(string $class, array $typeParams, ?TGenericObject $receiver): TGenericObject
-    {
-        if (!$receiver instanceof TGenericObject || \strtolower($receiver->value) !== \strtolower($class)) {
-            return new TGenericObject($class, $typeParams);
-        }
-
-        return $receiver
-            ->setValueIsStatic($class, false, false)
-            ->setIntersectionTypes([])
-            ->setTypeParams($typeParams);
-    }
-
-    /**
      * Check if a method is in the class's declaring_method_ids (i.e., declared or inherited,
      * not resolved via __call or @mixin).
      *
@@ -680,7 +619,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * Arguments stay `mixed` (see {@see DynamicWhereResolver::variadicMixedParams}), so no
      * column type is handed to {@see getMethodParams}.
      *
-     * @param TGenericObject $relation the receiver relation, as built by {@see forwardedRelation()}
+     * @param TGenericObject $relation the receiver relation, as built by {@see GenericReceiver::rebuild()}
      */
     private static function resolveDynamicWhereOnRelation(
         MethodReturnTypeProviderEvent $event,
@@ -717,7 +656,7 @@ final class MethodForwardingHandler implements MethodReturnTypeProviderInterface
      * (e.g. scopePublished → published()) or a modern #[Scope] attribute method.
      * Returns null otherwise, letting Psalm fall through to its default handling.
      *
-     * @param TGenericObject|null $relation the receiver relation, as built by {@see forwardedRelation()}
+     * @param TGenericObject|null $relation the receiver relation, as built by {@see GenericReceiver::rebuild()}
      */
     private static function resolveScopeOnRelation(
         Codebase $codebase,
