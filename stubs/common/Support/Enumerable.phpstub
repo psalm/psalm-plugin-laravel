@@ -109,7 +109,7 @@ interface Enumerable extends \Illuminate\Contracts\Support\Arrayable, \Illuminat
      * implementation (`Conditionable`) calls `$callback($this, $value)` and accepts any value or a
      * `Closure($this)` resolving to one. Same shape as the `Conditionable` trait declaration.
      *
-     * @todo-by https://github.com/laravel/framework/pull/62566 drop the when()/unless() overrides once the Enumerable docblocks ship
+     * @todo-by 2027-02-24 laravel/framework#62566 fixed these docblocks in v13.44.0 but was not backported to 12.x; drop the when()/unless() overrides once Laravel 12 support ends and the 13.x floor is >= 13.44
      *
      * @template TWhenParameter
      * @template TWhenReturnType
