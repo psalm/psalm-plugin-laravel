@@ -37,7 +37,7 @@ final class ClassAliasStorageHandler implements AfterCodebasePopulatedInterface
             }
 
             // Always assign, so a re-run refreshes a stale bridge.
-            $storages->addMore([\strtolower($alias) => $storages->get($resolved)]);
+            $storages->addMore([\strtolower($alias) => $storages->get($resolved)], [], $codebase->analysis_php_version_id);
         }
     }
 }

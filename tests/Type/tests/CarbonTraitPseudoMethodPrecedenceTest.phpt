@@ -187,7 +187,7 @@ function effective_visibility(AppPublicAdaptedChild $a, AppAliasedDay $c, AppPri
 
     // Private real method: tag stays.
     $_private = $d->dayOfYear(5);
-    /** @psalm-check-type-exact $_private = \AppPrivateDay&static */
+    /** @psalm-check-type-exact $_private = \AppPrivateDay */
 }
 ?>
 --EXPECTF--

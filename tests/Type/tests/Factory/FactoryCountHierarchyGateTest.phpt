@@ -150,7 +150,6 @@ class H extends Factory
 
 final class NewModelChild extends H
 {
-    /** @psalm-suppress MethodSignatureMismatch */
     #[\Override]
     public function newModel(array $attributes = [])
     {

@@ -54,5 +54,26 @@ function test_reverse_order(): void
     $_result = CollidingScopeModel::query()->count();
     /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\CollidingScopeModel> */
 }
+
+/**
+ * Protected-method collision: Eloquent\Builder::enforceOrderBy() is protected, so __call fires
+ * and the scope wins. The params provider must NOT skip the hand-off write for non-public methods.
+ *
+ * @see https://github.com/psalm/psalm-plugin-laravel/pull/1643#discussion_r4178549634
+ */
+function test_protected_method_collision_scope_wins(): void
+{
+    // scopeEnforceOrderBy(int $priority) should be invoked, not the protected Builder method.
+    $_result = CollidingScopeModel::query()->enforceOrderBy(1);
+    /** @psalm-check-type-exact $_result = Illuminate\Database\Eloquent\Builder<App\Models\CollidingScopeModel> */
+}
+
+/** Passing wrong type to protected-collision scope should report against the SCOPE signature. */
+function test_protected_method_collision_invalid_arg(): void
+{
+    // expects int $priority, given string — InvalidArgument from scope signature
+    $_result = CollidingScopeModel::query()->enforceOrderBy('x');
+}
 ?>
 --EXPECTF--
+InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Builder::enforceOrderBy expects int, but 'x' provided

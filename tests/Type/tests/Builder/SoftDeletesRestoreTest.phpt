@@ -71,5 +71,3 @@ CheckType on line %d: Checked variable $_result = int does not match $_result = 
 CheckType on line %d: Checked variable $_result = int does not match $_result = mixed
 CheckType on line %d: Checked variable $_result = App\Models\Customer does not match $_result = mixed
 CheckType on line %d: Checked variable $_result = App\Models\Customer does not match $_result = mixed
-CheckType on line %d: Checked variable $_result = App\Models\Customer does not match $_result = App\Models\Customer&static
-CheckType on line %d: Checked variable $_result = App\Models\Customer does not match $_result = App\Models\Customer&static
