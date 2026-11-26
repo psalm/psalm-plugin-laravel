@@ -9,8 +9,6 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\PivotColumnResolver;
-use Psalm\Plugin\EventHandler\AfterCodebasePopulatedInterface;
-use Psalm\Plugin\EventHandler\Event\AfterCodebasePopulatedEvent;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TGenericObject;
@@ -31,29 +29,8 @@ use Psalm\Type\Union;
  *
  * @internal
  */
-final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInterface, AfterCodebasePopulatedInterface
+final class BelongsToManyWithPivotHandler implements MethodReturnTypeProviderInterface
 {
-    /**
-     * The stub re-declares `using()` with `@return static<...>`, but the method keeps `returns_this` from Laravel's
-     * `@return $this`, and since Psalm 7.19 a `returns_this` call returns the `@phpstan-this-out` type instead of
-     * both the stub's return type and this provider's pivot shape. Clearing the flag restores the 7.18 answer.
-     *
-     * @todo-by https://github.com/vimeo/psalm/issues/15075 delete this method and the AfterCodebasePopulatedInterface
-     */
-    #[\Override]
-    public static function afterCodebasePopulated(AfterCodebasePopulatedEvent $event): void
-    {
-        try {
-            $storage = $event->getCodebase()->classlike_storage_provider->get(BelongsToMany::class);
-        } catch (\InvalidArgumentException) {
-            return;
-        }
-
-        if (isset($storage->methods['using'])) {
-            $storage->methods['using']->returns_this = false;
-        }
-    }
-
     /**
      * @return list<string>
      * @psalm-pure
