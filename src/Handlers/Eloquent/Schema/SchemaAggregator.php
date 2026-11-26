@@ -7,6 +7,7 @@ namespace Psalm\LaravelPlugin\Handlers\Eloquent\Schema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use PhpParser;
 use PhpParser\NodeFinder;
@@ -144,7 +145,13 @@ final class SchemaAggregator
             $this->trackSchemaVariable($stmt->expr, $schema_vars);
 
             $schema_call = $this->extractSchemaCall($stmt->expr, $schema_vars);
-            if ($schema_call === null || !$schema_call->name instanceof PhpParser\Node\Identifier) {
+            if ($schema_call === null) {
+                // Applied in statement order, so later Blueprint calls can alter tables created by raw SQL.
+                $this->addRawSqlTables($stmt->expr);
+                continue;
+            }
+
+            if (!$schema_call->name instanceof PhpParser\Node\Identifier) {
                 continue;
             }
 
@@ -170,6 +177,76 @@ final class SchemaAggregator
                     $this->renameTable($schema_call);
             }
         }
+    }
+
+    /**
+     * Feed literal SQL from `DB::statement()` / `DB::unprepared()` to the schema dump parser,
+     * statement by statement, so tables created with raw `CREATE TABLE` are known. Dynamic SQL is skipped.
+     */
+    private function addRawSqlTables(PhpParser\Node\Expr $expr): void
+    {
+        if (
+            !$expr instanceof PhpParser\Node\Expr\StaticCall
+            || !$expr->class instanceof PhpParser\Node\Name
+            || !$expr->name instanceof PhpParser\Node\Identifier
+            || !\in_array($expr->name->toLowerString(), ['statement', 'unprepared'], true)
+            || !isset($expr->args[0])
+            || !$expr->args[0] instanceof PhpParser\Node\Arg
+            || !$this->isFacadeClass($expr->class->getAttribute('resolvedName'), DB::class, 'DB')
+        ) {
+            return;
+        }
+
+        $sql = self::resolveConstantString($expr->args[0]->value);
+        if ($sql === null) {
+            return;
+        }
+
+        $parser = new SqlSchemaParser();
+
+        foreach (RawSqlStatementSplitter::split($sql) as $statement) {
+            // Only plain CREATE TABLE (not TEMPORARY, ALTER or INSERT), and not `CREATE TABLE x (LIKE y)`,
+            // which the dump parser would read as a column named LIKE.
+            if (
+                \preg_match('/^CREATE\s+TABLE\b/i', $statement) !== 1
+                || \preg_match('/^[^(]*\(\s*LIKE\b/i', $statement) === 1
+            ) {
+                continue;
+            }
+
+            $parsed = new self();
+            $parser->addToAggregator($statement, $parsed);
+
+            // `IF NOT EXISTS` is a no-op at runtime for a table that is already known.
+            $keep_existing = \preg_match('/^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\b/i', $statement) === 1;
+
+            foreach ($parsed->tables as $name => $table) {
+                if (!$keep_existing || !isset($this->tables[$name])) {
+                    $this->tables[$name] = $table;
+                }
+            }
+        }
+    }
+
+    /**
+     * A string literal (including nowdoc and heredoc without interpolation) or a concatenation of such literals.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function resolveConstantString(PhpParser\Node\Expr $expr): ?string
+    {
+        if ($expr instanceof PhpParser\Node\Scalar\String_) {
+            return $expr->value;
+        }
+
+        if ($expr instanceof PhpParser\Node\Expr\BinaryOp\Concat) {
+            $left = self::resolveConstantString($expr->left);
+            $right = self::resolveConstantString($expr->right);
+
+            return $left !== null && $right !== null ? $left . $right : null;
+        }
+
+        return null;
     }
 
     /**
@@ -224,7 +301,7 @@ final class SchemaAggregator
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
             && $expr->name->name === 'connection'
-            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'));
+            && $this->isFacadeClass($expr->class->getAttribute('resolvedName'), Schema::class, 'Schema');
     }
 
     /**
@@ -248,7 +325,7 @@ final class SchemaAggregator
             $expr instanceof PhpParser\Node\Expr\StaticCall
             && $expr->class instanceof PhpParser\Node\Name
             && $expr->name instanceof PhpParser\Node\Identifier
-            && $this->isSchemaClass($expr->class->getAttribute('resolvedName'))
+            && $this->isFacadeClass($expr->class->getAttribute('resolvedName'), Schema::class, 'Schema')
         ) {
             return $expr;
         }
@@ -262,7 +339,7 @@ final class SchemaAggregator
             && $expr->var->class instanceof PhpParser\Node\Name
             && $expr->var->name instanceof PhpParser\Node\Identifier
             && $expr->var->name->name === 'connection'
-            && $this->isSchemaClass($expr->var->class->getAttribute('resolvedName'))
+            && $this->isFacadeClass($expr->var->class->getAttribute('resolvedName'), Schema::class, 'Schema')
         ) {
             return $expr;
         }
@@ -947,15 +1024,16 @@ final class SchemaAggregator
     }
 
     /**
-     * Check if a class name refers to the Schema facade or a subclass of it.
-     * Handles the FQCN, the root-namespace 'Schema' alias, and custom subclasses.
+     * Check if a class name refers to the given facade, its root-namespace alias, or a custom subclass.
      *
      * Note: is_a() with allow_string=true may trigger autoloading (a side effect),
      * so this method is not truly pure, but the side effect is harmless.
      * Psalm requires @psalm-pure here (MissingPureAnnotation) for security analysis.
+     *
+     * @param class-string $facade
      * @psalm-pure
      */
-    private function isSchemaClass(mixed $class_name): bool
+    private function isFacadeClass(mixed $class_name, string $facade, string $root_alias): bool
     {
         if (!\is_string($class_name)) {
             return false;
@@ -963,15 +1041,15 @@ final class SchemaAggregator
 
         // Fast-path for the two common cases: avoids is_a() autoloading overhead
         // for 99% of migrations that use the standard facade or root-namespace alias.
-        if ($class_name === Schema::class || $class_name === 'Schema') {
+        if ($class_name === $facade || $class_name === $root_alias) {
             return true;
         }
 
-        // Fall back to subclass check for custom Schema facades.
+        // Fall back to subclass check for custom facades.
         // is_a() with allow_string=true may trigger autoloading, which is acceptable
         // here — same pattern as resolveForeignKeyColumn() using reflection.
         try {
-            return \is_a($class_name, Schema::class, true);
+            return \is_a($class_name, $facade, true);
         } catch (\Exception) {
             // is_a() with allow_string=true may trigger autoloading; broken autoloaders
             // can throw RuntimeException or similar. \Error types (fatal autoloading failures)
