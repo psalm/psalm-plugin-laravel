@@ -44,4 +44,4 @@ final class CollectionEmptinessGenericTemplateTest
 --EXPECTF--
 InvalidNullableReturnType on line %d: The declared return type 'int' for CollectionEmptinessGenericTemplateTest::nullableBoundStaysNullable is not nullable, but 'int|null' contains null
 NullableReturnStatement on line %d: The declared return type 'int' for CollectionEmptinessGenericTemplateTest::nullableBoundStaysNullable is not nullable, but the function returns 'int|null'
-PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $items->first() of type T|null
+PossiblyNullPropertyFetch on line %d: Cannot get property on possibly null variable $items->first() of type (T:fn-%s as GenericEmptinessBadge|null)|null

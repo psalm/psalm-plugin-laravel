@@ -45,6 +45,9 @@
     </taintAnalysis>
     <issueHandlers>
         <MissingPureAnnotation errorLevel="info" />
+        <!-- On PHP 8.5 Psalm asks for `#[\Override]` on an overriding property (`$signature`, `$model`), but the
+             same fixtures run on PHP 8.2, where Psalm reports that attribute as InvalidAttribute. -->
+        <MissingOverrideAttribute errorLevel="suppress" />
         <!-- NoEnvOutsideConfig is a linting rule, not a type issue. psalm-tester runs
              Psalm on temp files in sys_get_temp_dir(), which don't match the /tests/
              pattern that NoEnvOutsideConfigHandler uses to auto-exclude test code, so

@@ -72,9 +72,9 @@ final class HigherOrderProxyPropertyFetchNegativeTest
     public function reshapedTemplateSubclasses(PropFetchNegReversed $reversed, PropFetchNegExtra $extra): void
     {
         $_reversed = $reversed->map->n;
-        /** @psalm-check-type-exact $_reversed = Enumerable<array-key, mixed> */
+        /** @psalm-check-type-exact $_reversed = Enumerable<array-key, int> */
         $_extra = $extra->map->n;
-        /** @psalm-check-type-exact $_extra = Enumerable<array-key, mixed> */
+        /** @psalm-check-type-exact $_extra = Enumerable<array-key, int> */
     }
 
     public function ownMapProperty(PropFetchNegOwnMap $own): void

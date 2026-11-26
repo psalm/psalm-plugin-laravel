@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Psalm\Codebase;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\FactoryCount;
+use Psalm\LaravelPlugin\Internal\GenericReceiver;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TNamedObject;
@@ -106,7 +107,7 @@ final class FactoryCountTypeProvider implements MethodReturnTypeProviderInterfac
             return null;
         }
 
-        return FactoryCount::baseFactory($modelType, $countType);
+        return FactoryCount::baseFactory($modelType, $countType, GenericReceiver::of($event, Factory::class));
     }
 
     /**

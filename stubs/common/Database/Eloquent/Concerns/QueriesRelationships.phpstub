@@ -16,6 +16,8 @@ trait QueriesRelationships
      * @param  string  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function withWhereHas($relation, ?Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -28,6 +30,8 @@ trait QueriesRelationships
      * @return $this
      *
      * @throws \Illuminate\Database\Eloquent\RelationNotFoundException
+     *
+     * @psalm-taint-sink callable $relationshipName
      */
     public function whereBelongsTo($related, $relationshipName = null, $boolean = 'and') {}
 
@@ -39,6 +43,8 @@ trait QueriesRelationships
      * @return $this
      *
      * @throws \RuntimeException
+     *
+     * @psalm-taint-sink callable $relationshipName
      */
     public function orWhereBelongsTo($related, $relationshipName = null) {}
 
@@ -49,6 +55,8 @@ trait QueriesRelationships
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @param  string|null  $function
      * @return $this
+     *
+     * @psalm-taint-sink callable $relations
      */
     public function withAggregate($relations, $column, $function = null) {}
 
@@ -57,6 +65,8 @@ trait QueriesRelationships
      *
      * @param  mixed  $relations
      * @return $this
+     *
+     * @psalm-taint-sink callable $relations
      *
      * @psalm-variadic
      */
@@ -68,6 +78,8 @@ trait QueriesRelationships
      * @param  string|array  $relation
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function withMax($relation, $column) {}
 
@@ -77,6 +89,8 @@ trait QueriesRelationships
      * @param  string|array  $relation
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function withMin($relation, $column) {}
 
@@ -86,6 +100,8 @@ trait QueriesRelationships
      * @param  string|array  $relation
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function withSum($relation, $column) {}
 
@@ -95,6 +111,8 @@ trait QueriesRelationships
      * @param  string|array  $relation
      * @param  \Illuminate\Contracts\Database\Query\Expression|string  $column
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function withAvg($relation, $column) {}
 
@@ -103,6 +121,165 @@ trait QueriesRelationships
      *
      * @param  string|array  $relation
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function withExists($relation) {}
+
+    /**
+     * Add a basic where clause to a relationship query and eager-load the relationship with the same conditions.
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation|string  $relation
+     * @param  \Closure|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function withWhereRelation($relation, $column, $operator = null, $value = null) {}
+
+    /**
+     * Add a basic count / exists condition to a relationship query.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function whereDoesntHaveRelation($relation, $column, $operator = null, $value = null) {}
+
+    /**
+     * Add an "or where" clause to a relationship query.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function orWhereDoesntHaveRelation($relation, $column, $operator = null, $value = null) {}
+
+    /**
+     * Add a polymorphic relationship condition to the query with a where clause.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel>|string  $relation
+     * @param  string|array<int, string>  $types
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function whereMorphRelation($relation, $types, $column, $operator = null, $value = null) {}
+
+    /**
+     * Add a polymorphic relationship condition to the query with an "or where" clause.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel>|string  $relation
+     * @param  string|array<int, string>  $types
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function orWhereMorphRelation($relation, $types, $column, $operator = null, $value = null) {}
+
+    /**
+     * Add a polymorphic relationship condition to the query with a doesn't have clause.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel>|string  $relation
+     * @param  string|array<int, string>  $types
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function whereMorphDoesntHaveRelation($relation, $types, $column, $operator = null, $value = null) {}
+
+    /**
+     * Add a polymorphic relationship condition to the query with an "or doesn't have" clause.
+     *
+     * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel>|string  $relation
+     * @param  string|array<int, string>  $types
+     * @param  (\Closure(\Illuminate\Database\Eloquent\Builder<TRelatedModel>): mixed)|string|array|\Illuminate\Contracts\Database\Query\Expression  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function orWhereMorphDoesntHaveRelation($relation, $types, $column, $operator = null, $value = null) {}
+
+    /**
+     * Add a morph-to relationship condition to the query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Model|iterable<int, \Illuminate\Database\Eloquent\Model>|string|null  $model
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @throws \InvalidArgumentException
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function whereMorphedTo($relation, $model, $boolean = 'and') {}
+
+    /**
+     * Add a not morph-to relationship condition to the query.
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Model|iterable<int, \Illuminate\Database\Eloquent\Model>|string  $model
+     * @param  string  $boolean
+     * @return $this
+     *
+     * @throws \InvalidArgumentException
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function whereNotMorphedTo($relation, $model, $boolean = 'and') {}
+
+    /**
+     * Add a morph-to relationship condition to the query with an "or where" clause.
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Model|iterable<int, \Illuminate\Database\Eloquent\Model>|string|null  $model
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function orWhereMorphedTo($relation, $model) {}
+
+    /**
+     * Add a not morph-to relationship condition to the query with an "or where" clause.
+     *
+     * @param  \Illuminate\Database\Eloquent\Relations\MorphTo|string  $relation
+     * @param  \Illuminate\Database\Eloquent\Model|iterable<int, \Illuminate\Database\Eloquent\Model>|string  $model
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relation
+     */
+    public function orWhereNotMorphedTo($relation, $model) {}
 }

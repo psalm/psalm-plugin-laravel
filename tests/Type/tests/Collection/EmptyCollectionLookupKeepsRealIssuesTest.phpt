@@ -70,7 +70,6 @@ function invalid_arguments_on_empty_receivers(bool $flag): bool
     return collect()->get(new \stdClass()) === null
         && collect()->has(new \stdClass())
         && $customers->contains(new \stdClass())
-        // The displayed type `'it's'|stdClass` does not round-trip through Psalm's type parser.
         && collect()->has($flag ? "it's" : new \stdClass());
 }
 
@@ -102,6 +101,6 @@ InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Collectio
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::get expects null, but stdClass provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::has expects array<array-key, never>, but stdClass provided
 InvalidArgument on line %d: Argument 1 of Illuminate\Database\Eloquent\Collection::contains expects callable[impure](never, never):bool|int|string, but stdClass provided
-InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::has expects array<array-key, never>, but 'it's'|stdClass provided
+InvalidArgument on line %d: Argument 1 of Illuminate\Support\Collection::has expects array<array-key, never>, but 'it\'s'|stdClass provided
 InvalidArgument on line %d: Argument 2 of Illuminate\Support\Collection::containsStrict expects null, but 1 provided
 InvalidArgument on line %d: Argument 1 of KeptLookupBag::get expects never, but 'name' provided

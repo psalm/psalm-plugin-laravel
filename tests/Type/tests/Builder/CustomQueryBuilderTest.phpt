@@ -303,19 +303,18 @@ function test_soft_deletes_chain_to_get(): void
 
 /**
  * restoreOrCreate returns the model type (static), not the builder — must NOT be remapped.
- * The &static intersection comes from Psalm's native @method static resolution.
  */
 function test_soft_deletes_restore_or_create_returns_model(): void
 {
     $_result = WorkOrder::restoreOrCreate(['slug' => 'test']);
-    /** @psalm-check-type-exact $_result = WorkOrder&static */
+    /** @psalm-check-type-exact $_result = WorkOrder */
 }
 
 /** createOrRestore also returns the model type, not the builder. */
 function test_soft_deletes_create_or_restore_returns_model(): void
 {
     $_result = WorkOrder::createOrRestore(['slug' => 'test']);
-    /** @psalm-check-type-exact $_result = WorkOrder&static */
+    /** @psalm-check-type-exact $_result = WorkOrder */
 }
 
 // -----------------------------------------------------------------------

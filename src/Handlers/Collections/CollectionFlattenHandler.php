@@ -122,7 +122,7 @@ final class CollectionFlattenHandler implements MethodReturnTypeProviderInterfac
         }
 
         // array<K, V> — extract V (index 1)
-        if ($atomic instanceof TArray && \count($atomic->type_params) >= 2) {
+        if ($atomic instanceof TArray) {
             return $atomic->type_params[1];
         }
 

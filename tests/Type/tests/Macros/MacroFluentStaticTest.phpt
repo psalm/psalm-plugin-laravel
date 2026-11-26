@@ -16,7 +16,8 @@ use Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureChild;
  * argument; if the pseudo-method's `return_type` preserves the literal `static`
  * token (a `TNamedObject('static')`), the expander rewrites it to the caller.
  * Psalm renders the result as `Class&static` to signal that further chaining
- * keeps the late-bound type alive.
+ * keeps the late-bound type alive, and as `Class` when the caller is a final
+ * class or a class name in a static call.
  *
  * Plugin invariant: `MacroRegistry::reflectionTypeToUnion()` MUST NOT flatten
  * `static` to a concrete FQCN for Closure callables. Macroable rebinds the
@@ -30,7 +31,7 @@ use Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureChild;
 function test_fluent_macro_narrows_on_subclass_instance(): MacroFixtureChild
 {
     $_ = (new MacroFixtureChild())->fluentTest();
-    /** @psalm-check-type-exact $_ = Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureChild&static */
+    /** @psalm-check-type-exact $_ = Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureChild */
     return $_;
 }
 
@@ -43,7 +44,7 @@ function test_fluent_macro_returns_declaring_class_on_root_instance(): MacroFixt
 
 function test_fluent_macro_chains_preserve_caller_type(): string
 {
-    // After fluentTest() narrows to MacroFixtureChild&static, the next call in
+    // After fluentTest() narrows to MacroFixtureChild, the next call in
     // the chain must still see the macros inherited from the declaring class.
     $_ = (new MacroFixtureChild())->fluentTest()->shoutTest();
     /** @psalm-check-type-exact $_ = string */
@@ -77,7 +78,7 @@ final class ProbeFluentMacroUser extends MacroFixtureBag
     public function callFluent(): static
     {
         $_ = $this->fluentTest();
-        /** @psalm-check-type-exact $_ = ProbeFluentMacroUser&static */
+        /** @psalm-check-type-exact $_ = ProbeFluentMacroUser */
         return $_;
     }
 }
@@ -89,7 +90,7 @@ function test_fluent_macro_static_call_narrows_on_subclass(): MacroFixtureChild
     // `AtomicStaticCallAnalyzer`, which threads the receiver class through
     // `TypeExpander` the same way the instance path does.
     $_ = MacroFixtureChild::fluentTest();
-    /** @psalm-check-type-exact $_ = Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureChild&static */
+    /** @psalm-check-type-exact $_ = Tests\Psalm\LaravelPlugin\Type\Fixtures\MacroFixtureChild */
     return $_;
 }
 ?>

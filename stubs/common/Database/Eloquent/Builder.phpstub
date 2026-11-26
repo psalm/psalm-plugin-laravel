@@ -141,6 +141,8 @@ class Builder implements BuilderContract
      * @param  string  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function whereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -151,6 +153,8 @@ class Builder implements BuilderContract
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function whereRelation($relation, $column, $operator = null, $value = null) {}
 
@@ -168,6 +172,8 @@ class Builder implements BuilderContract
      * @param  mixed  $operator
      * @param  mixed  $value
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orWhereRelation($relation, $column, $operator = null, $value = null) {}
 
@@ -178,6 +184,8 @@ class Builder implements BuilderContract
      * @param  string  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orWhereHas($relation, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -191,6 +199,8 @@ class Builder implements BuilderContract
      * @param  string  $boolean
      * @param  \Closure|null  $callback
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function hasMorph($relation, $types, $operator = '>=', $count = 1, $boolean = 'and', \Closure $callback = null) {}
 
@@ -202,6 +212,8 @@ class Builder implements BuilderContract
      * @param  string  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orHasMorph($relation, $types, $operator = '>=', $count = 1) {}
 
@@ -213,6 +225,8 @@ class Builder implements BuilderContract
      * @param  string  $boolean
      * @param  \Closure|null  $callback
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function doesntHaveMorph($relation, $types, $boolean = 'and', \Closure $callback = null) {}
 
@@ -222,6 +236,8 @@ class Builder implements BuilderContract
      * @param  \Illuminate\Database\Eloquent\Relations\MorphTo<TRelatedModel, TChildModel>|string  $relation
      * @param  string|array<string>  $types
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orDoesntHaveMorph($relation, $types) {}
 
@@ -234,6 +250,8 @@ class Builder implements BuilderContract
      * @param  string  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function whereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -246,6 +264,8 @@ class Builder implements BuilderContract
      * @param  string  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orWhereHasMorph($relation, $types, \Closure $callback = null, $operator = '>=', $count = 1) {}
 
@@ -256,6 +276,8 @@ class Builder implements BuilderContract
      * @param  string|array<string>  $types
      * @param  \Closure|null  $callback
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function whereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
 
@@ -266,6 +288,8 @@ class Builder implements BuilderContract
      * @param  string|array<string>  $types
      * @param  \Closure|null  $callback
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orWhereDoesntHaveMorph($relation, $types, \Closure $callback = null) {}
 
@@ -280,6 +304,8 @@ class Builder implements BuilderContract
      * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  \Closure|null  $callback
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orWhereDoesntHave($relation, \Closure $callback = null) {}
 
@@ -288,6 +314,8 @@ class Builder implements BuilderContract
      * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @param  \Closure|null  $callback
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function whereDoesntHave($relation, \Closure $callback = null) {}
 
@@ -472,6 +500,8 @@ class Builder implements BuilderContract
      * @return $this
      *
      * @throws \RuntimeException
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function has($relation, $operator = '>=', $count = 1, $boolean = 'and', \Closure $callback = null) {}
 
@@ -481,6 +511,8 @@ class Builder implements BuilderContract
      * @param  string  $operator
      * @param  \Illuminate\Contracts\Database\Query\Expression|int  $count
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orHas($relation, $operator = '>=', $count = 1) {}
 
@@ -490,6 +522,8 @@ class Builder implements BuilderContract
      * @param  string  $boolean
      * @param  \Closure|null  $callback
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function doesntHave($relation, $boolean = 'and', \Closure $callback = null) {}
 
@@ -497,6 +531,8 @@ class Builder implements BuilderContract
      * @template TRelatedModel of \Illuminate\Database\Eloquent\Model
      * @param  \Illuminate\Database\Eloquent\Relations\Relation<TRelatedModel>|string  $relation
      * @return $this
+     *
+     * @psalm-taint-sink callable $relation
      */
     public function orDoesntHave($relation) {}
 
@@ -509,6 +545,8 @@ class Builder implements BuilderContract
     /**
      * @param  string  $name
      * @return \Illuminate\Database\Eloquent\Relations\Relation
+     *
+     * @psalm-taint-sink callable $name
      */
     public function getRelation($name) {}
 
@@ -673,13 +711,33 @@ class Builder implements BuilderContract
     public function applyScopes() {}
 
     /**
+     * Every relation name is called as a method on a new model before Laravel checks that it
+     * returns a Relation. A name that is not a relation reaches `Model::__call()` and runs the
+     * Builder method of that name, so `with('truncate')` empties the table. Hence the `callable`
+     * sink on every relation-name parameter of the eager-loading and relationship-query APIs.
+     * `$callback` is a second relation name when it is a string (`with('posts', 'tags')`). Further
+     * positional names (and the second one on the other `@psalm-variadic` relation-name methods,
+     * such as `Model::load()`) have no parameter to carry a sink and are not checked
+     * (TaintedCallableRelationNameVariadicKnownLimitation.phpt).
+     *
      * @param  mixed  $relations
      * @param  \Closure|string|null  $callback
      * @return $this
      *
+     * @psalm-taint-sink callable $relations
+     * @psalm-taint-sink callable $callback
+     *
      * @psalm-variadic
      */
     public function with($relations, $callback = null) {}
+
+    /**
+     * @param  array<array-key, array|(\Closure(\Illuminate\Database\Eloquent\Relations\Relation): mixed)|string>|string  $relations
+     * @return $this
+     *
+     * @psalm-taint-sink callable $relations
+     */
+    public function withOnly($relations) {}
 
     /**
      * @param  mixed  $relations
@@ -709,6 +767,8 @@ class Builder implements BuilderContract
     /**
      * @param array $eagerLoad
      * @return $this
+     *
+     * @psalm-taint-sink callable $eagerLoad
      */
     public function setEagerLoads(array $eagerLoad) {}
 

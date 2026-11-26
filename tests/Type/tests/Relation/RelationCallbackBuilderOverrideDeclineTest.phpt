@@ -136,7 +136,10 @@ function test_native_base_builder_with_docblock_builder_declines(): void
     NativeBaseDocblockOwner::query()->whereHas('children', fn(SpecialBuilder $q): SpecialBuilder => $q->special());
 }
 
-/** A nullable native `: ?Builder` is still the base builder, so the callback stays typed. */
+/**
+ * A nullable native `: ?Builder` is still the base builder, so the callback stays typed. Psalm takes the parent's
+ * non-null `@return Builder<*>` as the declared type (since 7.17), hence the two nullable-return issues.
+ */
 final class NullableBaseChild extends Model
 {
     /** @param \Illuminate\Database\Query\Builder $query */
@@ -342,3 +345,5 @@ function test_plain_related_model_stays_typed(): void
 }
 ?>
 --EXPECTF--
+InvalidNullableReturnType on line %d: The declared return type 'Illuminate\Database\Eloquent\Builder<NullableBaseChild>' for NullableBaseChild::newEloquentBuilder is not nullable, but 'null' contains null
+NullableReturnStatement on line %d: The declared return type 'Illuminate\Database\Eloquent\Builder<NullableBaseChild>' for NullableBaseChild::newEloquentBuilder is not nullable, but the function returns 'null'

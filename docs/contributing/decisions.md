@@ -417,7 +417,7 @@ Laravel casts group/key values to array keys at runtime, but the stub's `TGroupK
 
 **Accepted limitations:**
 - A fetch that is the direct operand of isset(), empty() or unset() keeps the item-level type. The proxy has no `__isset()`, so PHP's property check there finds nothing (isset() is false, empty() true); a never-null collection type would report "always isset". The scope entry Psalm writes there also keeps a later plain read of the same fetch item-level, and isset() on a fetch already read reports "always isset". Pinned by `HigherOrderProxyPropertyFetchIssetKnownLimitation`. Everywhere else PHP reads the fetch through `__get`, so it is wrapped: the left side of `??` (`$c->map->x ?? $d` is the collection) and a fetch behind an array dim, a property or a method call inside isset()/empty()/unset()/`??`.
-- The wrap is only as precise as Psalm's item-level type: a union of collections gets the combined item type in every branch, and a generic subclass (whose proxy comes from the vendor trait annotation) wraps `mixed`. Pinned by `HigherOrderProxyPropertyFetchItemTypeKnownLimitation`.
+- The wrap is only as precise as Psalm's item-level type: a union of collections gets the combined item type in every branch. Pinned by `HigherOrderProxyPropertyFetchItemTypeKnownLimitation`.
 
 **Rejected (probed dead ends):**
 - **`PropertyTypeProvider` on the proxy.** `PropertyTypeProviderEvent` has neither the fetch node nor the receiver's type params, so it cannot tell `map` from `filter` or read TKey.
@@ -561,6 +561,22 @@ Anything else (`count()`, `forEachSequence()`, `times()`, `new static`, `parent:
 **Why:** a pivot refined with its `withPivot()` columns (`Pivot&object{role: string}`) must still satisfy every existing `BelongsToMany<..., Pivot, 'pivot'>` return and parameter. TPivotModel has no input position: callbacks receive it (covariant) and `$using` is a `class-string<TPivotModel>`.
 
 **Rejected:** refining the slot while keeping it invariant. Every existing plain `Pivot` declaration on a `withPivot()` body then fails with `InvalidReturnStatement` / `InvalidArgument`.
+
+### A `*` type argument stays a `*` where a handler hands the argument through (#2380)
+
+**Decision:** every handler that answers a generic object over its receiver's type arguments builds it with `Internal\GenericReceiver::rebuild()` (relation forwarding, `filter()` / `whereNotNull()` narrowing, higher-order collection proxies, direct `keyBy()` / `groupBy()`, the factory count). The answer holds a `*` exactly in the slots handed the receiver's own Union instance; a slot the handler computes is a known type. Receivers without a `*` get the object that was always built.
+
+**Why:** Psalm keeps a `*` as a marker on the atomic, with no public getter or setter; `type_params` holds the bound. `new TGenericObject($class, $receiver->type_params)` therefore turns "unknown" into "exactly the bound" and accepts writes the receiver rejects (`each` returns the receiver itself).
+
+**Rejected:**
+- An equality gate (`setTypeParams()` on the receiver atomic, as #2378 first did). It keeps the marker of a recomputed slot that happens to equal the bound: `Collection<int, *>->map->foo()` (a proxied `mixed`) stayed `Collection<int, *>`, `Collection<*, X>->keyBy->getKey()` (an `array-key` key) stayed `Collection<*, X>`. It also picked the first atomic of a same-class union and made every answer a docblock type.
+- Psalm's outermost form for `partition`, `Collection<int<0, 1>, *>` (its rule for the declared `static<int<0, 1>, static<TKey, TValue>>`). Psalm must put the `*` on the outermost invariant argument because it cannot know the outer object is new. Laravel builds it (`newInstance([newInstance($passed), newInstance($failed)])`), so `Collection<int, Collection<*, X>>` is sound: both the result and a bucket reject the `array-key` typed parameter. A bucket of the outermost form reads `mixed`, and a plugin cannot create a marker anyway. The inner groups of `groupBy` follow the same rule.
+
+**Boundaries:**
+- A marker cannot move to another class or arity: the proxy `map` of an `Eloquent\Collection` answers the base `Collection` (`toBase()`), built new as before. A proxy answer that recomputes TKey or TValue keeps markers only on a class whose layout is proven `<TKey, TValue>`: identity cannot tell a reordered subclass's slots apart.
+- The answer is not a docblock type: without a surviving marker the newly built object is answered, so `RedundantCondition` on a forwarded relation stays the v4.23.1 kind (`RebuiltReceiverIssueKindTest.phpt`).
+- Template-bound receivers (`C of Collection<*, X>`) still lose the `*`: the node type holds the template, not the class.
+- Not a handler matter: `getQuery()` of a `HasMany<*, X>` is `Builder<Model>`. Psalm reads a `*` bound to a covariant argument as the bound, and the stub declares `Builder::TModel` covariant. The cost is the hole every upcast `Builder<Customer>` already has: `mergeConstraintsFrom(Builder<TModel>)` accepts any model's builder, where `Builder<*>` would reject it. Closing it needs an invariant `TModel`, a separate variance decision (`Relation/StarProjectionCovariantBuilderTest.phpt`).
 
 ## Facades and Stub Strategy
 
