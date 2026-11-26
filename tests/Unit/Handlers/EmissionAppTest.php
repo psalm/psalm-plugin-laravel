@@ -84,6 +84,51 @@ final class EmissionAppTest extends TestCase
     ];
 
     /**
+     * UnknownModelAttribute (#2339), builder writes naming columns: flagged key => ["Receiver::method" the
+     * message must start with, short model name, the verb it must carry: "is assigned" for row data,
+     * "references" for column names].
+     *
+     * @var array<string, array{string, string, string}>
+     */
+    private const EXPECTED_COLUMN_WRITE_FINDINGS = [
+        'typo_up_rows' => ['PostBuilder::upsert', 'Post', 'is assigned'],
+        'typo_up_row' => ['PostBuilder::upsert', 'Post', 'is assigned'],
+        'typo_up_unique_string' => ['PostBuilder::upsert', 'Post', 'references'],
+        'typo_up_unique_list' => ['PostBuilder::upsert', 'Post', 'references'],
+        'typo_up_update_list' => ['PostBuilder::upsert', 'Post', 'references'],
+        'typo_up_update_map' => ['PostBuilder::upsert', 'Post', 'references'],
+        'typo_up_named_update' => ['PostBuilder::upsert', 'Post', 'references'],
+        'typo_up_named_values' => ['PostBuilder::upsert', 'Post', 'is assigned'],
+        'typo_wa_map' => ['PostBuilder::withAttributes', 'Post', 'references'],
+        'typo_wa_string' => ['PostBuilder::withAttributes', 'Post', 'references'],
+        'typo_wa_named' => ['PostBuilder::withAttributes', 'Post', 'references'],
+        'typo_fai_rows' => ['PostBuilder::fillAndInsert', 'Post', 'is assigned'],
+        'typo_fai_row' => ['PostBuilder::fillAndInsert', 'Post', 'is assigned'],
+        'typo_faio' => ['PostBuilder::fillAndInsertOrIgnore', 'Post', 'is assigned'],
+        'typo_faig' => ['PostBuilder::fillAndInsertGetId', 'Post', 'is assigned'],
+        'typo_ffi' => ['PostBuilder::fillForInsert', 'Post', 'is assigned'],
+        'typo_inc_columns' => ['PostBuilder::incrementEach', 'Post', 'is assigned'],
+        'typo_inc_extra' => ['PostBuilder::incrementEach', 'Post', 'is assigned'],
+        'typo_dec_columns' => ['PostBuilder::decrementEach', 'Post', 'is assigned'],
+        'typo_dec_extra' => ['PostBuilder::decrementEach', 'Post', 'is assigned'],
+        'typo_static_upsert' => ['Post::upsert', 'Post', 'is assigned'],
+        'typo_static_wa' => ['Post::withAttributes', 'Post', 'references'],
+        'typo_static_fai' => ['Post::fillAndInsert', 'Post', 'is assigned'],
+        'typo_static_inc' => ['Post::incrementEach', 'Post', 'is assigned'],
+        'typo_model_inc' => ['Post::incrementEach', 'Post', 'is assigned'],
+        'typo_model_inc_extra' => ['Post::incrementEach', 'Post', 'is assigned'],
+        'typo_model_dec' => ['Post::decrementEach', 'Post', 'is assigned'],
+        'typo_model_upsert' => ['Post::upsert', 'Post', 'is assigned'],
+        'typo_rel_upsert' => ['HasMany::upsert', 'Post', 'is assigned'],
+        'typo_rel_wa' => ['HasMany::withAttributes', 'Post', 'references'],
+        'typo_rel_fai' => ['HasMany::fillAndInsert', 'Post', 'is assigned'],
+        'typo_rel_inc' => ['HasMany::incrementEach', 'Post', 'is assigned'],
+        'typo_btm_upsert' => ['BelongsToMany::upsert', 'Tag', 'is assigned'],
+        'typo_btm_wa' => ['BelongsToMany::withAttributes', 'Tag', 'references'],
+        'typo_btm_fai' => ['BelongsToMany::fillAndInsert', 'Tag', 'is assigned'],
+    ];
+
+    /**
      * DynamicWhereSchemaColumns: issue types a failed dynamic `where{Column}` resolution surfaces as.
      */
     private const DYNAMIC_WHERE_ISSUES = [
@@ -151,7 +196,18 @@ final class EmissionAppTest extends TestCase
         $this->assertStringNotContainsString("'custom_fields'", $joined, 'A model with a trait-widened guard must not be flagged.');
         $this->assertStringNotContainsString("'silent_", $joined, 'A declined receiver/method must not be flagged.');
 
-        $this->assertCount(3 + \count(self::EXPECTED_CREATION_PATH_FINDINGS), $findings, "Unexpected UnknownModelAttribute finding count, got:\n{$joined}");
+        // #2339: builder writes that name columns (`upsert()`, `withAttributes()`, `fillAndInsert*()`,
+        // `incrementEach()`), through builder, relation and Model receivers.
+        foreach (self::EXPECTED_COLUMN_WRITE_FINDINGS as $key => [$prefix, $model, $verb]) {
+            $this->assertMatchesRegularExpression(
+                '/^' . \preg_quote($prefix, '/') . '\(\) ' . $verb . " an unknown attribute '" . \preg_quote($key, '/') . '\'\..* of ' . $model . ' — check for a typo\.$/m',
+                $joined,
+                "'{$key}' must be flagged as {$prefix}() against {$model}.",
+            );
+        }
+
+        $expectedCount = 3 + \count(self::EXPECTED_CREATION_PATH_FINDINGS) + \count(self::EXPECTED_COLUMN_WRITE_FINDINGS);
+        $this->assertCount($expectedCount, $findings, "Unexpected UnknownModelAttribute finding count, got:\n{$joined}");
         // Experimental mode enforces the rule, so every finding is an error rather than the default info.
         $this->assertSame(\array_fill(0, \count($findings), 'error'), \array_column($findings, 'severity'));
     }

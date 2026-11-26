@@ -6,7 +6,7 @@ nav_order: 11
 
 # UnknownModelAttribute
 
-Emitted when an array passed to an Eloquent mass-assignment method, or to a creation method on a query builder or relation, names a key that is not a known attribute of the model being filled. This catches typos such as `User::create(['nmae' => $name])` and `$user->roles()->create(['nmae' => $name])`.
+Emitted when an array passed to an Eloquent mass-assignment method, a creation method on a query builder or relation, or a column-naming write such as `upsert()` or `incrementEach()`, names a key that is not a known attribute of the model. This catches typos such as `User::create(['nmae' => $name])`, `$user->roles()->create(['nmae' => $name])`, and `User::upsert($rows, ['nmae'])`.
 
 ## Why this is a problem
 
@@ -34,6 +34,18 @@ Creation calls on a builder or relation are checked against the model they fill,
 | `BelongsToMany`, `MorphToMany` | `create()`, `createQuietly()`, `createMany()`, `createManyQuietly()` | `TRelatedModel` |
 
 For the `*Many()` methods every literal array in the literal list is checked. For `BelongsToMany` only the first argument is checked: the second (`$joining` / `$joinings`) is pivot data, not model attributes. `update()` on a builder or relation is not checked: it is a query-builder write that bypasses `fill()`, so its keys are plain column names.
+
+Builder writes whose keys are raw column names are checked against the same recognized set:
+
+| Method | Checked | Receivers |
+| --- | --- | --- |
+| `upsert($values, $uniqueBy, $update)` | the keys of `$values` (one row or a list of rows), the column names in `$uniqueBy` (a string or a list), and in `$update` (list entries, or the keys of a `column => value` map) | `Builder`, `HasOne`, `HasMany`, `MorphOne`, `MorphMany`, `BelongsToMany`, `MorphToMany`, Model (static and instance) |
+| `withAttributes($attributes, $value)` | the keys of an array, or the column name passed as a string | same |
+| `fillAndInsert()`, `fillAndInsertOrIgnore()`, `fillForInsert()` | the keys of one row or a list of rows (Laravel 12.6 and later) | same |
+| `fillAndInsertGetId()` | the keys of the row | same |
+| `incrementEach($columns, $extra)`, `decrementEach()` | the keys of `$columns` and of `$extra` | `Builder`, `HasOne`, `HasMany`, `MorphOne`, `MorphMany`, Model (static and instance, plus the `*Quietly` twins on Laravel 13.20 and later) |
+
+A relation forwards these calls to the related model's builder, so they are checked against `TRelatedModel`. `incrementEach()` and `decrementEach()` are not checked on `BelongsToMany` and `MorphToMany`: their query joins the pivot table, so a pivot column is a legitimate key. A column name containing a dot (`posts.title`) is a qualified reference and is not checked. Rows are told apart the way Laravel does it: a first entry that is an array (or has no key) makes the argument a list of rows, otherwise it is one row.
 
 Keys are matched case insensitively and ignoring separators, so `fullName`, `full_name`, and `fullname` all resolve to the same attribute. A JSON path key such as `options->theme` is validated by its base column `options`, the column Laravel writes the nested value into.
 
@@ -64,8 +76,9 @@ The rule is on by default and reported at error levels 1 to 4 (like Psalm's `Und
 - **No column schema.** When migrations are disabled, or a model's table is not parsed, the column set is unknown, so the rule skips that model entirely rather than flag valid columns. With the default `columnFallback="migrations"` the columns come from your migration files.
 - **Non-literal arrays.** A variable array, a spread (`[...$attributes]`), or a dynamic key carries no statically known key names, so it is never inspected.
 - **Ambiguous receivers.** A static call on a non-model class, or an instance call whose receiver is not exactly one Eloquent model, is skipped. For a builder or relation, the receiver type must name exactly one concrete model: an unresolved template (`Builder<TModel>` in generic code, `$this` inside a generic custom builder), `Builder<Model>`, a union of different models, a union with `null`, an intersection type, or a custom builder that extends `Builder` without `@extends Builder<Post>` is skipped.
-- **Userland creation overrides.** When a class other than Laravel's own builder/relation classes, in the builder or relation's hierarchy, declares any creation method of that receiver kind (for example a custom builder overriding `create()`), the rule skips all of them: the override may map keys before delegating, and Laravel's `createQuietly()` / `createManyQuietly()` go through it. The override is detected by the exact framework class that declares the method, not by namespace. The delegated hooks count as well: a builder overriding `newModelInstance()`, or a `HasOne` / `HasMany` / `MorphOne` / `MorphMany` subclass overriding `setForeignAttributesForCreate()`.
-- **Unprovable record lists.** A `*Many()` list containing a spread or an explicit outer key is skipped entirely, because records may be merged or overwritten.
+- **Userland creation overrides.** When a class other than Laravel's own builder/relation classes, in the builder or relation's hierarchy, declares any checked method of that receiver kind (for example a custom builder overriding `create()` or `upsert()`), the rule skips all of them: the override may map keys before delegating, and Laravel's `createQuietly()` / `createManyQuietly()` go through it. The override is detected by the exact framework class that declares the method, not by namespace. The delegated hooks count as well: a builder overriding `newModelInstance()`, or a `HasOne` / `HasMany` / `MorphOne` / `MorphMany` subclass overriding `setForeignAttributesForCreate()`.
+- **Unprovable record lists.** A `*Many()` list, or the list of rows given to `upsert()` or `fillAndInsert()`, containing a spread or an explicit outer key is skipped entirely, because records may be merged or overwritten.
+- **Models declaring the method.** A model that declares its own `upsert()`, `withAttributes()`, `fillAndInsert()`, or `incrementEach()` family method (which then shadows the builder call) is skipped for that method.
 - **Models that customize mass assignment.** When a model's hierarchy (parent classes and traits, such as a custom-fields package trait) redeclares `fill()`, `forceFill()`, `newInstance()`, `isFillable()`, or `fillableFromArray()` outside Laravel's `Model` / `GuardsAttributes`, the model can accept keys that are no column, so it is skipped on every path: static, instance, builder, and relation calls.
 - **Migration files.** A mass-assignment call inside a migration file is skipped (a file counts as a migration when its name carries the migrator's `YYYY_MM_DD_HHMMSS_` prefix or it sits in a `migrations` directory). The plugin replays every migration into one final schema, so a column a later migration drops is absent from it, and a migration that legitimately wrote that column when it ran would be wrongly flagged against the final state.
 
