@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795552054131,
+  "lastUpdate": 1795706540321,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -20015,6 +20015,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1241,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "53eb3775d12de8ebde3581d03c80af67c4885664",
+          "message": "Adapt to Psalm 7.17-7.21 (#2392)\n\n* build(rector): keep the no-op `bootstrap()` of the anonymous HandleExceptions stand-in\n\n- Rector 2.9 `RemoveEmptyClassMethodRector` removes empty public methods of anonymous classes;\n  the style auto-fix workflow committed that, and Laravel boot then fails with\n  `Call to undefined method class@anonymous::bootstrap()`.\n\n* fix: keep the pivot shape on `BelongsToMany::using()` under Psalm 7.19+\n\n- The stub's `@return static<...>` re-declaration keeps Laravel's `returns_this`, and since\n  vimeo/psalm#14639 a `returns_this` call returns the `@phpstan-this-out` type, dropping both the\n  stub's return type and the provider's pivot shape. Clear the flag after population.\n- Upstream: vimeo/psalm#15075.\n\n* fix: adapt to Psalm 7.17-7.21\n\n- Require `ext-tokenizer` and `ext-libxml` (Psalm 7.17 `MissingExtensionRequirement`); the type-test\n  fixture `composer.json` requires `ext-pdo`.\n- Raise the Psalm floor to 7.18: template-bound `keyBy()`/`groupBy()` receivers now decline to the\n  stub's `static<...>`, which keeps its arguments since vimeo/psalm#14579 (closes the #13997 todo).\n- Drop self-analysis code Psalm 7.19+ proves redundant (auto-enabled Symfony plugin, always-entered loop).\n- Add `#[\\Override]` to overriding properties in phpt fixtures (PHP 8.5 `MissingOverrideAttribute`);\n  suppress it in the Blade unit fixture app, which PHP 8.3/8.4 load and reject the attribute on.\n- Update phpt expectations for Psalm's improved inference and changed issue names/messages.\n\n* test: suppress `MissingOverrideAttribute` in type tests instead of tagging properties\n\n- `#[\\Override]` on a property is reported as `InvalidAttribute` when Psalm runs on PHP 8.2,\n  so no fixture satisfies both the PHP 8.2 and 8.5 legs.\n\n* Retarget `@todo-by` tags whose upstream items closed (#2391)\n\n* chore: retarget `@todo-by` tags whose upstream items closed\n\n- `BuilderFluentReturnHandler`: vimeo/psalm#14337 (Psalm 7.17.0) exempts only verified\n  `@return $this` methods; delegating `: self`/`: static`/`@return static` builder methods\n  are still reported, so the handler stays. Drop the closed todo, document the split.\n- `Enumerable::when()`/`unless()`: laravel/framework#62566 shipped in v13.44.0 only, not 12.x;\n  keep the overrides and retarget the todo to Laravel 12's security-support end.\n\n* test: let the XFAIL alone track the vimeo/psalm#13769 fix\n\n- The issue closed via vimeo/psalm#15020, which no release carries yet, so the `@todo-by` fired\n  early. The XFAIL already fails once a release fixes the protected-method case.",
+          "timestamp": "2026-11-26T16:15:38+01:00",
+          "tree_id": "bcd94a30046bd7d5fb9ac9b384a31081421edc11",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/53eb3775d12de8ebde3581d03c80af67c4885664"
+        },
+        "date": 1795706538211,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 37.82,
+            "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1174,
             "unit": "MB"
           }
         ]
