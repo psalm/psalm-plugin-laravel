@@ -91,7 +91,7 @@ final class Renderer
     /** The same names as plain `Collection`s, so the two producers differ only by `&static`. */
     public function plain(): View
     {
-        /** @var Collection<int<0, 1>, string> $missing */
+        /** @var Collection<int, string> $missing */
         $missing = new Collection(['a', 'b']);
         /** @var array<int<1, max>, Collection<int, string>> $byRole */
         $byRole = [];
