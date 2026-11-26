@@ -44,6 +44,7 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->findMissingViews);
         $this->assertTrue($config->findUnconfiguredFilesystemDisks);
         $this->assertFalse($config->findUnregisteredRouteNames);
+        $this->assertFalse($config->findArrKeyNotFound);
         $this->assertFalse($config->reportImplicitQueryBuilderCalls);
         $this->assertTrue($config->findSerializedQueuedModels);
         $this->assertFalse($config->experimental);
@@ -148,6 +149,7 @@ final class PluginConfigTest extends TestCase
     public static function experimentalDerivedRules(): iterable
     {
         yield 'findUnregisteredRouteNames' => ['findUnregisteredRouteNames'];
+        yield 'findArrKeyNotFound' => ['findArrKeyNotFound'];
     }
 
     /** @return iterable<string, array{string}> */
@@ -244,6 +246,7 @@ final class PluginConfigTest extends TestCase
             'findUnconfiguredFilesystemDisks=true',
             'findUnregisteredRouteNames=true',
             'findSerializedQueuedModels=true',
+            'findArrKeyNotFound=true',
             'findOctaneIncompatibleBinding=true',
             'findPromptInjection=false',
             'blade=true',
@@ -260,6 +263,7 @@ final class PluginConfigTest extends TestCase
         $this->assertTrue($config->findUnconfiguredFilesystemDisks);
         $this->assertTrue($config->findUnregisteredRouteNames);
         $this->assertTrue($config->findSerializedQueuedModels);
+        $this->assertTrue($config->findArrKeyNotFound);
         $this->assertTrue($config->findOctaneIncompatibleBinding);
         $this->assertFalse($config->findPromptInjection);
         $this->assertTrue($config->bladeEnabled);
@@ -288,18 +292,19 @@ final class PluginConfigTest extends TestCase
             $config->findUnconfiguredFilesystemDisks,
             $config->findSerializedQueuedModels,
             $config->findUnregisteredRouteNames,
+            $config->findArrKeyNotFound,
         ];
         $experimentalXml = new \SimpleXMLElement('<pluginClass><experimental value="true" /></pluginClass>');
 
         // An experimental override reaches rules nothing sets explicitly...
-        $this->assertSame([true, true, true], $derived(PluginConfig::fromXml(null, PluginOverrides::parse('experimental=true'))));
+        $this->assertSame([true, true, true, true], $derived(PluginConfig::fromXml(null, PluginOverrides::parse('experimental=true'))));
         // ...and switches them back off over an experimental XML; rules on by default stay on...
-        $this->assertSame([true, true, false], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('experimental=false'))));
+        $this->assertSame([true, true, false, false], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('experimental=false'))));
 
         // ...but an explicit per-rule value, in the XML or an override, still wins in both directions.
         $explicitXml = new \SimpleXMLElement('<pluginClass><findSerializedQueuedModels value="false" /></pluginClass>');
-        $this->assertSame([true, false, true], $derived(PluginConfig::fromXml($explicitXml, PluginOverrides::parse('experimental=true'))));
-        $this->assertSame([false, false, true], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('findUnconfiguredFilesystemDisks=false findSerializedQueuedModels=false'))));
+        $this->assertSame([true, false, true, true], $derived(PluginConfig::fromXml($explicitXml, PluginOverrides::parse('experimental=true'))));
+        $this->assertSame([false, false, true, true], $derived(PluginConfig::fromXml($experimentalXml, PluginOverrides::parse('findUnconfiguredFilesystemDisks=false findSerializedQueuedModels=false'))));
     }
 
     #[Test]

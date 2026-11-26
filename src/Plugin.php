@@ -268,6 +268,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         Handlers\Producers\ProducerReturnTypeHandler::reset();
         Handlers\Rules\UnregisteredRouteNameHandler::reset();
         Handlers\Rules\NoEnvOutsideConfigHandler::reset();
+        Handlers\Support\ArrGetHandler::reset();
         Handlers\Support\ConditionableCallbackParamsHandler::reset();
         Handlers\Translations\TranslationKeyHandler::reset();
         Handlers\Filesystem\StorageHandler::reset();
@@ -598,6 +599,7 @@ final class Plugin implements PluginEntryPointInterface, PluginFixableIssuesInte
         require_once __DIR__ . '/Handlers/Support/ArrPluckHandler.php';
         $registration->registerHooksFromClass(Handlers\Support\ArrPluckHandler::class);
         require_once __DIR__ . '/Handlers/Support/ArrGetHandler.php';
+        Handlers\Support\ArrGetHandler::init($pluginConfig->findArrKeyNotFound);
         $registration->registerHooksFromClass(Handlers\Support\ArrGetHandler::class);
 
         require_once __DIR__ . '/Handlers/Console/CommandArgumentHandler.php';

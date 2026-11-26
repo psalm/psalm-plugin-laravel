@@ -27,6 +27,7 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [InvalidViewData](InvalidViewData.md): the value passed for a Blade template variable does not satisfy the type that template declares for it (needs Blade analysis)
 - [BladeCompileError](BladeCompileError.md): a template failed to compile and was excluded from analysis (needs Blade analysis)
 - [UnusedViewData](UnusedViewData.md): a `view()` call site passes a data key that neither the rendered template nor anything it includes reads or declares (needs Blade analysis)
+- [ArrKeyNotFound](ArrKeyNotFound.md): `Arr::get()` or `Arr::pull()` looks up a literal key that cannot exist in the sealed array shape it is given (opt-in)
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
 
 Issues marked **fixable** can be fixed automatically with [Psalter](https://psalm.dev/docs/manipulating_code/fixing/) while their rule is active.
