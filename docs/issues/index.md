@@ -24,7 +24,8 @@ The plugin ships advanced Laravel-aware static analysis checks that extend Psalm
 - [UnresolvableAppendedModelAttribute](UnresolvableAppendedModelAttribute.md) — an Eloquent `$appends` entry with no backing accessor or class cast, a runtime `BadMethodCallException` on `toArray()` / `toJson()`
 - [UndefinedModelRelation](UndefinedModelRelation.md) — a relation name passed to `with()`, `load()`, `has()`, `whereHas()`, and similar methods that does not resolve to a relationship on the model
 - [MissingViewData](MissingViewData.md): a Blade template declares a variable (`@var` docblock, `@props`) that the `view()` call site rendering it never passes (needs Blade analysis)
-- [InvalidViewData](InvalidViewData.md): the value passed for a Blade template variable does not satisfy the type that template declares for it (needs Blade analysis)
+- [InvalidViewData](InvalidViewData.md): the value passed for a Blade template variable cannot satisfy the type that template declares for it (needs Blade analysis)
+- [PossiblyInvalidViewData](PossiblyInvalidViewData.md): the value passed for a Blade template variable only partly satisfies the type that template declares for it: possibly null, a parent type, or a union with a member that does not fit (needs Blade analysis)
 - [BladeCompileError](BladeCompileError.md): a template failed to compile and was excluded from analysis (needs Blade analysis)
 - [UnusedViewData](UnusedViewData.md): a `view()` call site passes a data key that neither the rendered template nor anything it includes reads or declares (needs Blade analysis)
 - [UnregisteredRouteName](UnregisteredRouteName.md) — `route()`, `to_route()`, `URL::route()`, `Redirect::route()`, `redirect()->route()`, or `url()->route()` references a route name that is not registered (opt-in)
