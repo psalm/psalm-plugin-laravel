@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795706540321,
+  "lastUpdate": 1795717922796,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -20045,6 +20045,41 @@ window.BENCHMARK_DATA = {
             "name": "Wall time",
             "value": 37.82,
             "range": "± 0.19",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1174,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ef6b27aef9d46a68ce18f33140c1ae344accadbb",
+          "message": "Add the issue tracker and source URLs to composer.json (#2393)\n\nPsalm's crash report links to the issue tracker of the plugin that crashed, which it reads from `support.issues`.\n\nAlso normalized composer.json with composer normalize.",
+          "timestamp": "2026-11-26T19:27:24+01:00",
+          "tree_id": "6ecb9b0e70712cb5330f20ecc5dc1a45d56abbe8",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/ef6b27aef9d46a68ce18f33140c1ae344accadbb"
+        },
+        "date": 1795717921205,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.67,
+            "range": "± 0.64",
             "unit": "s"
           },
           {
