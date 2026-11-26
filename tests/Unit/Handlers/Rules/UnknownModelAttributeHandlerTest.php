@@ -157,6 +157,91 @@ final class UnknownModelAttributeHandlerTest extends TestCase
     }
 
     /**
+     * @param array{string, list<string>}|null $expected root method and link names, or null (declined)
+     */
+    #[Test]
+    #[DataProvider('queryChains')]
+    public function fresh_query_chain_accepts_only_a_class_named_static_root_and_shape_preserving_links(string $code, ?array $expected): void
+    {
+        $call = $this->parse($code);
+        $this->assertTrue($call instanceof MethodCall || $call instanceof StaticCall);
+
+        $chain = UnknownModelAttributeHandler::freshQueryChain($call);
+        $root = $chain[0]->name ?? null;
+
+        $this->assertSame(
+            $expected,
+            $chain === null || !$root instanceof Identifier ? null : [$root->name, $chain[1]],
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, array{string, list<string>}|null}>
+     */
+    public static function queryChains(): iterable
+    {
+        yield 'static forward is its own root' => ['Post::find(1, ["a"])', ['find', []]];
+        yield 'query() root' => ['Post::query()->first(["a"])', ['query', ['query']]];
+        yield 'static link root and links' => ['Post::where("a", 1)->orderBy("a")->limit(1)->get(["a"])', ['where', ['limit', 'orderby', 'where']]];
+        yield 'method names are case-insensitive' => ['Post::QUERY()->WhereIn("a", [1])->get(["a"])', ['QUERY', ['wherein', 'query']]];
+        yield 'join link' => ['Post::query()->join("t", "a", "=", "b")->get(["a"])', null];
+        yield 'select makes the argument dead' => ['Post::query()->select("a")->get(["b"])', null];
+        yield 'conditional closure' => ['Post::query()->when($f, fn ($q) => $q)->get(["a"])', null];
+        yield 'local scope or macro' => ['Post::query()->published()->get(["a"])', null];
+        yield 'query() is a root only' => ['Post::where("a", 1)->query()->get(["a"])', null];
+        yield 'variable receiver' => ['$builder->get(["a"])', null];
+        yield 'variable root of a chain' => ['$builder->where("a", 1)->get(["a"])', null];
+        yield 'property receiver' => ['$this->query->get(["a"])', null];
+        yield 'relation receiver' => ['$user->posts()->get(["a"])', null];
+        yield 'new receiver' => ['(new Post())->newQuery()->get(["a"])', null];
+        yield 'nullsafe link' => ['Post::query()?->where("a", 1)->get(["a"])', null];
+        yield 'dynamic link' => ['Post::query()->$method()->get(["a"])', null];
+        yield 'dynamic class' => ['$class::query()->get(["a"])', null];
+        yield 'dynamic static method' => ['Post::$method()->get(["a"])', null];
+    }
+
+    /**
+     * @param list<string> $expected
+     */
+    #[Test]
+    #[DataProvider('columnArguments')]
+    public function column_literals_keeps_only_plain_literal_columns(string $code, array $expected): void
+    {
+        $literals = UnknownModelAttributeHandler::columnLiterals($this->parse($code));
+
+        $this->assertSame($expected, \array_map(static fn(\PhpParser\Node\Scalar\String_ $s): string => $s->value, $literals));
+    }
+
+    /**
+     * @return iterable<string, array{string, list<string>}>
+     */
+    public static function columnArguments(): iterable
+    {
+        yield 'list of identifiers' => ['["id", "full_name", "_private", "col2"]', ['id', 'full_name', '_private', 'col2']];
+        yield 'single string' => ['"name"', ['name']];
+        yield 'JSON path keeps the whole literal' => ['["options->theme->color"]', ['options->theme->color']];
+        yield 'wildcards' => ['["*", "posts.*"]', []];
+        yield 'qualified names' => ['["posts.title", "db.posts.title"]', []];
+        yield 'aliases' => ['["title as t", "title AS t", "options->theme as theme"]', []];
+        yield 'raw-looking strings' => ['["count(*)", "`title`", "", " title", "title "]', []];
+        yield 'non-literals' => ['[$column, DB::raw("x"), "a" . $b, self::COLUMN]', []];
+        yield 'unpacked item is skipped alone' => ['[...$more, "kept"]', ['kept']];
+        yield 'any explicit key may overwrite an entry' => ['["dropped", 0 => "kept"]', []];
+        yield 'a dynamic key may overwrite an entry' => ['["dropped", $offset => "kept"]', []];
+        yield 'closure passed as $columns' => ['fn () => null', []];
+        yield 'variable' => ['$columns', []];
+    }
+
+    private function parse(string $code): \PhpParser\Node\Expr
+    {
+        $statements = (new \PhpParser\ParserFactory())->createForNewestSupportedVersion()->parse('<?php ' . $code . ';');
+        $statement = $statements[0] ?? null;
+        $this->assertInstanceOf(\PhpParser\Node\Stmt\Expression::class, $statement);
+
+        return $statement->expr;
+    }
+
+    /**
      * @param array<lowercase-string, string> $declaring
      * @param list<lowercase-string>          $scanned
      */

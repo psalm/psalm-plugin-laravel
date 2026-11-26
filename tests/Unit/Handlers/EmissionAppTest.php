@@ -84,6 +84,47 @@ final class EmissionAppTest extends TestCase
     ];
 
     /**
+     * UnknownModelColumn (#2346): flagged column literal => ["Receiver::method" the message must start
+     * with, short name of the model it must name]. The first three are the examples of the issue.
+     *
+     * @var array<string, array{string, string}>
+     */
+    private const EXPECTED_COLUMN_LIST_FINDINGS = [
+        'typocol_findsole' => ['PostBuilder::findSole', 'Post'],
+        'typocol_findor' => ['Post::findOr', 'Post'],
+        'typocol_first' => ['PostBuilder::first', 'Post'],
+        'typocol_find' => ['KnownThing::find', 'KnownThing'],
+        'typocol_findorfail' => ['KnownThing::findOrFail', 'KnownThing'],
+        'typocol_findornew' => ['KnownThing::findOrNew', 'KnownThing'],
+        'typocol_findmany' => ['KnownThing::findMany', 'KnownThing'],
+        'typocol_staticfirst' => ['KnownThing::first', 'KnownThing'],
+        'typocol_firstorfail' => ['KnownThing::firstOrFail', 'KnownThing'],
+        'typocol_firstor' => ['KnownThing::firstOr', 'KnownThing'],
+        'typocol_sole' => ['KnownThing::sole', 'KnownThing'],
+        'typocol_staticget' => ['KnownThing::get', 'KnownThing'],
+        'typocol_all' => ['KnownThing::all', 'KnownThing'],
+        'typocol_staticpaginate' => ['KnownThing::paginate', 'KnownThing'],
+        'typocol_get' => ['Builder::get', 'KnownThing'],
+        'typocol_paginate' => ['Builder::paginate', 'KnownThing'],
+        'typocol_simplepaginate' => ['Builder::simplePaginate', 'KnownThing'],
+        'typocol_cursorpaginate' => ['Builder::cursorPaginate', 'KnownThing'],
+        'typocol_chain' => ['Builder::get', 'KnownThing'],
+        'typocol_longchain' => ['Builder::get', 'KnownThing'],
+        'typocol_named' => ['Builder::find', 'KnownThing'],
+        'typocol_string' => ['Builder::first', 'KnownThing'],
+        'typocol_json->theme' => ['Builder::get', 'KnownThing'],
+        'typocol_twice_a' => ['Builder::get', 'KnownThing'],
+        'typocol_twice_b' => ['Builder::get', 'KnownThing'],
+        'typocol_lockforupdate' => ['Builder::first', 'KnownThing'],
+        'typocol_sharedlock' => ['Builder::get', 'KnownThing'],
+        'typocol_mixed' => ['Builder::get', 'KnownThing'],
+        'typocol_softdeletes' => ['Builder::first', 'TrashedPost'],
+        'typocol_unrelated_attribute' => ['Builder::get', 'AuditedPost'],
+        'typocol_self' => ['Builder::first', 'PlainPost'],
+        'typocol_static' => ['Builder::first', 'PlainPost'],
+    ];
+
+    /**
      * DynamicWhereSchemaColumns: issue types a failed dynamic `where{Column}` resolution surfaces as.
      */
     private const DYNAMIC_WHERE_ISSUES = [
@@ -153,6 +194,27 @@ final class EmissionAppTest extends TestCase
 
         $this->assertCount(3 + \count(self::EXPECTED_CREATION_PATH_FINDINGS), $findings, "Unexpected UnknownModelAttribute finding count, got:\n{$joined}");
         // Experimental mode enforces the rule, so every finding is an error rather than the default info.
+        $this->assertSame(\array_fill(0, \count($findings), 'error'), \array_column($findings, 'severity'));
+    }
+
+    #[Test]
+    public function unknown_column_in_a_literal_column_list_is_reported_only_on_a_fresh_static_query_chain(): void
+    {
+        $messages = $this->messages($findings = $this->scenarioFindings('UnknownModelColumn', 'UnknownModelAttribute'));
+        $joined = \implode("\n", $messages);
+
+        foreach (self::EXPECTED_COLUMN_LIST_FINDINGS as $column => [$prefix, $model]) {
+            $this->assertMatchesRegularExpression(
+                '/^' . \preg_quote($prefix, '/') . '\(\) selects an unknown column \'' . \preg_quote($column, '/') . '\'\..* of ' . $model . ' — check for a typo\.$/m',
+                $joined,
+                "'{$column}' must be flagged as {$prefix}() against {$model}.",
+            );
+        }
+
+        // Every declined shape carries a `silentcol_` literal: aliases, qualifiers, expressions, joins,
+        // FROM changes, dead arguments after a select, unproven receivers, global scopes, overrides.
+        $this->assertStringNotContainsString('silentcol_', $joined, 'A declined shape must not be flagged.');
+        $this->assertCount(\count(self::EXPECTED_COLUMN_LIST_FINDINGS), $findings, "Unexpected column finding count, got:\n{$joined}");
         $this->assertSame(\array_fill(0, \count($findings), 'error'), \array_column($findings, 'severity'));
     }
 

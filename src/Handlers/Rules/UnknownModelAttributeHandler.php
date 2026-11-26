@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Psalm\LaravelPlugin\Handlers\Rules;
 
+use Illuminate\Database\Eloquent\Attributes\ScopedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\GuardsAttributes;
+use Illuminate\Database\Eloquent\Concerns\HasGlobalScopes;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOneOrMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOneOrMany;
 use PhpParser\Node\Arg;
+use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
@@ -27,6 +30,7 @@ use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadata;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Metadata\ModelMetadataRegistry;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\EloquentModelMethods;
 use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelPropertyResolver;
+use Psalm\LaravelPlugin\Handlers\Eloquent\Support\ModelQueryPath;
 use Psalm\LaravelPlugin\Internal\ClassLineage;
 use Psalm\LaravelPlugin\Issues\UnknownModelAttribute;
 use Psalm\Plugin\EventHandler\AfterExpressionAnalysisInterface;
@@ -151,6 +155,86 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
     /** @var list<class-string> */
     private const TRUSTED_MODEL_DECLARERS = [Model::class, GuardsAttributes::class];
 
+    /**
+     * Eloquent read methods taking a `$columns` select list (#2346) => that parameter's position.
+     * Same name and position on the 12.27 and 13.20 floors. `all` exists on Model only.
+     *
+     * @var array<lowercase-string, int<0, 1>>
+     */
+    private const COLUMN_METHODS = [
+        'find' => 1,
+        'findorfail' => 1,
+        'findornew' => 1,
+        'findmany' => 1,
+        'findsole' => 1,
+        'findor' => 1,
+        'first' => 0,
+        'firstorfail' => 0,
+        'firstor' => 0,
+        'sole' => 0,
+        'get' => 0,
+        'all' => 0,
+        'paginate' => 1,
+        'simplepaginate' => 1,
+        'cursorpaginate' => 1,
+    ];
+
+    /**
+     * What the read methods call on the builder internally that Eloquent's Builder does not declare, so it
+     * reaches `Builder::__call()`, where a local scope of that name runs first, and a custom builder may
+     * declare it (`first()` calls `limit(1)`, `paginate()` calls `forPage()`, ...). One list for every read.
+     *
+     * @var list<lowercase-string>
+     */
+    private const READ_INTERNAL_CALLS = ['limit', 'forpage', 'offset', 'orderby', 'setbindings', 'addbinding'];
+
+    /**
+     * Model hooks beside {@see ModelQueryPath::isLaravels()} that decide what a column-list query looks like:
+     * the builder factory and base query builder (an override may return a joined or selected query), the
+     * global-scope providers of `HasGlobalScopes` (an override may supply scopes nothing registers), and the
+     * named-scope dispatch `Builder::__call()` asks before forwarding (an override may route any name).
+     *
+     * @var list<lowercase-string>
+     */
+    private const COLUMN_QUERY_HOOKS = [
+        'neweloquentbuilder',
+        'newbasequerybuilder',
+        'getglobalscopes',
+        'boothasglobalscopes',
+        'resolveglobalscopeattributes',
+        'hasnamedscope',
+        'callnamedscope',
+    ];
+
+    /**
+     * Chain links between a model's static query root and the read call that leave the query's select
+     * list, FROM and JOIN set untouched: they only add wheres, orders, limits, a row lock, eager loads,
+     * or drop global scopes. A positive list on purpose: anything else (`join()`, `from()`, `select()`,
+     * `withCount()`, `when()`, a local scope, a macro) may make a `$columns` literal name something other
+     * than a column of the model's table, or make the argument dead, so the chain is not checked.
+     *
+     * @var array<lowercase-string, true>
+     */
+    private const SHAPE_PRESERVING_METHODS = [
+        'where' => true, 'orwhere' => true, 'wherenot' => true, 'orwherenot' => true,
+        'wherekey' => true, 'wherekeynot' => true,
+        'wherein' => true, 'wherenotin' => true, 'orwherein' => true, 'orwherenotin' => true,
+        'wherenull' => true, 'wherenotnull' => true, 'orwherenull' => true, 'orwherenotnull' => true,
+        'wherebetween' => true, 'wherenotbetween' => true,
+        'wheredate' => true, 'wheremonth' => true, 'whereday' => true, 'whereyear' => true, 'wheretime' => true,
+        'wherecolumn' => true, 'wherelike' => true, 'wherenotlike' => true,
+        'has' => true, 'doesnthave' => true, 'wherehas' => true, 'orwherehas' => true,
+        'wheredoesnthave' => true, 'orwheredoesnthave' => true, 'whererelation' => true, 'orwhererelation' => true,
+        'wherebelongsto' => true, 'orwherebelongsto' => true, 'wheremorphedto' => true,
+        'orderby' => true, 'orderbydesc' => true, 'latest' => true, 'oldest' => true,
+        'inrandomorder' => true, 'reorder' => true,
+        'limit' => true, 'take' => true, 'skip' => true, 'offset' => true, 'forpage' => true,
+        'lockforupdate' => true, 'sharedlock' => true,
+        'with' => true, 'without' => true, 'withonly' => true,
+        'withtrashed' => true, 'onlytrashed' => true, 'withouttrashed' => true,
+        'withoutglobalscope' => true, 'withoutglobalscopes' => true,
+    ];
+
     /** @inheritDoc */
     #[\Override]
     public static function afterExpressionAnalysis(AfterExpressionAnalysisEvent $event): ?bool
@@ -169,6 +253,13 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
         }
 
         $lowerMethod = \strtolower($expr->name->name);
+
+        if (isset(self::COLUMN_METHODS[$lowerMethod])) {
+            self::checkColumnList($expr, $expr->name->name, $event);
+
+            return null;
+        }
+
         $isListMethod = isset(self::LIST_CREATION_METHODS[$lowerMethod]);
 
         if (
@@ -221,25 +312,9 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
             return null;
         }
 
-        $metadata = ModelMetadataRegistry::for($modelClass);
+        $metadata = self::authoritativeMetadata($modelClass);
 
         if (!$metadata instanceof ModelMetadata) {
-            return null;
-        }
-
-        if (
-            !$metadata->isComplete(
-                ModelMetadata::SECTION_METHODS
-                | ModelMetadata::SECTION_RELATIONS
-                | ModelMetadata::SECTION_RUNTIME_CONFIGURATION
-                | ModelMetadata::SECTION_SCHEMA
-                | ModelMetadata::SECTION_CASTS,
-            )
-            // A registered table can still have no statically parsed columns (for example when a
-            // migration uses dynamic names or Blueprint macros). In that case an unknown-key verdict
-            // would treat every real column as a typo, so preserve the rule's conservative bail-out.
-            || $metadata->schema()->all() === []
-        ) {
             return null;
         }
 
@@ -453,33 +528,309 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
     }
 
     /**
-     * The argument carrying the attribute map / records list: a named argument matching `$paramName`
-     * wherever it sits, else the first positional argument. Null when there is none, it is unpacked, or
-     * the call is a first-class callable.
+     * The argument bound to `$paramName`: the named argument wherever it sits, else the positional one
+     * at `$position`. Null when there is none, an unpack precedes it, or the call is a first-class
+     * callable.
      *
      * @param array<array-key, \PhpParser\Node> $args
      *
      * @psalm-capabilities read-props
      */
-    private static function dataArgument(array $args, string $paramName): ?Arg
+    private static function dataArgument(array $args, string $paramName, int $position = 0): ?Arg
     {
-        $first = $args[0] ?? null;
+        foreach (\array_values($args) as $index => $arg) {
+            if (!$arg instanceof Arg || $arg->unpack) {
+                return null;
+            }
 
-        if (!$first instanceof Arg) {
-            return null;
-        }
-
-        if (!$first->name instanceof Identifier) {
-            return $first->unpack ? null : $first;
-        }
-
-        foreach ($args as $arg) {
-            if ($arg instanceof Arg && !$arg->unpack && $arg->name?->name === $paramName) {
+            if ($arg->name instanceof Identifier ? $arg->name->name === $paramName : $index === $position) {
                 return $arg;
             }
         }
 
         return null;
+    }
+
+    /**
+     * The registry metadata, or null unless every section the recognized set is built from is
+     * authoritative.
+     *
+     * @param class-string<Model> $modelClass
+     *
+     * @return ModelMetadata<Model>|null
+     */
+    private static function authoritativeMetadata(string $modelClass): ?ModelMetadata
+    {
+        $metadata = ModelMetadataRegistry::for($modelClass);
+
+        if (
+            !$metadata instanceof ModelMetadata
+            || !$metadata->isComplete(
+                ModelMetadata::SECTION_METHODS
+                | ModelMetadata::SECTION_RELATIONS
+                | ModelMetadata::SECTION_RUNTIME_CONFIGURATION
+                | ModelMetadata::SECTION_SCHEMA
+                | ModelMetadata::SECTION_CASTS,
+            )
+            // A registered table can still have no statically parsed columns (for example when a
+            // migration uses dynamic names or Blueprint macros). In that case an unknown-key verdict
+            // would treat every real column as a typo, so preserve the rule's conservative bail-out.
+            || $metadata->schema()->all() === []
+        ) {
+            return null;
+        }
+
+        return $metadata;
+    }
+
+    /**
+     * #2346: flag a literal `$columns` entry of a read method that names no known attribute of the model,
+     * but only where the literal provably reaches SQL as a column of the model's own table: the call is
+     * (or chains from) a static call on the model class through {@see self::SHAPE_PRESERVING_METHODS}
+     * links only. A builder held in a variable, a relation, or any other link may carry a join, another
+     * FROM, or an earlier select (which makes `$columns` dead: `Query\Builder::get()` keeps existing
+     * columns), and the receiver type carries none of that, so those calls are never inspected.
+     */
+    private static function checkColumnList(MethodCall|StaticCall $expr, string $method, AfterExpressionAnalysisEvent $event): void
+    {
+        $lowerMethod = \strtolower($method);
+        $columns = self::columnLiterals(
+            self::dataArgument($expr->args, 'columns', self::COLUMN_METHODS[$lowerMethod] ?? 0)?->value,
+        );
+        $chain = $columns === [] ? null : self::freshQueryChain($expr);
+        $source = $event->getStatementsSource();
+
+        // `all()` is Model's own static; no builder has it.
+        if ($chain === null || ($lowerMethod === 'all' && $chain[0] !== $expr) || self::isMigrationFile($source->getFilePath())) {
+            return;
+        }
+
+        [$root, $chainNames] = $chain;
+        $codebase = $event->getCodebase();
+        $modelClass = self::staticReceiverModel($root, $source, $codebase);
+        $metadata = $modelClass === null ? null : self::authoritativeMetadata($modelClass);
+
+        if ($modelClass === null || !$metadata instanceof ModelMetadata) {
+            return;
+        }
+
+        $allowedKeys = self::allowedKeys($metadata, $modelClass, $codebase);
+        $unknown = \array_filter(
+            $columns,
+            static fn(String_ $column): bool => self::unknownKeys($allowedKeys, [$column->value]) !== [],
+        );
+
+        if ($unknown === []) {
+            return;
+        }
+
+        $called = [...$chainNames, $lowerMethod, ...self::READ_INTERNAL_CALLS];
+        $builderClass = $metadata->customBuilder;
+
+        if (
+            // `$withCount` (a name list or a constraint map) seeds a select on every query, so `$columns` is dead.
+            $metadata->hasDefaultCounts
+            // The query is not built by Laravel's own Model code on a known builder (`newQuery()` override, ...).
+            || !ModelQueryPath::isLaravels($codebase, $modelClass)
+            // The model declares a called name (`Setting::get($key)`, a `#[Scope]` method) or a query hook. A legacy
+            // `scope{Name}()` runs first in `Builder::__call()`, found by a case-insensitive `method_exists()`, which
+            // Psalm's lowercase method keys mirror.
+            || self::declaresUserlandMethod(
+                $modelClass,
+                null,
+                [...$called, ...\array_map(static fn(string $name): string => 'scope' . $name, $called), ...self::COLUMN_QUERY_HOOKS],
+                [...self::TRUSTED_MODEL_DECLARERS, HasGlobalScopes::class],
+                $codebase,
+            )
+            || ($builderClass !== null && self::redeclaresBuilderMethod($builderClass, $called, $codebase))
+            // Reads files, so it goes last.
+            || self::mayRegisterGlobalScope($modelClass, $codebase)
+        ) {
+            return;
+        }
+
+        $receiverName = self::shortClassName($root === $expr ? $modelClass : $builderClass ?? Builder::class);
+        $modelName = self::shortClassName($modelClass);
+
+        foreach ($unknown as $column) {
+            IssueBuffer::accepts(
+                new UnknownModelAttribute(
+                    "{$receiverName}::{$method}() selects an unknown column '{$column->value}'. "
+                    . "It matches no column, cast, accessor, relation, \$appends entry, or @property "
+                    . "of {$modelName} — check for a typo.",
+                    new CodeLocation($source, $column),
+                ),
+                $source->getSuppressedIssues(),
+            );
+        }
+    }
+
+    /**
+     * Pure syntax verdict: the static call a read call is, or chains from, plus the unique lowercase names
+     * of every link on the way (root included). Null unless the root is a class-named static call
+     * (`Post::query()`, `Post::where()`, `Post::find()`) and every link is a named
+     * {@see self::SHAPE_PRESERVING_METHODS} method call: a variable, property, `new`, function result,
+     * nullsafe or dynamic call has unknown provenance.
+     *
+     * @return array{StaticCall, list<lowercase-string>}|null
+     *
+     * @psalm-capabilities read-props
+     */
+    public static function freshQueryChain(MethodCall|StaticCall $call): ?array
+    {
+        $names = [];
+        $node = $call;
+
+        while ($node instanceof MethodCall) {
+            $node = $node->var;
+
+            if ((!$node instanceof MethodCall && !$node instanceof StaticCall) || !$node->name instanceof Identifier) {
+                return null;
+            }
+
+            $name = \strtolower($node->name->name);
+
+            if (!isset(self::SHAPE_PRESERVING_METHODS[$name]) && (!$node instanceof StaticCall || $name !== 'query')) {
+                return null;
+            }
+
+            $names[$name] = true;
+        }
+
+        return $node->class instanceof Name && $node->name instanceof Identifier ? [$node, \array_keys($names)] : null;
+    }
+
+    /**
+     * The literal entries of a `$columns` argument (`'a'` or `['a', 'b']`) that name a plain column:
+     * an identifier, optionally followed by a JSON path (validated by its base column). Everything
+     * else is skipped entry by entry, since select-list entries are independent: `*`, a qualified
+     * `table.column` / `table.*`, `column as alias`, anything with spaces or parentheses, an unpacked
+     * item, and every non-literal (an `Expression`, a variable, a closure passed as `$columns`). A list
+     * with any explicit key yields nothing: the key may overwrite another entry before it reaches SQL.
+     *
+     * @return list<String_>
+     *
+     * @psalm-capabilities read-props
+     */
+    public static function columnLiterals(?Expr $columns): array
+    {
+        $literals = [];
+        $items = match (true) {
+            $columns instanceof String_ => [$columns],
+            $columns instanceof Array_ => $columns->items,
+            default => [],
+        };
+
+        foreach ($items as $item) {
+            if (!$item instanceof String_) {
+                if ($item->key !== null) {
+                    return [];
+                }
+
+                $item = $item->unpack ? null : $item->value;
+            }
+
+            if ($item instanceof String_ && \preg_match('/^[A-Za-z_][A-Za-z0-9_]*(?:->\S+)?$/D', $item->value) === 1) {
+                $literals[] = $item;
+            }
+        }
+
+        return $literals;
+    }
+
+    /**
+     * Does a custom builder lineage redeclare anything `Illuminate\Database\Eloquent\Builder` declares
+     * (a read method, a link, `__construct`, `__call`, `applyScopes()`, ...) or declare a method named
+     * like a link `__call` would otherwise forward? The trusted declarers and the scanned names are read
+     * off the stock builder's own storage, so they follow the installed Laravel.
+     *
+     * @param class-string<Builder>  $builderClass
+     * @param list<lowercase-string> $chainNames
+     * @psalm-capabilities read-props
+     */
+    private static function redeclaresBuilderMethod(string $builderClass, array $chainNames, Codebase $codebase): bool
+    {
+        try {
+            $stock = $codebase->classlike_storage_provider->get(Builder::class)->declaring_method_ids;
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return true;
+        }
+
+        $trusted = [];
+
+        foreach ($stock as $declaring) {
+            $trusted[$declaring->fq_class_name] = true;
+        }
+
+        return self::declaresUserlandMethod($builderClass, null, [...\array_keys($stock), ...$chainNames], \array_keys($trusted), $codebase);
+    }
+
+    /**
+     * Over-approximation: does a class of the model's lineage (the class, its parents, every trait)
+     * carry a scope attribute, or does its file mention a global-scope registration? A global scope can
+     * join, re-point FROM, or add a select, and models are not booted during analysis, so the registered
+     * scopes cannot be read. Laravel's own Eloquent files are skipped: the one scope they register
+     * (`SoftDeletingScope`) adds a where. A scope registered from outside the lineage (a service
+     * provider, a middleware) is not seen.
+     *
+     * @param class-string<Model> $modelClass
+     */
+    private static function mayRegisterGlobalScope(string $modelClass, Codebase $codebase): bool
+    {
+        $eloquentRoot = \dirname((string) (new \ReflectionClass(Model::class))->getFileName()) . \DIRECTORY_SEPARATOR;
+        $parents = \class_parents($modelClass);
+
+        foreach ([$modelClass, ...\array_values($parents === false ? [] : $parents), ...\array_values(\class_uses_recursive($modelClass))] as $class) {
+            if (!\class_exists($class) && !\trait_exists($class)) {
+                return true;
+            }
+
+            $file = (new \ReflectionClass($class))->getFileName();
+
+            if ($file !== false && \str_starts_with($file, $eloquentRoot)) {
+                continue;
+            }
+
+            if (self::hasScopeAttribute($class, $codebase)) {
+                return true;
+            }
+
+            $contents = $file === false ? false : \file_get_contents($file);
+
+            if ($contents === false || \stripos($contents, 'addGlobalScope') !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Does `$class` carry `#[ScopedBy]` or an attribute extending it (Laravel 13 reads them with
+     * `IS_INSTANCEOF`)? Read from Psalm's storage: runtime reflection with `IS_INSTANCEOF` loads every
+     * attribute class, and one that raises a deprecation on load crashes the analysis. Missing storage
+     * counts as a scope attribute.
+     *
+     * @psalm-capabilities read-props
+     */
+    private static function hasScopeAttribute(string $class, Codebase $codebase): bool
+    {
+        $storage = $codebase->classlike_storage_provider;
+
+        try {
+            foreach ($storage->get($class)->attributes as $attribute) {
+                if (
+                    \strcasecmp($attribute->fq_class_name, ScopedBy::class) === 0
+                    || isset($storage->get($attribute->fq_class_name)->parent_classes[\strtolower(ScopedBy::class)])
+                ) {
+                    return true;
+                }
+            }
+        } catch (\InvalidArgumentException|UnpopulatedClasslikeException) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -586,7 +937,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
      *
      * @param class-string           $class
      * @param list<lowercase-string> $scanned  methods (and delegated hooks) to scan
-     * @param list<class-string>     $trusted
+     * @param list<string>           $trusted  exact declaring classes (never a namespace prefix)
      * @psalm-capabilities read-props
      */
     private static function declaresUserlandMethod(string $class, ?string $calledMethod, array $scanned, array $trusted, Codebase $codebase): bool
@@ -618,7 +969,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
      *
      * @param array<lowercase-string, string> $declaringClasses declaring class per scanned name; absent names omitted
      * @param list<lowercase-string>          $scanned
-     * @param list<class-string>              $trusted
+     * @param list<string>                    $trusted
      *
      * @psalm-pure
      */
@@ -638,7 +989,7 @@ final class UnknownModelAttributeHandler implements AfterExpressionAnalysisInter
     }
 
     /**
-     * @param list<class-string> $trusted
+     * @param list<string> $trusted
      *
      * @psalm-pure
      */
