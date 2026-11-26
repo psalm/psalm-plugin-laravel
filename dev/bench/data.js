@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795723443708,
+  "lastUpdate": 1795731646468,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -20120,6 +20120,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1175,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "650d24b7df18399e367807fabccfb33e15b91eb8",
+          "message": "Add `callable` taint sinks to Eloquent relation-name parameters (#2388)\n\n* feat(taint): add callable sinks to Eloquent relation-name parameters\n\n- Eloquent calls a relation name on a new model before checking it returns a Relation; a non-relation name reaches Model::__call() and runs that Builder method (`with('truncate')` empties the table, the mechanism behind GHSA-5wcm-3v2w-8362).\n- Sink every relation-name parameter of the eager-loading, existence-query, aggregate and load* APIs on Builder, Model and Eloquent\\Collection; re-declare the unstubbed ones with Laravel's docblock verbatim.\n- Document coverage, allowlist fixes and known gaps in docs/security.md and docs/contributing/taint-analysis.md.\n\n* docs(taint): link vimeo/psalm#15062 for dynamic method and property names\n\n- The attribute-read gap of the relation-name sinks depends on Psalm passing a dynamic name to __get()/__call(); track it with @todo-by.\n\n* fix(stubs): drop `*` type arguments from the new relation stubs\n\n- Laravel's `Relation<*, *, *>` / `MorphTo<*, *>` are star projections, which Psalm 7.14 (the plugin's floor) reports as InvalidDocblock in every analysed app (psalm-delta: +21 per app).\n- Spell them as a bare class or a leading template (`Relation<TRelatedModel>`), like the existing relation stubs.\n\n* fix(taint): sink getRelation() and setEagerLoads(), pin the loadMorph key false positive\n\n- getRelation() calls the name itself and setEagerLoads() keys are relation names: both get the callable sink.\n- A request-chosen morph-class key in loadMorph*() is reported; pin it as a known limitation and document it with morphWith() as not covered.\n- Give the negative phpts a positive control through a per-file sink, as the shared-sink pitfall requires.\n- Correct the contributor note: the loadMorph*() morph relation name only reaches methods the model's own class or traits declare.\n\n* docs(taint): track the magic-method name gap in vimeo/psalm#15122\n\n- vimeo/psalm#15062 closed with its method-name part (#15072); the remaining __get()/__call() part moved to #15122, so the @todo-by follows it.",
+          "timestamp": "2026-11-26T22:57:04+01:00",
+          "tree_id": "b9e80a707c19723e4fab3c17a758ebfa373380e4",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/650d24b7df18399e367807fabccfb33e15b91eb8"
+        },
+        "date": 1795731644761,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 40.44,
+            "range": "± 0.17",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1178,
             "unit": "MB"
           }
         ]
