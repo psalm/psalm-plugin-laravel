@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795731646468,
+  "lastUpdate": 1795731987173,
   "repoUrl": "https://github.com/psalm/psalm-plugin-laravel",
   "entries": {
     "Plugin Performance": [
@@ -20155,6 +20155,41 @@ window.BENCHMARK_DATA = {
           {
             "name": "Peak memory",
             "value": 1178,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5278175+alies-dev@users.noreply.github.com",
+            "name": "Alies Lapatsin",
+            "username": "alies-dev"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "70c69e02e71b4dc21e61d8cdbd897f0bde01ecc2",
+          "message": "Keep `*` type arguments in collection, proxy and factory answers (#2383)\n\n* fix: keep `*` type arguments through handlers that rebuild a generic from the receiver\n\n- Add `Internal\\GenericReceiver`: `of()` finds the receiver atomic a return type provider answers for (by the event's own type arguments, so same-class union branches stay apart), `rebuild()` keeps the `*` of every slot handed the receiver's own Union and answers the newly built object when no marker survives\n- Use it in `CollectionFilterHandler` (`filter()` / `whereNotNull()`), `HigherOrderCollectionProxyHandler`, `CollectionGroupByKeyByHandler`, `FactoryCount` (`withCount()`, `baseFactory()`), `FactoryUserMethodCountProvider::widenStatic()`, and `MethodForwardingHandler`, whose private helpers it replaces\n- A forwarded relation without `*` reports `RedundantCondition` again instead of `RedundantConditionGivenDocblockType`, as in v4.23.1\n- `getQuery()` of a `HasMany<*, X>` stays `Builder<Model>`: Psalm's covariant rule on the stub's `Builder::TModel`, documented and pinned\n\nRefs #2380\n\n* fix: keep a factory union branch's `*` and keep markers off recomputed proxy slots\n\n- `FactoryCount::withCount()` takes the marker source from the provider's union branch (`GenericReceiver::of()`) when the receiver is not a single atomic; late-static and intersection flags still come from the single receiver only\n- Higher-order `map` / `keyBy` / inner `groupBy` answers keep markers only on a collection whose layout is proven `<TKey, TValue>`, so a subclass that reorders its templates no longer gets a `*` on the slot Laravel recomputes\n- Correct the item 4 record: a covariant `Builder::TModel` accepts any model's builder in `mergeConstraintsFrom()`, the hole any upcast builder has\n\nRefs #2380",
+          "timestamp": "2026-11-26T23:23:18+01:00",
+          "tree_id": "a14f435579fe4a0b858eb8190f9b054381f52f52",
+          "url": "https://github.com/psalm/psalm-plugin-laravel/commit/70c69e02e71b4dc21e61d8cdbd897f0bde01ecc2"
+        },
+        "date": 1795731985001,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Wall time",
+            "value": 29.91,
+            "range": "± 0.31",
+            "unit": "s"
+          },
+          {
+            "name": "Peak memory",
+            "value": 1177,
             "unit": "MB"
           }
         ]
