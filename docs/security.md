@@ -37,6 +37,7 @@ Recommendations:
 | Shell Injection | A03:2021 | `Process::run()`, `Process::command()`                        |
 | XSS             | A03:2021 | `Response::make()` with unescaped content                     |
 | XSS (Blade templates) | A03:2021 | Opt-in with `<blade />`: unescaped `{!! $userInput !!}` output, view data and class-component properties. See [Blade coverage](blade.md#security-coverage) |
+| Unsafe reflection (CWE-470) | A03:2021 | Request input used as an Eloquent relation name (`with()`, `load()`, `loadMissing()`, `whereHas()`, `withCount()`, ...) or as a container class (`app()`, `make()`), reported as `TaintedCallable`. See [Relation names](#relation-names-cwe-470) |
 | Header Injection | A03:2021 | `Response::make()`, `response()`, and `new Response()` with user-controlled header values; mail sender/recipient addresses (`Mailable` `from()`, `to()`, `cc()`, `bcc()`, `replyTo()`; `MailMessage` `from()`, `cc()`, `bcc()`, `replyTo()`) |
 | SSRF            | A10:2021 | `Http::get()`, `head()`, `post()`, `put()`, `patch()`, `delete()`, `send()` and `query()` (Laravel 13.19+) with user-controlled URLs, on the facade and on `PendingRequest` |
 | File Traversal  | A01:2021 | `Storage::get()`, `File::delete()` with user-controlled paths |
@@ -54,6 +55,43 @@ Recommendations:
 Closure-returning helpers pass the closure's taint to their return value, so `echo DB::transaction(fn () => (string) $request->input('x'))` is reported like a direct echo of the input. Covered: `value()`, `rescue()`, `retry()`, `once()`, `with()` and `DB::transaction()` (also on a connection). `with()` passes on only the closure's result, never its first argument, because a supplied callback replaces that argument in the result. Not covered: `transform()`, and `Context::remember()`. The cache helpers (`Cache::remember()`, `rememberForever()`, `sear()`, `flexible()` and the same methods on a `Cache\Repository`) deliberately do not propagate: apps cache config values and decrypted secrets far more often than request input, and propagating flagged every read of such a cached value.
 
 Artisan commands, migrations and seeders print to a terminal, not an HTML page, so their `echo`/`print`/`printf()`/`var_dump()` output is not reported as `TaintedHtml` or `TaintedTextWithQuotes` (Psalm 7's `@psalm-cli-only`, applied to every subclass of `Illuminate\Console\Command`, `Illuminate\Database\Migrations\Migration` and `Illuminate\Database\Seeder`). The top-level code of two kinds of files, and the closures in it, counts as command-line code too: a migration file (one that returns `new class extends Migration`, in any directory) and the app's `routes/console.php`. They may call CLI-only code without `CliOnlyCall`. Values stay tainted for every other sink, and printed secrets are still reported. Not covered: trait methods, functions and classes declared in those files, a console routes file with another name, and scheduled closures. Known gap: a command run through `Artisan::call()` during an HTTP request writes raw `echo` output into the response.
+
+## Relation names (CWE-470)
+
+Eloquent calls every relation name as a method on a new model, and only afterwards checks that the result is a `Relation`. A name that is not a relation falls through `Model::__call()` to the query builder, so a request that picks the name picks the builder method: `?include=truncate` passed to `with()` runs `TRUNCATE TABLE` before Laravel throws. This is the mechanism behind [GHSA-5wcm-3v2w-8362](https://github.com/laravel/framework/security/advisories/GHSA-5wcm-3v2w-8362) in `JsonApiResource`. Laravel fixed that resource, not the eager loader, so application code that passes request input to these methods is still exposed on every Laravel version.
+
+```php
+$query->with(explode(',', $request->input('include')));  // TaintedCallable
+```
+
+Every relation-name parameter is a `callable` sink:
+
+* Eager loading: `with()` (also a string second argument), `withOnly()`, `getRelation()`, the keys of `setEagerLoads()`, and `load()`, `loadMissing()`, `loadCount()`, `loadAggregate()`, `loadMax()`, `loadMin()`, `loadSum()`, `loadAvg()`, `loadExists()`, `fresh()` on a model or an Eloquent collection.
+* Polymorphic loading: `loadMorph()` and `loadMorphCount()` (model and collection), `loadMorphAggregate()`, `loadMorphMax()`, `loadMorphMin()`, `loadMorphSum()`, `loadMorphAvg()`. Both the morph relation name and the nested names are sinks. The morph relation is read like a property, which calls the method of that name when the model's own class or a trait declares one (not a method of the `Model` base class or of the query builder). Known false positive: the nested names come in an array keyed by morph class, and a request-chosen key is reported too, although Laravel only uses it to look up the class.
+* Existence queries: `has()`, `whereHas()`, `doesntHave()`, `whereDoesntHave()`, `withWhereHas()`, the `*Morph()` variants, `whereRelation()`, `withWhereRelation()`, `whereDoesntHaveRelation()`, `whereMorphRelation()`, `whereMorphDoesntHaveRelation()`, `whereMorphedTo()`, `whereNotMorphedTo()`, and their `or*` forms.
+* Aggregates: `withCount()`, `withAggregate()`, `withMax()`, `withMin()`, `withSum()`, `withAvg()`, `withExists()`.
+* Named relations: the `$relationshipName` of `whereBelongsTo()` and `orWhereBelongsTo()`, and `$model->through()`.
+
+The sinks apply on a builder, through `Model::query()`, static model calls (`Post::with()`), and relation calls (`$user->posts()->with()`).
+
+Fix it with an allowlist the analyzer can read. Each of these narrows the value to names the code wrote, which clears the taint:
+
+```php
+in_array($include, ['author', 'comments'], true)  // then with($include)
+match ($include) { 'author' => 'author', 'comments' => 'comments', default => abort(400) }
+Include::from($include)->value                    // a backed enum of relation names
+$request->validate(['include' => 'in:author,comments'])
+array_intersect(['author', 'comments'], $requested) // allowlist first: the result keeps its values
+```
+
+`array_intersect($requested, $allowlist)` is still reported, because the result keeps the values of its first argument, the request input. Packages that validate includes for you, such as `spatie/laravel-query-builder` (`allowedIncludes()`), keep the request out of these calls in your code, so nothing is reported.
+
+Not covered:
+
+* A relation name in the second or later positional argument of `load()`, `loadMissing()`, `loadCount()`, `fresh()`, static `Model::with()`, `withCount()`, `Eloquent\Collection::load()`, `loadMissing()` and `fresh()`, and the third or later one of `Builder::with()` (`$author->load('comments', $name)`). Laravel reads extra arguments as more names, but they have no parameter to carry the sink.
+* `whereAttachedTo()` / `orWhereAttachedTo()` and `PendingHasThroughRelationship::has()` (`$user->through('posts')->has($name)`): their signatures changed within the supported Laravel versions.
+* `MorphTo::morphWith()` / `morphWithCount()` (`morphWith([Post::class => $includes])`): Laravel passes the stored names to `with()` / `withCount()`, but a sink there would report the morph-class keys too (see the false positive above).
+* Attribute reads that resolve relations: `$model->{$name}`, `$model->getAttribute($name)`, `$model[$name]`, `data_get($model, $name)`, `$model->only($names)`, and collection key paths over models (`pluck()`, `sortBy()`, `groupBy()`). A name that is not an attribute calls the model method of that name, unless the `Model` class itself declares it (a trait method such as `markEmailAsVerified()` runs). Psalm has no sink for a dynamic property name, and does not pass a dynamic name to the `$name` of `__get()` / `__call()` ([vimeo/psalm#15122](https://github.com/vimeo/psalm/issues/15122)). <!-- @todo-by https://github.com/vimeo/psalm/issues/15122 sink the $name of Model::__get() / __call() in the stubs once dynamic names reach it -->
 
 ## HTML and JSON escaping
 
