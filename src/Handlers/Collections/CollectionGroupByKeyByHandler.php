@@ -57,7 +57,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         if ($arg->isSingleStringLiteral()) {
             // The result is rebuilt as `<class><key, value>`, which only fits a receiver whose own templates are
             // (TKey, TValue): an intersection or a subclass with a different template list would get a type it does
-            // not declare (#1917). A template-bound receiver (`C of Collection<..>`) is judged by its bound.
+            // not declare (#1917). A template-bound receiver (`C of Collection<..>`) is left to the stub's `static<...>`.
             if (!self::keepsBaseTemplateLayout($lhs, $source->getCodebase())) {
                 return null;
             }
@@ -81,17 +81,6 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         }
 
         if (!$key instanceof Union || !$value instanceof Union) {
-            return null;
-        }
-
-        // Psalm replaces a parameterized `static` in the stub's return type with the receiver template itself, which
-        // discards our new arguments. That is only right when the call leaves the shape unchanged (#2005); otherwise
-        // (`groupBy()` always nests, `keyBy()` may change the key) keep the rebuilt type so a wrong `@return C` is
-        // reported (#2328).
-        // @todo-by https://github.com/vimeo/psalm/issues/13997 once Psalm keeps `static<...>` arguments on a template
-        // receiver, decline for every template-bound receiver (drop isTemplateBound()/sameShape() and the bound walk
-        // in keepsBaseTemplateLayout()) and let the stub's `static<...>` answer.
-        if ($method === 'keyby' && self::isTemplateBound($lhs) && self::sameShape($templates, $key, $value)) {
             return null;
         }
 
@@ -157,33 +146,11 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
         return true;
     }
 
-    /** @psalm-pure */
-    private static function isTemplateBound(?Union $lhs): bool
-    {
-        foreach ($lhs?->getAtomicTypes() ?? [] as $atomic) {
-            if ($atomic instanceof TTemplateParam) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     /**
-     * @param list<Union>|null $templates
-     * @psalm-pure
-     */
-    private static function sameShape(?array $templates, Union $key, Union $value): bool
-    {
-        return isset($templates[0], $templates[1])
-            && $templates[0]->getId() === $key->getId()
-            && $templates[1]->getId() === $value->getId();
-    }
-
-    /**
-     * Every receiver atomic (a template parameter stands for its bound) is a named class without intersections that is
-     * a base collection, or a subclass declaring no templates of its own (`@extends Collection<int, Model>`) or exactly
-     * `<TKey, TValue>` passed through in order.
+     * Every receiver atomic is a named class without intersections that is a base collection, or a subclass declaring
+     * no templates of its own (`@extends Collection<int, Model>`) or exactly `<TKey, TValue>` passed through in order.
+     * A template-bound receiver declines: Psalm (7.18+, vimeo/psalm#14579) keeps the stub's `static<...>` arguments
+     * on it, so the stub already answers.
      *
      * Known limitation: for any other template list we decline, so Psalm resolves the stub's `static<array-key, TValue>`
      * positionally against the subclass's own templates and the `array-key` can land on a non-key slot; see
@@ -197,14 +164,7 @@ final class CollectionGroupByKeyByHandler implements MethodReturnTypeProviderInt
             return false;
         }
 
-        $pending = \array_values($lhs->getAtomicTypes());
-        while ($pending !== []) {
-            $atomic = \array_shift($pending);
-            if ($atomic instanceof TTemplateParam) {
-                \array_push($pending, ...\array_values($atomic->as->getAtomicTypes()));
-                continue;
-            }
-
+        foreach ($lhs->getAtomicTypes() as $atomic) {
             if (!$atomic instanceof TNamedObject || $atomic->extra_types !== []) {
                 return false;
             }

@@ -51,7 +51,10 @@ final class AliasedAdminRequest extends FormRequest
     }
 }
 
-/** Parent's typed alias documents the child's untyped alias; Psalm's documented type wins. */
+/**
+ * The child's untyped alias replaces the parent's typed one. Psalm no longer documents it with the parent's
+ * `?Admin` (it did up to 7.16), so the handler falls back to the guard's provider model.
+ */
 class ParentAliasRequest extends FormRequest
 {
     use AdminUserAlias {
@@ -196,7 +199,7 @@ function overrideWithDeclaredReturnType(
     /** @psalm-check-type-exact $_aliasedWeb = Admin|null */
 
     $_childAliasWeb = $childAlias->user('web');
-    /** @psalm-check-type-exact $_childAliasWeb = Admin|null */
+    /** @psalm-check-type-exact $_childAliasWeb = \Illuminate\Foundation\Auth\User|null */
 
     $_docParentWeb = $docParent->user('web');
     /** @psalm-check-type-exact $_docParentWeb = Admin|null */

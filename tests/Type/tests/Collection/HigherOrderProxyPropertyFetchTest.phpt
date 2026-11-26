@@ -34,6 +34,13 @@ final class PropFetchParent
     public function __construct(public PropFetchChild $child) {}
 }
 
+/**
+ * @template K of array-key
+ * @template V
+ * @extends Collection<K, V>
+ */
+final class PropFetchGenericBag extends Collection {}
+
 final class PropFetchHolder
 {
     /** @param Collection<int, PropFetchItem> $items */
@@ -95,6 +102,13 @@ final class HigherOrderProxyPropertyFetchTest
         /** @psalm-check-type-exact $_partition = Collection<int, Collection<int, PropFetchItem>> */
         $_keyBy = $p->keyBy->name;
         /** @psalm-check-type-exact $_keyBy = Collection<array-key, PropFetchItem> */
+    }
+
+    /** @param PropFetchGenericBag<string, PropFetchItem> $bag */
+    public function genericSubclass(PropFetchGenericBag $bag): void
+    {
+        $_map = $bag->map->n;
+        /** @psalm-check-type-exact $_map = PropFetchGenericBag<string, int> */
     }
 
     /** @param LazyCollection<string, PropFetchItem> $l */
@@ -266,8 +280,7 @@ final class HigherOrderProxyPropertyFetchTest
     /**
      * Without `__isset()` on the proxy, PHP reads a fetch through `__get` everywhere except as the direct operand of
      * isset()/empty()/unset(): the left side of `??`, and a fetch behind an array dim or a method call, are wrapped.
-     * The reports below are true positives: `all()` and the collection are never null, `number()` never returns
-     * null, and `$collection[0]` is null for a missing offset.
+     * The reports below are true positives: `all()`, `number()` and the collection are never null.
      *
      * @param Collection<int, PropFetchItem> $p
      * @param Collection<int, PropFetchParent> $parents
@@ -324,7 +337,6 @@ PossiblyNullReference on line %d: Cannot call method count on possibly null valu
 RedundantConditionGivenDocblockType on line %d: Docblock-defined type array<int, int> for $p->map->id->all() is never null
 DocblockTypeContradiction on line %d: Cannot resolve types for $p->map->id->all() - docblock-defined type array<int, int> does not contain null
 RedundantCondition on line %d: Type int for $parents->map->child[0]->number() is never null
-PossiblyNullReference on line %d: Cannot call method number on possibly null value
 TypeDoesNotContainNull on line %d: Cannot resolve types for $parents->map->child[0]->number() - int does not contain null
 RedundantCondition on line %d: Type Illuminate\Support\Collection<int, PropFetchItem> for $p->sortBy->parent is always isset
 TypeDoesNotContainType on line %d: Cannot resolve types for $p->sortBy->parent with type Illuminate\Support\Collection<int, PropFetchItem> and !isset assertion

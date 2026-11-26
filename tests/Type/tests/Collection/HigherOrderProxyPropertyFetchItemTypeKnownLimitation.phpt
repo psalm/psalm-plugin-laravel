@@ -15,13 +15,6 @@ final class PropFetchLimitOtherItem
 }
 
 /**
- * @template K of array-key
- * @template V
- * @extends Collection<K, V>
- */
-final class PropFetchLimitGeneric extends Collection {}
-
-/**
  * Known limitation: a property fetch through the proxy wraps the item-level type Psalm computed for the fetch,
  * so the wrap is only as precise as that type (see HigherOrderCollectionProxyHandler::afterExpressionAnalysis()
  * and decisions.md "Property fetch through HigherOrderCollectionProxy").
@@ -40,18 +33,6 @@ final class HigherOrderProxyPropertyFetchItemTypeKnownLimitation
         /** @psalm-check-type-exact $_map = Collection<int, int|string>|LazyCollection<string, int|string> */
         $_max = $both->max->n;
         /** @psalm-check-type-exact $_max = int|null|string */
-    }
-
-    /**
-     * A generic subclass resolves its proxy from the vendor trait annotation, whose TValue Psalm leaves
-     * unresolved, so the item-level value is mixed: ideally `PropFetchLimitGeneric<string, int>`.
-     *
-     * @param PropFetchLimitGeneric<string, PropFetchLimitItem> $generic
-     */
-    public function genericSubclass(PropFetchLimitGeneric $generic): void
-    {
-        $_map = $generic->map->n;
-        /** @psalm-check-type-exact $_map = PropFetchLimitGeneric<string, mixed> */
     }
 }
 ?>

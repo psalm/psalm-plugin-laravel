@@ -4,9 +4,9 @@
 <?php declare(strict_types=1);
 
 /**
- * Each taint needs its own flag set. html: JSON_HEX_TAG | JSON_HEX_AMP as one literal (core). has_quotes:
- * JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP, AND-ed across a literal union (plugin). Without HEX_AMP an
- * attribute decodes a payload `&lt;` or `&quot;` back to `<` or `"`.
+ * Each taint needs its own flag set. html: JSON_HEX_TAG | JSON_HEX_AMP (core, which ANDs the bits of constant
+ * ternary branches). has_quotes: JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP, AND-ed across a literal union
+ * (plugin). Without HEX_AMP an attribute decodes a payload `&lt;` or `&quot;` back to `<` or `"`.
  */
 function renderJson(\Illuminate\Http\Request $request): void {
     $v = (string) $request->input('v');
@@ -22,8 +22,8 @@ function renderJson(\Illuminate\Http\Request $request): void {
     // quotes cleared, html kept: no HEX_TAG
     echo json_encode($v, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 
-    // quotes cleared (15 & 79 = 15), html kept: core needs a single literal
-    echo json_encode($v, $request->boolean('b') ? 15 : 79);
+    // quotes cleared (14 & 78 = 14), html kept: no HEX_TAG in either branch
+    echo json_encode($v, $request->boolean('b') ? 14 : 78);
 }
 ?>
 --EXPECTF--

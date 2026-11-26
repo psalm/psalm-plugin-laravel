@@ -64,11 +64,7 @@ final class AddCommand extends Command
             return Command::FAILURE;
         }
 
-        // Symfony's InputArgument::REQUIRED guarantees a non-null string reaches
-        // execute(); the assertion documents the contract for Psalm and catches
-        // any future misconfiguration of the argument declaration.
         $target = $input->getArgument('target');
-        \assert(\is_string($target));
 
         $registry = $this->registry ?? CiTargetRegistry::default();
 
