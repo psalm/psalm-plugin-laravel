@@ -8,7 +8,6 @@ use Illuminate\Console\Command;
 class HasInputGuardCommand extends Command
 {
     /** @var string */
-    #[\Override]
     protected $signature = 'example:guard {email}';
 
     public function handle(): int

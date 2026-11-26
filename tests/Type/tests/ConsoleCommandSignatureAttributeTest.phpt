@@ -20,7 +20,6 @@ use Illuminate\Console\Command;
 final class AttributeSignatureCommand extends Command
 {
     /** @var string */
-    #[\Override]
     protected $signature = 'test:legacy {legacy}';
 
     public function handle(): int

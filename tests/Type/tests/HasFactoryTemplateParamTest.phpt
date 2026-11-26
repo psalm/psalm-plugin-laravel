@@ -25,7 +25,6 @@ class Article extends Model
  */
 class ExplicitArticleFactory extends Factory
 {
-    #[\Override]
     protected $model = ExplicitArticle::class;
 
     /** @return array<string, mixed> */

@@ -33,5 +33,7 @@
     </plugins>
     <issueHandlers>
         <MissingPureAnnotation errorLevel="info" />
+        <!-- See psalm.xml: `#[\Override]` on a property cannot satisfy both PHP 8.2 and 8.5 fixtures. -->
+        <MissingOverrideAttribute errorLevel="suppress" />
     </issueHandlers>
 </psalm>

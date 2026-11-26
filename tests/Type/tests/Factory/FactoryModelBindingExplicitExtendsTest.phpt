@@ -29,7 +29,6 @@ namespace Database\Factories {
      */
     final class BeaconFactory extends Factory
     {
-        #[\Override]
         protected $model = Beacon::class;
 
         /** @return array<string, mixed> */

@@ -8,7 +8,6 @@ use Illuminate\Console\Command;
 class HasInputCommand extends Command
 {
     /** @var string */
-    #[\Override]
     protected $signature = 'example:has
         {email : The user email}
         {--F|force : Force flag}
@@ -61,7 +60,6 @@ class HasInputCommand extends Command
 class NoSignatureCommand extends Command
 {
     /** @var string */
-    #[\Override]
     protected $name = 'example:nosig';
 
     public function handle(): int

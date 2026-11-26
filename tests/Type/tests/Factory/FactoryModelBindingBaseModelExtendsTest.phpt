@@ -25,7 +25,6 @@ namespace Database\Factories {
      */
     final class ReactorFactory extends Factory
     {
-        #[\Override]
         protected $model = Reactor::class;
 
         /** @return array<string, mixed> */

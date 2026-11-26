@@ -42,7 +42,6 @@ namespace Database\Factories {
     /** `$model` does not change that: the guard skips every leaf behind an abstract base. */
     final class GammaFactory extends BaseFactory
     {
-        #[\Override]
         protected $model = \App\Models\Beta::class;
 
         /** @return array<string, mixed> */

@@ -21,7 +21,6 @@ namespace Database\Factories {
      */
     final class PomeloFactory extends Factory
     {
-        #[\Override]
         protected $model = Widget::class;
 
         /** @return array<string, mixed> */

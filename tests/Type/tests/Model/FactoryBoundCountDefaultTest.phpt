@@ -18,7 +18,6 @@ final class Sprocket extends Model
 final class SprocketFactory extends Factory
 {
     /** @var class-string<Sprocket> */
-    #[\Override]
     protected $model = Sprocket::class;
 
     /** @return array<string, mixed> */
