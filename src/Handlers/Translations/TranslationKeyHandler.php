@@ -88,6 +88,14 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
     private static bool $reportMissing = false;
 
     /**
+     * Which missing keys get a MissingTranslation when $reportMissing is on (emission only, not narrowing).
+     * Null reports every key. A predicate rather than the Config enum keeps Handlers off the Config layer.
+     *
+     * @var (\Closure(string): bool)|null
+     */
+    private static ?\Closure $shouldReportKey = null;
+
+    /**
      * Cached translation resolution results.
      *
      * - null value means the key does not exist (missing translation)
@@ -109,13 +117,16 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
     {
         self::$translator = null;
         self::$reportMissing = false;
+        self::$shouldReportKey = null;
         self::$resolvedKeys = [];
     }
 
-    public static function init(Translator $translator, bool $reportMissing): void
+    /** @param (\Closure(string): bool)|null $shouldReportKey */
+    public static function init(Translator $translator, bool $reportMissing, ?\Closure $shouldReportKey = null): void
     {
         self::$translator = $translator;
         self::$reportMissing = $reportMissing;
+        self::$shouldReportKey = $shouldReportKey;
         self::$resolvedKeys = [];
         self::$zeroArgTransUnions = [];
     }
@@ -441,7 +452,11 @@ final class TranslationKeyHandler implements FunctionReturnTypeProviderInterface
 
         // Key does not exist — emit the issue only when findMissingTranslations
         // is enabled, then fall through to TransHandler for the fallback type
-        if (self::$reportMissing && $emitMissingTranslation) {
+        if (
+            self::$reportMissing
+            && $emitMissingTranslation
+            && (!self::$shouldReportKey instanceof \Closure || (self::$shouldReportKey)($translationKey))
+        ) {
             IssueBuffer::accepts(
                 new MissingTranslation(
                     "Translation key '{$translationKey}' not found in language files",

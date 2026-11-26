@@ -11,9 +11,11 @@ use PHPUnit\Framework\TestCase;
 use Psalm\LaravelPlugin\Config\ColumnFallback;
 use Psalm\LaravelPlugin\Config\PluginConfig;
 use Psalm\LaravelPlugin\Config\PluginOverrides;
+use Psalm\LaravelPlugin\Config\TranslationKeys;
 
 #[CoversClass(PluginConfig::class)]
 #[CoversClass(ColumnFallback::class)]
+#[CoversClass(TranslationKeys::class)]
 final class PluginConfigTest extends TestCase
 {
     private ?string $originalEnv = null;
@@ -41,6 +43,7 @@ final class PluginConfigTest extends TestCase
         $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
         $this->assertFalse($config->failOnInternalError);
         $this->assertFalse($config->findMissingTranslations);
+        $this->assertSame(TranslationKeys::All, $config->findMissingTranslationsKeys);
         $this->assertTrue($config->findMissingViews);
         $this->assertTrue($config->findUnconfiguredFilesystemDisks);
         $this->assertFalse($config->findUnregisteredRouteNames);
@@ -99,6 +102,21 @@ final class PluginConfigTest extends TestCase
         $this->expectExceptionMessage("Invalid columnFallback value 'invalid'");
 
         PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><modelProperties columnFallback="invalid" /></pluginClass>'));
+    }
+
+    #[Test]
+    public function find_missing_translations_keys_is_parsed_and_validated(): void
+    {
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="true" /></pluginClass>');
+        $this->assertSame(TranslationKeys::All, PluginConfig::fromXml($xml)->findMissingTranslationsKeys);
+
+        $xml = new \SimpleXMLElement('<pluginClass><findMissingTranslations value="true" keys="short" /></pluginClass>');
+        $this->assertSame(TranslationKeys::Short, PluginConfig::fromXml($xml)->findMissingTranslationsKeys);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Invalid findMissingTranslations keys value 'foo'. Valid values: 'all', 'short'.");
+
+        PluginConfig::fromXml(new \SimpleXMLElement('<pluginClass><findMissingTranslations value="true" keys="foo" /></pluginClass>'));
     }
 
     /** @return iterable<string, array{string}> */
@@ -271,12 +289,13 @@ final class PluginConfigTest extends TestCase
     public function an_override_flips_explicit_xml_in_either_direction(): void
     {
         $xml = new \SimpleXMLElement(
-            '<pluginClass><modelProperties columnFallback="none" /><findOctaneIncompatibleBinding value="false" /><findPromptInjection value="true" /></pluginClass>',
+            '<pluginClass><modelProperties columnFallback="none" /><findMissingTranslations value="true" keys="short" /><findOctaneIncompatibleBinding value="false" /><findPromptInjection value="true" /></pluginClass>',
         );
 
-        $config = PluginConfig::fromXml($xml, PluginOverrides::parse('modelProperties.columnFallback=migrations findOctaneIncompatibleBinding=true findPromptInjection=false'));
+        $config = PluginConfig::fromXml($xml, PluginOverrides::parse('modelProperties.columnFallback=migrations findMissingTranslations.keys=all findOctaneIncompatibleBinding=true findPromptInjection=false'));
 
         $this->assertSame(ColumnFallback::Migrations, $config->modelPropertiesColumnFallback);
+        $this->assertSame(TranslationKeys::All, $config->findMissingTranslationsKeys);
         $this->assertTrue($config->findOctaneIncompatibleBinding);
         $this->assertFalse($config->findPromptInjection);
     }
@@ -333,6 +352,7 @@ final class PluginConfigTest extends TestCase
         yield 'bad blade value' => ['<blade value="yes" />'];
         yield 'unknown attribute on a later blade element' => ['<blade /><blade typo="1" />'];
         yield 'bad enum' => ['<modelProperties columnFallback="db" />'];
+        yield 'bad translation keys' => ['<findMissingTranslations value="true" keys="foo" />'];
         yield 'prompt injection without value' => ['<findPromptInjection />'];
     }
 
